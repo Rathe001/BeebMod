@@ -1,0 +1,7 @@
+# Lua, TOC and text files stay LF in the repo and in every checkout
+* text=auto eol=lf
+
+# art and fonts are binary
+*.tga binary
+*.ttf binary
+*.png binary

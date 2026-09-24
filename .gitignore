@@ -1,0 +1,7 @@
+# The account's SavedVariables, linked in as a folder for the beta client,
+# which does not read saved variables back (see BeebMod.toc and
+# docs/beta-bug-savedvariables.md). Personal data, and not part of the addon.
+Data/Live
+
+# crash dumps from the shell
+*.stackdump

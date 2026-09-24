@@ -1,0 +1,107 @@
+# WoW: Forever ONLY (Josh 2026-09-18). One client, one interface number, no
+# compatibility shims: nothing here has to run on Era, Mists or retail, and
+# the code is free to assume this game's rules - two-part names above all.
+## Interface: 16001
+## Title: BeebMod
+## Notes: A set of small utilities behind one window and one button.
+## Author: Josh
+## Version: 0.1.0-beta.1
+# TWO VARIABLES, NOT ONE (Josh 2026-09-20). BeebModDB is the whole book -
+# every character ever seen, a megabyte and a half of it. BeebModKeep is
+# only what you WROTE: the notes, the tags, the ratings, the settings. A few
+# kilobytes.
+#
+# They are separated because losing the book is an inconvenience and losing
+# your notes is not, and because this client hands back neither reliably: if
+# the small one returns and the big one does not, the cause is size, and we
+# will know that the first time it happens.
+## SavedVariables: BeebModDB, BeebModKeep
+# And a THIRD, per character rather than per account. It holds the same few
+# kilobytes as the second one, and it exists to answer a question no amount of
+# reading the file can: the client writes account saved variables correctly and
+# hands back nothing, and per-character ones are a different file written by
+# different code. If this one comes back when the others do not, everything
+# moves here and the problem is over.
+## SavedVariablesPerCharacter: BeebModChar
+
+# THE LIVE SAVE, AS ADDON CODE (Josh 2026-09-22). This beta client writes
+# saved variables and never reads them back - a known bug in 1.60.1.69913, for
+# every addon. Data\Live is a folder link to the account's SavedVariables, so
+# the client runs what it last wrote as an ordinary addon file, and that sets
+# BeebModDB before anything else here loads. The same trick ForeverSVFix
+# uses. Remove these lines and the link once the client is fixed.
+#
+# THE OLD NAME IS GONE (Josh 2026-09-23). The book under the addon's old name
+# (Data\Live\BeebsToolkit.lua) was adopted on the first save under the new
+# one, and loading it every session after that held a second, older copy of
+# the whole book in memory - six megabytes of it. The file is left on disk;
+# only the line that loaded it is gone.
+Data\Live\BeebMod.lua
+# the core: the book, the window, the bar, and the look of everything
+Core\Init.lua
+Core\Cpu.lua
+Core\Util.lua
+Core\Session.lua
+Core\Fonts.lua
+Core\Blocked.lua
+Core\DB.lua
+Core\Tooltip.lua
+Core\StatusBars.lua
+Core\Collect\Meter.lua
+Core\Collect\Rosters.lua
+Core\Collect\Sightings.lua
+UI\Pill.lua
+Core\Theme.lua
+UI\Widgets.lua
+UI\Ornament.lua
+Core\Furniture.lua
+UI\Window.lua
+UI\CensusWindow.lua
+UI\Settings.lua
+UI\Bar.lua
+
+# the utilities. Each one registers a tab, its cells on the bar and its own
+# commands, and can be switched off in Settings without the rest noticing.
+Modules\Ledger\Tags.lua
+Modules\Ledger\Find.lua
+Modules\Ledger\Tooltip.lua
+Modules\Ledger\Ledger.lua
+Modules\Census\Stats.lua
+Modules\Census\Chart.lua
+Modules\Census\Census.lua
+Modules\Tips\Tips.lua
+Modules\Tracker\Quests.lua
+Modules\Tracker\Tracker.lua
+Modules\Bars\Bars.lua
+Modules\Micro\Micro.lua
+Modules\BagWindow\BagWindow.lua
+Modules\Menus\Menus.lua
+Modules\CharSheet\CharSheet.lua
+Modules\Minimap\Minimap.lua
+Modules\Clock\Clock.lua
+Modules\Buttons\Buttons.lua
+Modules\Metrics\Metrics.lua
+Modules\Perf\Perf.lua
+Modules\Gold\Gold.lua
+Modules\Space\Space.lua
+Modules\Durability\Durability.lua
+Modules\ItemLevel\ItemLevel.lua
+Modules\Pickpocket\Pickpocket.lua
+Modules\Speed\Speed.lua
+Modules\XP\XP.lua
+Modules\Rep\Rep.lua
+Modules\Chat\Chat.lua
+Modules\DamageMeter\DamageMeter.lua
+Modules\PRD\PRD.lua
+Modules\Menu\Menu.lua
+# every unit frame, in the toolkit's clothes
+Modules\Frames\Unit.lua
+Modules\Frames\Auras.lua
+Modules\Frames\Buffs.lua
+Modules\Frames\Frames.lua
+
+Core\Slash.lua
+# where the time and the memory go: /bt mem, /bt prof
+Core\Profile.lua
+# what the client will tell a unit frame: /bt unitprobe
+Core\UnitProbe.lua
