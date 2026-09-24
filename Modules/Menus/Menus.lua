@@ -76,6 +76,19 @@ function M.DressMenu(menu)
 	return true
 end
 
+-- a menu the client is still building, dressed when it has finished
+function M.DressSoon(menu)
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, function()
+			if BT.Enabled("menus") then
+				M.DressMenu(menu)
+			end
+		end)
+		return true
+	end
+	return false
+end
+
 -- the one the manager says is open, and the entries it has just made
 function M.AfterOpen()
 	local menu = M.OpenMenu()
@@ -124,9 +137,13 @@ function M.Hook()
 	for key, value in pairs(_G) do
 		if type(key) == "string" and type(value) == "table" and key:find("Menu", 1, true)
 			and key:find("Style", 1, true) and key:find("Mixin$") and type(value.Generate) == "function" then
+			-- A FRAME LATER, NOT DURING (Josh 2026-09-24: "Use of function
+			-- 'CreateTexture' is disallowed"). While the client builds a menu's
+			-- look, the menu is behind a guard that refuses new textures -
+			-- and our surface is textures. Dressed once the build is done.
 			pcall(hooksecurefunc, value, "Generate", function(self)
 				if BT.Enabled("menus") then
-					M.DressMenu(self)
+					M.DressSoon(self)
 				end
 			end)
 			M.found[#M.found + 1] = key

@@ -4605,13 +4605,22 @@ if ok then
 			assert(art._alpha == 0, "its stone background off")
 			assert(light._alpha ~= 0, "the light under the pointer kept")
 			assert(heading._textColor[3] > 0.5, "and a gold heading in the panel's text")
-			-- a submenu, made rather than opened: dressed as its look is built
+			-- a submenu, made rather than opened: dressed once its look is built -
+			-- never during, when the client refuses new textures on it
 			local sub = _G.CreateFrame("Frame", nil, _G.UIParent)
 			local subArt = sub:CreateTexture()
 			subArt.GetAtlas = function() return "common-dropdown-bg" end
 			subArt._width, subArt._height = 150, 80
+			local later = {}
+			_G.C_Timer.After = function(_, fn) later[#later + 1] = fn end
+			local realCreate = sub.CreateTexture
+			sub.CreateTexture = function() error("Use of function 'CreateTexture' is disallowed.") end
 			_G.TestMenuStyle1Mixin.Generate(sub)
-			assert(subArt._alpha == 0 and BT.Pill.Panels()[sub], "a submenu too")
+			assert(not BT.Pill.Panels()[sub], "nothing made on it while it is being built")
+			sub.CreateTexture = realCreate
+			for _, fn in ipairs(later) do fn() end
+			_G.C_Timer.After = function(_, fn) fn() end
+			assert(subArt._alpha == 0 and BT.Pill.Panels()[sub], "a submenu too, a frame later")
 
 			BT.SetEnabled("menus", false)
 			assert(art._alpha == 1 and subArt._alpha == 1 and not panel.fill:IsShown(),
