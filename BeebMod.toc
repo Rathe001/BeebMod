@@ -24,19 +24,12 @@
 # moves here and the problem is over.
 ## SavedVariablesPerCharacter: BeebModChar
 
-# THE LIVE SAVE, AS ADDON CODE (Josh 2026-09-22). This beta client writes
-# saved variables and never reads them back - a known bug in 1.60.1.69913, for
-# every addon. Data\Live is a folder link to the account's SavedVariables, so
-# the client runs what it last wrote as an ordinary addon file, and that sets
-# BeebModDB before anything else here loads. The same trick ForeverSVFix
-# uses. Remove these lines and the link once the client is fixed.
-#
-# THE OLD NAME IS GONE (Josh 2026-09-23). The book under the addon's old name
-# (Data\Live\BeebsToolkit.lua) was adopted on the first save under the new
-# one, and loading it every session after that held a second, older copy of
-# the whole book in memory - six megabytes of it. The file is left on disk;
-# only the line that loaded it is gone.
-Data\Live\BeebMod.lua
+# THE CLIENT READS SAVED VARIABLES AGAIN (Josh 2026-09-24). Build 70009
+# hands an addon its saved variables back (checked with a probe addon: a
+# fresh launch and a /reload both returned the table), so the book loads the
+# ordinary way. The Data\Live link that ran the last save as addon code while
+# the client could not - the ForeverSVFix trick - is retired, and so is the
+# line that loaded it: anyone else installing the addon has no such link.
 # the core: the book, the window, the bar, and the look of everything
 Core\Init.lua
 Core\Cpu.lua

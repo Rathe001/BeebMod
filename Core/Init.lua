@@ -82,7 +82,7 @@ BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-b
 BT.SCHEMA = 12
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. /bt debug prints it, so "did the reload take?" is never a guess.
-BT.BUILD = "2026-09-24-menufix"
+BT.BUILD = "2026-09-24-svnative"
 
 BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off
@@ -1040,9 +1040,11 @@ local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
 -- NO SECOND COPY AT LOGOUT (Josh 2026-09-22). The whole book used to be
 -- stashed in the per-character file as well, in case that channel came back
--- when the account one did not. Neither did; the Data\Live link is how the
--- book returns now, so the stash was 2.9 MB written at every logout for
--- nothing. BT.StashBook and BT.TakeStashed stay for a file that still has one.
+-- when the account one did not. Neither did - and since build 70009 the
+-- client reads saved variables back the ordinary way (Josh 2026-09-24) - so
+-- the stash was 2.9 MB written at every logout for nothing. BT.StashBook and
+-- BT.TakeStashed stay for a file that still has one; Adopt and BT.linked stay
+-- as a net should a later build lose the book again.
 loader:SetScript("OnEvent", function(_, event, addon)
 	if addon ~= ADDON then
 		return

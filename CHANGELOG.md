@@ -5,6 +5,17 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Saved variables load the ordinary way.** Build 1.60.1.70009 fixed the
+  beta bug that kept the client from reading saved variables back, so the
+  `Data\Live` workaround is gone: the TOC no longer loads the last save as an
+  addon file, and anyone else installing the addon no longer gets an error
+  for a file only this machine had. The book is unchanged - it was already in
+  the client's own saved file.
+- Dropdown menus are dressed once the client has built them (a menu dressed
+  during its build raised "Use of function 'CreateTexture' is disallowed").
+
 ## 0.1.0-beta.1
 
 The first version kept in git: everything up to here, in one.

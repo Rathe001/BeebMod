@@ -135,7 +135,6 @@ losing a mark.
     Art/Rank/            the Art Deco corner and crest round an elite or rare
                          mob's frame, gold or silver (scripts/make-rank.py)
     Core/Profile.lua     /bt mem and /bt prof
-    Data/Live/           a folder link to SavedVariables; see below
 
 ## Tests
 
@@ -296,49 +295,29 @@ The consequence is that a character heard only in chat stays a name with no clas
 
 ## Notes on the client
 
-Built against build 1.60.1.69913 (`wow_classic_beta`). The TOC says `## Interface: 16001`, confirmed in-game with `/dump select(4, GetBuildInfo())` on build 1.60.1.69893 (the client packs 1.60.1 as 1-60-01, not 11600). A beta build can move it; if the addon ever shows as out of date, check it again. The tooltip hook works with either the modern `TooltipDataProcessor` or the old `OnTooltipSetUnit`, whichever the build has.
+Built against build 1.60.1.70009 (`wow_classic_beta`). The TOC says `## Interface: 16001`, confirmed in-game with `/dump select(4, GetBuildInfo())` on build 1.60.1.69893 (the client packs 1.60.1 as 1-60-01, not 11600). A beta build can move it; if the addon ever shows as out of date, check it again. The tooltip hook works with either the modern `TooltipDataProcessor` or the old `OnTooltipSetUnit`, whichever the build has.
 
-## The client will not read saved variables back
+## Saved variables, and the beta bug that lost them
 
-**Build 1.60.1.69913.** The client writes `SavedVariables` correctly on every
-logout and `/reload`, and never reads them back - for every addon, not just this
-one. It is a known Forever beta bug, reported since 2026-09-17 (Blizzard forums,
-and [forever-bugs #34](https://github.com/ClassicWoWCommunity/forever-bugs/issues/34)).
-What comes back after a `/reload` for an addon loaded on demand is carried over
-in memory, not read from disk; nothing survives a fresh launch.
+**Fixed in build 1.60.1.70009 (2026-09-24).** Up to that build the client
+wrote `SavedVariables` correctly on every logout and `/reload` and never read
+them back - for every addon ([forever-bugs #34](https://github.com/ClassicWoWCommunity/forever-bugs/issues/34),
+and `docs/beta-bug-savedvariables.md`). On 70009 a probe addon got its table
+back on a fresh launch and on a `/reload`, so the book now loads the ordinary
+way and nothing of the workaround is left in the addon.
 
-**What works: the save, run as an addon file** - the technique
-[ForeverSVFix](https://github.com/nobewayo/ForeverSVFix) uses. The client always
-loads an addon's own files, so:
-
-    Data/Live            a directory junction to
-                         WTF/Account/960221#4/SavedVariables
-    BeebMod.toc          lists Data\Live\BeebMod.lua first, so the client
-                         runs its own last save and BeebModDB is set
-                         before anything else loads
-    Core/Init.lua        holds what that set (BT.linked), and puts it back if
-                         the client's loader clears the global before
-                         ADDON_LOADED
-
-Nothing runs outside the game. The junction was made once, with
-
-    New-Item -ItemType Junction -Path Data\Live -Target "<...>\WTF\Account\960221#4\SavedVariables"
-
-`/bt boot` says `file arrived` and `live file: loaded` when it is working. The
-tests skip the `Data\Live` line, so they never run on a real book.
-
-**When the client is fixed:** delete the `Data\Live\BeebMod.lua` line from
-the TOC and remove the junction (`rmdir Data\Live` - rmdir, not a recursive
-delete, which would follow the link into SavedVariables).
+**The workaround, for the record (2026-09-22 to 09-24):** `Data/Live` was a
+directory junction to `WTF/Account/<account>/SavedVariables`, and the TOC
+listed `Data\Live\BeebMod.lua` first, so the client ran its own last save as
+an addon file - the technique [ForeverSVFix](https://github.com/nobewayo/ForeverSVFix)
+uses. Before that (09-19 to 09-22) the book rode in a generated
+`Data/Baked.lua`. `BT.Adopt` and `BT.linked` in `Core/Init.lua` are left as a
+net should a later build lose the book again; with the book arriving normally
+they do nothing.
 
 `scripts/backup-book.ps1` copies the save into `LedgerBackups`;
 `scripts/restore-book.ps1` puts one back, and refuses while the game is running
 because the next save would overwrite it.
-
-**Before this (2026-09-19 to 09-22)** the book rode in a generated
-`Data/Baked.lua`, rebaked by a script outside the game. It was retired once the
-junction had carried a save across two fresh launches; the last baked copy is in
-`LedgerBackups`.
 
 ## Later
 

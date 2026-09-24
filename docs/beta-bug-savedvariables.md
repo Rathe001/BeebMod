@@ -1,5 +1,9 @@
 # Bug report: addon SavedVariables are written but never loaded
 
+> **Fixed in 1.60.1.70009 (2026-09-24).** The probe below got its table back
+> on a fresh launch and on a `/reload` ("run 2: arrived as table, build
+> 70009"). Kept for the record.
+
 Paste-ready for the in-game Issue Reporter (F6 / the bug icon). Keep it to the
 facts: what was expected, what happened, and the smallest thing that shows it.
 
