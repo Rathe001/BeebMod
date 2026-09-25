@@ -1,0 +1,32 @@
+# Runs both test suites on every push to main and every pull request - the
+# same two that must be green before a change is called safe.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua
+        run: sudo apt-get update -q && sudo apt-get install -y -q lua5.4
+
+      - name: Syntax-check every addon file
+        run: |
+          set -e
+          find . -name "*.lua" -not -path "./tests/*" -print0 | xargs -0 -n1 luac5.4 -p
+
+      # the pure-Lua half: keys, the book, packing, modules, migrations
+      - name: Run test suite
+        run: lua5.4 tests/run.lua
+
+      # every file in TOC order against stubbed WoW globals, then the window
+      # opened and its switches clicked: where a file-scope mistake or a
+      # load-order dependency actually bites
+      - name: Load every file the way the client does
+        run: lua5.4 tests/load.lua

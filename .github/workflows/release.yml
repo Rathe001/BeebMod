@@ -1,0 +1,60 @@
+# Packages the addon and publishes it when a version tag is pushed
+# (v0.1.0-beta.2 and so on; scripts/cut-release.ps1 makes one). The same
+# checks as the Tests workflow run first, so nothing red is ever packaged.
+#
+# Where it goes:
+#   GitHub Releases   always - the zip, with this version's notes
+#   CurseForge        once the repo has a CF_API_KEY secret and BeebMod.toc
+#                     has an X-Curse-Project-ID line; until then the packager
+#                     skips it and the GitHub release is the download
+#
+# A tag with "beta" in it is published as a beta file, "alpha" as an alpha.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Lua
+        run: sudo apt-get update -q && sudo apt-get install -y -q lua5.4
+
+      - name: Tests
+        run: |
+          set -e
+          lua5.4 tests/run.lua
+          lua5.4 tests/load.lua
+
+      # the tag and the TOC must agree, or the zip says one version and the
+      # addon list another
+      - name: The tag matches the TOC
+        run: |
+          set -e
+          tag="${GITHUB_REF_NAME#v}"
+          toc="$(sed -n 's/^## Version: *//p' BeebMod.toc | tr -d '\r')"
+          if [ "$tag" != "$toc" ]; then
+            echo "tag $tag but BeebMod.toc says $toc"
+            exit 1
+          fi
+
+      # CurseForge's "What's New" shows the whole changelog file, so it is
+      # handed only this version's section: the first `## ` block.
+      - name: This release's notes
+        run: awk '/^## /{c++} c==1' CHANGELOG.md > .release-notes.md
+
+      - name: Package and release
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}

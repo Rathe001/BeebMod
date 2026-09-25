@@ -1,0 +1,26 @@
+# What the BigWigs packager builds into the zip a player installs (Josh
+# 2026-09-25, the TrueParse way: .github/workflows/release.yml runs it on a
+# version tag, and it uploads to CurseForge and to GitHub Releases).
+package-as: BeebMod
+
+# the TOC is written by hand: one client, one interface number
+enable-toc-creation: no
+
+# everything that is ours to work with and nothing a player's client loads
+ignore:
+  - tests
+  - scripts
+  - docs
+  - README.md
+  - .pkgmeta
+  - .github
+  - .gitattributes
+  - .gitignore
+  - .release-notes.md
+
+# .release-notes.md holds only the version being released, taken out of
+# CHANGELOG.md by the release workflow before packaging - otherwise the whole
+# history would show as one wall on every file's "What's New"
+manual-changelog:
+  filename: .release-notes.md
+  markup-type: markdown
