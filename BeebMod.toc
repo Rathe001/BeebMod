@@ -6,6 +6,7 @@
 ## Notes: A set of small utilities behind one window and one button.
 ## Author: Josh
 ## Version: 0.1.0-beta.1
+## X-Curse-Project-ID: 1711982
 # TWO VARIABLES, NOT ONE (Josh 2026-09-20). BeebModDB is the whole book -
 # every character ever seen, a megabyte and a half of it. BeebModKeep is
 # only what you WROTE: the notes, the tags, the ratings, the settings. A few
