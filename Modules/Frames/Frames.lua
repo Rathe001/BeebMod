@@ -257,7 +257,9 @@ local GAP = 18
 -- raid you are in your group's column like everybody else. The target sits
 -- to the right of the party column and its targets, where the eye goes next.
 M.TARGET_X = 24 + F.KINDS.party.w + 4 + F.KINDS.gtarget.w + GAP
-M.BOSS_GAP = 44
+-- room under a boss for its cast bar (10 and 14), and over the next one for
+-- four of your damage-over-time lanes (Timers.lua: 4 of 5, a pixel apart)
+M.BOSS_GAP = 50
 -- the column beside the target: this far from it, and this far between the
 -- target of target and the focus - which makes the two as tall as the target
 -- (room for an elite's ornate border between the target and the column)
@@ -1074,21 +1076,21 @@ local SP = {
 
 local SKULL = { name = "Edwin VanCleef", reaction = "hostile", hp = 64, marker = 8 }
 local PARTY = {
-	{ name = "Brannoc", class = "WARRIOR", hp = 64, max = 1480, heal = 20, shield = 8, aggro = 3, leader = true, ml = true,
+	{ name = "Brannoc", class = "WARRIOR", level = 34, hp = 64, max = 1480, heal = 20, shield = 8, aggro = 3, leader = true, ml = true,
 		aim = SKULL, auras = { debuffs = { { spell = SP.poison, type = "Poison", count = 3 } },
 			mine = { { spell = SP.renew }, { spell = SP.shield } }, dispel = "Poison" } },
 	-- the one with something you could remove, to show the mark
 	-- and a summon waiting for her
-	{ name = "Maelis", class = "PRIEST", hp = 92, max = 760, mana = 58, summon = 1,
+	{ name = "Maelis", class = "PRIEST", level = 33, hp = 92, max = 760, mana = 58, summon = 1, heal = 20,
 		aim = { name = "Brannoc", class = "WARRIOR", hp = 64 },
 		auras = { debuffs = { { spell = SP.pain, type = "Magic" }, { spell = SP.hamstring } }, dispel = "Magic" } },
 	-- the one on the wrong target, which is what the column is for
-	{ name = "Ysolde", class = "MAGE", hp = 100, max = 720, mana = 71, target = true,
+	{ name = "Ysolde", class = "MAGE", level = 35, hp = 100, max = 720, mana = 71, target = true,
 		aim = { name = "Defias Blackguard", reaction = "hostile", hp = 100 },
 		auras = { debuffs = { { spell = SP.infected, type = "Disease" } }, mine = { { spell = SP.shield } },
 			dispel = "Disease" } },
 	-- a hunter, with a boar that is only content: the happiness square
-	{ name = "Ashby", class = "HUNTER", hp = 47, max = 1210, mana = 80, aim = SKULL,
+	{ name = "Ashby", class = "HUNTER", level = 32, hp = 47, max = 1210, mana = 80, aim = SKULL,
 		pet = { name = "Bristleback", reaction = "friendly", hp = 83, happy = 2 },
 		auras = { debuffs = { { spell = SP.corruption, type = "Curse" } }, mine = { { spell = SP.rejuv } },
 			dispel = "Curse" } },
@@ -1128,6 +1130,10 @@ local function preview(kind, d, point, handle)
 	if d.auras and F.Auras then
 		F.Auras.Show(f, kind, d.auras)
 	end
+	-- and the bars of your heals or damage over time, part run down
+	if F.Timers and not d.dead and not d.offline then
+		F.Timers.Show(f, kind)
+	end
 	f:Show()
 	M.previews[#M.previews + 1] = f
 	return f
@@ -1145,6 +1151,13 @@ local function spot(key)
 end
 
 -- "party", "raid" or nil for none
+-- the made-up people drawn again, as they are now (a choice changed)
+function M.RefreshPreview()
+	if M.previewing then
+		M.Preview(M.previewing)
+	end
+end
+
 function M.Preview(what)
 	for _, f in ipairs(M.previews) do
 		f:Hide()
@@ -1601,6 +1614,24 @@ function M:BuildTab(panel)
 				F.Auras.TargetBuffs(M.singles.target)
 			end
 		end)
+	-- YOUR HEAL OVER TIME (Josh 2026-09-24): a bar along the top of the
+	-- frame it is on (Timers.lua). The damage over time goes over your own
+	-- bars now, and its settings with it, on the Resource display's page.
+	local T = F.Timers
+	if T and #T.Spells("hot") > 0 then
+		local timers = page:Section("Heal over time")
+		for _, name in ipairs(T.Spells("hot")) do
+			W.SwitchRow(timers, name, "a bar on the friend it is on, running down",
+				function() return T.On(name) end,
+				function(on)
+					T.SetOn(name, on)
+					M.RefreshPreview()
+				end)
+		end
+		-- the heal's own blink; the damage has its own, on the Resource
+		-- display's page
+		self.blinkRow = T.BlinkRow(timers, "hot", function() M.RefreshPreview() end)
+	end
 	local more = page:Section("More")
 	if M.MouseoverSupported() then
 		self.mouseoverRow = W.SwitchRow(more, "Cast on what you point at",
@@ -1608,20 +1639,12 @@ function M:BuildTab(panel)
 			function() return M.Mouseover() end,
 			function(on) M.SetMouseover(on) end)
 	end
-	local row = W.Row(more, "Made-up people", "see the frames in a group while you are alone")
-	self.previewSeg = row:SetControl(W.Segmented(row, {
-		{ "off", "Off" }, { "party", "Party" }, { "raid", "Raid" },
-	}, function(key)
-		M.Preview(key ~= "off" and key or nil)
-	end))
+	-- the made-up people are on the Testing page now (UI/Window.lua)
 	page:Layout()
 	self.page = page
 end
 
 function M:ShowTab()
-	if self.previewSeg then
-		self.previewSeg:Select(M.previewing or "off")
-	end
 	for _, seg in ipairs(self.healthSegs or {}) do
 		seg:Select(F.HealthMode(seg.healthKey == "raid" and "raid" or seg.healthKey))
 	end

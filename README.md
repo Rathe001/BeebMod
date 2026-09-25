@@ -145,6 +145,32 @@ losing a mark.
 Both must be green before anything is installed. `load.lua` answers only real
 widget methods, so a typo fails there rather than in front of you.
 
+## Releasing
+
+A version is `MAJOR.MINOR.PATCH-beta.N` while the client is in beta, and
+`CHANGELOG.md` keeps what has changed since the last one under
+`## Unreleased`. To cut one, with everything committed:
+
+    powershell -ExecutionPolicy Bypass -File scripts\cut-release.ps1 -Version 0.1.0-beta.2
+    git push origin main v0.1.0-beta.2
+
+The script refuses a dirty tree or a red test, writes the version into the
+TOC and `Core/Init.lua`, turns `## Unreleased` into `## 0.1.0-beta.2`, commits
+and tags. Pushing the tag runs `.github/workflows/release.yml`: the tests
+again, a check that the tag and the TOC agree, then the BigWigs packager,
+which zips the addon without its tests, scripts and docs (`.pkgmeta`) and
+publishes it with that version's changelog section as its notes.
+
+Where it lands:
+
+- **GitHub Releases**, always.
+- **CurseForge**, once it is set up: create the project, put its id in
+  `BeebMod.toc` as `## X-Curse-Project-ID: <id>`, and add a CurseForge API
+  token as the repository secret `CF_API_KEY`. Until then the packager skips
+  it. A tag with `beta` in it goes up as a beta file.
+
+`.github/workflows/tests.yml` runs both suites on every push to `main`.
+
 ## The unit tooltip has one hook
 
 Two modules want a say in it: **Tooltips** rebuilds it compactly, the **Ledger**

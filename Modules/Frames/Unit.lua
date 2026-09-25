@@ -541,6 +541,10 @@ local function text(parent, size, justify, face)
 	return fs
 end
 
+-- how far past the end of the health bar a heal may show, as a share of
+-- the bar's width, on the frames that allow it (`overheal` below)
+F.OVERHEAL = 0.08
+
 local function bar(parent, level)
 	local b = CreateFrame("StatusBar", nil, parent)
 	b:SetStatusBarTexture(BLANK)
@@ -567,8 +571,13 @@ end
 -- as well as a share, and its mana, rage or energy on a power bar tall enough
 -- to carry the figure. Your own numbers are on the resource display already.
 F.KINDS = {
-	target = { w = 160, h = 60, power = 12, name = 12, text = "percent", stack = true, hpValue = true, castOverPower = true,
-		threat = true,
+	-- WIDER THAN A CELL (Josh 2026-09-24: "let's make the target bar wider
+	-- since we're showing a lot more info in it"): its level, a name like
+	-- "Defias Rogue Wizard" and your threat on one line were cut to "Defias
+	-- Rogue..." at a party cell's 160. The column beside it (its target, the
+	-- focus) hangs off its right edge and moves with it.
+	target = { w = 220, h = 60, power = 12, name = 12, text = "percent", stack = true, hpValue = true, castOverPower = true,
+		threat = true, overheal = true,
 		powerValue = true, cast = true, combo = true },
 	focus = { w = 110, h = 30, power = 0, name = 11, text = "percent", cast = true, castGap = 10 },
 	tot = { w = 110, h = 22, power = 0, name = 10, text = "none" },
@@ -580,7 +589,10 @@ F.KINDS = {
 	-- THE PLAYER FRAME'S SIZE (Josh 2026-09-23): the party column is your
 	-- frame now, so a cell is what the player frame was - 160 by 60, the name
 	-- at the top in its size - laid out as a stacked cell
-	party = { w = 160, h = 60, power = 5, manaOnly = true, name = 12, text = "none", group = true, stack = true },
+	-- THE LEVEL IN FRONT OF THE NAME (Josh 2026-09-24: "can you add player
+	-- level to the frame?"), as the target wears it; a raid cell is too narrow
+	party = { w = 160, h = 60, power = 5, manaOnly = true, name = 12, text = "none", group = true, stack = true,
+		overheal = true, level = true },
 	raid = { w = 70, h = 40, power = 0, name = 10, text = "none", group = true, short = true },
 	-- a main tank: a smaller cell than a party member's, with its target beside
 	-- it, in a column of their own in a raid (Josh 2026-09-23)
@@ -636,7 +648,26 @@ function F.Dress(b, kind)
 		b.health:SetClipsChildren(true)
 	end
 	local fill = b.health:GetStatusBarTexture()
-	b.heals = bar(b.health, 1)
+	-- PAST THE END, A LITTLE (Josh 2026-09-24: "party, player, and target
+	-- frames should extend visual heal beyond the health bar. But it should
+	-- be limited"). On the frames you heal from, the heal has a clip of its
+	-- own: the health bar and F.OVERHEAL of its width past the right-hand
+	-- end, so a heal bigger than the health missing shows as a ghost running
+	-- off the frame, and stops. The amount is secret; the client's clip does
+	-- the sum, not us.
+	local healParent = b.health
+	if k.overheal then
+		local over = math.floor((k.w - 2 * inset) * F.OVERHEAL + 0.5)
+		b.healRoom = CreateFrame("Frame", nil, b)
+		b.healRoom:SetPoint("TOPLEFT", b.health, "TOPLEFT", 0, 0)
+		b.healRoom:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", over, 0)
+		if b.healRoom.SetClipsChildren then
+			b.healRoom:SetClipsChildren(true)
+		end
+		b.healRoom:SetFrameLevel((b.health:GetFrameLevel() or 1) + 1)
+		healParent = b.healRoom
+	end
+	b.heals = bar(healParent, 1)
 	b.heals:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
 	b.heals:SetPoint("BOTTOMLEFT", fill, "BOTTOMRIGHT", 0, 0)
 	b.shield = bar(b.health, 2)
@@ -1001,7 +1032,8 @@ local function levelText(src)
 	-- difficulty in the client's own colours where it will say
 	local c = _G.GetQuestDifficultyColor and level > 0 and _G.GetQuestDifficultyColor(level)
 	if c and c.r then
-		return ("|cff%02x%02x%02x%s|r "):format(c.r * 255, c.g * 255, c.b * 255, tag)
+		local function hex(v) return math.floor(v * 255 + 0.5) end
+		return ("|cff%02x%02x%02x%s|r "):format(hex(c.r), hex(c.g), hex(c.b), tag)
 	end
 	return tag .. " "
 end
@@ -1093,7 +1125,13 @@ function F.Paint(b, src)
 		name = src:FullName()
 	end
 	if k.group then
-		writeName(b.name, name)
+		local line = name
+		if k.level and name ~= nil then
+			-- a secret name is still a string: the client joins it for us
+			local ok, joined = pcall(function() return levelText(src) .. name end)
+			line = ok and joined or name
+		end
+		writeName(b.name, line)
 		if gone then
 			b.name:SetTextColor(0.60, 0.64, 0.62)
 		elseif src:Charmed() then

@@ -80,6 +80,14 @@ local LINE2_LIFT = 3
 local savePosition -- MakeHandle needs it, and it is written further down
 B.PAD = PAD
 local MIN_W = 34
+-- ONE WIDTH, WHATEVER IS IN IT (Josh 2026-09-24: "quest log seems to make
+-- the right panel wider"). The dock was as wide as its widest part, so the
+-- quest list's 230 made it jump when the tracker came and went - and without
+-- it the dock shrank until the XP line and the Ledger's prompt were cut off.
+-- It is a width of its own now, a setting, and everything in it follows.
+-- Never under 200: the narrowest the XP line, the readouts and the prompt
+-- all fit.
+B.WIDTH, B.WIDTH_MIN, B.WIDTH_MAX, B.WIDTH_STEP = 230, 200, 320, 10
 local bar, cells, row, sections, ordered, rowWidth
 
 -- the layout adds widths up, so it keeps its own number rather than asking the
@@ -651,19 +659,50 @@ function B.HeaderItem(frame)
 	return frame
 end
 
+-- the Census icon is in the header while the Census is on, unless you left
+-- it out (its charts are still at /bt census and on its page)
+local function censusInHeader()
+	return BT.Enabled and BT.Enabled("census") and not (BT.settings and BT.settings.censusButton == false)
+		or false
+end
+
+-- HOW WIDE THE HEADER NEEDS TO BE (Josh 2026-09-24). The dock was as wide as
+-- its row or its widest section, and never less than a sliver; with the
+-- Census alone there is neither, and the panel shrank to 34 pixels behind
+-- "Beeb" while "Mod", the icon and the cog hung off it over the world. The
+-- name, what sits beside it and whatever is at the right-hand end all fit.
+local function headerNeed()
+	local title = BT.Pill.Number(bar.header.title:GetStringWidth(), 52)
+	local w = INSET + 1 + title + 4
+	if bar.census and censusInHeader() then
+		w = w + 22
+	end
+	if bar.cog then
+		w = w + (bar.cog.cellWidth or 22)
+	end
+	for _, f in ipairs(bar.headerItems or {}) do
+		if f:IsShown() then
+			w = w + 4 + BT.Pill.Number(f:GetWidth(), 0)
+		end
+	end
+	return math.ceil(w + INSET)
+end
+
 function B.Relayout()
 	if not bar then
 		return
 	end
 	sortSections()
 	local wantRow = B.RowWanted()
-	local width, live = math.max(rowWidth or MIN_W, MIN_W), false
+	-- the dock's own width; only a row or a header that could not fit in it
+	-- (a setting narrower than its cells) makes it wider
+	local width, live = math.max(B.Width(), rowWidth or MIN_W, MIN_W), false
 	for _, s in ipairs(ordered) do
 		if s.frame:IsShown() and s.key ~= "readouts" then
-			width = math.max(width, s.frame.wantWidth or 0)
 			live = true
 		end
 	end
+	width = math.max(width, headerNeed())
 	local chipRank
 	do
 		local rank = {}
@@ -799,8 +838,7 @@ function B.Relayout()
 		bar.census:SetPoint("LEFT", prev, "RIGHT", 4, 0)
 		-- its button can be left out of the header, the charts kept (Josh
 		-- 2026-09-24): /bt census and the Census page still open them
-		local on = BT.Enabled and BT.Enabled("census") and not (BT.settings and BT.settings.censusButton == false)
-			or false
+		local on = censusInHeader()
 		bar.census:SetShown(on)
 		if on then
 			prev = bar.census
@@ -834,7 +872,11 @@ function B.Relayout()
 	-- a clock or the census icon in the header is something to show too:
 	-- the dock went with the last panel module, clock and all, and with it
 	-- the cog that is the way into the settings (Josh 2026-09-23, audit)
-	if wantRow or live or right ~= nil then
+	-- THE CENSUS ON ITS OWN (Josh 2026-09-24): its icon is a way in as much
+	-- as the clock is, and the census alone is a way to use the addon - the
+	-- name, the icon and the cog, and nothing under them
+	local censusIcon = bar.census ~= nil and bar.census:IsShown()
+	if wantRow or live or right ~= nil or censusIcon then
 		bar:Show()
 	else
 		bar:Hide()
@@ -1204,6 +1246,23 @@ function B.SetScale(n)
 		BT.Widgets.Hairlines()
 		B.Relayout()
 	end
+end
+
+-- how wide the dock is, as a setting (B.WIDTH)
+function B.Width()
+	local w = BT.settings and tonumber(BT.settings.dockWidth)
+	if not w then
+		return B.WIDTH
+	end
+	return math.max(B.WIDTH_MIN, math.min(B.WIDTH_MAX, w))
+end
+
+function B.SetWidth(n)
+	BT.EnsureBound()
+	n = math.max(B.WIDTH_MIN, math.min(B.WIDTH_MAX, math.floor(n + 0.5)))
+	BT.settings.dockWidth = n ~= B.WIDTH and n or nil
+	B.Relayout()
+	return n
 end
 
 function B.Scale()

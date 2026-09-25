@@ -65,6 +65,17 @@ end
 
 -- Returns key, fullName, realm. The full name keeps whatever spacing and case
 -- the client gave us, because that is what the player sees on their portrait.
+--
+-- THE NAME ALONE, AT HOME (Josh 2026-09-24). A book belongs to one realm, so
+-- "@ClassicBetaPvE2" on every one of its keys said the same thing sixteen
+-- thousand times - a third of a packed character (Core/Pack.lua). A
+-- character of the realm you are on is keyed by name; only a visitor from
+-- another realm carries "@Realm".
+function U.HomeRealm()
+	local home = U.realm or (GetRealmName and GetRealmName())
+	return home and (home:gsub("%s+", "")) or nil
+end
+
 function U.Key(name, realm)
 	if type(name) ~= "string" then
 		return nil
@@ -94,6 +105,9 @@ function U.Key(name, realm)
 	-- Blizzard writes realm names with and without their spaces depending on
 	-- where you read them; one spelling, or one character lands under two keys
 	realm = realm:gsub("%s+", "")
+	if realm == U.HomeRealm() then
+		return name, name, realm
+	end
 	return name .. SEP .. realm, name, realm
 end
 
@@ -112,7 +126,7 @@ function U.NameFromKey(key)
 	if type(key) ~= "string" then
 		return nil
 	end
-	return key:match("^(.*)" .. SEP)
+	return key:match("^(.*)" .. SEP) or key
 end
 
 -- The realm half of a player GUID ("Player-4372-0002BFB1") is a realm ID, not
@@ -289,7 +303,10 @@ function U.MeKey()
 	if not me then
 		return "?"
 	end
-	return U.Key(me) or me
+	-- always with the realm, unlike a book's key: the settings are
+	-- account-wide, so this has to tell two realms apart
+	local realm = U.HomeRealm()
+	return realm and (me .. SEP .. realm) or me
 end
 
 function U.Me()

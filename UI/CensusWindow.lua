@@ -77,7 +77,7 @@ local function subtitle()
 	end
 	local m = BT.GetModule("census")
 	local census = m and m.view and m.view.census
-	local total = census and census.total or BT.DB.Stats(BT.db).total
+	local total = census and (census.book or census.total) or BT.DB.Stats(BT.db).total
 	frame.subtitle:SetText(("%s · %s · %d characters")
 		:format(BT.scope and BT.scope.realm or "?", BT.scope and BT.scope.faction or "?", total))
 end

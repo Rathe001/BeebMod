@@ -180,11 +180,16 @@ function C.Backfill(budget)
 	-- written after the walk: a rename can add a row and empty this one, and
 	-- adding to the table being walked is an "invalid key to next"
 	local renames = {}
-	for _, p in pairs(DB.Players(BT.db)) do
+	for key, p in DB.Each(BT.db) do
+		-- A PACKED ROW IS A TIDY ONE (Josh 2026-09-24): only a real GUID
+		-- goes into the string, so a packed row with a class has nothing
+		-- to put right, and one without is unpacked to be filled in
+		if not p.class and p.light then
+			p = DB.Get(BT.db, key)
+		end
 		-- a "guid" that is not one is the lineID bug above: drop it, so the
 		-- count of who we cannot identify is honest
-		if p.guid ~= nil and (type(p.guid) ~= "string" or not p.guid:match("^Player%-")) then
-			if BT.db.guids then BT.db.guids[p.guid] = nil end
+		if p.guid ~= nil and not p.light and (type(p.guid) ~= "string" or not p.guid:match("^Player%-")) then
 			p.guid = nil
 		end
 		if not p.class and not p.guid then
@@ -422,6 +427,33 @@ handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
 		BT.lastRun = BT.lastRun or {}
 		BT.lastRun.pruned = DB.Prune(BT.db, BT.settings.pruneDays)
 	end
+	-- and the book's size, at the same quiet moment (DB.Cap)
+	if BT.db and (BT.settings.bookCap or 0) > 0 then
+		BT.lastRun = BT.lastRun or {}
+		BT.lastRun.capped, BT.lastRun.capFrom = DB.Cap(BT.db, BT.settings.bookCap)
+	end
+end
+
+-- PACKED FOR THE NIGHT (Josh 2026-09-24). Every character the session
+-- unpacked goes back into its string before the client writes the file - in
+-- every book, so one bound before the packing existed is packed too. A row
+-- that cannot be packed stays a table, which the next login reads just the
+-- same, so nothing here can lose anybody; and it is all inside a pcall,
+-- because an error here would stand between you and the logout.
+handlers.PLAYER_LOGOUT = function()
+	if not (BT.DB and type(BeebModDB) == "table" and type(BeebModDB.realms) == "table") then
+		return
+	end
+	pcall(function()
+		local packed = 0
+		for key, book in pairs(BeebModDB.realms) do
+			if type(book) == "table" and type(book.players) == "table" then
+				book.realm = book.realm or key:match("^(.-)|")
+				packed = packed + DB.PackAll(book)
+			end
+		end
+		BeebModDB.packedAtLogout = packed
+	end)
 end
 
 -- the tests reach the login handler through this rather than through an event

@@ -1,5 +1,6 @@
--- The census view: one horizontal bar chart, four things it can count
--- (Josh 2026-09-18), in the Census window (UI/CensusWindow.lua).
+-- The census view: one horizontal bar chart, six things it can count
+-- (Josh 2026-09-18; guild and zone 2026-09-24), in the Census window
+-- (UI/CensusWindow.lua).
 --
 -- Bars are sorted by size, except levels, which stay in level order - a
 -- 1-10 .. 51-59, 60 chart shuffled by popularity cannot be read at all.
@@ -11,12 +12,16 @@ local C = {}
 BT.Census = C
 
 local ROWS, ROW_H, BAR_X, BAR_W = 12, 22, 150, 380
+-- the brackets, how recently, the charts, the caption, then the bars
+local SEEN_Y, MODE_Y, SUB_Y, ROWS_Y = -24, -50, -76, -96
 local COUNT_W = 78 -- the column the counts are right-aligned in
 
 local MODES = {
 	{ key = "class", label = "Class" },
 	{ key = "race",  label = "Race" },
 	{ key = "level", label = "Level" },
+	{ key = "guild", label = "Guild" },
+	{ key = "zone",  label = "Zone"  },
 	{ key = "flag",  label = "Tags"  },
 }
 C.MODES = MODES
@@ -26,8 +31,13 @@ local function prettyClass(key)
 end
 
 local function rowLabel(mode, key)
-	if key == BT.Stats.UNKNOWN then
+	local S = BT.Stats
+	if key == S.UNKNOWN then
 		return "Unknown"
+	elseif key == S.UNGUILDED then
+		return "No guild"
+	elseif key == S.OTHER then
+		return mode == "guild" and "Other guilds" or "Elsewhere"
 	end
 	if mode == "class" then
 		return prettyClass(key)
@@ -39,8 +49,9 @@ local function rowLabel(mode, key)
 end
 
 local function rowColor(mode, key)
-	if key == BT.Stats.UNKNOWN then
-		return 0.42, 0.46, 0.44 -- grey: a gap in the book, not a category
+	local S = BT.Stats
+	if key == S.UNKNOWN or key == S.UNGUILDED or key == S.OTHER then
+		return 0.42, 0.46, 0.44 -- grey: a gap in the book, or a pile, not a category
 	end
 	if mode == "class" then
 		local r, g, b = U.ClassColor(key)
@@ -86,6 +97,42 @@ function C.Build(parent)
 		bx = bx + (band.key == "60" and 40 or 58)
 	end
 
+	-- SEEN WITHIN (Josh 2026-09-24): the book remembers everyone who ever
+	-- passed through; these narrow every chart to who is about lately. One
+	-- of them is always on, and All is the whole book.
+	view.seen = "all"
+	view.seenButtons = {}
+	local seenLabel = label(view, "SEEN", "small", 0.42, 0.47, 0.45)
+	seenLabel:SetPoint("TOPLEFT", 0, SEEN_Y - 3)
+	local sx = 52
+	for _, s in ipairs(BT.Stats.SEEN) do
+		local b = BT.Widgets.Button(view, s.label, 54, 20)
+		b:SetPoint("TOPLEFT", sx, SEEN_Y)
+		b:SetScript("OnClick", function()
+			view.seen = s.key
+			C.Refresh(view)
+		end)
+		view.seenButtons[s.key] = b
+		sx = sx + 58
+	end
+
+	-- CLICK A BAR (Josh 2026-09-24): a class, race, guild, zone or tag picked
+	-- here narrows every other chart to it - "what races are the hunters",
+	-- "what levels is this guild". Its button, on the right, puts it back.
+	view.clear = BT.Widgets.Button(view, "", 190, 20)
+	view.clear:SetPoint("TOPRIGHT", -4, SEEN_Y)
+	view.clear:SetScript("OnClick", function()
+		view.pick = nil
+		C.Refresh(view)
+	end)
+	-- a guild's name can be longer than the button
+	view.clear.label:SetWidth(178)
+	view.clear.label:SetWordWrap(false)
+	view.clear:Hide()
+	view.hint = label(view, "click a bar to count only them", "small", 0.42, 0.47, 0.45)
+	view.hint:SetPoint("TOPRIGHT", -6, SEEN_Y - 3)
+	view.hint:SetJustifyH("RIGHT")
+
 	-- THE CHARTS THE TOOLKIT CAN ACTUALLY DRAW (Josh 2026-09-19). Tags are the
 	-- Ledger's vocabulary; with the Ledger switched off there is nothing to
 	-- chart and the button would be a promise we cannot keep, so it goes.
@@ -116,10 +163,30 @@ function C.Build(parent)
 		-- 560 with the count hung 538 pixels along, which ran off the edge of
 		-- the window and took the percentage with it. The count is pinned to
 		-- the right instead, and the bar stretches to meet it.
-		local row = CreateFrame("Frame", nil, view)
+		local row = CreateFrame("Button", nil, view)
 		row:SetHeight(ROW_H)
-		row:SetPoint("TOPLEFT", 0, -72 - (i - 1) * ROW_H)
-		row:SetPoint("TOPRIGHT", 0, -72 - (i - 1) * ROW_H)
+		row:SetPoint("TOPLEFT", 0, ROWS_Y - (i - 1) * ROW_H)
+		row:SetPoint("TOPRIGHT", 0, ROWS_Y - (i - 1) * ROW_H)
+		row.hover = row:CreateTexture(nil, "BACKGROUND")
+		row.hover:SetAllPoints()
+		row.hover:SetColorTexture(1, 1, 1, 0.04)
+		row.hover:Hide()
+		row:SetScript("OnEnter", function(self)
+			if self.pickable then self.hover:Show() end
+		end)
+		row:SetScript("OnLeave", function(self) self.hover:Hide() end)
+		row:SetScript("OnClick", function(self)
+			if not self.pickable then
+				return
+			end
+			local p = view.pick
+			if p and p.mode == view.mode and p.key == self.key then
+				view.pick = nil
+			else
+				view.pick = { mode = view.mode, key = self.key }
+			end
+			C.Refresh(view)
+		end)
 		row.name = label(row, "", "small")
 		row.name:SetPoint("LEFT", 4, 0)
 		row.name:SetWidth(BAR_X - 12)
@@ -142,7 +209,7 @@ function C.Build(parent)
 	end
 
 	view.footer = label(view, "", "small", 0.5, 0.55, 0.52)
-	view.footer:SetPoint("TOPLEFT", 4, -78 - ROWS * ROW_H)
+	view.footer:SetPoint("TOPLEFT", 4, ROWS_Y - 6 - ROWS * ROW_H)
 	return view
 end
 
@@ -159,19 +226,32 @@ local function bandFilter(view)
 	return any and view.bands or nil
 end
 
--- `census`, when given, is one already counted (the window's job, counted a
--- slice a frame - see UI/CensusWindow.lua); otherwise it is counted now
--- the brackets a view is counting, for a census counted elsewhere
+-- what a view is counting - brackets, how recently, the bar picked - for a
+-- census counted elsewhere (BT.Stats.Census has the shape)
 function C.Filter(view)
-	return bandFilter(view)
+	-- a pick on a chart that is not there today (tags, with the Ledger off)
+	-- is a filter nobody can see or undo
+	local pick = view.pick
+	if pick and pick.mode == "flag" and not BT.Enabled("ledger") then
+		view.pick, pick = nil, nil
+	end
+	return { bands = bandFilter(view), seen = view.seen, pick = pick }
 end
 
+-- `census`, when given, is one already counted (the window's job, counted a
+-- slice a frame - see UI/CensusWindow.lua); otherwise it is counted now
 function C.Refresh(view, census)
 	if not (view and BT.db) then
 		return
 	end
-	local filter = bandFilter(view)
-	census = census or BT.Stats.Census(BT.db, nil, filter)
+	local want = C.Filter(view)
+	local filter = want.bands
+	-- counted a slice at a time before a click changed what to count: that
+	-- census is of the wrong thing, so count the right one now
+	if census and (census.pick ~= want.pick or (census.seen or "all") ~= (want.seen or "all")) then
+		census = nil
+	end
+	census = census or BT.Stats.Census(BT.db, nil, want)
 	view.census = census
 	-- lay the mode buttons out around whichever of them belong here today
 	local x = 0
@@ -184,14 +264,14 @@ function C.Refresh(view, census)
 			end
 		else
 			b:ClearAllPoints()
-			b:SetPoint("TOPLEFT", x, -26)
+			b:SetPoint("TOPLEFT", x, MODE_Y)
 			b:Show()
 			x = x + 84
 		end
 	end
 	view.subtitle:ClearAllPoints()
-	view.subtitle:SetPoint("TOPLEFT", 1, -52)
-	view.subtitle:SetPoint("TOPRIGHT", -4, -52)
+	view.subtitle:SetPoint("TOPLEFT", 1, SUB_Y)
+	view.subtitle:SetPoint("TOPRIGHT", -4, SUB_Y)
 	for key, b in pairs(view.modeButtons) do
 		b:SetPressed(key == view.mode)
 	end
@@ -199,13 +279,28 @@ function C.Refresh(view, census)
 		-- with no filter every bracket counts, so every button reads as on
 		b:SetPressed(filter == nil or view.bands[key] == true)
 	end
-	local rows = census[view.mode] or {}
-	-- on the level chart the brackets are a highlight, not a filter
-	if view.mode == "level" and filter then
-		for _, r in ipairs(rows) do
-			r.muted = not view.bands[r.key]
-		end
+	for key, b in pairs(view.seenButtons) do
+		b:SetPressed(key == (view.seen or "all"))
 	end
+	local pick = view.pick
+	if pick then
+		view.clear:SetLabel(("only %s · clear"):format(rowLabel(pick.mode, pick.key)))
+		view.clear:Show()
+		view.hint:Hide()
+	else
+		view.clear:Hide()
+		view.hint:Show()
+	end
+	local rows = census[view.mode] or {}
+	-- On the level chart the brackets are a highlight, not a filter; on the
+	-- chart a bar was picked from, every bar but that one is quiet.
+	local function muted(r)
+		if view.mode == "level" and filter then
+			return not view.bands[r.key]
+		end
+		return pick ~= nil and pick.mode == view.mode and pick.key ~= r.key
+	end
+	local pickable = BT.Stats.PICKABLE[view.mode]
 	local top = 0
 	for _, r in ipairs(rows) do
 		if r.n > top then top = r.n end
@@ -227,7 +322,10 @@ function C.Refresh(view, census)
 				track = BAR_W
 			end
 			row.bar:SetWidth(math.max(1, track * (top > 0 and r.n / top or 0)))
-			if r.muted then
+			-- the pile of the rest is not one thing, so it cannot be picked
+			row.key = r.key
+			row.pickable = pickable and r.key ~= BT.Stats.OTHER
+			if muted(r) then
 				row.bar:SetColorTexture(0.35, 0.4, 0.38, 0.5)
 				row.name:SetTextColor(0.42, 0.47, 0.45)
 			else
@@ -240,6 +338,7 @@ function C.Refresh(view, census)
 			row.count:SetText(("%d  |cff6e7b75%d%%|r"):format(r.n, pct))
 			row:Show()
 		else
+			row.key, row.pickable = nil, nil
 			row:Hide()
 		end
 	end

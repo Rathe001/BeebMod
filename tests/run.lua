@@ -21,7 +21,7 @@ _G.GetAddOnMetadata = function() return "0.1.0" end
 local BT = {}
 -- the pure-Lua half of the toolkit: the core's book, and the two modules'
 -- arithmetic. No frames, so no UI files.
-for _, f in ipairs({ "Core/Init.lua", "Core/Cpu.lua", "Core/Util.lua", "Core/Session.lua", "Core/DB.lua",
+for _, f in ipairs({ "Core/Init.lua", "Core/Cpu.lua", "Core/Util.lua", "Core/Session.lua", "Core/Pack.lua", "Core/DB.lua",
 	-- the widget kit comes along for the surface it defines; it draws nothing
 	-- until something asks it to
 	"UI/Pill.lua", "UI/Widgets.lua",
@@ -58,7 +58,7 @@ do
 	local a = U.Key("Beeb Bob")
 	local b = U.Key("Beeb Bob", "Whitemane")
 	local typed = U.Key("Beeb-Bob")
-	check(a == "Beeb Bob@Whitemane" and a == b, ("a full name keys once (%s / %s)"):format(a, b))
+	check(a == "Beeb Bob" and a == b, ("a full name keys once (%s / %s)"):format(a, b))
 	check(typed == a, ("a name typed with a hyphen is the same character (%s)"):format(typed))
 	U.LearnRealm("Whitemane")
 	U.LearnRealm("Faerlina")
@@ -79,7 +79,7 @@ do
 	-- a unit sighting hands over faction and sex as well, and neither may land
 	-- on the row: DB.Note used to strip them and then copy them straight back
 	DB.Note(db, "Beeb Bob", nil, { zone = "Orgrimmar", faction = "Alliance", sex = 2 }, 2000)
-	local p = DB.Get(db, "Beeb Bob@Whitemane")
+	local p = DB.Get(db, "Beeb Bob")
 	check(p.class == "WARRIOR" and p.level == 60 and p.guild == "Nightwatch",
 		"a bare sighting does not erase class, level or guild")
 	check(p.zone == "Orgrimmar" and p.seen == 2 and p.last == 2000 and p.first == 1000,
@@ -106,7 +106,7 @@ do
 		"while everything that says something is left alone")
 	check(DB.Slim(db) == 0, "and it only happens once")
 	DB.Note(db, "Beeb Bob", nil, { level = 12 }, 3000)
-	check(DB.Get(db, "Beeb Bob@Whitemane").level == 60, "a stale level never walks a character backwards")
+	check(DB.Get(db, "Beeb Bob").level == 60, "a stale level never walks a character backwards")
 end
 
 -- 3. Guild history, which is the thing a census knows that an armory does not.
@@ -115,7 +115,7 @@ do
 	DB.Note(db, "Astralux Vane", nil, { guild = "First" }, 1000)
 	DB.Note(db, "Astralux Vane", nil, { guild = "First" }, 2000)
 	DB.Note(db, "Astralux Vane", nil, { guild = "Second" }, 3000)
-	local p = DB.Get(db, "Astralux Vane@Whitemane")
+	local p = DB.Get(db, "Astralux Vane")
 	check(#p.guilds == 2 and p.guild == "Second", "a guild change adds a row, a repeat does not")
 	local former, when = DB.FormerGuild(p)
 	check(former == "First" and when == 2000, ("the tooltip can say where they were (%s)"):format(tostring(former)))
@@ -127,7 +127,7 @@ end
 -- 4. Your half: notes, flags, ratings.
 do
 	local db = newdb()
-	local key = "Grimshade Ash@Whitemane"
+	local key = "Grimshade Ash"
 	DB.Note(db, "Grimshade Ash", nil, {}, 1000)
 	check(not DB.IsMine(DB.Get(db, key)), "a stranger is not yours")
 	DB.SetNote(db, key, "  good healer, slow to res  ")
@@ -151,10 +151,10 @@ do
 	DB.Note(db, "Beeb Bob", nil, { class = "WARRIOR", level = 60, guild = "Nightwatch" }, 1000)
 	DB.Note(db, "Beebles Ann", nil, { class = "MAGE", level = 42 }, 3000)
 	DB.Note(db, "Corwin Bob", nil, { class = "MAGE", level = 60, guild = "Nightwatch" }, 2000)
-	DB.SetNote(db, "Beeb Bob@Whitemane", "tanked Molten Core")
-	DB.SetFlag(db, "Beeb Bob@Whitemane", "troll", true)
+	DB.SetNote(db, "Beeb Bob", "tanked Molten Core")
+	DB.SetFlag(db, "Beeb Bob", "troll", true)
 	local r = DB.Search(db, { text = "beeb" })
-	check(#r == 2 and r[1].key == "Beeb Bob@Whitemane",
+	check(#r == 2 and r[1].key == "Beeb Bob",
 		("a given-name prefix finds both Beebs, the noted one first (%d)"):format(#r))
 	local s = DB.Search(db, { text = "bob" })
 	check(#s == 2, ("a surname is searchable on its own (%d)"):format(#s))
@@ -167,7 +167,7 @@ do
 		"level range and only-mine")
 	check(#DB.Search(db, { limit = 1 }) == 1, "a limit truncates")
 	local all = DB.Search(db, {})
-	check(all[1].key == "Beeb Bob@Whitemane" and all[2].key == "Beebles Ann@Whitemane",
+	check(all[1].key == "Beeb Bob" and all[2].key == "Beebles Ann",
 		"yours first, then most recently seen")
 end
 
@@ -178,10 +178,10 @@ do
 	DB.Note(db, "Stranger One", nil, {}, now - 9 * 86400)
 	DB.Note(db, "Friend Two", nil, {}, now - 9 * 86400)
 	DB.Note(db, "Recent Three", nil, {}, now - 86400)
-	DB.SetNote(db, "Friend Two@Whitemane", "shared a dungeon")
+	DB.SetNote(db, "Friend Two", "shared a dungeon")
 	check(DB.Prune(db, 7, now) == 1, "one stale stranger dropped")
-	check(DB.Get(db, "Friend Two@Whitemane") and DB.Get(db, "Recent Three@Whitemane")
-		and not DB.Get(db, "Stranger One@Whitemane"),
+	check(DB.Get(db, "Friend Two") and DB.Get(db, "Recent Three")
+		and not DB.Get(db, "Stranger One"),
 		"the noted one and the recent one stay")
 	check(DB.Prune(db, 0, now) == 0, "pruning is off at zero days")
 end
@@ -192,7 +192,7 @@ do
 	local db = newdb()
 	local t0 = 1000000
 	DB.Note(db, "Kalles Kalleborg", nil, { level = 3, guild = "Inner Sanctum", zone = "Teldrassil" }, t0)
-	local p = DB.Get(db, "Kalles Kalleborg@Whitemane")
+	local p = DB.Get(db, "Kalles Kalleborg")
 	check(p.levelAt == t0 and p.guildAt == t0 and p.zoneAt == t0, "each observed field stamps its own moment")
 	check(U.LevelText(p, t0) == "3" and U.ZoneText(p, t0) == "Teldrassil" and U.GuildText(p, t0) == "Inner Sanctum",
 		"fresh: say it plainly")
@@ -210,23 +210,23 @@ do
 	local db = newdb()
 	-- a half-named row as older versions left behind: written straight in,
 	-- because DB.Note will not create one any more
-	db.players["Arch@Whitemane"] = { name = "Arch", realm = "Whitemane", given = "Arch",
+	db.players["Arch"] = { name = "Arch", realm = "Whitemane", given = "Arch",
 		guid = "Player-70-0001", class = "ROGUE", seen = 1, first = 1000, last = 1000 }
-	db.guids["Player-70-0001"] = "Arch@Whitemane"
-	DB.SetNote(db, "Arch@Whitemane", "ganked me in Ashenvale")
+	DB.Guids(db)["Player-70-0001"] = "Arch"
+	DB.SetNote(db, "Arch", "ganked me in Ashenvale")
 	DB.Note(db, "Arch Droob", nil, { guid = "Player-70-0001", level = 12 }, 2000)
-	check(DB.Get(db, "Arch@Whitemane") == nil, "the half-named row is gone")
-	local p = DB.Get(db, "Arch Droob@Whitemane")
+	check(DB.Get(db, "Arch") == nil, "the half-named row is gone")
+	local p = DB.Get(db, "Arch Droob")
 	check(p and p.note == "ganked me in Ashenvale" and p.class == "ROGUE" and p.level == 12 and p.seen >= 2,
 		"the full name keeps the note, the class, the level and the count")
 	-- and the short name from then on lands on the same row
-	local before = DB.Get(db, "Arch Droob@Whitemane").seen
+	local before = DB.Get(db, "Arch Droob").seen
 	DB.Note(db, "Arch", nil, { guid = "Player-70-0001" }, 3000)
-	check(DB.Get(db, "Arch@Whitemane") == nil and DB.Get(db, "Arch Droob@Whitemane").seen > before,
+	check(DB.Get(db, "Arch") == nil and DB.Get(db, "Arch Droob").seen > before,
 		"a later short-named sighting files itself under the full name")
 	-- two different characters who share a given name stay apart
 	DB.Note(db, "Arch Vale", nil, { guid = "Player-70-0002" }, 4000)
-	check(DB.Get(db, "Arch Vale@Whitemane") and DB.Get(db, "Arch Droob@Whitemane"),
+	check(DB.Get(db, "Arch Vale") and DB.Get(db, "Arch Droob"),
 		"a different GUID is a different character")
 end
 
@@ -237,16 +237,16 @@ do
 	_G.BeebModDB = nil
 	local ally = BT.Bind("Whitemane", "Alliance")
 	DB.Note(ally, "Beeb Straffe", nil, { class = "DRUID" }, 1000)
-	DB.SetNote(ally, "Beeb Straffe@Whitemane", "my main")
+	DB.SetNote(ally, "Beeb Straffe", "my main")
 	-- an alt on the same realm and side opens the same book
 	local alt = BT.Bind("Whitemane", "Alliance")
-	check(alt == ally and DB.Get(alt, "Beeb Straffe@Whitemane").note == "my main",
+	check(alt == ally and DB.Get(alt, "Beeb Straffe").note == "my main",
 		"an alt on the same realm and faction reads the same notes")
 	-- the other faction, and another realm, do not
 	local horde = BT.Bind("Whitemane", "Horde")
-	check(DB.Get(horde, "Beeb Straffe@Whitemane") == nil, "the other faction keeps its own book")
+	check(DB.Get(horde, "Beeb Straffe") == nil, "the other faction keeps its own book")
 	local other = BT.Bind("Faerlina", "Alliance")
-	check(DB.Get(other, "Beeb Straffe@Whitemane") == nil, "so does another realm")
+	check(DB.Get(other, "Beeb Straffe") == nil, "so does another realm")
 	check(#BT.OtherBooks() == 2, ("the books you are not in are listed (%d)"):format(#BT.OtherBooks()))
 	-- settings are account-wide, not per book
 	BT.settings.collect = false
@@ -265,25 +265,25 @@ do
 	local db = newdb()
 	DB.Note(db, "Kept One", nil, { class = "MAGE", level = 12 })
 	DB.Note(db, "Lost Two", nil, { class = "ROGUE", level = 9 })
-	DB.SetNote(db, "Kept One@Whitemane", "held the door")
-	DB.SetFlag(db, "Kept One@Whitemane", "good", true)
+	DB.SetNote(db, "Kept One", "held the door")
+	DB.SetFlag(db, "Kept One", "good", true)
 
 	local keep = _G.BeebModKeep
 	check(type(keep) == "table" and type(keep.realms) == "table",
 		"writing a note fills the second variable")
 	local rows = keep.realms["Whitemane|Alliance"].players
-	check(rows["Kept One@Whitemane"] ~= nil, "the one you wrote on is in it")
-	check(rows["Lost Two@Whitemane"] == nil, "and the one you only walked past is not")
+	check(rows["Kept One"] ~= nil, "the one you wrote on is in it")
+	check(rows["Lost Two"] == nil, "and the one you only walked past is not")
 
 	-- the book fails to come back; the small variable does
 	_G.BeebModDB = nil
 	BT.boot = nil
 	local fresh = BT.Bind("Whitemane", "Alliance")
 	check(DB.Stats(fresh).total == 1, "an empty book is filled from what you wrote")
-	local back = DB.Get(fresh, "Kept One@Whitemane")
+	local back = DB.Get(fresh, "Kept One")
 	check(back and back.note == "held the door", "the note came back")
 	check(back and back.flags and back.flags.good, "and the tag with it")
-	check(DB.Get(fresh, "Lost Two@Whitemane") == nil,
+	check(DB.Get(fresh, "Lost Two") == nil,
 		"a sighting is replaceable and is not kept")
 
 	-- THREE CHANNELS, ONE QUESTION (Josh 2026-09-20). The same rows go into a
@@ -292,21 +292,21 @@ do
 	check(type(_G.BeebModChar) == "table",
 		"the per-character variable is written too")
 	local charRows = _G.BeebModChar.realms["Whitemane|Alliance"].players
-	check(charRows["Kept One@Whitemane"] ~= nil, "with the same rows in it")
+	check(charRows["Kept One"] ~= nil, "with the same rows in it")
 
 	-- and it is preferred on the way back in, because if it works at all it is
 	-- the one THIS character wrote
 	_G.BeebModDB, _G.BeebModKeep = nil, nil
 	BT.boot = nil
 	local only = BT.Bind("Whitemane", "Alliance")
-	check(DB.Stats(only).total == 1 and DB.Get(only, "Kept One@Whitemane").note == "held the door",
+	check(DB.Stats(only).total == 1 and DB.Get(only, "Kept One").note == "held the door",
 		"the per-character variable alone puts the note back")
 
 	-- and clearing a note takes the row out again, rather than leaving a
 	-- ghost that reappears next login
-	DB.SetNote(fresh, "Kept One@Whitemane", "")
-	DB.SetFlag(fresh, "Kept One@Whitemane", "good", false)
-	check(_G.BeebModKeep.realms["Whitemane|Alliance"].players["Kept One@Whitemane"] == nil,
+	DB.SetNote(fresh, "Kept One", "")
+	DB.SetFlag(fresh, "Kept One", "good", false)
+	check(_G.BeebModKeep.realms["Whitemane|Alliance"].players["Kept One"] == nil,
 		"nothing of yours left on it, nothing kept")
 end
 
@@ -345,7 +345,7 @@ do
 	-- "the data is there but the panel is a tab behind".
 	check(DB.Stats(fresh).total == 2, "and the book comes back whole")
 	check(DB.rev > revBefore, "with the revision moved, so the caches know")
-	check(DB.Get(fresh, "Horde One@Whitemane") ~= nil, "every character in it")
+	check(DB.Get(fresh, "Horde One") ~= nil, "every character in it")
 	check(BT.Stats.Census(fresh).total == 2,
 		"and the census counts them without being asked twice")
 
@@ -379,14 +379,14 @@ end
 -- so a book written under the old name is adopted once and saved under the new.
 do
 	_G.BeebModDB = nil
-	_G.BeebsToolkitDB = { realms = { ["Whitemane:Alliance"] = { players = { ["Old One@Whitemane"] = {
+	_G.BeebsToolkitDB = { realms = { ["Whitemane:Alliance"] = { players = { ["Old One"] = {
 		name = "Old One", realm = "Whitemane", level = 12,
 	} } } }, settings = { modules = {} } }
 	check(BT.Adopt() == true, "a book under the old name is adopted")
 	check(_G.BeebModDB == _G.BeebsToolkitDB, "and is the book from then on")
 
 	-- once there is a book under the new name, the old one is only history
-	_G.BeebModDB = { realms = { ["Whitemane:Alliance"] = { players = { ["New One@Whitemane"] = {
+	_G.BeebModDB = { realms = { ["Whitemane:Alliance"] = { players = { ["New One"] = {
 		name = "New One", realm = "Whitemane", level = 3,
 	} } } }, settings = {} }
 	local keep = _G.BeebModDB
@@ -403,7 +403,7 @@ do
 	DB.Note(db, "Ally Two", nil, { class = "WARRIOR", race = "Dwarf", level = 24 }, now - 2 * 86400)
 	DB.Note(db, "Ally Three", nil, { class = "MAGE", race = "Dwarf", level = 60 }, now - 40 * 86400)
 	DB.Note(db, "Ally Four", nil, {}, now - 40 * 86400) -- class and level unknown
-	DB.SetFlag(db, "Ally One@Whitemane", "troll", true)
+	DB.SetFlag(db, "Ally One", "troll", true)
 	local c = BT.Stats.Census(db, now)
 	check(c.total == 4 and c.class[1].key == "WARRIOR" and c.class[1].n == 2,
 		"the commonest class leads the class chart")
@@ -450,7 +450,7 @@ do
 	DB.Note(db2, "Low One", nil, { class = "MAGE", level = 4 }, 1000)
 	DB.Note(db2, "High Two", nil, { class = "DRUID", level = 60 }, 1000)
 	DB.Note(db2, "No Level", nil, { class = "ROGUE" }, 1000)
-	local only60 = BT.Stats.Census(db2, 1000, { ["60"] = true })
+	local only60 = BT.Stats.Census(db2, 1000, { bands = { ["60"] = true } })
 	check(only60.class[1].key == "DRUID" and #only60.class == 1,
 		"a bracket filter narrows the class chart to those levels")
 	check(only60.level[7].n == 1 and only60.level[1].n == 1,
@@ -470,8 +470,8 @@ do
 	local now = 200 * 86400
 	DB.Note(db, "Ghost One", nil, {}, now - 120 * 86400)
 	DB.Note(db, "Kept Two", nil, {}, now - 120 * 86400)
-	DB.SetFlag(db, "Kept Two@Whitemane", "troll", true)
-	check(DB.Prune(db, BT.settings.pruneDays, now) == 1 and DB.Get(db, "Kept Two@Whitemane"),
+	DB.SetFlag(db, "Kept Two", "troll", true)
+	check(DB.Prune(db, BT.settings.pruneDays, now) == 1 and DB.Get(db, "Kept Two"),
 		"the stranger goes, the flagged one stays")
 end
 
@@ -482,10 +482,10 @@ do
 	DB.Note(db, "Watched One", nil, {}, 1000)
 	check(DB.rev > before, "a sighting counts as a change")
 	local afterNote = DB.rev
-	DB.SetNote(db, "Watched One@Whitemane", "hello")
+	DB.SetNote(db, "Watched One", "hello")
 	check(DB.rev > afterNote, "so does writing a note")
 	local afterFlag = DB.rev
-	DB.SetFlag(db, "Watched One@Whitemane", "troll", true)
+	DB.SetFlag(db, "Watched One", "troll", true)
 	check(DB.rev > afterFlag, "and a flag")
 	local afterRead = DB.rev
 	DB.Search(db, { text = "watched" })
@@ -500,14 +500,14 @@ do
 	DB.Note(db, "Known Class", nil, { class = "MAGE" }, 1000)                  -- stays
 	DB.Note(db, "Guid Haver", nil, { guid = "Player-70-0004" }, 1000)          -- stays: askable
 	DB.Note(db, "Noted Stranger", nil, {}, 1000)
-	DB.SetNote(db, "Noted Stranger@Whitemane", "the one who ninja'd the belt") -- stays: yours
-	db.players["Nature@Whitemane"] = { name = "Nature", realm = "Whitemane", seen = 1, last = 1000 }
+	DB.SetNote(db, "Noted Stranger", "the one who ninja'd the belt") -- stays: yours
+	db.players["Nature"] = { name = "Nature", realm = "Whitemane", seen = 1, last = 1000 }
 	check(DB.Cleanup(db) == 2, "the nameless row and the pet go")
-	check(DB.Get(db, "Only Name@Whitemane") == nil
-		and DB.Get(db, "Paws@Whitemane") == nil
-		and DB.Get(db, "Known Class@Whitemane")
-		and DB.Get(db, "Guid Haver@Whitemane")
-		and DB.Get(db, "Noted Stranger@Whitemane"),
+	check(DB.Get(db, "Only Name") == nil
+		and DB.Get(db, "Paws") == nil
+		and DB.Get(db, "Known Class")
+		and DB.Get(db, "Guid Haver")
+		and DB.Get(db, "Noted Stranger"),
 		"a two-part name, a GUID or a note each save a record")
 	-- text a parser mistook for a person goes, vouched or not
 	DB.Note(db, "[1. General - Teldrassil] [3. LocalDefense - Teldrassil]", nil,
@@ -522,12 +522,12 @@ do
 	-- create a character without a surname, so nobody is called just "Totem"
 	check(DB.Note(db, "Totem", nil, { guid = "Player-4620-0068DFC4", class = "SHAMAN" }, 1000) == nil,
 		"a half-named sighting cannot create a character")
-	check(DB.Get(db, "Totem@Whitemane") == nil, "so no such row appears")
+	check(DB.Get(db, "Totem") == nil, "so no such row appears")
 	-- but it can still update the right person, found by GUID
 	DB.Note(db, "Totem Caller", nil, { guid = "Player-4620-0068DFC4" }, 1000)
-	local before = DB.Get(db, "Totem Caller@Whitemane").seen
+	local before = DB.Get(db, "Totem Caller").seen
 	DB.Note(db, "Totem", nil, { guid = "Player-4620-0068DFC4", class = "SHAMAN" }, 2000)
-	local p = DB.Get(db, "Totem Caller@Whitemane")
+	local p = DB.Get(db, "Totem Caller")
 	check(p.seen > before and p.class == "SHAMAN",
 		"half a name still updates the row its GUID belongs to")
 	check(DB.Cleanup(db) == 0, "and a clean book cleans to nothing")
@@ -540,14 +540,14 @@ do
 		settings = { collect = true },
 		realms = { ["Whitemane|Alliance"] = {
 			players = {
-				["Ghost Name@Whitemane"] = { name = "Ghost Name", realm = "Whitemane", seen = 2, last = 10 },
-				["Real One@Whitemane"] = { name = "Real One", realm = "Whitemane", class = "DRUID", seen = 1, last = 10 },
+				["Ghost Name"] = { name = "Ghost Name", realm = "Whitemane", seen = 2, last = 10 },
+				["Real One"] = { name = "Real One", realm = "Whitemane", class = "DRUID", seen = 1, last = 10 },
 			},
 			guids = {}, stats = { sightings = 3 },
 		} },
 	}
 	local db = BT.Bind("Whitemane", "Alliance")
-	check(DB.Get(db, "Ghost Name@Whitemane") == nil and DB.Get(db, "Real One@Whitemane"),
+	check(DB.Get(db, "Ghost Name") == nil and DB.Get(db, "Real One"),
 		"logging in after the upgrade sweeps the nameless out")
 	check(BT.cleanedOnLoad == 1 and _G.BeebModDB.schema == BT.SCHEMA, "and says how many it took")
 	BT.cleanedOnLoad = nil
@@ -560,9 +560,9 @@ do
 	DB.Note(db, "Apol Winterbrew", nil, { guid = "Player-70-0100", class = "SHAMAN" }, 1000)
 	-- the same character, from a source that only knows the given name
 	DB.Note(db, "Apol", nil, { guid = "Player-70-0100" }, 2000)
-	check(DB.Get(db, "Apol Winterbrew@Whitemane") and DB.Get(db, "Apol Winterbrew@Whitemane").name == "Apol Winterbrew",
+	check(DB.Get(db, "Apol Winterbrew") and DB.Get(db, "Apol Winterbrew").name == "Apol Winterbrew",
 		"a half-named sighting does not cut the record down")
-	check(DB.Get(db, "Apol@Whitemane") == nil, "and does not open a second row")
+	check(DB.Get(db, "Apol") == nil, "and does not open a second row")
 	check(U.HasSurname("Apol Winterbrew") and not U.HasSurname("Apol"), "one name is half a name")
 end
 
@@ -585,14 +585,14 @@ do
 	check(select(2, BT.AddTag("   ")) ~= nil, "and so is no name at all")
 
 	DB.Note(db, "Sticky Fingers", nil, {}, 1000)
-	DB.SetFlag(db, "Sticky Fingers@Whitemane", tag.key, true)
-	check(DB.Get(db, "Sticky Fingers@Whitemane").flags[tag.key], "it marks a character like any other")
+	DB.SetFlag(db, "Sticky Fingers", tag.key, true)
+	check(DB.Get(db, "Sticky Fingers").flags[tag.key], "it marks a character like any other")
 	check(#DB.Search(db, { flag = tag.key }) == 1, "and filters like any other")
 
 	-- deleting a tag takes it off everybody: a mark you cannot see or filter
 	-- by is worse than no mark
 	check(BT.RemoveTag("Ninja") == true, "a tag can be deleted by name")
-	check(DB.Get(db, "Sticky Fingers@Whitemane").flags == nil, "and it leaves every character it was on")
+	check(DB.Get(db, "Sticky Fingers").flags == nil, "and it leaves every character it was on")
 	check(#BT.AllFlags() == 3, "leaving the built-ins")
 end
 
@@ -604,7 +604,7 @@ do
 		settings = { collect = true },
 		realms = { ["Whitemane|Alliance"] = {
 			players = {
-				["Old Note@Whitemane"] = { name = "Old Note", realm = "Whitemane", seen = 1, last = 10,
+				["Old Note"] = { name = "Old Note", realm = "Whitemane", seen = 1, last = 10,
 					class = "DRUID", flags = { great = true, terrible = true, watch = true,
 						friendly = true, tank = true, avoid = true, tag7 = true } },
 			},
@@ -612,7 +612,7 @@ do
 		} },
 	}
 	local db = BT.Bind("Whitemane", "Alliance")
-	local f = DB.Get(db, "Old Note@Whitemane").flags
+	local f = DB.Get(db, "Old Note").flags
 	check(f.good and f.bad and f.troll,
 		"very good becomes Good player, terrible becomes Bad player, keep-an-eye becomes Troll")
 	check(f.friendly and U.FlagByKey("friendly") and U.FlagByKey("friendly").label == "Good company",
@@ -708,14 +708,14 @@ do
 
 	-- something of our own in the new book, to prove adopting does not trample it
 	DB.Note(db, "Beeb Bob", "Whitemane", { guid = "Player-1-BBB" }, 100)
-	DB.SetNote(db, "Beeb Bob@Whitemane", "met again")
+	DB.SetNote(db, "Beeb Bob", "met again")
 
 	local done = BT.AdoptBook("OldRealm Alliance")
 	check(done and done.added == 2 and done.folded == 0,
 		"adopting brings the characters across under the name you were shown")
 	check(DB.Get(db, "Beeb Bob@OldRealm") and DB.Get(db, "Arch Droob@OldRealm"), "and they are in this book now")
-	check(db.guids["Player-1-AAA"] == "Beeb Bob@OldRealm", "with their GUIDs indexed here")
-	check(DB.Get(db, "Beeb Bob@Whitemane").note == "met again", "and what was already here is untouched")
+	check(DB.ByGuid(db, "Player-1-AAA") == "Beeb Bob@OldRealm", "with their GUIDs indexed here")
+	check(DB.Get(db, "Beeb Bob").note == "met again", "and what was already here is untouched")
 	check(db.stats.sightings >= 40, "the sightings count carries over too")
 	check(BT.AdoptBook("no such book") == nil, "a book that is not there is not adopted")
 
@@ -743,14 +743,14 @@ do
 		schema = BT.SCHEMA,
 		settings = {},
 		realms = { ["Whitemane|Alliance"] = {
-			players = { ["Old Timer@Whitemane"] = { name = "Old Timer", first = 1, last = 2, seen = 9 } },
+			players = { ["Old Timer"] = { name = "Old Timer", first = 1, last = 2, seen = 9 } },
 			guids = {},
 			stats = { sightings = 99 },
 		} },
 	}
 	check(BT.AcceptLateBook() == true, "a book that lands late is taken")
-	check(DB.Get(BT.db, "Old Timer@Whitemane"), "its characters are the ones we write in now")
-	check(DB.Get(BT.db, "Seen Whilewaiting@Whitemane"), "and what we saw while waiting is kept")
+	check(DB.Get(BT.db, "Old Timer"), "its characters are the ones we write in now")
+	check(DB.Get(BT.db, "Seen Whilewaiting"), "and what we saw while waiting is kept")
 	check(BT.db == _G.BeebModDB.realms["Whitemane|Alliance"], "and we write into the delivered table, not a copy")
 	check(BT.AcceptLateBook() == false, "taking it twice does nothing")
 
@@ -768,11 +768,11 @@ do
 		},
 		realms = { ["Whitemane|Alliance"] = {
 			players = {
-				["Baked Bread@Whitemane"] = { name = "Baked Bread", first = 1, last = 2, seen = 4,
+				["Baked Bread"] = { name = "Baked Bread", first = 1, last = 2, seen = 4,
 					class = "ROGUE", guid = "Player-1-DDD", flags = { tag3 = true }, note = "shared a quest" },
-				["Baked Beans@Whitemane"] = { name = "Baked Beans", first = 1, last = 2, seen = 1 },
+				["Baked Beans"] = { name = "Baked Beans", first = 1, last = 2, seen = 1 },
 			},
-			guids = { ["Player-1-DDD"] = "Baked Bread@Whitemane" },
+			guids = { ["Player-1-DDD"] = "Baked Bread" },
 			stats = { sightings = 12 },
 		} },
 	}
@@ -780,10 +780,10 @@ do
 	BT.boot = nil
 	local fresh = BT.Bind("Whitemane", "Alliance")
 	check(BT.bakedTaken == 2, ("the baked book is taken when nothing arrived (%s)"):format(tostring(BT.bakedTaken)))
-	check(DB.Get(fresh, "Baked Bread@Whitemane") and DB.Get(fresh, "Baked Beans@Whitemane"),
+	check(DB.Get(fresh, "Baked Bread") and DB.Get(fresh, "Baked Beans"),
 		"its characters are in the book we write in")
-	check(fresh.guids["Player-1-DDD"] == "Baked Bread@Whitemane", "and indexed by GUID")
-	check(DB.Get(fresh, "Baked Bread@Whitemane").flags.tag3 == true,
+	check(fresh.guids == nil, "and no GUID index is saved in the book any more")
+	check(DB.Get(fresh, "Baked Bread").flags.tag3 == true,
 		"a custom tag survives, because its definition came across first")
 	check(BT.Util.FlagByKey("tag3") ~= nil, "and the tag itself is a tag again")
 
@@ -809,15 +809,14 @@ do
 	-- baked file knows is handed over whole
 	BT.bakedTaken = nil
 	_G.BeebModDB = { schema = BT.SCHEMA, settings = {}, realms = { ["Whitemane|Alliance"] = {
-		players = { ["Real Person@Whitemane"] = { name = "Real Person", first = 1, last = 2, seen = 1 } },
+		players = { ["Real Person"] = { name = "Real Person", first = 1, last = 2, seen = 1 } },
 		guids = {}, stats = { sightings = 1 } } } }
 	BT.boot = nil
 	local live = BT.Bind("Whitemane", "Alliance")
 	check(BT.bakedTaken == 2, ("a book that arrived gets only what it lacks (%s)"):format(tostring(BT.bakedTaken)))
-	check(DB.Get(live, "Real Person@Whitemane").seen == 1, "and what it has is left exactly as it is")
-	check(DB.Get(live, "Baked Bread@Whitemane") ~= nil
-		and live.guids["Player-1-DDD"] == "Baked Bread@Whitemane",
-		"with the missing ones whole and found by GUID")
+	check(DB.Get(live, "Real Person").seen == 1, "and what it has is left exactly as it is")
+	check(DB.Get(live, "Baked Bread") ~= nil and DB.Get(live, "Baked Bread").guid == "Player-1-DDD",
+		"with the missing ones whole")
 	check(BT.settings.barPos and BT.settings.barPos.point ~= "TOPLEFT" or not BT.bakedSettings,
 		"and the baked settings never override the book's")
 	BT.baked = nil
@@ -834,17 +833,19 @@ do
 		["Solo Act@ClassicBetaPvE"] = { name = "Solo Act", first = 1, last = 2, seen = 1 },
 		["Far Away@Faerlina"] = { name = "Far Away", first = 1, last = 2, seen = 1 },
 	}
-	two.guids = { ["Player-9-AAA"] = "Ola Bard@ClassicBetaPvE" }
-	check(DB.FoldRealms(two, "ClassicBetaPvE2") == 2, "both old-spelling rows are folded")
-	check(DB.Get(two, "Ola Bard@ClassicBetaPvE") == nil, "the old key is gone")
-	local ola = DB.Get(two, "Ola Bard@ClassicBetaPvE2")
+	-- the old spelling AND this realm's own name come off the key: a
+	-- character of the book's realm is keyed by name alone (Josh 2026-09-24)
+	check(DB.FoldRealms(two, "ClassicBetaPvE2") == 3, "every row of this realm, either spelling, is folded")
+	check(DB.Get(two, "Ola Bard@ClassicBetaPvE") == nil and DB.Get(two, "Ola Bard@ClassicBetaPvE2") == nil,
+		"the old keys are gone")
+	local ola = DB.Get(two, "Ola Bard")
 	check(ola and ola.seen == 3 and ola.first == 5 and ola.last == 90 and ola.level == 32
 		and ola.note == "good healer" and ola.class == "MAGE",
-		"and the two halves of what we knew are one character")
-	check(two.guids["Player-9-AAA"] == "Ola Bard@ClassicBetaPvE2", "the GUID index follows")
-	check(DB.Get(two, "Solo Act@ClassicBetaPvE2"), "a row with nothing to merge into just moves")
-	check(DB.Get(two, "Solo Act@ClassicBetaPvE2").realm == "ClassicBetaPvE2", "and is told where it lives")
+		"and the two halves of what we knew are one character, under the name alone")
+	check(DB.Get(two, "Solo Act"), "a row with nothing to merge into just moves")
+	check(DB.Get(two, "Solo Act").realm == "ClassicBetaPvE2", "and is told where it lives")
 	check(DB.Get(two, "Far Away@Faerlina"), "another realm entirely is left alone")
+	check(two.realm == "ClassicBetaPvE2", "and the book knows its realm")
 	check(DB.FoldRealms(two, "ClassicBetaPvE2") == 0, "and running it again does nothing")
 
 	-- nothing arrived at all: the witness says so rather than shrugging
@@ -901,14 +902,14 @@ do
 	-- written straight onto the row: "tank" is retired, so DB.SetFlag rightly
 	-- refuses it, and what we are testing is what happens to a mark that is
 	-- already in a book written by an older version
-	DB.Get(db, "Tagged Person@Whitemane").flags = { tank = true }
+	DB.Get(db, "Tagged Person").flags = { tank = true }
 	BT.SetEnabled("ledger", false)
 	BT.Bind("Whitemane", "Alliance")
-	check(DB.Get(BT.db, "Tagged Person@Whitemane").flags.tank == true,
+	check(DB.Get(BT.db, "Tagged Person").flags.tank == true,
 		"a switched-off Ledger does not sweep the marks it is not showing")
 	BT.SetEnabled("ledger", true)
 	BT.Bind("Whitemane", "Alliance")
-	local p = DB.Get(BT.db, "Tagged Person@Whitemane")
+	local p = DB.Get(BT.db, "Tagged Person")
 	check(p.flags.tank == true and BT.Util.FlagByKey("tank") ~= nil,
 		"and with it back on, the retired flag becomes a tag of your own")
 
@@ -926,8 +927,8 @@ do
 	BT.baked = nil
 	local db = BT.Bind("Whitemane", "Alliance")
 	DB.Note(db, "Searcher One", "Whitemane", { class = "MAGE" }, 100)
-	DB.SetGuild(DB.Get(db, "Searcher One@Whitemane"), "Old Guard", 100)
-	DB.SetNote(db, "Searcher One@Whitemane", "ninja looter")
+	DB.SetGuild(DB.Get(db, "Searcher One"), "Old Guard", 100)
+	DB.SetNote(db, "Searcher One", "ninja looter")
 
 	local function find(text)
 		return #DB.Search(db, { text = text })
@@ -939,9 +940,9 @@ do
 	check(find("nobody") == 0, "and nothing matches nothing")
 
 	-- the cache has to notice each of those changing
-	DB.SetNote(db, "Searcher One@Whitemane", "actually fine")
+	DB.SetNote(db, "Searcher One", "actually fine")
 	check(find("ninja") == 0 and find("actually") == 1, "an edited note is searched as edited")
-	DB.SetGuild(DB.Get(db, "Searcher One@Whitemane"), "New Guard", 200)
+	DB.SetGuild(DB.Get(db, "Searcher One"), "New Guard", 200)
 	check(find("old guard") == 0 and find("new guard") == 1, "and a guild they have left is not searched")
 
 	-- and the counts are cached the same way, by revision
@@ -1077,19 +1078,19 @@ do
 	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Magus" or nil end
 	local db = newdb()
 	DB.Note(db, "Told About", "Whitemane", {}, 100)
-	DB.SetNote(db, "Told About@Whitemane", "solid tank")
-	local p = DB.Get(db, "Told About@Whitemane")
+	DB.SetNote(db, "Told About", "solid tank")
+	local p = DB.Get(db, "Told About")
 	check(p.notedBy == "Beeb Magus", ("the note remembers who wrote it (%s)"):format(tostring(p.notedBy)))
 	check((p.noted or 0) > 0, "and when")
 
 	-- a different character writing over it takes the note over with it
 	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Straffe" or nil end
-	DB.SetNote(db, "Told About@Whitemane", "actually a rogue")
-	check(DB.Get(db, "Told About@Whitemane").notedBy == "Beeb Straffe", "whoever wrote it last owns it")
+	DB.SetNote(db, "Told About", "actually a rogue")
+	check(DB.Get(db, "Told About").notedBy == "Beeb Straffe", "whoever wrote it last owns it")
 
 	-- clearing a note clears its source with it
-	DB.SetNote(db, "Told About@Whitemane", "")
-	check(DB.Get(db, "Told About@Whitemane").notedBy == nil, "and an empty note is nobody's")
+	DB.SetNote(db, "Told About", "")
+	check(DB.Get(db, "Told About").notedBy == nil, "and an empty note is nobody's")
 
 	check(BT.Util.ShortDate(1789828852):find("%d+/%d+/%d+") ~= nil,
 		("a short date reads as a date (%s)"):format(tostring(BT.Util.ShortDate(1789828852))))
@@ -1103,7 +1104,7 @@ end
 do
 	local held = BT.linked
 	BT.linked = { schema = BT.SCHEMA, settings = {}, realms = { ["Whitemane|Alliance"] = {
-		players = { ["Linked Friend@Whitemane"] = { name = "Linked Friend", first = 1, last = 2, seen = 1 } },
+		players = { ["Linked Friend"] = { name = "Linked Friend", first = 1, last = 2, seen = 1 } },
 		guids = {}, stats = { sightings = 1 } } } }
 	_G.BeebModDB = nil
 	BT.linkedRestored = nil
@@ -1114,7 +1115,7 @@ do
 	end
 	BT.boot = nil
 	local db = BT.Bind("Whitemane", "Alliance")
-	check(BT.linkedRestored and DB.Get(db, "Linked Friend@Whitemane") ~= nil,
+	check(BT.linkedRestored and DB.Get(db, "Linked Friend") ~= nil,
 		"a book the live file set is put back and bound")
 	BT.linked = held
 	BT.linkedRestored = nil
@@ -1125,7 +1126,7 @@ end
 do
 	local db = newdb()
 	DB.Note(db, "Guild Mate", nil, { guild = "Nightwatch" }, 1000)
-	local p = DB.Get(db, "Guild Mate@Whitemane")
+	local p = DB.Get(db, "Guild Mate")
 	local seen, last = p.seen, p.last
 	DB.Note(db, "Guild Mate", nil, { guild = "Nightwatch", listed = true }, 5000)
 	check(p.seen == seen and p.last == last, "an offline member listed by the roster is not a sighting")
@@ -1185,6 +1186,215 @@ do
 	check(census.total == whole.total and census.age.median == whole.age.median
 		and #census.class == #whole.class and census.class[1].n == whole.class[1].n,
 		"and the same charts as counting it in one go")
+	-- and the same filter, counted in slices
+	local filter = { seen = "today", pick = { mode = "class", key = "MAGE" } }
+	local picked = S.Census(db, 1030, filter)
+	step, census, calls = S.CensusJob(db, 1030, filter, 4), nil, 0
+	repeat
+		census = step()
+		calls = calls + 1
+	until census or calls > 100
+	check(census and census.matched == picked.matched and census.total == picked.total
+		and census.level[1].n == picked.level[1].n, "a filtered job counts what the filter says")
+end
+
+-- SEEN WITHIN, CLICK A BAR, GUILD AND ZONE (Josh 2026-09-24): the census
+-- narrowed to who is about lately, and to one bar of another chart
+do
+	local db = newdb()
+	local S, DAY = BT.Stats, 86400
+	local now = 100 * DAY
+	local function put(name, p)
+		db.players[name] = p
+		p.name = name
+		p.first = p.first or 0
+	end
+	put("Ann Arrow", { class = "HUNTER", race = "Dwarf", level = 60, guild = "Vanguard", zone = "Ironforge", last = now - 3600 })
+	put("Bob Bow", { class = "HUNTER", race = "Night Elf", level = 30, guild = "", zone = "Darnassus", last = now - 2 * DAY })
+	put("Cal Cast", { class = "MAGE", race = "Gnome", level = 60, guild = "Vanguard", zone = "Ironforge", last = now - 3600 })
+	put("Dee Dusk", { class = "MAGE", race = "Human", level = 12, last = now - 40 * DAY })
+	put("Eve Edge", { class = "ROGUE", race = "Human", level = 60, guild = "Vanguard", last = now - 3600,
+		flags = { healer = true } })
+	put("Fay Fog", { class = "HUNTER", level = 5 }) -- never seen: has no `last`
+
+	local all = S.Census(db, now)
+	check(all.book == 6 and all.total == 6 and all.matched == 6, "with no filter, everybody counts")
+	local today = S.Census(db, now, { seen = "today" })
+	check(today.book == 6 and today.total == 3, "seen today counts the three seen in the last day")
+	check(S.Subtitle("class", today, 3):find("seen today", 1, true) ~= nil,
+		("and the caption says so (%s)"):format(S.Subtitle("class", today, 3)))
+	local week = S.Census(db, now, { seen = "week" })
+	check(week.total == 4, "this week adds the one seen two days ago")
+	check(S.Census(db, now, { seen = "month" }).total == 4, "the month leaves out forty days ago and never")
+	check(S.Census(db, now, { seen = "nonsense" }).total == 6, "a seen that is not one of ours is no filter")
+
+	-- the guild chart: guilds, then the unguilded; the never-seen are a caveat
+	check(all.guild[1].key == "Vanguard" and all.guild[1].n == 3, "the largest guild first")
+	check(all.guild[#all.guild].key == S.UNGUILDED and all.guild[#all.guild].n == 1,
+		"then those seen with no guild, last")
+	check(all.unknown.guild == 2, "and no guild line at all is not the same as no guild")
+	check(S.Subtitle("guild", all, 4) == "4 of 6 · 2 no guild on file",
+		("the guild chart says who it left out (%s)"):format(S.Subtitle("guild", all, 4)))
+	check(all.zone[1].key == "Ironforge" and all.zone[1].n == 2 and all.unknown.zone == 3,
+		"the zone chart counts where each was last seen")
+
+	-- a long guild chart keeps its top and sums the rest
+	local long = newdb()
+	for i = 1, S.TOP + 5 do
+		long.players["Guild Member" .. i] = { name = "Guild Member" .. i, guild = "Guild " .. i, last = now }
+	end
+	long.players["Lone Wolf"] = { name = "Lone Wolf", guild = "", last = now }
+	local lc = S.Census(long, now)
+	check(#lc.guild == S.TOP + 2 and lc.guild[S.TOP + 1].key == S.OTHER and lc.guild[S.TOP + 1].n == 5
+		and lc.guild[S.TOP + 2].key == S.UNGUILDED, "the top guilds, the other guilds summed, then no guild")
+
+	-- a bar picked: every other chart counts only what it picked
+	local hunters = S.Census(db, now, { pick = { mode = "class", key = "HUNTER" } })
+	check(hunters.matched == 3 and hunters.total == 6, "three hunters out of six")
+	local classes = 0
+	for _, r in ipairs(hunters.class) do classes = classes + 1 end
+	check(classes == 3, "the class chart it was picked on still counts every class")
+	local races = {}
+	for _, r in ipairs(hunters.race) do races[r.key] = r.n end
+	check(races.Dwarf == 1 and races["Night Elf"] == 1 and races.Gnome == nil and races.Human == nil,
+		"the race chart counts only the hunters")
+	check(hunters.unknown.race == 1, "and the hunter with no race is its caveat")
+	check(S.Subtitle("race", hunters, 2) == "2 of 3 · 1 no race",
+		("out of the hunters, not the realm (%s)"):format(S.Subtitle("race", hunters, 2)))
+	check(hunters.level[7].n == 1 and hunters.level[1].n == 1 and hunters.level[3].n == 1,
+		"the level chart counts only the hunters")
+
+	local unguilded = S.Census(db, now, { pick = { mode = "guild", key = S.UNGUILDED } })
+	check(unguilded.matched == 1 and unguilded.class[1].key == "HUNTER", "no guild can be picked like a guild")
+	local healers = S.Census(db, now, { pick = { mode = "flag", key = "healer" } })
+	check(healers.matched == 1 and healers.class[1].key == "ROGUE", "and so can a tag")
+	local zoned = S.Census(db, now, { pick = { mode = "zone", key = "Ironforge" } })
+	check(zoned.matched == 2 and #zoned.race == 2, "and so can a zone")
+	check(S.Census(db, now, { pick = { mode = "level", key = "60" } }).matched == 6,
+		"the level chart has its brackets, not a pick")
+
+	-- all three at once: brackets, seen and a pick
+	local both = S.Census(db, now, { bands = { ["60"] = true }, seen = "today",
+		pick = { mode = "guild", key = "Vanguard" } })
+	check(both.total == 3 and both.matched == 3 and #both.class == 3, "they stack")
+end
+
+-- THE BOOK, PACKED (Josh 2026-09-24): a character at rest is one short
+-- string, and comes back the same character (Core/Pack.lua)
+do
+	local db = newdb()
+	local P = BT.Pack
+	local T = P.EPOCH + 200 * 86400 + 3 * 3600 + 17 * 60 + 42 -- mid-July, 03:17:42
+	DB.Note(db, "Drae Moreweth", nil, { guid = "Player-4620-007246A3", class = "WARLOCK", race = "Gnome",
+		level = 20, guild = "House Fortemps", zone = "Stormwind City", vouch = true }, T - 5 * 86400)
+	DB.Note(db, "Drae Moreweth", nil, { guild = "Night Watch", level = 24 }, T)
+	DB.Note(db, "Far Away", "Faerlina", { class = "MAGE" }, T)
+	DB.Note(db, "Lone Wolf", nil, { class = "ROGUE", guild = "" }, T)
+	DB.Note(db, "Old Timer", nil, { class = "DRUID" }, 1000) -- before 2026: cannot be said
+	DB.Note(db, "Noted Person", nil, { class = "PRIEST" }, T)
+	DB.SetNote(db, "Noted Person", "kind")
+	DB.Note(db, "Odd Field", nil, { class = "PRIEST" }, T)
+	DB.Get(db, "Odd Field").someday = 1
+	local before = BT.Stats.Census(db, T + 60)
+
+	local n = DB.PackAll(db)
+	check(n == 3, "three rows pack: " .. n)
+	local s = db.players["Drae Moreweth"]
+	check(type(s) == "string" and #s == P.HEAD + 2 * P.STINT,
+		("a character is a %d-letter string, and two guild stints"):format(type(s) == "string" and #s or -1))
+	check(type(db.players["Old Timer"]) == "table", "a time before 2026 stays a table")
+	check(type(db.players["Noted Person"]) == "table", "so does a character you wrote on")
+	check(type(db.players["Odd Field"]) == "table", "and one with a field the packing does not know")
+	check(type(db.players["Far Away@Faerlina"]) == "string", "a visitor from another realm packs too")
+	local guilds = table.concat(db.words and db.words.guild or {}, ",")
+	check(#db.words.guild == 2 and guilds:find("House Fortemps", 1, true) and guilds:find("Night Watch", 1, true),
+		"the words are listed once, on the book: " .. guilds)
+
+	-- the same census, read straight out of the strings
+	local after = BT.Stats.Census(db, T + 60)
+	check(after.total == before.total and after.class[1].n == before.class[1].n
+		and #after.guild == #before.guild and after.zone[1].key == "Stormwind City",
+		"the census reads a packed book the same")
+
+	-- and back into a table when somebody asks
+	local p = DB.Get(db, "Drae Moreweth")
+	check(type(db.players["Drae Moreweth"]) == "table" and p == db.players["Drae Moreweth"],
+		"asked for, it is unpacked and stays unpacked")
+	check(p.name == "Drae Moreweth" and p.realm == "Whitemane" and p.class == "WARLOCK" and p.race == "Gnome"
+		and p.level == 24 and p.guild == "Night Watch" and p.zone == "Stormwind City" and p.vouch == true
+		and p.seen == 2 and p.guid == "Player-4620-007246A3", "every field comes back")
+	check(p.last == T - 42 and p.first == T - 5 * 86400 - 17 * 60 - 42 and p.levelAt == T - 17 * 60 - 42,
+		"the last sighting to the minute, the rest to the hour")
+	check(p.guilds and #p.guilds == 2 and p.guilds[1].name == "House Fortemps" and p.guilds[2].name == "Night Watch",
+		"and the guild history, in order")
+	check(p.zoneAt == nil, "a zone keeps no time of its own")
+	check(DB.ByGuid(db, "Player-4620-007246A3") == "Drae Moreweth", "and its GUID is known this session")
+	check(P.Pack(db, "Drae Moreweth", p) == s, "packed again, it is the same string")
+	local far = DB.Get(db, "Far Away@Faerlina")
+	check(far.name == "Far Away" and far.realm == "Faerlina", "the visitor keeps their realm")
+	local lone = DB.Get(db, "Lone Wolf")
+	check(lone.guild == "" and lone.guilds == nil, "no guild is not an unknown guild")
+
+	-- a sighting of a packed character lands on the same row
+	DB.PackAll(db)
+	DB.Note(db, "Drae Moreweth", nil, { level = 25 }, T + 3600)
+	check(type(db.players["Drae Moreweth"]) == "table" and DB.Get(db, "Drae Moreweth").seen == 3
+		and DB.Get(db, "Drae Moreweth").level == 25, "a sighting of a packed character unpacks it and counts")
+
+	-- walking the book reads a packed row without unpacking it
+	DB.PackAll(db)
+	local seenNames = {}
+	for key, row in DB.Each(db) do
+		seenNames[#seenNames + 1] = row.name
+	end
+	check(#seenNames == 6 and type(db.players["Drae Moreweth"]) == "string", "a walk leaves the strings as they are")
+
+	-- search: either half of the name, any case, a guild; only what is shown
+	-- is unpacked
+	local hits = DB.Search(db, { text = "MORE" })
+	check(#hits == 1 and hits[1].key == "Drae Moreweth" and hits[1].p.class == "WARLOCK",
+		"a surname finds a packed character, whatever the case")
+	check(#DB.Search(db, { text = "night w" }) == 1, "and so does their guild")
+	check(#DB.Search(db, { text = "o" }) == 2, "a given name too")
+	check(#DB.Search(db, { text = "[" }) == 0, "and a pattern character is only a character")
+	check(#DB.Search(db, { surname = "moreweth" }) == 1, "the family filter matches the whole surname")
+
+	-- a row with a broken GUID is left a table, not guessed at
+	local odd = { name = "Bad Guid", realm = "Whitemane", guid = "Player-1-abc", first = T, last = T, seen = 1 }
+	check(P.Pack(db, "Bad Guid", odd) == nil, "a GUID that would not come back the same stays a table")
+
+	-- THE BOOK HAS A SIZE: past the cap, whole days go, oldest first, and
+	-- what you wrote on stays
+	local capped = newdb()
+	for i = 1, 10 do
+		DB.Note(capped, "Day" .. i .. " Person", nil, { class = "MAGE" }, T - i * 86400)
+	end
+	DB.Note(capped, "Ancient Friend", nil, { class = "MAGE" }, T - 400 * 86400)
+	DB.SetNote(capped, "Ancient Friend", "old pal")
+	DB.PackAll(capped)
+	check(DB.Cap(capped, 20) == 0, "under the cap, nothing goes")
+	local gone, from = DB.Cap(capped, 6)
+	check(gone == 5 and DB.Get(capped, "Day5 Person") and not DB.Get(capped, "Day6 Person"),
+		("the five seen longest ago go (%s)"):format(tostring(gone)))
+	check(DB.Get(capped, "Ancient Friend") ~= nil, "and someone you wrote on stays, whatever their age")
+	check(from and from <= T - 5 * 86400 and from > T - 6 * 86400, "and it says from which day it kept")
+
+	-- a packed row crosses to another book as the character it is, words and all
+	local other = newdb()
+	DB.Note(other, "Zed Zoo", "OldRealm", { class = "HUNTER", guild = "Far Guild" }, T)
+	other.realm = "OldRealm"
+	DB.FoldRealms(other, "OldRealm")
+	DB.PackAll(other)
+	check(type(other.players["Zed Zoo"]) == "string", "the other book's row is packed, under its name alone")
+	local into = newdb()
+	into.realm = "Whitemane"
+	DB.Note(into, "Some One", nil, { class = "PRIEST", guild = "Home Guild" }, T)
+	DB.PackAll(into)
+	local added = DB.Adopt(into, other)
+	local zed = DB.Get(into, "Zed Zoo@OldRealm")
+	check(added == 1 and zed and zed.class == "HUNTER" and zed.guild == "Far Guild" and zed.realm == "OldRealm",
+		"adopted, it keeps its class and guild, and its realm goes back on its key")
+	check(DB.Get(into, "Some One").guild == "Home Guild", "and this book's own words are untouched")
 end
 
 print("")

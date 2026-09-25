@@ -722,15 +722,7 @@ function M:BuildTab(panel)
 			BT.settings.buffs = BT.settings.buffs or {}
 			BT.settings.buffs.timeText = (not on) and false or nil
 		end)
-	local look = page:Section("Preview")
-	M.previewRow = W.SwitchRow(look, "Made-up auras", "see the tray full: buffs, a weapon poison, debuffs",
-		function() return B.previewing end,
-		function(on)
-			if M.live then
-				B.Build()
-				B.Preview(on)
-			end
-		end)
+	-- the made-up auras are on the Testing page now (UI/Window.lua)
 	page:Layout()
 end
 

@@ -25,7 +25,7 @@
 --
 -- BeebModDB = {
 --   schema, settings,                         account-wide
---   realms = { ["Whitemane|Alliance"] = { players, guids, stats } },
+--   realms = { ["Whitemane|Alliance"] = { realm, players, words, stats } },
 -- }
 -- BT.db is the book for whoever is logged in; BT.settings is account-wide.
 local ADDON, BT = ...
@@ -82,7 +82,7 @@ BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-b
 BT.SCHEMA = 12
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. /bt debug prints it, so "did the reload take?" is never a guess.
-BT.BUILD = "2026-09-24-svnative"
+BT.BUILD = "2026-09-24-flashfill"
 
 BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off
@@ -93,6 +93,9 @@ BT.SETTINGS = {
 	-- is noise, and the book gets slower and less true the more of them it
 	-- keeps. Anything you have written on is never purged, at any age.
 	pruneDays = 90,        -- 0 = keep everything
+	-- the most characters a book keeps: past it, the ones seen longest ago
+	-- go first (DB.Cap). About 9 MB of saved file, packed (Josh 2026-09-24).
+	bookCap = 150000,      -- 0 = no limit
 	bar = true,            -- the floating bar
 	barPos = nil,          -- where you dragged it
 }
@@ -458,7 +461,7 @@ local function fill(dst, src)
 end
 
 local function newBook()
-	return { players = {}, guids = {}, stats = { sightings = 0 } }
+	return { players = {}, stats = { sightings = 0 } }
 end
 
 function BT.ScopeKey(realm, faction)
@@ -533,6 +536,22 @@ function BT.Bind(realm, faction)
 	local folded = BT.DB and BT.DB.FoldRealms(BT.db, rname) or 0
 	if folded > 0 then
 		BT.foldedOnLoad = folded
+	end
+	-- EVERY BOOK IN ONE SHAPE (Josh 2026-09-24): the realm off the keys of
+	-- the other books too (each by its own realm), and the GUID index no
+	-- book saves any more (DB.ByGuid) off all of them - as well as off what
+	-- you wrote, which is keyed the same way, before it is read back below
+	if BT.DB then
+		for otherKey, book in pairs(BeebModDB.realms) do
+			if type(book) == "table" then
+				book.guids = nil
+				local r = type(otherKey) == "string" and otherKey:match("^(.-)|")
+				if book ~= BT.db and r and r ~= "?" and type(book.players) == "table" then
+					BT.DB.FoldRealms(book, r)
+				end
+			end
+		end
+		BT.RekeyKept()
 	end
 	-- THE BOOK'S OWN HYGIENE IS THE CORE'S (Josh 2026-09-19). Dropping rows
 	-- that are a name and nothing else says nothing about what anybody thinks
@@ -614,13 +633,11 @@ function BT.TakeBaked(key)
 				into = newBook()
 				BeebModDB.realms[otherKey] = into
 			end
-			into.players, into.guids = into.players or {}, into.guids or {}
-			for who, row in pairs(type(other) == "table" and other.players or {}) do
+			into.players = into.players or {}
+			for who in pairs(type(other) == "table" and other.players or {}) do
 				if not into.players[who] then
-					into.players[who] = row
-					if row.guid and not into.guids[row.guid] then
-						into.guids[row.guid] = who
-					end
+					-- as a table: a packed row reads only with its own words
+					into.players[who] = BT.DB.Get(other, who)
 					added = added + 1
 				end
 			end
@@ -822,6 +839,31 @@ local function keepInto(store, scopeKey, who, row)
 	store.tags = BT.settings and BT.settings.tags
 end
 
+-- The kept rows, keyed as the book is now: "Name@Realm" in a book of that
+-- realm is "Name" (U.Key, Josh 2026-09-24).
+function BT.RekeyKept()
+	for _, store in ipairs({ BeebModKeep, BeebModChar }) do
+		if type(store) == "table" and type(store.realms) == "table" then
+			for scopeKey, book in pairs(store.realms) do
+				local realm = type(scopeKey) == "string" and scopeKey:match("^(.-)|")
+				if realm and type(book) == "table" and type(book.players) == "table" then
+					local rekey = {}
+					for who in pairs(book.players) do
+						local name, r = tostring(who):match("^(.*)@(.*)$")
+						if name and r == realm then
+							rekey[who] = name
+						end
+					end
+					for from, to in pairs(rekey) do
+						book.players[to] = book.players[to] or book.players[from]
+						book.players[from] = nil
+					end
+				end
+			end
+		end
+	end
+end
+
 -- Called after every write that a person made by hand.
 function BT.KeepRow(key, p)
 	if not (key and type(p) == "table" and BT.scope) then
@@ -902,7 +944,7 @@ function BT.TakeKept(key)
 		return out
 	end
 	for who, row in pairs(from.players) do
-		local have = book.players[who]
+		local have = BT.DB.Get(book, who)
 		if not have then
 			book.players[who] = copy(row)
 			back = back + 1
@@ -966,13 +1008,17 @@ function BT.TakeStashed(key)
 	end
 	local back = 0
 	BT.db.players = BT.db.players or {}
-	for who, row in pairs(stash.db.players or {}) do
+	local keys = {}
+	for who in pairs(stash.db.players or {}) do
+		keys[#keys + 1] = who
+	end
+	for _, who in ipairs(keys) do
 		if not BT.db.players[who] then
-			BT.db.players[who] = row
+			BT.db.players[who] = BT.DB.Get(stash.db, who)
 			back = back + 1
 		end
 	end
-	for _, field in ipairs({ "guids", "stats", "tags" }) do
+	for _, field in ipairs({ "stats", "tags" }) do
 		if stash.db[field] and not next(BT.db[field] or {}) then
 			BT.db[field] = stash.db[field]
 		end

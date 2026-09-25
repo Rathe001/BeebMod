@@ -13,10 +13,24 @@
 --   zone                 where we last saw them
 --   first last seen      unix seconds, and how many times we wrote them down
 --   note flags rating    yours: free text, { key = true }, 1-5
+--
+-- AT REST, A STRING (Josh 2026-09-24). A row in `players` is either that
+-- table or the same row packed into one short string (Core/Pack.lua), which
+-- is how most of the book sits in the saved file and in memory. So:
+--
+--   DB.Get(db, key)      the row as a table, unpacked on the spot if it was
+--                        packed - and it stays a table for the session
+--   DB.Each(db, full)    every row, for READING: a packed one comes as a
+--                        borrowed table that the next row overwrites, so
+--                        keep the key, never the row
+--   DB.PackAll(db)       back into strings, at logout
+--
+-- Anything that walks `players` itself sees strings, and a string has no
+-- fields: `row.note` is nil, `row.note = x` is an error.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Core/DB.lua")
 
-local U = BT.Util
+local U, P = BT.Util, BT.Pack
 local DB = {}
 BT.DB = DB
 
@@ -49,10 +63,14 @@ end
 local DEAD_FIELDS = { "given", "surname", "srcName", "src", "faction", "sex" }
 
 -- Returns how many rows it slimmed, which is what the login report prints.
+-- (A packed row was slimmed on its way into the string.)
 function DB.Slim(db)
 	local done = 0
 	for _, p in pairs(DB.Players(db)) do
 		local touchedOne = false
+		if type(p) ~= "table" then
+			p = {}
+		end
 		for _, field in ipairs(DEAD_FIELDS) do
 			if p[field] ~= nil then
 				p[field] = nil
@@ -76,8 +94,98 @@ function DB.Players(db)
 	return db and db.players or {}
 end
 
+-- WHO A GUID IS, THIS SESSION (Josh 2026-09-24). The book used to save a
+-- second table of every GUID and its key - a megabyte of the file, and all of
+-- it the same GUIDs the rows already carry. It is kept in memory now, for the
+-- characters this session has met or looked at, which is who the damage meter
+-- and a half-named sighting are ever about.
+local guidIndex = setmetatable({}, { __mode = "k" })
+
+function DB.Guids(db)
+	local g = guidIndex[db]
+	if not g then
+		g = {}
+		guidIndex[db] = g
+	end
+	return g
+end
+
+function DB.ByGuid(db, guid)
+	db = db or BT.db
+	return db and type(guid) == "string" and DB.Guids(db)[guid] or nil
+end
+
 function DB.Get(db, key)
-	return key and DB.Players(db)[key] or nil
+	db = db or BT.db
+	local players = DB.Players(db)
+	local p = key and players[key]
+	if type(p) == "string" then
+		p = P.Unpack(db, key, p)
+		players[key] = p
+		if p.guid then
+			DB.Guids(db)[p.guid] = key
+		end
+	end
+	return p or nil
+end
+
+-- A row to read, however it is kept. Packed, it is unpacked into one of two
+-- borrowed tables, the next packed row overwrites it, and `full` is only for
+-- a walk that needs the GUID and the guild history as well.
+local lightView, fullView = {}, {}
+
+function DB.View(db, key, row, full)
+	if type(row) ~= "string" then
+		return row
+	end
+	if full then
+		return P.Unpack(db, key, row, fullView)
+	end
+	return P.Unpack(db, key, row, lightView, true)
+end
+
+function DB.Each(db, full)
+	db = db or BT.db
+	local players, key = DB.Players(db), nil
+	return function()
+		local row
+		key, row = next(players, key)
+		if key == nil then
+			return nil
+		end
+		return key, DB.View(db, key, row, full)
+	end
+end
+
+-- Every table row that can be said as a string, said as one. Returns how many.
+function DB.PackAll(db)
+	db = db or BT.db
+	if not db then
+		return 0
+	end
+	local players, packed = DB.Players(db), 0
+	for key, p in pairs(players) do
+		if type(p) == "table" then
+			local s = P.Pack(db, key, p)
+			if s then
+				players[key] = s
+				packed = packed + 1
+			end
+		end
+	end
+	return packed
+end
+
+-- How many rows, and how many of them are packed.
+function DB.Count(db)
+	local n, packed = 0, 0
+	for _, p in pairs(DB.Players(db)) do
+		n = n + 1
+		if type(p) == "string" then
+			packed = packed + 1
+		end
+	end
+	return n, packed
 end
 
 -- ONE CHARACTER, ONE ROW (Josh 2026-09-18). Some sources hand over the full
@@ -128,7 +236,7 @@ function DB.Merge(db, fromKey, toKey)
 	absorb(to, from)
 	db.players[fromKey] = nil
 	if from.guid then
-		db.guids[from.guid] = toKey
+		DB.Guids(db)[from.guid] = toKey
 	end
 	return to
 end
@@ -144,10 +252,23 @@ function DB.Adopt(db, from)
 	if not (db and type(from) == "table" and type(from.players) == "table") then
 		return 0, 0
 	end
-	db.players, db.guids = db.players or {}, db.guids or {}
+	db.players = db.players or {}
 	local added, folded = 0, 0
-	for key, p in pairs(from.players) do
-		if db.players[key] then
+	-- keys first: unpacking a row of `from` below is an edit of it
+	local keys = {}
+	for key in pairs(from.players) do
+		keys[#keys + 1] = key
+	end
+	for _, fromKey in ipairs(keys) do
+		-- a packed row is only readable with its OWN book's words, so it
+		-- crosses as the table it stands for
+		local p = DB.Get(from, fromKey)
+		-- and under the key it has HERE: "Beeb Bob" in an OldRealm book is
+		-- "Beeb Bob@OldRealm" in this one, and "Beeb Bob@Whitemane" there is
+		-- "Beeb Bob" in Whitemane's
+		local name, realm = P.Split(from, fromKey)
+		local key = (realm == nil or realm == db.realm) and name or (name .. "@" .. realm)
+		if DB.Get(db, key) then
 			absorb(db.players[key], p)
 			folded = folded + 1
 		else
@@ -156,7 +277,7 @@ function DB.Adopt(db, from)
 		end
 		local row = db.players[key]
 		if row.guid then
-			db.guids[row.guid] = key
+			DB.Guids(db)[row.guid] = key
 		end
 	end
 	db.stats = db.stats or { sightings = 0 }
@@ -189,40 +310,43 @@ local function sameRealm(a, b)
 	return #short >= 6 and long:sub(1, #short) == short
 end
 
+--
+-- AND THE REALM COMES OFF THE KEY (Josh 2026-09-24): a character of the
+-- book's own realm is keyed by name alone (U.Key), so "Beeb Bob@Whitemane" in
+-- the Whitemane book becomes "Beeb Bob" here too - which is how every book
+-- written before that change comes across, on its first login after it.
 function DB.FoldRealms(db, realm)
 	db = db or BT.db
 	if not (db and realm and realm ~= "" and db.players) then
 		return 0
 	end
+	db.realm = realm
 	-- collect first, then edit: re-keying the table you are walking is an
 	-- "invalid key to next" error, not a warning
 	local rekey = {}
 	for key in pairs(db.players) do
-		local name, r = key:match("^(.*)@(.*)$")
-		if name and r and r ~= realm and sameRealm(r, realm) then
-			rekey[key] = name .. "@" .. realm
+		if key:find("@", 1, true) then
+			local name, r = key:match("^(.*)@(.*)$")
+			if name and r and sameRealm(r, realm) then
+				rekey[key] = name
+			end
 		end
 	end
 	local moved = 0
 	for from, to in pairs(rekey) do
+		-- a string row names nobody (the key does), so only a table has a
+		-- name and a realm to put right
 		local p = db.players[from]
+		if type(p) == "table" then
+			p.realm = realm
+		end
 		db.players[from] = nil
 		if db.players[to] then
-			absorb(db.players[to], p)
+			absorb(DB.Get(db, to), type(p) == "table" and p or P.Unpack(db, to, p))
 		else
-			p.realm = realm
 			db.players[to] = p
 		end
-		local row = db.players[to]
-		if row.guid then
-			db.guids[row.guid] = to
-		end
 		moved = moved + 1
-	end
-	for guid, key in pairs(db.guids or {}) do
-		if rekey[key] then
-			db.guids[guid] = rekey[key]
-		end
 	end
 	if moved > 0 then
 		touched()
@@ -245,27 +369,28 @@ function DB.Note(db, name, realm, info, now)
 	end
 	now = now or U.Now()
 	info = info or {}
-	db.guids = db.guids or {}
+	local guids = DB.Guids(db)
 	-- the same character under a shorter name: file this sighting on the row
 	-- that already exists, and let the fuller name own it
 	local guid = info.guid
 	if guid then
-		local known = db.guids[guid]
-		if known and known ~= key and db.players[known] then
+		local known = guids[guid]
+		local them = known and known ~= key and DB.Get(db, known)
+		if them then
 			local mineHasSurname = U.HasSurname(short)
-			local theirsHasSurname = U.HasSurname(db.players[known].name or "")
+			local theirsHasSurname = U.HasSurname(them.name or "")
 			if theirsHasSurname and not mineHasSurname then
-				key, short, rname = known, db.players[known].name, db.players[known].realm
+				key, short, rname = known, them.name, them.realm
 			elseif mineHasSurname and not theirsHasSurname then
-				db.players[key] = db.players[key] or {}
+				db.players[key] = DB.Get(db, key) or {}
 				DB.Merge(db, known, key)
 			else
-				key, short, rname = known, db.players[known].name, db.players[known].realm
+				key, short, rname = known, them.name, them.realm
 			end
 		end
-		db.guids[guid] = key
+		guids[guid] = key
 	end
-	local p = db.players[key]
+	local p = DB.Get(db, key)
 	if not p then
 		-- NO HALF NAMES, EVER (Josh 2026-09-19). Character creation requires
 		-- both a given name and a surname, so a one-word name is never a whole
@@ -457,84 +582,82 @@ end
 -- query = { text, class, guild, surname, flag, minLevel, maxLevel, mineOnly, limit }
 -- Matching is case-insensitive and by prefix on name, substring on guild and
 -- note, which is what you want when you half-remember a name.
--- THE LOWERCASE OF EVERY NAME, ONCE (Josh 2026-09-19). Searching used to call
--- :lower() on four fields of every character on every keystroke - about nine
--- thousand strings per letter typed with a book this size, all of them garbage
--- a moment later. They are cached beside the row instead, in a weak table so
--- it cannot keep a deleted character alive, and rebuilt for one row only when
--- that row's own text has changed.
 --
--- Not stored ON the row: everything on a row is written to the saved file, and
--- doubling the file to save a microsecond is the wrong trade.
-local folded = setmetatable({}, { __mode = "k" })
+-- NO LOWERCASE COPIES (Josh 2026-09-24). Searching used to :lower() every
+-- name, guild and note, first on every keystroke and then once each into a
+-- cache beside the row (Josh 2026-09-19) - a second copy of every name in the
+-- book, and nothing to hang it on once a row is a string. A name is matched
+-- by a pattern that is its own caseless spelling ("bob" -> "[bB][oO][bB]"),
+-- which makes nothing; the guilds, which are few, are lowercased once each.
+local function caseless(text)
+	return (text:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+		:gsub("%a", function(c) return "[" .. c:lower() .. c:upper() .. "]" end))
+end
 
-local function lower(p)
-	local e = folded[p]
-	if e and e.name == p.name and e.guild == p.guild and e.note == p.note then
-		return e
+local guildLower = {}
+local function lowGuild(g)
+	local l = guildLower[g]
+	if not l then
+		l = g:lower()
+		guildLower[g] = l
 	end
-	-- the two halves are worked out here rather than kept on the row: this
-	-- table is already being built, and it is the only place they are wanted
-	local given, surname = U.SplitName(p.name)
-	e = {
-		name = p.name, guild = p.guild, note = p.note,
-		given = (given or p.name or ""):lower(),
-		surname = surname and surname:lower() or nil,
-		lguild = (p.guild and p.guild ~= "") and p.guild:lower() or nil,
-		lnote = p.note and p.note:lower() or nil,
-	}
-	folded[p] = e
-	return e
+	return l
 end
 
 function DB.Search(db, query)
+	db = db or BT.db
 	query = query or {}
 	local text = (type(query.text) == "string" and query.text ~= "") and query.text:lower() or nil
-	local rows = {}
-	for key, p in pairs(DB.Players(db)) do
+	-- a prefix of EITHER half of the name: people remember a surname as
+	-- readily as a given name, and "bob" should find "Beeb Bob"
+	local given = text and ("^" .. caseless(text))
+	local surname = text and ("^%S+%s+" .. caseless(text))
+	local family = type(query.surname) == "string"
+		and ("^%S+%s+" .. caseless(query.surname:lower()) .. "$") or nil
+	local found = {}
+	for key, p in DB.Each(db) do
 		local ok = true
 		if query.mineOnly and not DB.IsMine(p) then
 			ok = false
 		end
+		local name = p.name or ""
 		if ok and text then
-			-- a prefix of EITHER half of the name: people remember a surname
-			-- as readily as a given name, and "bob" should find "Beeb Bob"
-			local f = lower(p)
-			ok = f.given:sub(1, #text) == text
-				or (f.surname ~= nil and f.surname:sub(1, #text) == text)
-				or (f.lguild ~= nil and f.lguild:find(text, 1, true) ~= nil)
-				or (f.lnote ~= nil and f.lnote:find(text, 1, true) ~= nil)
+			ok = name:find(given) ~= nil or name:find(surname) ~= nil
+				or (p.guild ~= nil and p.guild ~= "" and lowGuild(p.guild):find(text, 1, true) ~= nil)
+				or (p.note ~= nil and p.note:lower():find(text, 1, true) ~= nil)
 		end
 		if ok and query.class and p.class ~= query.class then ok = false end
 		if ok and query.flag and not (p.flags and p.flags[query.flag]) then ok = false end
 		if ok and query.guild and p.guild ~= query.guild then ok = false end
-		-- its own lookup: `f` above belongs to the text branch, and the
-		-- surname filter can be asked for on its own
-		if ok and query.surname and lower(p).surname ~= query.surname:lower() then
-			ok = false
-		end
+		if ok and family and not name:find(family) then ok = false end
 		if ok and query.minLevel and (p.level or 0) < query.minLevel then ok = false end
 		if ok and query.maxLevel and (p.level or 0) > query.maxLevel then ok = false end
 		if ok then
-			rows[#rows + 1] = { key = key, p = p }
+			-- the key and what the order needs, not the row: a packed row is
+			-- a borrowed table the next one overwrites
+			found[#found + 1] = { key = key, mine = DB.IsMine(p), last = p.last or 0, name = name }
 		end
 	end
-	table.sort(rows, function(a, b)
-		local am, bm = DB.IsMine(a.p), DB.IsMine(b.p)
-		if am ~= bm then
-			return am
+	table.sort(found, function(a, b)
+		if a.mine ~= b.mine then
+			return a.mine
 		end
-		if (a.p.last or 0) ~= (b.p.last or 0) then
-			return (a.p.last or 0) > (b.p.last or 0)
+		if a.last ~= b.last then
+			return a.last > b.last
 		end
-		return a.p.name < b.p.name
+		return a.name < b.name
 	end)
-	if query.limit and #rows > query.limit then
-		for i = #rows, query.limit + 1, -1 do
-			rows[i] = nil
+	if query.limit and #found > query.limit then
+		for i = #found, query.limit + 1, -1 do
+			found[i] = nil
 		end
 	end
-	return rows
+	-- only what is shown is unpacked
+	for _, r in ipairs(found) do
+		r.p = DB.Get(db, r.key)
+		r.mine, r.last, r.name = nil, nil, nil
+	end
+	return found
 end
 
 -- Two kinds of row are not characters, and both are cleared out here. Nothing
@@ -555,7 +678,7 @@ function DB.Cleanup(db)
 		return 0
 	end
 	local gone = 0
-	for key, p in pairs(DB.Players(db)) do
+	for key, p in DB.Each(db, true) do
 		-- junk a parser produced is junk however it was vouched for
 		local junk = not U.LooksLikeName(p.name)
 		-- and half a name is not a character, whatever vouches for it: every
@@ -568,8 +691,8 @@ function DB.Cleanup(db)
 		local notAPerson = surname == nil and not p.guid and not p.class and not p.vouch
 		if not DB.IsMine(p) and (nameless or notAPerson or junk or half) then
 			db.players[key] = nil
-			if p.guid and db.guids then
-				db.guids[p.guid] = nil
+			if p.guid then
+				DB.Guids(db)[p.guid] = nil
 			end
 			gone = gone + 1
 		end
@@ -590,10 +713,9 @@ function DB.Prune(db, days, now)
 	now = now or U.Now()
 	local cutoff = now - days * 86400
 	local gone = 0
-	for key, p in pairs(DB.Players(db)) do
+	for key, p in DB.Each(db) do
 		if not DB.IsMine(p) and (p.last or 0) < cutoff then
 			db.players[key] = nil
-			if p.guid and db.guids then db.guids[p.guid] = nil end
 			gone = gone + 1
 		end
 	end
@@ -614,7 +736,7 @@ function DB.Stats(db)
 	end
 	local total, mine, guilded, maxLevel = 0, 0, 0, 0
 	local byClass = {}
-	for _, p in pairs(DB.Players(db)) do
+	for _, p in DB.Each(db) do
 		total = total + 1
 		if DB.IsMine(p) then mine = mine + 1 end
 		if p.guild and p.guild ~= "" then guilded = guilded + 1 end
@@ -625,4 +747,65 @@ function DB.Stats(db)
 	statsCache.out = { total = total, mine = mine, guilded = guilded,
 		maxLevel = maxLevel, byClass = byClass }
 	return statsCache.out
+end
+
+-- THE BOOK HAS A SIZE (Josh 2026-09-24). A character is small packed, but a
+-- book that only ever grows still ends up as big as the realm. Past `max`
+-- characters, the ones seen longest ago go first - whole days at a time, so
+-- the book always covers "everybody seen since" some day - and anything you
+-- have written on stays, whatever its age. Returns how many went, and the
+-- oldest day kept (unix seconds).
+local DAY = 86400
+
+local function lastOf(p)
+	if type(p) == "string" then
+		return P.Last(p) or 0
+	end
+	return p.last or 0
+end
+
+function DB.Cap(db, max)
+	db = db or BT.db
+	if not (db and type(max) == "number" and max > 0) then
+		return 0
+	end
+	local players = DB.Players(db)
+	local total, mine, perDay = 0, 0, {}
+	for _, p in pairs(players) do
+		total = total + 1
+		if type(p) == "table" and DB.IsMine(p) then
+			mine = mine + 1
+		else
+			local d = math.floor(lastOf(p) / DAY)
+			perDay[d] = (perDay[d] or 0) + 1
+		end
+	end
+	if total <= max then
+		return 0
+	end
+	-- newest day first, keeping whole days while they fit
+	local days = {}
+	for d in pairs(perDay) do
+		days[#days + 1] = d
+	end
+	table.sort(days, function(a, b) return a > b end)
+	local room, keepFrom = max - mine, math.huge
+	for _, d in ipairs(days) do
+		if perDay[d] > room then
+			break
+		end
+		room = room - perDay[d]
+		keepFrom = d
+	end
+	local gone = 0
+	for key, p in pairs(players) do
+		if not (type(p) == "table" and DB.IsMine(p)) and math.floor(lastOf(p) / DAY) < keepFrom then
+			players[key] = nil
+			gone = gone + 1
+		end
+	end
+	if gone > 0 then
+		touched()
+	end
+	return gone, keepFrom < math.huge and keepFrom * DAY or nil
 end

@@ -43,8 +43,9 @@ local GROUP_H, GROUP_GAP, FOOT_H = 20, 8, 16
 -- TALLER (Josh 2026-09-23): the rail carries every page now - twenty tabs
 -- with two headings since the unit frames, buffs and game menu arrived - and
 -- they need the room
--- (640 tall, Josh 2026-09-24: the rail's five groups want the room)
-local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 640
+-- (640 tall, Josh 2026-09-24: the rail's five groups want the room; 660
+-- the same day, for the Testing tab under General)
+local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 660
 -- the page's own header: its name, a line under it, and its switch
 local HEADER_H = 54
 
@@ -337,6 +338,13 @@ W.PAGES = {
 		blurb = "the menu Escape opens, and every dropdown and right-click menu" },
 	censusset = { title = "Census", group = "people", members = { "census" },
 		blurb = "the realm's charts, in a window of their own" },
+	-- TESTING (Josh 2026-09-24: "let's add a testing or debug section to
+	-- the options panel, and move the options like this to it"): the
+	-- made-up people and auras that let you see a frame while you are alone,
+	-- and the addon's own reports - none of it a setting, all of it a look.
+	-- Not one module's: under General, above the rail's line.
+	testing = { title = "Testing", group = "general", fixed = true,
+		blurb = "made-up people and auras to look at while you are alone, and the addon's own reports" },
 }
 
 function W.Page(key)
@@ -529,13 +537,21 @@ end
 local function dockPage(body)
 	local st = BT.Widgets.Stack(body)
 	body.stack = st
-	local size = BT.Widgets.Row(st:Section("Size"), "Dock size", "the whole panel, from the header to the quests")
+	local sizeSec = st:Section("Size")
+	local size = BT.Widgets.Row(sizeSec, "Dock size", "the whole panel, from the header to the quests")
 	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir)
 		local now = math.floor((BT.Bar.Scale() + dir * 0.05) * 100 + 0.5) / 100
 		BT.Bar.SetScale(math.max(0.7, math.min(1.3, now)))
 		W.RefreshDock()
 	end))
 	body.sizeText = step.value
+	-- ONE WIDTH, WHATEVER IS IN IT (Josh 2026-09-24)
+	local wide = BT.Widgets.Row(sizeSec, "Dock width", "the same with the quests or without them")
+	local wstep = wide:SetControl(BT.Widgets.Stepper(wide, function(dir)
+		BT.Bar.SetWidth(BT.Bar.Width() + dir * BT.Bar.WIDTH_STEP)
+		W.RefreshDock()
+	end))
+	body.widthText = wstep.value
 	-- (Josh 2026-09-24) where it stays, and how loud it is in a fight
 	local feel = st:Section("Behaviour")
 	BT.Widgets.SwitchRow(feel, "Lock in place", "no drag moves it · off, drag it by anything in it",
@@ -581,6 +597,9 @@ function W.RefreshDock()
 	local body = panel and panel.body
 	if body and body.sizeText and BT.Bar and BT.Bar.Scale then
 		body.sizeText:SetText(("%d%%"):format(math.floor(BT.Bar.Scale() * 100 + 0.5)))
+	end
+	if body and body.widthText and BT.Bar and BT.Bar.Width then
+		body.widthText:SetText(tostring(BT.Bar.Width()))
 	end
 	if body and body.fadeSeg then
 		body.fadeSeg:Select(BT.settings and BT.settings.dockFade or "off")
@@ -631,6 +650,62 @@ local function censusPage(body)
 	st:Layout()
 end
 
+-- the Testing page: things to look at, and things to ask
+local function testingPage(body)
+	local Wd = BT.Widgets
+	local st = Wd.Stack(body)
+	body.stack = st
+	local look = st:Section("Look at")
+	-- the unit frames' made-up group (Modules/Frames/Frames.lua)
+	local people = Wd.Row(look, "Made-up people", "see the frames in a group while you are alone · needs Unit frames on")
+	body.peopleSeg = people:SetControl(Wd.Segmented(people, {
+		{ "off", "Off" }, { "party", "Party" }, { "raid", "Raid" },
+	}, function(key)
+		local m = BT.GetModule("frames")
+		if m and m.Preview then
+			m.Preview(key ~= "off" and key or nil)
+		end
+	end))
+	-- the buff tray full (Modules/Frames/Buffs.lua)
+	body.aurasRow = Wd.SwitchRow(look, "Made-up auras", "see the tray full: buffs, a weapon poison, debuffs · needs Buffs on",
+		function()
+			local B = BT.UnitFrames and BT.UnitFrames.Buffs
+			return B and B.previewing or false
+		end,
+		function(on)
+			local B = BT.UnitFrames and BT.UnitFrames.Buffs
+			local m = BT.GetModule("buffs")
+			if B and m and m.live then
+				B.Build()
+				B.Preview(on)
+			end
+		end)
+	-- the reports /bt already writes, a click away; they go to your chat
+	local ask = st:Section("Ask the addon")
+	for _, c in ipairs({
+		{ "debug", "What loaded", "the build, the book, every module, what the client refused" },
+		{ "timers", "Over-time bars", "where the heal and damage bars got to, spell by spell" },
+		{ "stats", "The book", "how many characters, how many packed, and the other books" },
+	}) do
+		local row = Wd.Row(ask, c[2], c[3] .. " · /bt " .. c[1])
+		local run = row:SetControl(Wd.Button(row, "Show", 62, 20))
+		run:SetScript("OnClick", function()
+			local cmd = SlashCmdList and SlashCmdList.BEEBSTOOLKIT
+			if cmd then
+				cmd(c[1])
+			end
+		end)
+	end
+	-- what is showing now, whenever the page is opened
+	body:HookScript("OnShow", function()
+		local m = BT.GetModule("frames")
+		body.peopleSeg:Select(m and m.previewing or "off")
+		Wd.SyncRows()
+	end)
+	body.peopleSeg:Select("off")
+	st:Layout()
+end
+
 local function pagePanel(key, page)
 	local panel = CreateFrame("Frame", nil, content)
 	panel:SetAllPoints()
@@ -641,6 +716,8 @@ local function pagePanel(key, page)
 		dockPage(panel.body)
 	elseif key == "censusset" then
 		censusPage(panel.body)
+	elseif key == "testing" then
+		testingPage(panel.body)
 	else
 		sharedPage(panel, page)
 	end
@@ -869,6 +946,9 @@ function W.Rebuild()
 	-- THE SETTINGS TAB IS NOT ONE OF THE UTILITIES (Josh 2026-09-20). It is
 	-- the toolkit itself, so it goes above them with a line under it.
 	place("settings", "General", "general")
+	-- and Testing under it: the addon's too, not a utility's - a group of
+	-- its own at the foot ran the rail past the window
+	place("testing", W.TitleOf("testing"), "general")
 	-- CENTRED IN THE GAP, AND UNDER NOTHING (Josh 2026-09-20). `place` leaves
 	-- y one tab below where it drew, and a tab is shorter than its stride - so
 	-- the tab it just drew ends that gap above y. The line went BELOW y once,

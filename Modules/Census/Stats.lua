@@ -20,6 +20,11 @@ local S = {}
 BT.Stats = S
 
 S.UNKNOWN = "__unknown"
+-- a guild of "" is a character we have seen with no guild, which is not the
+-- same as one we have never seen a guild line for (nil, UNKNOWN)
+S.UNGUILDED = "__unguilded"
+-- the rest of a long chart, summed into one row so its percentages still add up
+S.OTHER = "__other"
 -- SIXTY IS ITS OWN BAND (Josh 2026-09-19). "51-60" answers the wrong question:
 -- what a raid leader wants to know is how many are DONE levelling, and a 54 is
 -- not that. So the last stretch splits, and 60 stands alone.
@@ -38,6 +43,24 @@ S.AGE_BUCKETS = {
 	{ key = "this month", within = 30 * 86400 },
 	{ key = "older", within = math.huge },
 }
+
+-- SEEN WITHIN (Josh 2026-09-24). A book kept for weeks remembers everyone who
+-- ever passed through; "who plays here NOW" is the characters seen lately. The
+-- window narrows every chart to one of these, and nil is the whole book.
+S.SEEN = {
+	{ key = "today", label = "Today", within = 86400 },
+	{ key = "week",  label = "Week",  within = 7 * 86400 },
+	{ key = "month", label = "Month", within = 30 * 86400 },
+	{ key = "all",   label = "All" },
+}
+local seenWithin = {}
+for _, s in ipairs(S.SEEN) do
+	seenWithin[s.key] = s.within
+end
+
+-- Guild and zone are long charts - a realm has hundreds of guilds - so each
+-- shows its largest and sums the rest into one row.
+S.TOP = 10
 
 local function sorted(counts)
 	local rows = {}
@@ -101,8 +124,43 @@ end
 -- counted into it, and it is finished into the charts. S.Census does all of
 -- it at once; S.CensusJob does the counting a slice at a time, so the window
 -- open in a city never spends one frame on fourteen thousand characters.
+--
+-- THE FILTER (Josh 2026-09-24) is a table, every part of it optional:
+--   bands   the brackets above
+--   seen    a key of S.SEEN: only characters seen that recently count at all
+--   pick    { mode = "class", key = "HUNTER" } - a bar clicked in the window.
+--           Every OTHER chart counts only the characters it picks; its own
+--           chart still counts everybody, with the bar lit, so you can see
+--           what you picked from and pick again.
 
-local function begin(now, bands)
+-- The key a character is filed under on each chart that can be picked from.
+local function guildKey(p)
+	local g = p.guild
+	if g == nil then
+		return S.UNKNOWN
+	end
+	return g == "" and S.UNGUILDED or g
+end
+
+local keyOf = {
+	class = function(p) return p.class or S.UNKNOWN end,
+	race = function(p) return p.race or S.UNKNOWN end,
+	guild = guildKey,
+	zone = function(p) return p.zone or S.UNKNOWN end,
+}
+S.PICKABLE = { class = true, race = true, guild = true, zone = true, flag = true }
+
+local function picks(pick, p)
+	if pick.mode == "flag" then
+		return p.flags ~= nil and p.flags[pick.key] ~= nil
+	end
+	local of = keyOf[pick.mode]
+	return of ~= nil and of(p) == pick.key
+end
+
+local function begin(now, filter)
+	filter = filter or {}
+	local bands = filter.bands
 	local filtering = false
 	if bands then
 		for _ in pairs(bands) do
@@ -110,10 +168,21 @@ local function begin(now, bands)
 			break
 		end
 	end
+	local pick = filter.pick
+	if pick and not (S.PICKABLE[pick.mode] and pick.key ~= nil) then
+		pick = nil
+	end
 	local t = {
 		now = now, bands = bands, filtering = filtering,
-		class = {}, race = {}, band = {}, flag = {}, ages = {}, ageBuckets = {},
-		total = 0, mine = 0, unknownClass = 0, unknownLevel = 0, unknownRace = 0,
+		seen = seenWithin[filter.seen] and filter.seen or nil,
+		within = seenWithin[filter.seen], pick = pick,
+		class = {}, race = {}, band = {}, flag = {}, guild = {}, zone = {},
+		ages = {}, ageBuckets = {},
+		-- book: every character; total: those seen recently enough; matched:
+		-- those of them the pick picks (all of them with no pick)
+		book = 0, total = 0, matched = 0, mine = 0,
+		unknownClass = 0, unknownLevel = 0, unknownRace = 0,
+		unknownGuild = 0, unknownZone = 0,
 		-- characters carrying at least one tag: the flag chart's rows count
 		-- marks, and a character with three tags is one character
 		tagged = 0,
@@ -130,30 +199,69 @@ end
 -- bands and the age buckets in order.
 local AGE = S.AGE_BUCKETS
 local function count(t, p)
-	t.total = t.total + 1
-	local myBand = S.BandOf(p.level)
-	-- the level chart counts everybody, whatever the filter says
-	if myBand then
-		t.band[myBand] = (t.band[myBand] or 0) + 1
-	else
-		t.unknownLevel = t.unknownLevel + 1
+	t.book = t.book + 1
+	local age = t.now - (p.last or t.now)
+	-- not seen lately: on no chart at all (never seen has no age, so it is
+	-- as old as the book)
+	if t.within and (p.last == nil or age >= t.within) then
+		return
 	end
-	local counted = (not t.filtering) or (myBand ~= nil and t.bands[myBand])
+	t.total = t.total + 1
+	local pick = t.pick
+	local matched = pick == nil or picks(pick, p)
+	-- a chart counts a character the pick picks - or anybody, if the pick
+	-- was made on that chart
+	local pickMode = pick and pick.mode
+	local myBand = S.BandOf(p.level)
+	-- the level chart counts everybody the brackets would leave out
+	if matched then
+		t.matched = t.matched + 1
+		if myBand then
+			t.band[myBand] = (t.band[myBand] or 0) + 1
+		else
+			t.unknownLevel = t.unknownLevel + 1
+		end
+	end
+	if not ((not t.filtering) or (myBand ~= nil and t.bands[myBand])) then
+		matched, pickMode = false, nil
+	end
 	if DB.IsMine(p) then
 		t.mine = t.mine + 1
 	end
-	if counted then
-		local c, r, flags = p.class, p.race, p.flags
+	if matched or pickMode == "class" then
+		local c = p.class
 		if c then
 			t.class[c] = (t.class[c] or 0) + 1
 		else
 			t.unknownClass = t.unknownClass + 1
 		end
+	end
+	if matched or pickMode == "race" then
+		local r = p.race
 		if r then
 			t.race[r] = (t.race[r] or 0) + 1
 		else
 			t.unknownRace = t.unknownRace + 1
 		end
+	end
+	if matched or pickMode == "guild" then
+		local g = guildKey(p)
+		if g == S.UNKNOWN then
+			t.unknownGuild = t.unknownGuild + 1
+		else
+			t.guild[g] = (t.guild[g] or 0) + 1
+		end
+	end
+	if matched or pickMode == "zone" then
+		local z = p.zone
+		if z then
+			t.zone[z] = (t.zone[z] or 0) + 1
+		else
+			t.unknownZone = t.unknownZone + 1
+		end
+	end
+	if matched or pickMode == "flag" then
+		local flags = p.flags
 		if flags and next(flags) then
 			t.tagged = t.tagged + 1
 			for key in pairs(flags) do
@@ -161,8 +269,10 @@ local function count(t, p)
 			end
 		end
 	end
-	local age = t.now - (p.last or t.now)
-	t.ages[t.total] = age
+	if pick and not picks(pick, p) then
+		return
+	end
+	t.ages[#t.ages + 1] = age
 	for i = 1, #AGE do
 		local b = AGE[i]
 		if age < b.within then
@@ -170,6 +280,30 @@ local function count(t, p)
 			break
 		end
 	end
+end
+
+-- the largest `top` rows, and everything after them as one OTHER row; the
+-- rows kept last (Unguilded) go after that, whatever their size
+local function topRows(counts, top, last)
+	local rows = sorted(counts)
+	local kept, tail = {}, {}
+	local other = 0
+	for _, r in ipairs(rows) do
+		if last and last[r.key] then
+			tail[#tail + 1] = r
+		elseif #kept < top then
+			kept[#kept + 1] = r
+		else
+			other = other + r.n
+		end
+	end
+	if other > 0 then
+		kept[#kept + 1] = { key = S.OTHER, n = other }
+	end
+	for _, r in ipairs(tail) do
+		kept[#kept + 1] = r
+	end
+	return kept
 end
 
 local function finish(t)
@@ -193,15 +327,24 @@ local function finish(t)
 		classRows[#classRows + 1] = { key = S.UNKNOWN, n = t.unknownClass }
 	end
 	return {
+		book = t.book,
 		total = t.total,
+		matched = t.matched,
 		mine = t.mine,
 		filtered = t.filtering,
+		seen = t.seen,
+		pick = t.pick,
 		class = classRows,
 		race = sorted(t.race),
 		level = bands,
 		flag = sorted(t.flag),
+		guild = topRows(t.guild, S.TOP, { [S.UNGUILDED] = true }),
+		zone = topRows(t.zone, S.TOP + 1),
 		tagged = t.tagged,
-		unknown = { class = t.unknownClass, level = t.unknownLevel, race = t.unknownRace, flag = 0 },
+		unknown = {
+			class = t.unknownClass, level = t.unknownLevel, race = t.unknownRace, flag = 0,
+			guild = t.unknownGuild, zone = t.unknownZone,
+		},
 		age = {
 			mean = #ages > 0 and (sum / #ages) or nil,
 			median = median(ages),
@@ -210,9 +353,11 @@ local function finish(t)
 	}
 end
 
-function S.Census(db, now, bands)
-	local t = begin(now or U.Now(), bands)
-	for _, p in pairs(DB.Players(db)) do
+function S.Census(db, now, filter)
+	local t = begin(now or U.Now(), filter)
+	-- read where they lie: a packed character is read out of its string
+	-- into a borrowed table, never unpacked into a row of its own
+	for _, p in DB.Each(db) do
 		count(t, p)
 	end
 	return finish(t)
@@ -223,18 +368,21 @@ end
 -- The book is listed first, so characters seen while it runs wait for the
 -- next one rather than upsetting the walk.
 S.JOB_SLICE = 2000
-function S.CensusJob(db, now, bands, per)
-	local list = {}
-	for _, p in pairs(DB.Players(db)) do
+function S.CensusJob(db, now, filter, per)
+	-- the row as it was when listed, and its key: a packed row is read with
+	-- its key (which is its name) and the book's words
+	local list, keys = {}, {}
+	for key, p in pairs(DB.Players(db)) do
 		list[#list + 1] = p
+		keys[#list] = key
 	end
-	local t = begin(now or U.Now(), bands)
+	local t = begin(now or U.Now(), filter)
 	local at = 0
 	per = per or S.JOB_SLICE
 	return function()
 		local stop = math.min(#list, at + per)
 		for i = at + 1, stop do
-			count(t, list[i])
+			count(t, DB.View(db, keys[i], list[i]))
 		end
 		at = stop
 		if at >= #list then
@@ -246,17 +394,26 @@ end
 
 -- What a chart is a chart OF. The unidentified are mentioned only when there
 -- ARE any: "0 of them unidentified" is a caveat about nothing (Josh 2026-09-18).
-function S.Subtitle(mode, census, counted)
+--
+-- OUT OF WHOM (Josh 2026-09-24): with a bar picked, a chart counts the
+-- characters it picked, so "of" is out of them and not out of the realm - and
+-- the chart it was picked on is still out of everybody.
+local NOUN = { race = "race", guild = "guild on file", zone = "zone on file" }
+local SEEN_AS = { today = "seen today", week = "seen this week", month = "seen this month" }
+
+local function subtitle(mode, census, counted)
 	local unknown = (census.unknown and census.unknown[mode]) or 0
+	local pick = census.pick
+	local of = (pick and pick.mode ~= mode and census.matched) or census.total
 	if mode == "flag" then
 		-- characters, not marks: "6 of 3 tagged" was three people with two
 		-- tags each
-		return ("%d of %d tagged"):format(census.tagged or counted, census.total)
+		return ("%d of %d tagged"):format(census.tagged or counted, of)
 	end
 	if mode == "level" then
 		local noLevel = (census.unknown and census.unknown.level) or 0
 		return noLevel > 0
-			and ("%d of %d · %d no level"):format(counted, census.total, noLevel)
+			and ("%d of %d · %d no level"):format(counted, of, noLevel)
 			or ("all %d"):format(counted)
 	end
 	-- with brackets switched off, say what is being left out rather than
@@ -264,16 +421,22 @@ function S.Subtitle(mode, census, counted)
 	if census.filtered then
 		local noLevel = (census.unknown and census.unknown.level) or 0
 		local tail = unknown > 0 and (" · %d unknown"):format(unknown) or ""
-		return ("%d of %d in these levels%s%s"):format(counted, census.total, tail,
+		return ("%d of %d in these levels%s%s"):format(counted, of, tail,
 			noLevel > 0 and (" · %d no level"):format(noLevel) or "")
 	end
 	if unknown > 0 then
 		if mode == "class" then
 			return ("all %d · %d unknown"):format(counted, unknown)
 		end
-		return ("%d of %d · %d no %s"):format(counted, census.total, unknown, mode)
+		return ("%d of %d · %d no %s"):format(counted, of, unknown, NOUN[mode] or mode)
 	end
 	return ("all %d"):format(counted)
+end
+
+function S.Subtitle(mode, census, counted)
+	local line = subtitle(mode, census, counted)
+	local seen = SEEN_AS[census.seen]
+	return seen and (line .. " · " .. seen) or line
 end
 
 -- "median 2 days, average 5 days" - how much of this book you should believe.

@@ -67,10 +67,15 @@ BT.Command("stats", function()
 	local s = DB.Stats(BT.db)
 	U.Print(("%s %s · %d characters · %d noted · %d guilded · %d sightings")
 		:format(BT.scope.realm, BT.scope.faction, s.total, s.mine, s.guilded, BT.db.stats.sightings or 0))
+	-- how the book is kept (Core/Pack.lua): packed, and how big it may grow
+	local n, packed = DB.Count(BT.db)
+	local cap = BT.settings.bookCap or 0
+	U.Print(("%d of %d packed · %s"):format(packed, n,
+		cap > 0 and ("keeps up to %d"):format(cap) or "no size limit"))
 	local r = BT.lastRun
-	if r and ((r.identified or 0) > 0 or (r.cleaned or 0) > 0 or (r.pruned or 0) > 0) then
-		U.Print(("last login · identified %d · cleaned %d · purged %d")
-			:format(r.identified or 0, r.cleaned or 0, r.pruned or 0))
+	if r and ((r.identified or 0) > 0 or (r.cleaned or 0) > 0 or (r.pruned or 0) > 0 or (r.capped or 0) > 0) then
+		U.Print(("last login · identified %d · cleaned %d · purged %d · over the limit %d")
+			:format(r.identified or 0, r.cleaned or 0, r.pruned or 0, r.capped or 0))
 	end
 	local others = BT.OtherBooks()
 	if #others > 0 then
@@ -128,6 +133,22 @@ BT.Command("autopurge", function(rest)
 		and ("auto-purge after %d day%s · unwritten sightings only"):format(d, d == 1 and "" or "s")
 		or "auto-purge off")
 end, "autopurge <days|off> - at each loading screen, drop unwritten sightings older than this")
+
+-- THE BOOK HAS A SIZE (Josh 2026-09-24): past it, the characters seen
+-- longest ago go at the next login (DB.Cap). Never below a thousand: a limit
+-- that small is a typo, and it would take most of the book with it.
+BT.Command("cap", function(rest)
+	local n = tonumber(rest)
+	if rest == "off" or (n and n <= 0) then
+		BT.settings.bookCap = 0
+	elseif n then
+		BT.settings.bookCap = math.max(1000, math.floor(n))
+	end
+	local c = BT.settings.bookCap or 0
+	U.Print(c > 0
+		and ("keeps up to %d characters · past that, those seen longest ago go at login · yours stay"):format(c)
+		or "no size limit")
+end, "cap <characters|off> - the most characters the book keeps")
 
 BT.Command("cleanup", function()
 	local gone = DB.Cleanup(BT.db)
@@ -270,6 +291,12 @@ BT.Command("debug", function()
 	end
 	for _, err in ipairs(BT.moduleErrors or {}) do
 		U.Print("|cffff6b6bmodule error|r " .. err)
+	end
+	-- the over-time bars' flash is the client's to allow (Frames/Timers.lua)
+	local timers = BT.UnitFrames and BT.UnitFrames.Timers
+	local refused = timers and timers.seen and timers.seen.textRefused
+	if refused then
+		U.Print("|cffff6b6bflash refused|r " .. refused:sub(1, 120))
 	end
 end, "what loaded, what the client refused")
 

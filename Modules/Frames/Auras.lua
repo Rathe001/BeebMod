@@ -502,6 +502,11 @@ function A.Attach(b, kind)
 			set.dispel = slot
 		end
 	end
+	-- your heals and damage over time, a bar a spell along the top (Timers.lua)
+	b.bmAuras = set
+	if F.Timers then
+		F.Timers.Attach(b)
+	end
 	-- NOBODY'S UNTIL IT HAS SOMEBODY (Josh 2026-09-23, audit): a raid cell is
 	-- made before the group gives it a member, and its rows stood on "player"
 	-- meanwhile - forty cells' worth of your own auras, read and laid out

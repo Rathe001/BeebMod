@@ -9,7 +9,7 @@
 --   lua tests/load.lua
 local ok = true
 -- every tab on the window's rail, top to bottom, for a warrior with no order set
-ALL_TABS = "settings,dock,map,progress,metrics,tracker,micro,"
+ALL_TABS = "settings,testing,dock,map,progress,metrics,tracker,micro,"
 	.. "buffs,damagemeter,prd,frames,"
 	.. "bars,bagwindow,charsheet,chat,allmenus,tips,"
 	.. "censusset,ledger"
@@ -262,7 +262,14 @@ local function widget(kind, parent)
 		-- a measurement, and in secret mode the kind of measurement this client
 		-- hands back once execution is tainted
 		if k == "GetStringWidth" then
-			return function(s2) return _G.secretMeasurements and _G.SECRET_WIDTH or (#(s2._text or "") * 6) end
+			-- colour codes take no room on screen
+			return function(s2)
+				if _G.secretMeasurements then
+					return _G.SECRET_WIDTH
+				end
+				local shown = tostring(s2._text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+				return #shown * 6
+			end
 		end
 		if k == "GetWidth" then
 			return function(s2) return _G.secretMeasurements and _G.SECRET_WIDTH or (s2._width or 200) end
@@ -543,7 +550,7 @@ if ok then
 		{ "a unit sighting, and who they are looking at", function()
 			BT.Collect.FromUnitAndTarget("target")
 			-- the stub answers every unit, so the point is that it ASKED
-			assert(BT.DB.Get(BT.db, "Beeb Bob@Whitemane"), "the unit itself is filed")
+			assert(BT.DB.Get(BT.db, "Beeb Bob"), "the unit itself is filed")
 		end },
 		{ "the search window", function()
 			BT.Window.Toggle()
@@ -571,8 +578,8 @@ if ok then
 			end
 			-- the tooltip is about whoever the unit is, and the stub's unit is
 			-- Beeb Bob: tag THEM, not somebody else
-			BT.DB.SetFlag(BT.db, "Beeb Bob@Whitemane", "good", true)
-			BT.DB.SetFlag(BT.db, "Beeb Bob@Whitemane", "troll", true)
+			BT.DB.SetFlag(BT.db, "Beeb Bob", "good", true)
+			BT.DB.SetFlag(BT.db, "Beeb Bob", "troll", true)
 			BT.Tooltip.Fill(tip, "target")
 
 			-- BACK INSIDE THE TOOLTIP (Josh 2026-09-20). They sat on a strip
@@ -660,7 +667,7 @@ if ok then
 				end,
 				NumLines = function() return #lines end,
 			}, { __index = function() return function() end end })
-			BT.DB.SetNote(BT.db, "Beeb Bob@Whitemane", "the best lol")
+			BT.DB.SetNote(BT.db, "Beeb Bob", "the best lol")
 			BT.Tooltip.Fill(tip, "target")
 			local joined = table.concat(lines, " | ")
 			-- THE NOTE FLOATS (Josh 2026-09-19). It was four lines inside the
@@ -735,14 +742,14 @@ if ok then
 
 			-- and it goes when there is nothing to say at all: no note AND no
 			-- tags, since the tags live on it too now
-			BT.DB.SetNote(BT.db, "Beeb Bob@Whitemane", "")
-			local hadGood = BT.DB.Get(BT.db, "Beeb Bob@Whitemane").flags
-			BT.DB.Get(BT.db, "Beeb Bob@Whitemane").flags = nil
+			BT.DB.SetNote(BT.db, "Beeb Bob", "")
+			local hadGood = BT.DB.Get(BT.db, "Beeb Bob").flags
+			BT.DB.Get(BT.db, "Beeb Bob").flags = nil
 			BT.Tooltip.Fill(tip, "target")
 			assert(not card:IsShown() and not quote:IsShown(),
 				"nothing of yours, nothing above the tooltip")
-			BT.DB.Get(BT.db, "Beeb Bob@Whitemane").flags = hadGood
-			BT.DB.SetNote(BT.db, "Beeb Bob@Whitemane", "the best lol")
+			BT.DB.Get(BT.db, "Beeb Bob").flags = hadGood
+			BT.DB.SetNote(BT.db, "Beeb Bob", "the best lol")
 		end },
 		{ "the bar on the world", function()
 			BT.Bar.Create()
@@ -767,11 +774,11 @@ if ok then
 
 			-- somebody you have written about: a dot per tag, and a note mark
 			BT.DB.Note(BT.db, "Beeb Bob", nil, { guid = "Player-4372-0002BFB1", class = "WARRIOR" })
-			BT.DB.SetFlag(BT.db, "Beeb Bob@Whitemane", "good", true)
-			BT.DB.SetFlag(BT.db, "Beeb Bob@Whitemane", "troll", true)
-			BT.DB.SetNote(BT.db, "Beeb Bob@Whitemane", "held the door")
+			BT.DB.SetFlag(BT.db, "Beeb Bob", "good", true)
+			BT.DB.SetFlag(BT.db, "Beeb Bob", "troll", true)
+			BT.DB.SetNote(BT.db, "Beeb Bob", "held the door")
 			BT.Bar.Update()
-			assert(cell.who.key == "Beeb Bob@Whitemane", "it knows who you have targeted")
+			assert(cell.who.key == "Beeb Bob", "it knows who you have targeted")
 			assert(#q.dots.tags == 2 and q.dots.list[1]:IsShown() and q.dots.list[2]:IsShown(),
 				"a dot for each tag")
 			assert(not q.dots.list[3]:IsShown(), "and no more than that")
@@ -790,10 +797,10 @@ if ok then
 				"the tags step aside for it rather than sitting under it")
 
 			-- and it goes when the note does
-			BT.DB.SetNote(BT.db, "Beeb Bob@Whitemane", "")
+			BT.DB.SetNote(BT.db, "Beeb Bob", "")
 			BT.Bar.Update()
 			assert(not q.dots.note:IsShown(), "no note, no mark")
-			BT.DB.SetNote(BT.db, "Beeb Bob@Whitemane", "held the door")
+			BT.DB.SetNote(BT.db, "Beeb Bob", "held the door")
 			BT.Bar.Update()
 
 			assert(cell.dots.side == "right" and cell.cog.side == "right",
@@ -900,6 +907,9 @@ if ok then
 			-- with no other section in the dock, hiding the row hides the dock
 			local hadMap, hadPerf = BT.Enabled("minimap"), BT.Enabled("perf")
 			local hadGold, hadClock = BT.Enabled("gold"), BT.Enabled("clock")
+			-- the census icon keeps the dock too (the census on its own)
+			local hadCensus = BT.Enabled("census")
+			BT.SetEnabled("census", false)
 			BT.SetEnabled("clock", false)
 			BT.SetEnabled("minimap", false)
 			BT.SetEnabled("perf", false)
@@ -907,6 +917,7 @@ if ok then
 			BT.Bar.Update()
 			assert(BT.Bar.Toggle() == false and not q:IsShown(), "/bt bar hides it")
 			BT.Bar.Toggle()
+			BT.SetEnabled("census", hadCensus)
 			BT.SetEnabled("minimap", hadMap)
 			BT.SetEnabled("perf", hadPerf)
 			BT.SetEnabled("gold", hadGold)
@@ -916,20 +927,20 @@ if ok then
 			-- a totem emoting: a name, no GUID, and no business in the book
 			BT.Collect.handlers.CHAT_MSG_TEXT_EMOTE(nil, "CHAT_MSG_TEXT_EMOTE",
 				"Totem pulses.", "Totem", "", "", "", "", 0, 0, "", 0, 42, nil)
-			assert(BT.DB.Get(BT.db, "Totem@Whitemane") == nil, "a totem is not a character")
+			assert(BT.DB.Get(BT.db, "Totem") == nil, "a totem is not a character")
 			-- and the same for a pet with a pet GUID
 			BT.Collect.handlers.CHAT_MSG_SAY(nil, "CHAT_MSG_SAY",
 				"grr", "Snarly", "", "", "", "", 0, 0, "", 0, 43, "Pet-0-4372-1-1")
-			assert(BT.DB.Get(BT.db, "Snarly@Whitemane") == nil, "nor is a pet")
+			assert(BT.DB.Get(BT.db, "Snarly") == nil, "nor is a pet")
 		end },
 		{ "chat keeps the full name it was given", function()
 			-- the client only knows "Baragon"; chat said "Baragon Stoneshaper"
 			_G.guidBook["Player-70-0000CCCC"] = { "Priest", "PRIEST", "Human", "Human", 2, "Corvin", "Whitemane" }
 			BT.Collect.handlers.CHAT_MSG_SAY(nil, "CHAT_MSG_SAY",
 				"wts linen", "Corvin Halewood", "", "", "", "", 0, 0, "", 0, 44, "Player-70-0000CCCC")
-			assert(BT.DB.Get(BT.db, "Corvin Halewood@Whitemane"), "the full name from chat is what is filed")
-			assert(BT.DB.Get(BT.db, "Corvin@Whitemane") == nil, "not the half the GUID knows")
-			assert(BT.DB.Get(BT.db, "Corvin Halewood@Whitemane").class == "PRIEST", "and the class still lands")
+			assert(BT.DB.Get(BT.db, "Corvin Halewood"), "the full name from chat is what is filed")
+			assert(BT.DB.Get(BT.db, "Corvin") == nil, "not the half the GUID knows")
+			assert(BT.DB.Get(BT.db, "Corvin Halewood").class == "PRIEST", "and the class still lands")
 		end },
 		{ "a chat message carries a usable GUID", function()
 			-- the real argument list: text, sender, language, channel, sender2,
@@ -937,19 +948,19 @@ if ok then
 			BT.Collect.handlers.CHAT_MSG_SAY(nil, "CHAT_MSG_SAY",
 				"anyone selling linen", "Baragon Stoneshaper", "Common", "", "", "", 0, 0, "", 0,
 				1234567, "Player-70-0000AAAA")
-			local p = BT.DB.Get(BT.db, "Baragon Stoneshaper@Whitemane")
+			local p = BT.DB.Get(BT.db, "Baragon Stoneshaper")
 			assert(p, "the chat sighting was filed")
 			assert(p.guid == "Player-70-0000AAAA", "with the GUID, not the line number")
 			assert(p.class == "SHAMAN", "so the class came with it, unseen")
 		end },
 		{ "one-word names are swept out", function()
-			BT.db.players["Totem@Whitemane"] = {
+			BT.db.players["Totem"] = {
 				name = "Totem", realm = "Whitemane", guid = "Player-4620-0068DFC4",
 				class = "SHAMAN", seen = 4, first = 1, last = 2,
 			}
-			BT.db.guids["Player-4620-0068DFC4"] = "Totem@Whitemane"
+			BT.DB.Guids(BT.db)["Player-4620-0068DFC4"] = "Totem"
 			BT.DB.Cleanup(BT.db)
-			assert(BT.DB.Get(BT.db, "Totem@Whitemane") == nil,
+			assert(BT.DB.Get(BT.db, "Totem") == nil,
 				"half a name goes, however convincing its GUID and class look")
 		end },
 		{ "chat names identify themselves", function()
@@ -959,11 +970,11 @@ if ok then
 			assert(h.Identify("Player-70-0000AAAA").class == "SHAMAN", "the client names the class")
 			-- and an old unknown in the book is filled in by the backfill pass
 			BT.DB.Note(BT.db, "Baragon Stoneshaper", nil, { guid = "Player-70-0000AAAA" })
-			local p = BT.DB.Get(BT.db, "Baragon Stoneshaper@Whitemane")
+			local p = BT.DB.Get(BT.db, "Baragon Stoneshaper")
 			p.class = nil -- as if it had been stored before this existed
 			local done = h.Backfill(100)
 			assert(done >= 1, "the backfill names them")
-			assert(BT.DB.Get(BT.db, "Baragon Stoneshaper@Whitemane").class == "SHAMAN", "class filled in")
+			assert(BT.DB.Get(BT.db, "Baragon Stoneshaper").class == "SHAMAN", "class filled in")
 			assert(BT.Stats.Census(BT.db).unknown.class <= before, "the unknown pile did not grow")
 		end },
 		{ "the panel repaints wherever it was opened from", function()
@@ -973,7 +984,7 @@ if ok then
 			BT.Window.SetView("census")
 			BT.Window.Toggle() -- close it, leaving view = census
 			BT.DB.Note(BT.db, "Trilly Lightbolt", nil, { guid = "Player-70-0000ABAB", class = "WARLOCK" })
-			BT.Find.OpenEditorFor("Trilly Lightbolt@Whitemane", _G.BeebModBar)
+			BT.Find.OpenEditorFor("Trilly Lightbolt", _G.BeebModBar)
 			assert(BT.Find.EditorShown(), "the panel is open")
 			local before = BT.Find.EditorRefreshes()
 			local flags = BT.Find.EditorFlagButtons()
@@ -982,7 +993,7 @@ if ok then
 			assert(flags.good.swatch and flags.good.text, "each tag is a swatch and a label")
 			assert(flags.good.pillLeft == nil, "and not a pill any more")
 			flags.good:GetScript("OnClick")(flags.good, "LeftButton")
-			assert(BT.DB.Get(BT.db, "Trilly Lightbolt@Whitemane").flags.good, "the tag went on")
+			assert(BT.DB.Get(BT.db, "Trilly Lightbolt").flags.good, "the tag went on")
 			assert(BT.Find.EditorRefreshes() > before, "and the panel was redrawn")
 			-- ON IS THREE THINGS AT ONCE: a wash behind the line, a solid
 			-- square, and the name in full ink. One difference was not enough
@@ -1019,7 +1030,7 @@ if ok then
 			-- one that somebody carries still asks
 			mine = BT.AddTag("Carried")
 			BT.Find.RebuildFlags()
-			BT.DB.SetFlag(BT.db, "Trilly Lightbolt@Whitemane", mine.key, true)
+			BT.DB.SetFlag(BT.db, "Trilly Lightbolt", mine.key, true)
 			row = BT.Find.EditorFlagButtons()[mine.key]
 			row.kill:GetScript("OnClick")(row.kill)
 			assert(BT.Find.ConfirmShown(), "a tag somebody carries asks before deleting")
@@ -1030,7 +1041,7 @@ if ok then
 			row:GetScript("OnClick")(row, "RightButton")
 			assert(BT.Find.ConfirmShown(), "right-clicking one of yours asks too")
 			BT.Find.ConfirmButtons().no:GetScript("OnClick")(BT.Find.ConfirmButtons().no)
-			BT.DB.SetFlag(BT.db, "Trilly Lightbolt@Whitemane", mine.key, false)
+			BT.DB.SetFlag(BT.db, "Trilly Lightbolt", mine.key, false)
 			BT.RemoveTag(mine.key)
 			BT.Find.RebuildFlags()
 
@@ -1041,7 +1052,7 @@ if ok then
 			BT.Find.ShowTagMaker(false)
 			assert(not BT.Find.Maker():IsShown(), "and closes again")
 			-- clicking anywhere else closes it and keeps what you typed
-			BT.Find.OpenEditorFor("Trilly Lightbolt@Whitemane", _G.BeebModBar)
+			BT.Find.OpenEditorFor("Trilly Lightbolt", _G.BeebModBar)
 			BT.Find.EditorNoteBox():SetText("half typed")
 			local catch = BT.Find.Catcher()
 			assert(catch and catch:IsShown(), "a click-catcher sits behind it while it is open")
@@ -1054,20 +1065,20 @@ if ok then
 				"and sits below it")
 			catch:GetScript("OnClick")(catch, "LeftButton")
 			assert(not BT.Find.EditorShown(), "clicking outside closes the panel")
-			assert(BT.DB.Get(BT.db, "Trilly Lightbolt@Whitemane").note == "half typed",
+			assert(BT.DB.Get(BT.db, "Trilly Lightbolt").note == "half typed",
 				"and writes down what was in the box")
 			assert(not catch:IsShown(), "the catcher goes with it")
 			BT.Find.CloseEditor()
 			-- THE X KEEPS IT TOO (the audit): closing by the button saved nothing
-			BT.Find.OpenEditorFor("Trilly Lightbolt@Whitemane", _G.BeebModBar)
+			BT.Find.OpenEditorFor("Trilly Lightbolt", _G.BeebModBar)
 			BT.Find.EditorNoteBox():SetText("typed, then the X")
 			BT.Find.CloseEditor()
-			assert(BT.DB.Get(BT.db, "Trilly Lightbolt@Whitemane").note == "typed, then the X",
+			assert(BT.DB.Get(BT.db, "Trilly Lightbolt").note == "typed, then the X",
 				"closing the panel any way keeps what was typed")
 			-- and a save that changes nothing keeps who wrote it and when
-			local row = BT.DB.Get(BT.db, "Trilly Lightbolt@Whitemane")
+			local row = BT.DB.Get(BT.db, "Trilly Lightbolt")
 			row.notedBy, row.noted = "Somebody Else", 12345
-			assert(not BT.Find.SaveText("Trilly Lightbolt@Whitemane", "typed, then the X"),
+			assert(not BT.Find.SaveText("Trilly Lightbolt", "typed, then the X"),
 				"the same text is not a save")
 			assert(row.notedBy == "Somebody Else" and row.noted == 12345, "so the note keeps its author and date")
 		end },
@@ -1097,7 +1108,7 @@ if ok then
 			BT.DB.Note(BT.db, "Beeb Lighthammer", nil, { guid = "Player-70-0000FFFF", class = "PALADIN" })
 			BT.Find.Search("lighthammer")
 			local card = BT.Find.Cards()[1]
-			assert(card and card.key == "Beeb Lighthammer@Whitemane", "the card holds the match")
+			assert(card and card.key == "Beeb Lighthammer", "the card holds the match")
 			assert(card.edit == nil, "and carries no button: the row itself is the editor")
 
 			-- closed, it shows only the tags they carry
@@ -1107,7 +1118,7 @@ if ok then
 
 			-- clicking the row opens it: every tag, dim or lit, each a switch
 			card:GetScript("OnClick")(card)
-			assert(BT.Find.Selected() == "Beeb Lighthammer@Whitemane", "the row is open")
+			assert(BT.Find.Selected() == "Beeb Lighthammer", "the row is open")
 			assert(card:GetHeight() > closedHeight, "which makes it taller")
 			local tagCount = #BT.AllFlags()
 			assert(card.pills[tagCount] and card.pills[tagCount]:IsShown(), "every tag is on the open row")
@@ -1119,16 +1130,16 @@ if ok then
 			end
 			assert(troll, "the Troll tag is one of them")
 			troll:GetScript("OnClick")(troll)
-			assert(BT.DB.Get(BT.db, "Beeb Lighthammer@Whitemane").flags.troll, "clicking it tags them")
+			assert(BT.DB.Get(BT.db, "Beeb Lighthammer").flags.troll, "clicking it tags them")
 			troll:GetScript("OnClick")(troll)
-			assert(BT.DB.Get(BT.db, "Beeb Lighthammer@Whitemane").flags == nil, "clicking again takes it off")
+			assert(BT.DB.Get(BT.db, "Beeb Lighthammer").flags == nil, "clicking again takes it off")
 
 			-- the note is typed on the row and saved with enter
 			local box = BT.Find.CardNoteBox(card)
 			assert(box:IsShown(), "the open row has a note field")
 			box.GetText = function() return "held the cave pull on his own" end
 			box:GetScript("OnEnterPressed")(box)
-			assert(BT.DB.Get(BT.db, "Beeb Lighthammer@Whitemane").note == "held the cave pull on his own",
+			assert(BT.DB.Get(BT.db, "Beeb Lighthammer").note == "held the cave pull on his own",
 				"enter saves the note")
 
 			-- clicking the open row again closes it
@@ -1220,6 +1231,16 @@ if ok then
 			-- window; the rail has to hold every tab above the line at its foot
 			local fits, reach, room = BT.Window.RailFits()
 			assert(fits, ("every tab fits on the rail (%s of %s)"):format(tostring(reach), tostring(room)))
+			-- TESTING (Josh 2026-09-24): the made-up people and auras, and the
+			-- reports, on a page of their own under General
+			BT.Window.SetView("testing")
+			local tbody = BT.Window.Panel("testing").body
+			assert(tbody.peopleSeg and tbody.aurasRow, "the made-up people and auras are here")
+			local frames = BT.GetModule("frames")
+			tbody.peopleSeg.buttons[2]:GetScript("OnClick")(tbody.peopleSeg.buttons[2])
+			assert(frames.previewing == "party", "and draw the made-up party")
+			tbody.peopleSeg.buttons[1]:GetScript("OnClick")(tbody.peopleSeg.buttons[1])
+			assert(frames.previewing == nil, "and take it away")
 			BT.Window.SetView("tips")
 			assert(BT.Window.View() == "tips" and BT.Window.Panel("tips"), "a page builds its panel once")
 			assert(BT.Window.LitTab() == "tips", "and lights its own tab while it is up")
@@ -1272,6 +1293,35 @@ if ok then
 			BT.Stats.JOB_SLICE = wasSlice
 			assert(BT.CensusWindow.Tick() == false and refreshed == 1, "and only once for it")
 			BT.Census.Refresh = wasRefresh
+			-- CLICK A BAR, SEEN WITHIN, GUILD AND ZONE (Josh 2026-09-24)
+			local view = BT.GetModule("census").view
+			assert(view.modeButtons.guild and view.modeButtons.zone, "guild and zone have charts")
+			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+			local row = view.rows[1]
+			assert(row.pickable and row.key, "a class bar can be picked")
+			local picked = row.key
+			row:GetScript("OnClick")(row)
+			assert(view.pick and view.pick.mode == "class" and view.pick.key == picked, "clicking it picks it")
+			assert(view.clear:IsShown() and not view.hint:IsShown(), "and a button says so, and puts it back")
+			assert(view.census.pick and view.census.matched <= view.census.total, "the charts count what it picked")
+			view.modeButtons.race:GetScript("OnClick")(view.modeButtons.race)
+			assert(view.pick and view.pick.key == picked, "the pick stays on the other charts")
+			view.clear:GetScript("OnClick")(view.clear)
+			assert(view.pick == nil and view.hint:IsShown(), "and the button clears it")
+			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+			view.rows[1]:GetScript("OnClick")(view.rows[1])
+			view.rows[1]:GetScript("OnClick")(view.rows[1])
+			assert(view.pick == nil, "clicking the picked bar again clears it too")
+			view.seenButtons.today:GetScript("OnClick")(view.seenButtons.today)
+			assert(view.seen == "today" and view.census.seen == "today", "seen today narrows the charts")
+			assert(BT.Census.Filter(view).seen == "today", "and the window's own counting with them")
+			view.seenButtons.all:GetScript("OnClick")(view.seenButtons.all)
+			assert(view.census.seen == nil, "and All is the whole book")
+			view.modeButtons.guild:GetScript("OnClick")(view.modeButtons.guild)
+			assert(view.mode == "guild", "the guild chart draws")
+			view.modeButtons.zone:GetScript("OnClick")(view.modeButtons.zone)
+			assert(view.mode == "zone", "the zone chart draws")
+			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
 			BT.CensusWindow.Hide()
 			assert(BT.CensusWindow.ticker == nil, "closing it stops the looking")
 			BT.CensusWindow.Show()
@@ -1457,7 +1507,7 @@ if ok then
 
 			-- the Ledger's note is a card above the tooltip, not a line in it,
 			-- so the tooltip keeps the size it had
-			BT.DB.SetNote(BT.db, "Beeb Bob@Whitemane", "held the door")
+			BT.DB.SetNote(BT.db, "Beeb Bob", "held the door")
 			local was = #lines
 			BT.Tooltip.Fill(tip, "target")
 			for i = 3, #lines do
@@ -1515,7 +1565,7 @@ if ok then
 			assert(tagged > 0, "the tags on a card are swatches")
 		end },
 		{ "a note on a card is quoted, right-aligned, and signed", function()
-			local key = "Beeb Bob@Whitemane"
+			local key = "Beeb Bob"
 			BT.DB.SetNote(BT.db, key, "held the line")
 			BT.Find.Select(nil)
 			BT.Find.Search("beeb")
@@ -1546,10 +1596,10 @@ if ok then
 			BT.DB.Note(BT.db, "Passer By", nil, { guid = "Player-70-0000DDDD", class = "WARRIOR" })
 			assert(BT.DB.noteRev == notes, "a sighting is not something a tooltip shows")
 			assert(BT.DB.rev > 0, "but it is still a write the list should notice")
-			BT.DB.SetNote(BT.db, "Passer By@Whitemane", "shared a quest")
+			BT.DB.SetNote(BT.db, "Passer By", "shared a quest")
 			assert(BT.DB.noteRev > notes, "writing a note is")
 			local tagged = BT.DB.noteRev
-			BT.DB.SetFlag(BT.db, "Passer By@Whitemane", "good", true)
+			BT.DB.SetFlag(BT.db, "Passer By", "good", true)
 			assert(BT.DB.noteRev > tagged, "and so is tagging somebody")
 		end },
 		{ "the tracker's switches redraw the panel they are about", function()
@@ -2929,7 +2979,9 @@ if ok then
 			F.Paint(player, F.Source("player"))
 			assert(tostring(player.name._text):find("Beeb Bob", 1, true), "a single frame says the whole name: " .. tostring(player.name._text))
 			_G.GetUnitName = wasGUN
-			assert(player:GetWidth() < player:GetHeight() * 3, "and is a cell, not a strip: " .. player:GetWidth() .. "x" .. player:GetHeight())
+			-- (wider than it was, for all it says - Josh 2026-09-24 - but still
+			-- no ruler)
+			assert(player:GetWidth() < player:GetHeight() * 4, "and is a block, not a strip: " .. player:GetWidth() .. "x" .. player:GetHeight())
 			-- NO RIM: the frame's edge is left for aggro, the target outline, dispels
 			local held = BT.Pill.Panels()[player]
 			assert(held and held.fillColour == BT.Widgets.FILL and held.edgeColour[4] == 0,
@@ -3090,7 +3142,8 @@ if ok then
 			assert(t and t.hpText._text == "1.1K", "the target's health, abbreviated: " .. tostring(t and t.hpText._text))
 			assert(t.value._text == "72%", "beside its share: " .. tostring(t.value._text))
 			assert(t.power.text._text == "45", "and its rage on the bar: " .. tostring(t.power.text._text))
-			assert(t:GetHeight() >= F.KINDS.party.h and t:GetWidth() < 200, "a cell, narrow and tall")
+			assert(t:GetHeight() >= F.KINDS.party.h and t:GetWidth() == F.KINDS.target.w and F.KINDS.target.w > F.KINDS.party.w,
+				"wider than a cell, for its level, name and threat on one line")
 			assert(F.KINDS.party.w == 160 and F.KINDS.party.h == 60, "and a party cell the size the player frame was")
 			-- A LIGHT UNDER THE POINTER, on every unit frame
 			t:GetScript("OnEnter")(t)
@@ -3107,7 +3160,7 @@ if ok then
 			for _, f in ipairs(mod.previews) do
 				if f.bmKind == "party" then cellNames[#cellNames + 1] = f.name._text end
 			end
-			assert(#cellNames == 4 and cellNames[4] == "Ashby", "four made-up people under the real you: " .. table.concat(cellNames, ","))
+			assert(#cellNames == 4 and cellNames[4]:find("Ashby$"), "four made-up people under the real you: " .. table.concat(cellNames, ","))
 			assert(mod.previews[1]._points.TOPLEFT.y == -(F.KINDS.party.h + mod.PARTY_STEP), "the first place left for you")
 			assert(mod.previews[1].value._shown == false, "a party cell writes no figure: the bar says it")
 			-- A PET AND A TARGET FOR EVERY MEMBER: the room for a pet is kept
@@ -3129,6 +3182,15 @@ if ok then
 			F.Paint(cells[3], F.Fake({ name = "Ysolde", class = "MAGE", hp = 0, dead = true, rez = true }))
 			assert(filed == F.CALL.rez.file, "an unknown atlas falls back to the file: " .. tostring(filed))
 			cells[3].call.SetAtlas, cells[3].call.SetTexture = wasAtlas, nil
+			-- THE LEVEL IN FRONT OF THE NAME (Josh 2026-09-24), as the target has it
+			F.Paint(cells[3], F.Fake({ name = "Ysolde", class = "MAGE", level = 35, hp = 80 }))
+			local said = tostring(cells[3].name._text or "")
+			assert(said:find("35", 1, true) and said:find("Ysolde", 1, true)
+				and said:find("35", 1, true) < said:find("Ysolde", 1, true),
+				"a party cell says the level before the name: " .. said)
+			local raidCell = F.Build(_G.UIParent, "raid", nil, false)
+			F.Paint(raidCell, F.Fake({ name = "Ysolde", class = "MAGE", level = 35, hp = 80 }))
+			assert(not tostring(raidCell.name._text or ""):find("35", 1, true), "a raid cell has no room for it")
 			local voidwalker, aims = nil, 0
 			for _, f in ipairs(mod.previews) do
 				if f.bmKind == "gpet" then voidwalker = f end
@@ -3148,7 +3210,8 @@ if ok then
 			assert(F.DeepenBy({ 0.78, 0.61, 0.43 }) == 0.34, "and the rest by a third, as before")
 			local byName = {}
 			for _, f in ipairs(mod.previews) do
-				if f.bmKind == "party" then byName[f.name._text] = f end
+				-- the name without the level in front of it
+				if f.bmKind == "party" then byName[(tostring(f.name._text):match("(%a+)$"))] = f end
 			end
 			local priest, warrior = byName.Maelis, byName.Brannoc
 			local r, g, b = priest.health._barColor[1], priest.health._barColor[2], priest.health._barColor[3]
@@ -3328,6 +3391,242 @@ if ok then
 			BT.Window.SetView("settings")
 			assert(BT.Settings.Appearance().type == nil, "no font picker on General")
 		end },
+		{ "your heals and damage over time run down as bars, a lane a spell", function()
+			-- YOUR HEALS AND DAMAGE OVER TIME, AS BARS (Josh 2026-09-24): a
+			-- container a spell, told only that spell, its button a bar the
+			-- client runs down
+			local F, T = BT.UnitFrames, BT.UnitFrames.Timers
+			local realCF = _G.CreateFrame
+			local made = {}
+			_G.CreateFrame = function(kind, name, parent, template)
+				if kind == "AuraContainer" then
+					local c = realCF("Frame", name, parent)
+					c.groups = {}
+					c.AddAuraGroup = function(self, key, filter, opts) self.groups[key] = { filter = filter, opts = opts } end
+					c.SetUnit = function(self, u) self.unit = u end
+					c.SetEnabled = function(self, on) self.enabled = on end
+					made[#made + 1] = c
+					return c
+				end
+				return realCF(kind, name, parent, template)
+			end
+			local wasClass, wasSpell, wasEnum, wasCurve = _G.UnitClass, _G.C_Spell, _G.Enum, _G.C_CurveUtil
+			_G.UnitClass = function() return "Druid", "DRUID" end
+			local IDS = { Rejuvenation = 774, Regrowth = 8936, Moonfire = 8921, ["Insect Swarm"] = 5570 }
+			_G.C_Spell = { GetSpellInfo = function(name) return IDS[name] and { spellID = IDS[name] } or nil end }
+			_G.Enum = setmetatable({ StatusBarTimerDirection = { ElapsedTime = 0, RemainingTime = 1 },
+				LuaCurveType = { Step = 2 } }, { __index = wasEnum })
+			T.Rebuild()
+
+			local cell = F.Build(_G.UIParent, "party", nil, true)
+			F.Auras.Attach(cell, "party")
+			F.Bind(cell, "party2")
+			local set = cell.bmAuras
+			local rejuv = set.timers["hot:Rejuvenation"]
+			assert(rejuv and set.timers["hot:Regrowth"] == nil, "one heal over time, and it is Rejuvenation")
+			local g = rejuv.groups.timer
+			assert(g.filter == "HELPFUL|PLAYER" and g.opts.candidateFilters.includeSpellIDs[774],
+				"a lane shows only your own buff, and only that spell")
+			assert(rejuv._points.TOPLEFT.rel == cell.health and rejuv._points.TOPLEFT.y == 0,
+				"along the top of the health")
+			assert(rejuv.unit == "party2", "and follow the cell's member")
+			-- /bt timers says where they got to, without falling over
+			T.Report()
+
+
+			-- its button: a bar the client runs down, from full to empty, and
+			-- a countdown under it the client writes and colours - no script
+			-- of ours runs on the client's button (in game: blinks 0)
+			local points, interval = {}, nil
+			_G.C_CurveUtil = { CreateColorCurve = function()
+				return { SetType = function() end, AddPoint = function(_, x, c) points[#points + 1] = { x, c } end }
+			end }
+			local wasColor, wasDU, wasSU = _G.CreateColor, _G.C_DurationUtil, _G.C_StringUtil
+			_G.CreateColor = function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+			_G.C_DurationUtil = { CreateDurationTextBinding = function()
+				return { SetFormatter = function() end, SetUpdateInterval = function(_, n) interval = n end,
+					SetZeroDurationText = function() end, SetExpiredText = function() end }
+			end }
+			_G.Enum.DurationTextBindingProperty = { RemainingDuration = 0 }
+			local button = realCF("Button")
+			local handed, told
+			button.SetDurationBar = function(self, bar, opts) handed = { bar = bar, opts = opts } end
+			button.SetDurationText = function(self, text, opts) told = { text = text, opts = opts } end
+			g.opts.initializeFrame(button)
+			assert(handed and handed.opts.direction == 1 and not handed.bar:GetScript("OnUpdate"),
+				"the client's duration bar, counting down, and nothing of ours on it")
+			-- BLINK AS IT RUNS OUT (Josh 2026-09-24): a lane-sized red picture
+			-- as the client's duration text, its colour from a curve over the
+			-- time left, looked at every frame
+			assert(told and told.opts.textColor.property == 0 and told.opts.binding and interval == 0,
+				"a flash the client colours by the time left, looked at every frame")
+			local fmt = told.opts.textFormat and told.opts.textFormat.formatString or ""
+			assert(fmt:find("|T", 1, true) and fmt:find(":255:92:77|t", 1, true) and not fmt:find("{}", 1, true),
+				"a red picture, and no number: " .. fmt)
+			assert(told.text._points.LEFT.rel == button and fmt:find(":" .. (3 + 6) .. ":" .. (156 * 2) .. ":", 1, true),
+				"oversized, from the lane's left edge: " .. fmt)
+			-- UNDER THE BAR: the track, the flash, the bar, bottom to top
+			local under = button.bmCountFrame
+			assert(under and under:GetFrameLevel() < button.bmBar:GetFrameLevel()
+				and under:GetFrameLevel() > button:GetFrameLevel(),
+				"between the track and the bar, so what is left stays in its colour")
+			assert(under._clips == true or under.DoesClipChildren == nil or under:DoesClipChildren() ~= false,
+				"and cut to the lane's edges")
+			assert(#points > 6 and points[#points][2].a == 0, "blinking by the curve, and not there before the end")
+			local gapNear, gapFar = points[2][1] - points[1][1], points[#points - 1][1] - points[#points - 2][1]
+			assert(gapNear < gapFar, "faster the nearer the end: " .. gapNear .. " then " .. gapFar)
+			assert(points[1][2].a == 1 and points[2][2].a == 0, "lit, then dark, then lit")
+			-- one switch for heals, one for damage; off, a lane without it
+			T.SetBlinks(false, "hot")
+			assert(not T.Blinks("hot") and BT.settings.frames.timerBlinkHot == false and T.Blinks("dot"),
+				"switched off for heals, and only for heals")
+			local plain = realCF("Button")
+			local wrote
+			plain.SetDurationBar = function() end
+			plain.SetDurationText = function() wrote = true end
+			set.timers["hot:Rejuvenation"].groups.timer.opts.initializeFrame(plain)
+			assert(not wrote, "and its lanes are made again without it")
+			BT.settings.frames.timerCount = "steady"
+			T.SetBlinks(true, "hot")
+			assert(T.Blinks("hot") and BT.settings.frames.timerBlinkHot == nil and BT.settings.frames.timerCount == nil,
+				"on, the default, is not written down, and the countdown's settings are cleared away")
+			rejuv = set.timers["hot:Rejuvenation"]
+			_G.CreateColor, _G.C_DurationUtil, _G.C_StringUtil = wasColor, wasDU, wasSU
+
+			-- a spell switched off takes its lane away
+			T.SetOn("Rejuvenation", false)
+			assert(set.timers["hot:Rejuvenation"] == nil and rejuv.enabled == false, "switched off, gone")
+			T.SetOn("Rejuvenation", true)
+			rejuv = set.timers["hot:Rejuvenation"]
+			assert(rejuv ~= nil, "and back")
+
+			-- in a fight it waits
+			_G.InCombatLockdown = function() return true end
+			T.SetOn("Rejuvenation", false)
+			assert(set.timers["hot:Rejuvenation"] == rejuv, "nothing is changed in a fight")
+			_G.InCombatLockdown = function() return false end
+			T.Rebuild()
+			assert(set.timers["hot:Rejuvenation"] == nil, "and it is done once the fight is over")
+			T.SetOn("Rejuvenation", true)
+
+			-- the target: your damage over time, over the frame while there
+			-- is no resource display to put it on
+			local hadPRD = BT.Enabled("prd")
+			BT.SetEnabled("prd", false)
+			local target = F.Build(_G.UIParent, "target", nil, true)
+			F.Auras.Attach(target, "target")
+			-- DAMAGE GOES ABOVE THE FRAME (Josh 2026-09-24): stacked inside,
+			-- a warlock's third lane ran through the enemy's name
+			local moon = target.bmAuras.timers["dot:Moonfire"]
+			local at = moon and moon._points.TOPLEFT
+			assert(moon and moon.groups.timer.filter == "HARMFUL|PLAYER" and at.rel == target and at.y == 6,
+				"your debuffs on an enemy, just above the frame, five pixels thick")
+			assert(target.bmAuras.timers["dot:Insect Swarm"]._points.TOPLEFT.y == 12,
+				"a lane each, stacked upwards, as many as a warlock needs")
+			local dotButton = realCF("Button")
+			dotButton.SetDurationBar = function() end
+			dotButton.SetDurationText = function() end
+			moon.groups.timer.opts.initializeFrame(dotButton)
+			assert(dotButton:GetHeight() == T.DOT_H and T.DOT_H > T.LANE_H.target, "thicker than a heal's")
+			T.SetBlinks(false, "dot")
+			assert(T.LaneStyle("dot") == "still" and target.bmAuras.timers["dot:Moonfire"] ~= moon,
+				"the damage's switch makes its lanes again")
+			T.SetBlinks(true, "dot")
+			moon = target.bmAuras.timers["dot:Moonfire"]
+			-- YOUR ORDER (Josh 2026-09-24): the lanes stack as you set them,
+			-- each spell keeping its colour wherever it goes
+			local moonColour = T.Colour("dot", "Moonfire")
+			assert(T.Ordered("dot")[1] == "Moonfire", "the class's order to begin with")
+			assert(T.Move("dot", "Insect Swarm", -1), "moved nearer the frame")
+			assert(T.Ordered("dot")[1] == "Insect Swarm" and T.Ordered("dot")[2] == "Moonfire", "and the order says so")
+			assert(target.bmAuras.timers["dot:Insect Swarm"]._points.TOPLEFT.y == 6
+				and target.bmAuras.timers["dot:Moonfire"]._points.TOPLEFT.y == 12,
+				"the lanes swap places")
+			assert(target.bmAuras.timers["dot:Moonfire"] == moon, "the same containers, only moved")
+			assert(T.Colour("dot", "Moonfire") == moonColour, "and Moonfire keeps its colour")
+			assert(not T.Move("dot", "Insect Swarm", -1), "nothing is nearer than the nearest")
+			assert(BT.settings.frames.timerOrder.DRUID[1] == "Insect Swarm", "kept for the class")
+			BT.settings.frames.timerOrder = { DRUID = { "Rip", "Nonsense", "Moonfire" } }
+			local o = T.Ordered("dot")
+			assert(o[1] == "Rip" and o[2] == "Moonfire" and o[3] == "Insect Swarm" and #o == 4,
+				"a spell it never heard of is passed over, and the rest follow in the class's order")
+			BT.settings.frames.timerOrder = nil
+			T.Rebuild()
+
+			-- their settings, on the Resource display's page now: listed as
+			-- they stack, the top lane first, and the chevrons move them
+			local page = BT.Widgets.Stack(realCF("Frame", nil, _G.UIParent))
+			local sec = T.DotSection(page)
+			local function listed()
+				local out = {}
+				for _, r in ipairs(sec.rows) do
+					if r.spell then out[#out + 1] = r.spell end
+				end
+				return table.concat(out, ",")
+			end
+			assert(listed() == "Rip,Rake,Insect Swarm,Moonfire", "top lane first: " .. listed())
+			local moonRow
+			for _, r in ipairs(sec.rows) do
+				if r.spell == "Moonfire" then moonRow = r end
+			end
+			moonRow.moves[1]:GetScript("OnClick")(moonRow.moves[1])
+			assert(listed() == "Rip,Rake,Moonfire,Insect Swarm", "the up chevron takes it a lane higher: " .. listed())
+			assert(T.BlinkRow(sec, "dot").switch:IsOn(), "and whether the damage blinks as it runs out, on to begin with")
+			BT.settings.frames.timerOrder = nil
+			T.Rebuild()
+
+			-- YOUR TARGET'S, OVER YOUR OWN BARS (Josh 2026-09-24): with the
+			-- resource display on, the lanes leave the target frame for a
+			-- holder on top of its bars
+			BT.SetEnabled("prd", true)
+			assert(target.bmAuras.timers["dot:Moonfire"] == nil, "off the target frame")
+			local bars = realCF("Frame", nil, _G.UIParent)
+			bars:SetSize(199, 8)
+			assert(T.OnPRD(bars), "the display says where its bars are")
+			local d = T.Display()
+			local dmoon = d and d.bmAuras.timers["dot:Moonfire"]
+			assert(dmoon and dmoon.unit == "target" and dmoon.groups.timer.filter == "HARMFUL|PLAYER",
+				"your damage on your target, over the bars")
+			assert(d._points.BOTTOMLEFT.rel == bars and d._points.BOTTOMLEFT.relPoint == "TOPLEFT"
+				and dmoon._points.TOPLEFT.rel == d and dmoon._points.TOPLEFT.y == 6,
+				"stacked upwards from the top of the bars")
+			assert(dmoon.groups.timer.opts.layout.elementWidth == 199, "as wide as the bars")
+			d.bmAuras.host:Hide()
+			T.Bounce()
+			assert(d.bmAuras.host._shown ~= false, "a new target: read again")
+			T.OnPRD(nil)
+			assert(not d:IsShown(), "no bars, nothing over them")
+			BT.SetEnabled("prd", hadPRD)
+			-- a raid cell: the one lane, one container
+			local raid = F.Build(_G.UIParent, "raid", nil, true)
+			F.Auras.Attach(raid, "raid")
+			local lanes = 0
+			for _ in pairs(raid.bmAuras.timers) do lanes = lanes + 1 end
+			assert(lanes == 1, "one container a raid cell, not two")
+
+			-- the made-up party shows them, the last one nearly out
+			local fake = F.Build(_G.UIParent, "party", nil, false)
+			assert(T.Show(fake, "party") == 1 and fake.bmFakeTimers[1]:GetScript("OnUpdate")
+				and fake.bmFakeTimers[1].cover and not fake.bmFakeTimers[1].count,
+				"a made-up friend wears your heal, nearly out, flashing red and with no number")
+			assert(T.Show(fake, "boss") == 4, "and a made-up boss your damage, four lanes at most")
+
+			-- a spell the book had not got yet is looked for again, not
+			-- remembered as missing (the first try in game had no bar at all)
+			local wasTime, t0 = _G.GetTime, 100
+			_G.GetTime = function() return t0 end
+			IDS.Rejuvenation = nil
+			T.Rebuild()
+			assert(T.Ids("Rejuvenation") == nil and set.timers["hot:Rejuvenation"] == nil, "not in the book yet")
+			IDS.Rejuvenation = 774
+			assert(T.Ids("Rejuvenation") == nil, "and not asked again within the second")
+			t0 = 101.5
+			assert(T.Ids("Rejuvenation") and T.Ids("Rejuvenation")[774], "a second later it is looked for, and found")
+			_G.GetTime = wasTime
+
+			_G.CreateFrame, _G.UnitClass, _G.C_Spell, _G.Enum, _G.C_CurveUtil = realCF, wasClass, wasSpell, wasEnum, wasCurve
+			T.Rebuild()
+		end },
 		{ "the unit frames' auras are the client's, in containers we describe", function()
 			-- AURAS DRAWN BY THE CLIENT (Josh 2026-09-23): an addon may not read
 			-- one in a fight, so a container reads them and fills our buttons.
@@ -3504,6 +3803,17 @@ if ok then
 
 			-- the target's debuffs hang beside it, in rows of four
 			local target = F.Build(_G.UIParent, "target", nil, true)
+			-- PAST THE END, A LITTLE (Josh 2026-09-24): the heal on the frames
+			-- you heal from has its own clip, a little wider than the health
+			local room = target.healRoom
+			local over = math.floor((F.KINDS.target.w - 4) * F.OVERHEAL + 0.5)
+			assert(room and target.heals:GetParent() == room and room._points.BOTTOMRIGHT
+				and room._points.BOTTOMRIGHT.x == over and room._points.BOTTOMRIGHT.rel == target.health,
+				"the target's heal may run past the end of its health, by " .. over)
+			assert(F.Build(_G.UIParent, "party", nil, true).healRoom, "so may a party cell's, which is yours too")
+			local raidCell = F.Build(_G.UIParent, "raid", nil, true)
+			assert(raidCell.healRoom == nil and raidCell.heals:GetParent() == raidCell.health,
+				"a raid cell's stays inside its health")
 			A.Attach(target, "target")
 			local row = target.bmAuras.debuffs
 			assert(row and row._points.TOPLEFT and row._points.TOPLEFT.rel == target
@@ -5698,7 +6008,7 @@ if ok then
 			-- move the quest tracker to the top
 			BT.MoveModule("tracker", 1)
 			BT.Window.Rebuild()
-			assert(railKeys():find("^settings,dock,tracker,map,progress"), "the rail follows: " .. railKeys())
+			assert(railKeys():find("^settings,testing,dock,tracker,map,progress"), "the rail follows: " .. railKeys())
 			assert(BT.settings.order and BT.settings.order[1] == "tracker",
 				"and the order is a setting, so it is saved")
 			BT.SetEnabled("perf", true)
@@ -5815,12 +6125,12 @@ if ok then
 			BT.SortModules()
 			BT.Window.Rebuild()
 			BT.Bar.Relayout()
-			assert(railKeys():find("^settings,dock,map,progress"), "no order is the default order")
+			assert(railKeys():find("^settings,testing,dock,map,progress"), "no order is the default order")
 			-- A SHARED PAGE MOVES WHOLE (Josh 2026-09-24): Progress dragged above
 			-- the map takes experience and reputation with it, together
 			BT.Window.MoveTab("progress", "map")
 			BT.Window.Rebuild()
-			assert(railKeys():find("^settings,dock,progress,map"), "the tab moves: " .. railKeys())
+			assert(railKeys():find("^settings,testing,dock,progress,map"), "the tab moves: " .. railKeys())
 			keys = {}
 			for _, m in ipairs(BT.Modules()) do keys[#keys + 1] = m.key end
 			assert(table.concat(keys, ","):find("xp,rep,minimap,buttons", 1, true),
@@ -7766,7 +8076,7 @@ if ok then
 			row.GetLeft = function() return 900 end
 			BT.DB.Note(BT.db, "Beeb Bob", "solid tank")
 			local key = BT.Util.Key and BT.Util.Key("Beeb Bob", "Whitemane")
-			BT.Find.OpenEditorFor(key or "Beeb Bob@Whitemane", row)
+			BT.Find.OpenEditorFor(key or "Beeb Bob", row)
 
 			local editor = BT.Find.Editor()
 			assert(editor, "the editor is up")
@@ -7781,7 +8091,7 @@ if ok then
 			dock.GetLeft = function() return 900 end
 			dockRow.GetTop = function() return 690 end
 			dockRow:Show()
-			BT.Find.OpenEditorFor(key or "Beeb Bob@Whitemane", row)
+			BT.Find.OpenEditorFor(key or "Beeb Bob", row)
 			at = (editor._points or {}).TOPRIGHT
 			assert(at and at.rel == dock and at.relPoint == "TOPLEFT",
 				"against the dock's own edge, not the name inside it")
@@ -7789,7 +8099,7 @@ if ok then
 			assert(at.y == -110, ("level with the top of the row (%s)"):format(tostring(at.y)))
 			-- a scaled dock: its tops are in its units, the offset in the editor's
 			dock.GetEffectiveScale = function() return 0.5 end
-			BT.Find.OpenEditorFor(key or "Beeb Bob@Whitemane", row)
+			BT.Find.OpenEditorFor(key or "Beeb Bob", row)
 			at = (editor._points or {}).TOPRIGHT
 			assert(at.y == -55, ("and still level when the dock is scaled (%s)"):format(tostring(at.y)))
 			dock.GetTop, dock.GetLeft, dockRow.GetTop, dock.GetEffectiveScale = nil, nil, nil, nil
@@ -8101,10 +8411,26 @@ if ok then
 			BT.Bar.SetShown(true)
 			assert(BT.Bar.Row():IsShown(), "and comes back")
 
-			-- with nothing following and no row, there is nothing to show
+			-- with nothing following, no row and no census, there is nothing
+			-- to show
 			BT.SetEnabled("tracker", false)
+			BT.SetEnabled("census", false)
 			BT.Bar.SetShown(false)
 			assert(not dock:IsShown(), "an empty dock does not sit there being empty")
+			-- THE CENSUS ON ITS OWN (Josh 2026-09-24): the name, its icon and
+			-- the cog, and nothing under them
+			BT.SetEnabled("census", true)
+			BT.SetEnabled("ledger", false)
+			assert(dock:IsShown(), "the census alone keeps the dock")
+			assert(BT.Bar.Frame().census:IsShown() and BT.Bar.Frame().cog:IsShown(),
+				"with its icon and the cog in the header")
+			-- and the panel is wide enough for them: it was 34 pixels, the
+			-- name and the icons hanging off it over the world
+			local titleW = BT.Bar.Frame().header.title:GetStringWidth()
+			assert(dock:GetWidth() >= 5 + 1 + titleW + 4 + 22 + 22 + 5,
+				("the dock fits its header (%s)"):format(tostring(dock:GetWidth())))
+			assert(not BT.Bar.Row():IsShown(), "and no row under them")
+			BT.SetEnabled("ledger", true)
 			BT.Bar.SetShown(true)
 			BT.SetEnabled("tracker", true)
 
@@ -8120,6 +8446,22 @@ if ok then
 			BT.SetEnabled("ledger", true)
 			assert(BT.Bar.RowWanted(), "switching it back on brings the row back")
 			assert(BT.Bar.Row():IsShown(), "and draws it")
+
+			-- ONE WIDTH, WHATEVER IS IN IT (Josh 2026-09-24): the quests no
+			-- longer make the dock wider, nor their absence narrower
+			BT.Bar.Relayout()
+			local withQuests = dock:GetWidth()
+			BT.SetEnabled("tracker", false)
+			BT.Bar.Relayout()
+			assert(dock:GetWidth() == withQuests and withQuests == BT.Bar.WIDTH,
+				("the same width with the quests or without (%s, %s)"):format(tostring(withQuests), tostring(dock:GetWidth())))
+			BT.SetEnabled("tracker", true)
+			assert(BT.Bar.SetWidth(120) == BT.Bar.WIDTH_MIN and BT.Bar.SetWidth(999) == BT.Bar.WIDTH_MAX,
+				"a width between what fits and what is sensible")
+			BT.Bar.SetWidth(260)
+			assert(dock:GetWidth() == 260 and BT.settings.dockWidth == 260, "and the dock takes it")
+			BT.Bar.SetWidth(BT.Bar.WIDTH)
+			assert(BT.settings.dockWidth == nil, "the default is not written down")
 		end },
 		{ "an item tooltip can say the item level, beside the name", function()
 			local tips = BT.GetModule("tips")
@@ -8222,42 +8564,42 @@ if ok then
 			assert(BT.Meter.available, "the meter source should be available against the stubs")
 			-- the meter only ever says "Corwin", so it may not INVENT a row:
 			-- with nobody under that GUID yet, it writes nothing at all
-			for k in pairs(BT.db.guids) do BT.db.guids[k] = nil end
+			for k in pairs(BT.DB.Guids(BT.db)) do BT.DB.Guids(BT.db)[k] = nil end
 			assert(BT.Meter.Harvest() == 0, "an unknown combat source is not filed")
-			assert(BT.DB.Get(BT.db, "Corwin@Whitemane") == nil, "half a name never enters the book")
+			assert(BT.DB.Get(BT.db, "Corwin") == nil, "half a name never enters the book")
 			-- once chat or a nameplate has filed them properly, it updates that row
 			BT.DB.Note(BT.db, "Corwin Bob", nil, { guid = "Player-4372-0002BFB2" })
-			local before = BT.DB.Get(BT.db, "Corwin Bob@Whitemane").seen
+			local before = BT.DB.Get(BT.db, "Corwin Bob").seen
 			assert(BT.Meter.Harvest() == 1, "a known fighter is updated")
-			assert(BT.DB.Get(BT.db, "Corwin Bob@Whitemane").seen > before, "on the row that already exists")
-			assert(BT.DB.Get(BT.db, "Snarly@Whitemane") == nil, "a pet with no player GUID is not a character")
+			assert(BT.DB.Get(BT.db, "Corwin Bob").seen > before, "on the row that already exists")
+			assert(BT.DB.Get(BT.db, "Snarly") == nil, "a pet with no player GUID is not a character")
 		end },
 		{ "/bt stats", function() SlashCmdList.BEEBSTOOLKIT("stats") end },
 		{ "/bt note", function()
 			SlashCmdList.BEEBSTOOLKIT("note Beeb Bob solid tank")
-			assert(BT.DB.Get(BT.db, "Beeb Bob@Whitemane").note == "solid tank", "the command wrote the note")
+			assert(BT.DB.Get(BT.db, "Beeb Bob").note == "solid tank", "the command wrote the note")
 			-- NOTHING TYPED READS IT BACK: it used to erase the note
 			SlashCmdList.BEEBSTOOLKIT("note Beeb Bob")
-			assert(BT.DB.Get(BT.db, "Beeb Bob@Whitemane").note == "solid tank", "a bare /bt note keeps the note")
+			assert(BT.DB.Get(BT.db, "Beeb Bob").note == "solid tank", "a bare /bt note keeps the note")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob 4")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob 9")
-			assert(BT.DB.Get(BT.db, "Beeb Bob@Whitemane").rating == 4, "a bare or wrong rating keeps the rating")
+			assert(BT.DB.Get(BT.db, "Beeb Bob").rating == 4, "a bare or wrong rating keeps the rating")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob clear")
-			assert(BT.DB.Get(BT.db, "Beeb Bob@Whitemane").rating == nil, "and clear clears it")
+			assert(BT.DB.Get(BT.db, "Beeb Bob").rating == nil, "and clear clears it")
 		end },
 		{ "/bt flag", function()
 			-- a toggle, so the check is that it CHANGED, not what it landed on
-			local before = BT.DB.Get(BT.db, "Beeb Bob@Whitemane").flags
+			local before = BT.DB.Get(BT.db, "Beeb Bob").flags
 			before = before and before.troll or false
 			SlashCmdList.BEEBSTOOLKIT("flag Beeb Bob troll")
-			local after = BT.DB.Get(BT.db, "Beeb Bob@Whitemane").flags
+			local after = BT.DB.Get(BT.db, "Beeb Bob").flags
 			after = after and after.troll or false
 			assert(after ~= before, "the command toggled the tag")
 			-- by its label too, in any case
 			local label = BT.Util.FlagByKey("troll").label
 			SlashCmdList.BEEBSTOOLKIT("flag Beeb Bob " .. label:upper())
-			local back = BT.DB.Get(BT.db, "Beeb Bob@Whitemane").flags
+			local back = BT.DB.Get(BT.db, "Beeb Bob").flags
 			back = back and back.troll or false
 			assert(back == before, "toggled back by its label: " .. label)
 		end },
@@ -8273,6 +8615,14 @@ if ok then
 			SlashCmdList.BEEBSTOOLKIT("autopurge off")
 			assert(BT.settings.pruneDays == 0, "and can be turned off")
 		end },
+		{ "/bt cap", function()
+			SlashCmdList.BEEBSTOOLKIT("cap 5")
+			assert(BT.settings.bookCap == 1000, "a limit is never below a thousand")
+			SlashCmdList.BEEBSTOOLKIT("cap off")
+			assert(BT.settings.bookCap == 0, "and off is off")
+			SlashCmdList.BEEBSTOOLKIT("cap 150000")
+			assert(BT.settings.bookCap == 150000, "and it takes a number")
+		end },
 		{ "/bt help", function() SlashCmdList.BEEBSTOOLKIT("help") end },
 	}
 	for _, step in ipairs(steps) do
@@ -8283,12 +8633,43 @@ if ok then
 			fail(step[1] .. ": " .. tostring(err))
 		end
 	end
-	local p = BT.DB.Get(BT.db, "Beeb Bob@Whitemane")
+	local p = BT.DB.Get(BT.db, "Beeb Bob")
 	-- each command checks its own effect above; this is the belt to that braces
 	if not (p and p.note) then
 		fail("the slash commands did not reach the database")
 	else
 		print("ok   the slash commands wrote a note and a flag")
+	end
+end
+
+-- PACKED FOR THE NIGHT (Josh 2026-09-24): logout packs every book, and the
+-- book reads the same afterwards - the last thing here, since it turns the
+-- rows the checks above held on to back into strings
+do
+	local good, err = pcall(function()
+		local total, packedBefore = BT.DB.Count(BT.db)
+		local census = BT.Stats.Census(BT.db).total
+		BT.Collect.Handlers.PLAYER_LOGOUT()
+		local after, packed = BT.DB.Count(BT.db)
+		assert(after == total, "logout packs, it does not drop anybody")
+		assert(packed > packedBefore and (BeebModDB.packedAtLogout or 0) > 0,
+			("characters were packed (%d of %d)"):format(packed, after))
+		assert(BT.Stats.Census(BT.db).total == census, "the census counts the packed book the same")
+		local p = BT.DB.Get(BT.db, "Beeb Bob")
+		assert(p and p.note, "a character you wrote on is still a table with your note")
+		for key, row in pairs(BT.db.players) do
+			if type(row) == "string" then
+				local back = BT.DB.Get(BT.db, key)
+				assert(back and back.name and BT.Pack.Pack(BT.db, key, back) == row,
+					"a packed character unpacks and packs back the same: " .. key)
+			end
+		end
+		assert(BT.db.guids == nil, "and no GUID index goes into the file")
+	end)
+	if good then
+		print("ok   logout packs the book, and it reads the same")
+	else
+		fail("logout packing: " .. tostring(err))
 	end
 end
 

@@ -83,7 +83,7 @@ function M.Harvest()
 				-- longer CREATES characters, it only updates ones the book
 				-- already knows by their GUID. Anyone new it sees will arrive
 				-- properly named the moment they speak or are seen.
-				local known = type(guid) == "string" and BT.db.guids and BT.db.guids[guid]
+				local known = DB.ByGuid(BT.db, guid)
 				local p = known and DB.Get(BT.db, known)
 				if p and BT.Collect.Fresh(known) then
 					DB.Note(BT.db, p.name, p.realm, {

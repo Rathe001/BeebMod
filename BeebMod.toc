@@ -37,6 +37,7 @@ Core\Util.lua
 Core\Session.lua
 Core\Fonts.lua
 Core\Blocked.lua
+Core\Pack.lua
 Core\DB.lua
 Core\Tooltip.lua
 Core\StatusBars.lua
@@ -90,6 +91,7 @@ Modules\Menu\Menu.lua
 # every unit frame, in the toolkit's clothes
 Modules\Frames\Unit.lua
 Modules\Frames\Auras.lua
+Modules\Frames\Timers.lua
 Modules\Frames\Buffs.lua
 Modules\Frames\Frames.lua
 

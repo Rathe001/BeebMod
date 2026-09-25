@@ -910,7 +910,9 @@ function M.Build()
 	end
 	rows = {}
 	frame = BT.Bar.Section("tracker", 10)
-	frame.wantWidth = opt("width", 230)
+	-- as wide as the dock, which has a width of its own (UI/Bar.lua): the
+	-- list asking for 230 was what made the whole dock wider with it
+	frame.wantWidth = nil
 	-- the one section the dock may cut short to stay on the screen
 	frame.shrinks = true
 	frame.Fit = function(_, height)
