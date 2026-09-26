@@ -20,6 +20,18 @@ function S.Build(parent)
 	stack = W.Stack(parent)
 	S.appearance = {}
 
+	-- HOW MUCH IT CHANGES (Josh 2026-09-25): the question the first login
+	-- asks - full, just the dock, or the census and notes - asked again
+	local layout = stack:Section("How much it changes")
+	local again = W.Row(layout, "Choose again", "everything, just the dock, or the census and your notes · /bt setup")
+	local ask = again:SetControl(W.Button(again, "Choose", 70, 20))
+	ask:SetScript("OnClick", function()
+		if BT.Welcome then
+			BT.Welcome.Show()
+		end
+	end)
+	S.chooseButton = ask
+
 	-- WHAT THE TOOLKIT LOOKS LIKE, IN ONE PLACE (Josh 2026-09-21). Every
 	-- module reads these; there is nothing to set twice.
 	local look = stack:Section("Look")

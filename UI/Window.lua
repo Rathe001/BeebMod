@@ -629,16 +629,41 @@ local function censusPage(body)
 		function() return not (BT.settings and BT.settings.censusButton == false) end,
 		function(v)
 			BT.EnsureBound()
-			BT.settings.censusButton = (not v) and false or nil
+			-- off is written down, on (the default) is not: `(not v) and false or nil`
+			-- was nil either way, and the switch could never turn it off (Josh 2026-09-25)
+			if v then
+				BT.settings.censusButton = nil
+			else
+				BT.settings.censusButton = false
+			end
 			if BT.Bar then
 				BT.Bar.Relayout()
+			end
+		end)
+	-- THE CENSUS, SHARED (Josh 2026-09-25): what you see, told to everyone
+	-- else with BeebMod, and what they see, filed as heard (Core/Share.lua)
+	BT.Widgets.SwitchRow(sec, "Share with other BeebMod users",
+		"new sightings go out and come in over a hidden channel · theirs are filed as heard · /bt share",
+		function() return not (BT.settings and BT.settings.shareCensus == false) end,
+		function(v)
+			if BT.Share then
+				BT.Share.SetOn(v)
+			end
+			if v and BT.CommsProbe then
+				BT.CommsProbe.HelloAll()
 			end
 		end)
 	BT.Widgets.SwitchRow(sec, "Up to date while open", "the charts redrawn as the book fills · off, as they were when opened",
 		function() return not (BT.settings and BT.settings.censusLive == false) end,
 		function(v)
 			BT.EnsureBound()
-			BT.settings.censusLive = (not v) and false or nil
+			-- off is written down, on (the default) is not: `(not v) and false or nil`
+			-- was nil either way, and the switch could never turn it off (Josh 2026-09-25)
+			if v then
+				BT.settings.censusLive = nil
+			else
+				BT.settings.censusLive = false
+			end
 		end)
 	local open = BT.Widgets.Row(sec, "Open the charts", "the same as the chart button in the header · /bt census")
 	local b = open:SetControl(BT.Widgets.Button(open, "Open", 62, 20))
@@ -680,12 +705,33 @@ local function testingPage(body)
 				B.Preview(on)
 			end
 		end)
+	-- THE FIRST LOGIN (Josh 2026-09-25): the choice a fresh install is
+	-- given - full, just the dock, or the census and notes - to see again
+	local first = Wd.Row(look, "First login", "the choice a fresh install gets: everything, just the dock, or the census and notes")
+	body.firstButton = first:SetControl(Wd.Button(first, "Show", 62, 20))
+	body.firstButton:SetScript("OnClick", function()
+		if BT.Welcome then
+			BT.Welcome.Show()
+		end
+	end)
+	-- OTHER BEEBMOD USERS (Josh 2026-09-25): the hidden channel everyone with
+	-- BeebMod meets on - the ground the census will be shared on
+	local talk = st:Section("Other BeebMod users")
+	body.helloRow = Wd.SwitchRow(talk, "Say hello to them",
+		"a hidden channel and hidden whispers · nobody without BeebMod sees a thing · /bt comms friends",
+		function() return BT.CommsProbe == nil or BT.CommsProbe.On() end,
+		function(on)
+			if BT.CommsProbe then
+				BT.CommsProbe.SetOn(on)
+			end
+		end)
 	-- the reports /bt already writes, a click away; they go to your chat
 	local ask = st:Section("Ask the addon")
 	for _, c in ipairs({
 		{ "debug", "What loaded", "the build, the book, every module, what the client refused" },
 		{ "timers", "Over-time bars", "where the heal and damage bars got to, spell by spell" },
 		{ "stats", "The book", "how many characters, how many packed, and the other books" },
+		{ "comms", "Hidden messages", "what the client lets addons send each other, and who answered · /bt comms friends" },
 	}) do
 		local row = Wd.Row(ask, c[2], c[3] .. " · /bt " .. c[1])
 		local run = row:SetControl(Wd.Button(row, "Show", 62, 20))

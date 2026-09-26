@@ -30,7 +30,8 @@
 --   16    3   levelAt        hours
 --   19    3   guildAt        hours
 --   22    2   seen           capped at 4095
---   24    1   bits           1 = vouched for by a list the client builds
+--   24    1   bits           1 = vouched for by a list the client builds,
+--                             2 = heard from another copy, not seen yourself
 --   25    1   server         the realm number in the GUID, words.server
 --   26    6   guid           the rest of the GUID, as a number
 --   32    9n  guild history  guild 3, first 3 (hours), last 3 (hours) each
@@ -147,7 +148,7 @@ end
 local PACKED = {
 	name = true, realm = true, class = true, race = true, level = true, levelAt = true,
 	guild = true, guildAt = true, guilds = true, zone = true, zoneAt = true,
-	first = true, last = true, seen = true, vouch = true, guid = true,
+	first = true, last = true, seen = true, vouch = true, guid = true, heard = true,
 }
 -- written by older versions, and dropped rather than kept
 local DEAD = { given = true, surname = true, srcName = true, src = true, faction = true, sex = true }
@@ -180,7 +181,8 @@ function P.Pack(db, key, p)
 		end
 	end
 	local name, realm = P.Split(db, key)
-	if p.name ~= name or p.realm ~= realm or not (p.vouch == nil or p.vouch == true) then
+	if p.name ~= name or p.realm ~= realm or not (p.vouch == nil or p.vouch == true)
+		or not (p.heard == nil or p.heard == true) then
 		return nil
 	end
 	local level = p.level
@@ -214,7 +216,7 @@ function P.Pack(db, key, p)
 		{ when(p.levelAt, 3600, 3), 3 },
 		{ when(p.guildAt, 3600, 3), 3 },
 		{ math.min(seen, 4095), 2 },
-		{ p.vouch and 1 or 0, 1 },
+		{ (p.vouch and 1 or 0) + (p.heard and 2 or 0), 1 },
 		{ server, 1 },
 		{ id, 6 },
 	}
@@ -291,7 +293,9 @@ function P.Unpack(db, key, s, into, light)
 	into.levelAt = at(dec(s, 16, 3), 3600)
 	into.guildAt = at(dec(s, 19, 3), 3600)
 	into.seen = dec(s, 22, 2)
-	into.vouch = VALUE[byte(s, 24)] % 2 == 1 or nil
+	local bits = VALUE[byte(s, 24)]
+	into.vouch = bits % 2 == 1 or nil
+	into.heard = math.floor(bits / 2) % 2 == 1 or nil
 	into.guid, into.guilds = nil, nil
 	if light then
 		into.light = true
@@ -319,4 +323,10 @@ end
 -- Just the last sighting, for sorting the book by age without unpacking it.
 function P.Last(s)
 	return at(dec(s, 9, 4), 60)
+end
+
+-- and the level, for the same reason (nil when none is on file)
+function P.Level(s)
+	local level = VALUE[byte(s, 3)]
+	return level > 0 and level or nil
 end

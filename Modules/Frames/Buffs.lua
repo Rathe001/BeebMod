@@ -720,7 +720,13 @@ function M:BuildTab(panel)
 		function(on)
 			BT.EnsureBound()
 			BT.settings.buffs = BT.settings.buffs or {}
-			BT.settings.buffs.timeText = (not on) and false or nil
+			-- off is written down, on (the default) is not: `(not on) and false or nil`
+			-- was nil either way, and the switch could never turn it off (Josh 2026-09-25)
+			if on then
+				BT.settings.buffs.timeText = nil
+			else
+				BT.settings.buffs.timeText = false
+			end
 		end)
 	-- the made-up auras are on the Testing page now (UI/Window.lua)
 	page:Layout()

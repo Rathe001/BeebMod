@@ -405,6 +405,22 @@ function DB.Note(db, name, realm, info, now)
 		p = { name = short, realm = rname, first = now, seen = 0 }
 		db.players[key] = p
 	end
+	-- HEARD IS NOT SEEN (Josh 2026-09-25, the census shared: Core/Share.lua).
+	-- A character another copy of BeebMod saw arrives with `info.heard`: it
+	-- is filed, but marked as heard until you see them yourself; it never
+	-- counts as a sighting of yours, never overwrites a guild you saw more
+	-- recently, only fills in a class or race you did not have, and - being
+	-- nobody's news of yours - is never passed on again. What it was before,
+	-- to tell afterwards whether this sighting of yours is news worth sharing:
+	local heard = info.heard and true or false
+	local was = { last = p.last, level = p.level, guild = p.guild }
+	if heard then
+		if was.last == nil then
+			p.heard = true
+		end
+	else
+		p.heard = nil
+	end
 	-- a name may gain a surname, never lose one: whatever the source, the
 	-- fuller spelling of a character is the true one
 	if not (p.name and U.HasSurname(p.name) and not U.HasSurname(short)) then
@@ -448,28 +464,48 @@ function DB.Note(db, name, realm, info, now)
 	-- lines above have just taken those off the row, and copying them back in
 	-- here put them on every row again, one sighting at a time
 	for _, f in ipairs({ "class", "race", "guid" }) do
-		if info[f] ~= nil then
+		if info[f] ~= nil and not (heard and p[f] ~= nil) then
 			p[f] = info[f]
 		end
 	end
-	if info.zone ~= nil then
+	if info.zone ~= nil and not heard then
 		p.zone, p.zoneAt = info.zone, now
 	end
-	if info.guild ~= nil then
+	if info.guild ~= nil and not (heard and (p.guildAt or 0) >= now) then
 		DB.SetGuild(p, info.guild, now)
 	end
 	-- LISTED IS NOT SEEN (Josh 2026-09-23, audit): the guild roster names
 	-- offline members too, and marking them seen every minute kept them from
 	-- ever ageing out, and counted a sighting of the whole guild each pass. A
 	-- listed row takes what it is told and keeps its last sighting.
-	if not info.listed or not p.last then
+	if heard then
+		p.last = math.max(p.last or 0, now)
+	elseif not info.listed or not p.last then
 		p.last = now
 	end
-	if not info.listed then
+	if not info.listed and not heard then
 		p.seen = (p.seen or 0) + 1
 		db.stats.sightings = (db.stats.sightings or 0) + 1
 	end
 	touched()
+	-- NEWS, FOR THE CENSUS SHARED: a sighting of yours that says something the
+	-- others may not know - somebody new, somebody seen for the first time
+	-- today, a new level, a new guild. Everything else stays here.
+	if not heard and not info.listed and DB.OnNews then
+		local kind
+		if was.last == nil then
+			kind = "new"
+		elseif p.level ~= was.level then
+			kind = "level"
+		elseif p.guild ~= was.guild then
+			kind = "guild"
+		elseif math.floor(was.last / 86400) < math.floor(now / 86400) then
+			kind = "today"
+		end
+		if kind then
+			pcall(DB.OnNews, db, key, kind)
+		end
+	end
 	return p
 end
 
@@ -751,10 +787,9 @@ end
 
 -- THE BOOK HAS A SIZE (Josh 2026-09-24). A character is small packed, but a
 -- book that only ever grows still ends up as big as the realm. Past `max`
--- characters, the ones seen longest ago go first - whole days at a time, so
--- the book always covers "everybody seen since" some day - and anything you
--- have written on stays, whatever its age. Returns how many went, and the
--- oldest day kept (unix seconds).
+-- characters some have to go - whole days at a time, so what is left always
+-- covers "everybody seen since" some day - and anything you have written on
+-- stays, whatever its age.
 local DAY = 86400
 
 local function lastOf(p)
@@ -764,48 +799,97 @@ local function lastOf(p)
 	return p.last or 0
 end
 
+-- LOW LEVELS FIRST (Josh 2026-09-25: "level 1-10 are typically bank alts,
+-- and throwaway toons. After that, I think it makes sense to remove the
+-- oldest last seen"). A character on file at 1-10 goes before anyone else,
+-- the longest unseen of them first; only when there are not enough of them
+-- does the book start on the rest, oldest first. A character with no level on
+-- file is one of the rest: chat names a level-60 main as readily as an alt.
+DB.CAP_LOW = 10
+local HOUR = 3600
+
+local function levelOf(p)
+	if type(p) == "string" then
+		return P.Level(p)
+	end
+	return p.level
+end
+
+-- whole buckets (days, or hours for the low levels), oldest first, until at
+-- least `need` are counted; returns the first bucket NOT to remove (every one
+-- before it goes), and how many that is
+local function oldestDays(perDay, need)
+	local days = {}
+	for d in pairs(perDay) do
+		days[#days + 1] = d
+	end
+	table.sort(days)
+	local taken, upTo = 0, -math.huge
+	for _, d in ipairs(days) do
+		if taken >= need then
+			break
+		end
+		taken = taken + perDay[d]
+		upTo = d + 1
+	end
+	return upTo, taken
+end
+
+-- Returns how many went, how many of them were low levels, and the oldest
+-- day kept of the rest (unix seconds), when any of the rest had to go.
 function DB.Cap(db, max)
 	db = db or BT.db
 	if not (db and type(max) == "number" and max > 0) then
 		return 0
 	end
 	local players = DB.Players(db)
-	local total, mine, perDay = 0, 0, {}
+	local total, low, rest = 0, {}, {}
+	local lowCount = 0
 	for _, p in pairs(players) do
 		total = total + 1
-		if type(p) == "table" and DB.IsMine(p) then
-			mine = mine + 1
-		else
-			local d = math.floor(lastOf(p) / DAY)
-			perDay[d] = (perDay[d] or 0) + 1
+		if not (type(p) == "table" and DB.IsMine(p)) then
+			local lv = levelOf(p)
+			if type(lv) == "number" and lv <= DB.CAP_LOW then
+				-- by the hour: which of them goes need not be whole days
+				local h = math.floor(lastOf(p) / HOUR)
+				low[h] = (low[h] or 0) + 1
+				lowCount = lowCount + 1
+			else
+				local d = math.floor(lastOf(p) / DAY)
+				rest[d] = (rest[d] or 0) + 1
+			end
 		end
 	end
-	if total <= max then
+	local over = total - max
+	if over <= 0 then
 		return 0
 	end
-	-- newest day first, keeping whole days while they fit
-	local days = {}
-	for d in pairs(perDay) do
-		days[#days + 1] = d
+	-- the low levels, oldest days first, as many days as it takes
+	local lowUpTo = -math.huge
+	local restUpTo = -math.huge
+	if lowCount >= over then
+		lowUpTo = oldestDays(low, over)
+	else
+		lowUpTo = math.huge
+		restUpTo = oldestDays(rest, over - lowCount)
 	end
-	table.sort(days, function(a, b) return a > b end)
-	local room, keepFrom = max - mine, math.huge
-	for _, d in ipairs(days) do
-		if perDay[d] > room then
-			break
-		end
-		room = room - perDay[d]
-		keepFrom = d
-	end
-	local gone = 0
+	local gone, lowGone = 0, 0
 	for key, p in pairs(players) do
-		if not (type(p) == "table" and DB.IsMine(p)) and math.floor(lastOf(p) / DAY) < keepFrom then
-			players[key] = nil
-			gone = gone + 1
+		if not (type(p) == "table" and DB.IsMine(p)) then
+			local lv = levelOf(p)
+			local isLow = type(lv) == "number" and lv <= DB.CAP_LOW
+			local t = lastOf(p)
+			if (isLow and math.floor(t / HOUR) < lowUpTo) or (not isLow and math.floor(t / DAY) < restUpTo) then
+				players[key] = nil
+				gone = gone + 1
+				if isLow then
+					lowGone = lowGone + 1
+				end
+			end
 		end
 	end
 	if gone > 0 then
 		touched()
 	end
-	return gone, keepFrom < math.huge and keepFrom * DAY or nil
+	return gone, lowGone, restUpTo > -math.huge and restUpTo * DAY or nil
 end

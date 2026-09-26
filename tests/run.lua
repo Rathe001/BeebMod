@@ -1373,11 +1373,31 @@ do
 	DB.SetNote(capped, "Ancient Friend", "old pal")
 	DB.PackAll(capped)
 	check(DB.Cap(capped, 20) == 0, "under the cap, nothing goes")
-	local gone, from = DB.Cap(capped, 6)
-	check(gone == 5 and DB.Get(capped, "Day5 Person") and not DB.Get(capped, "Day6 Person"),
+	local gone, lowGone, from = DB.Cap(capped, 6)
+	check(gone == 5 and lowGone == 0 and DB.Get(capped, "Day5 Person") and not DB.Get(capped, "Day6 Person"),
 		("the five seen longest ago go (%s)"):format(tostring(gone)))
 	check(DB.Get(capped, "Ancient Friend") ~= nil, "and someone you wrote on stays, whatever their age")
 	check(from and from <= T - 5 * 86400 and from > T - 6 * 86400, "and it says from which day it kept")
+
+	-- LOW LEVELS FIRST (Josh 2026-09-25): bank alts and throwaways go before
+	-- anyone else, however recently seen; then the oldest of the rest
+	local alts = newdb()
+	for i = 1, 4 do
+		DB.Note(alts, "Bank Alt" .. string.char(64 + i), nil, { class = "ROGUE", level = i + 1 }, T - i * 3600)
+	end
+	for i = 1, 4 do
+		DB.Note(alts, "Real Main" .. string.char(64 + i), nil, { class = "MAGE", level = 50 + i }, T - i * 86400)
+	end
+	DB.Note(alts, "Chat Only", nil, { class = "PRIEST" }, T - 30 * 86400)
+	DB.PackAll(alts)
+	local g, lowG = DB.Cap(alts, 7)
+	check(g == 2 and lowG == 2 and not DB.Get(alts, "Bank AltD") and not DB.Get(alts, "Bank AltC")
+		and DB.Get(alts, "Bank AltA") and DB.Get(alts, "Chat Only"),
+		("two over: the two least recently seen low levels go, not the old main (%s, %s)"):format(tostring(g), tostring(lowG)))
+	g, lowG = DB.Cap(alts, 3)
+	check(lowG == 2 and not DB.Get(alts, "Bank AltA") and not DB.Get(alts, "Chat Only")
+		and not DB.Get(alts, "Real MainD") and DB.Get(alts, "Real MainA") and DB.Get(alts, "Real MainC"),
+		"the low levels all gone, the rest go oldest first - no level on file is one of the rest")
 
 	-- a packed row crosses to another book as the character it is, words and all
 	local other = newdb()

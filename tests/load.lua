@@ -1241,6 +1241,10 @@ if ok then
 			assert(frames.previewing == "party", "and draw the made-up party")
 			tbody.peopleSeg.buttons[1]:GetScript("OnClick")(tbody.peopleSeg.buttons[1])
 			assert(frames.previewing == nil, "and take it away")
+			-- and the first login's choice, to see again
+			tbody.firstButton:GetScript("OnClick")(tbody.firstButton)
+			assert(BT.Welcome.Frame() and BT.Welcome.Frame():IsShown(), "the first login's choice, on a click")
+			BT.Welcome.Frame():Hide()
 			BT.Window.SetView("tips")
 			assert(BT.Window.View() == "tips" and BT.Window.Panel("tips"), "a page builds its panel once")
 			assert(BT.Window.LitTab() == "tips", "and lights its own tab while it is up")
@@ -3390,6 +3394,319 @@ if ok then
 			-- and General offers no choice
 			BT.Window.SetView("settings")
 			assert(BT.Settings.Appearance().type == nil, "no font picker on General")
+		end },
+		{ "the first login asks how much to change: full, the dock, or census and notes", function()
+			-- HOW MUCH SHOULD IT CHANGE? (Josh 2026-09-25)
+			local Wl = BT.Welcome
+			local was = {}
+			for k, v in pairs(BT.settings.modules or {}) do was[k] = v end
+			local wasSetup = BT.settings.setup
+			-- a fresh install is asked; one that has set its switches is not
+			BT.settings.modules, BT.settings.setup = {}, nil
+			assert(Wl.ShouldAsk(), "a fresh install is asked")
+			BT.settings.modules = { tips = false }
+			assert(not Wl.ShouldAsk() and BT.settings.setup == "kept", "one that has chosen switches is not")
+			local function on(key) return BT.Switched(key) end
+			-- just the dock
+			BT.settings.modules, BT.settings.setup = {}, nil
+			assert(Wl.Apply("dock") and BT.settings.setup == "dock", "the dock chosen")
+			assert(on("minimap") and on("tracker") and on("metrics") and on("xp") and on("micro") and on("clock"),
+				"the dock and what is on it stay")
+			assert(on("census") and on("ledger"), "and the census and your notes")
+			assert(not on("frames") and not on("buffs") and not on("bars") and not on("chat") and not on("tips")
+				and not on("bagwindow") and not on("charsheet") and not on("damagemeter") and not on("prd"),
+				"the unit frames, bars, bags, chat and tooltips go back to the game")
+			assert(on("gold") and BT.Enabled("gold"), "a readout goes with its panel")
+			-- census and notes
+			assert(Wl.Apply("census"), "the census chosen")
+			for _, m in ipairs(BT.Modules()) do
+				if not m.part then
+					local want = m.key == "census" or m.key == "ledger"
+					assert(on(m.key) == want, ("census and notes: %s %s"):format(m.key, tostring(on(m.key))))
+				end
+			end
+			assert(not BT.Enabled("gold"), "and the readouts are off with the panel they sit on")
+			-- the dock stays, as the name, the census's icon and the cog
+			assert(BT.Bar.Frame():IsShown(), "and the dock is just its header")
+			-- full
+			assert(Wl.Apply("full"), "everything chosen")
+			for _, m in ipairs(BT.Modules()) do
+				assert(on(m.key), "full: " .. m.key)
+			end
+			-- the window: three choices, and a choice closes it
+			local f = Wl.Show()
+			assert(#f.choices == 3 and f:IsShown(), "three choices")
+			f.choices[3]:GetScript("OnClick")(f.choices[3])
+			assert(not f:IsShown() and BT.settings.setup == "census", "choosing closes it and sets it up")
+			assert(BT.Settings.chooseButton, "and the General page can ask again")
+			-- back as it was, for the tests that follow
+			Wl.Apply("full")
+			BT.settings.modules = was
+			for k, v in pairs(was) do BT.SetEnabled(k, v) end
+			BT.settings.setup = wasSetup
+		end },
+		{ "the census is shared: news out, heard in, a budget for the channel", function()
+			-- THE CENSUS, SHARED (Josh 2026-09-25)
+			local S, DB, U = BT.Share, BT.DB, BT.Util
+			local db = BT.db
+			local now = U.Now()
+			assert(S.On(), "on by default")
+			-- an entry, and back
+			local e = S.Encode({ name = "Drae Moreweth", class = "WARLOCK", race = "Gnome", level = 20,
+				guild = "House Fortemps", last = now - 120 }, now)
+			assert(e == "Drae Moreweth,9,4,20,House Fortemps,2", "a character in one short line: " .. tostring(e))
+			local name, info, when = S.Decode(e, now)
+			assert(name == "Drae Moreweth" and info.class == "WARLOCK" and info.race == "Gnome" and info.level == 20
+				and info.guild == "House Fortemps" and info.heard and when == now - 120, "and back")
+			assert(S.Encode({ name = "Lone Wolf", guild = "", last = now }, now):find(",~,", 1, true), "no guild is ~")
+			for _, junk in ipairs({ "hello", "Solo,1,1,1,,0", "Two Words,99,1,1,,0", "Two Words,1,1,1,,x",
+				"Two Words,1,1,500,,0", ("A"):rep(90) }) do
+				assert(S.Decode(junk, now) == nil, "not a character: " .. junk)
+			end
+			-- news: somebody new is queued, and waits
+			for k in pairs(S.queue) do S.queue[k] = nil end
+			DB.Note(db, "Newly Seen", nil, { class = "MAGE", race = "Human", level = 12 }, now)
+			local key = U.Key("Newly Seen")
+			assert(S.queue[key] and S.queue[key].kind == "new", "somebody new is news")
+			assert(S.Next(now) == nil, "and waits before it goes, in case another copy says it")
+			-- seen again the same day: not news
+			S.queue[key] = nil
+			DB.Note(db, "Newly Seen", nil, { class = "MAGE" }, now + 60)
+			assert(S.queue[key] == nil, "seen again the same day is not")
+			-- a new level is
+			DB.Note(db, "Newly Seen", nil, { level = 13 }, now + 120)
+			assert(S.queue[key] and S.queue[key].kind == "level", "a new level is")
+			-- when it is due, it goes as one message, the most useful first
+			S.queue[key].due = 0
+			local text, count = S.Next(now + 120)
+			assert(text and text:find("^S:1:Newly Seen,8,1,13,", 1, false) and count == 1, "one message: " .. tostring(text))
+			assert(S.saidToday[key] ~= nil and S.queue[key] == nil, "and said for today")
+			-- many at once are cut to fit
+			for i = 1, 30 do
+				local n = "Many Folk" .. string.char(64 + i)
+				DB.Note(db, n, nil, { class = "ROGUE", level = 10 }, now)
+				S.queue[U.Key(n)].due = 0
+			end
+			local big, carried = S.Next(now)
+			assert(#big <= S.MAX_LEN and carried >= 5, ("cut to fit a message: %d characters in %d bytes"):format(carried, #big))
+			-- somebody else saying it first takes ours off the queue
+			DB.Note(db, "Said Elsewhere", nil, { class = "PRIEST" }, now)
+			local skey = U.Key("Said Elsewhere")
+			assert(S.queue[skey], "queued")
+			S.Heard("S:1:Said Elsewhere,5,0,30,,1", "Other Copy-Realm")
+			assert(S.queue[skey] == nil, "and dropped when another copy says it first")
+			-- heard is filed as heard: no sighting of ours, no guild over a newer one
+			S.Heard("S:1:Pal Hearsay,4,4,20,Guild X,2", "Other Copy-Realm")
+			local ph = DB.Get(db, "Pal Hearsay")
+			assert(ph and ph.heard and ph.class == "ROGUE" and ph.race == "Gnome" and ph.level == 20
+				and ph.guild == "Guild X" and ph.seen == 0, "filed as heard, never as a sighting of yours")
+			assert(S.queue[U.Key("Pal Hearsay")] == nil, "and never passed on")
+			DB.Note(db, "Pal Hearsay", nil, { guild = "Our Guild" }, now + 300)
+			assert(not DB.Get(db, "Pal Hearsay").heard, "seen yourself, it is yours")
+			S.Heard("S:1:Pal Hearsay,4,4,19,Old Guild,30", "Other Copy-Realm")
+			local after = DB.Get(db, "Pal Hearsay")
+			assert(after.guild == "Our Guild" and after.level == 20, "what you saw more recently stands, and a level only rises")
+			-- heard survives packing
+			local row = { name = "Packed Hearsay", realm = db.realm, class = "MAGE", first = now, last = now, seen = 0, heard = true }
+			local s = BT.Pack.Pack(db, "Packed Hearsay", row)
+			assert(s and BT.Pack.Unpack(db, "Packed Hearsay", s).heard, "heard is kept when packed")
+			-- the budget: the more copies sending, the longer each waits
+			for k in pairs(S.senders) do S.senders[k] = nil end
+			local alone = S.Gap()
+			for i = 1, 40 do S.senders["Copy" .. i] = BT.Util.Now and (GetTime and GetTime() or 0) end
+			assert(S.Gap() > alone and S.Gap() == (40 + 1) / S.BUDGET, "the channel's budget, shared: " .. S.Gap())
+			for k in pairs(S.senders) do S.senders[k] = nil end
+			-- a copy far over its share is not listened to
+			for i = 1, S.FLOOD + 2 do
+				S.Heard("S:1:Flood Guy" .. string.char(64 + (i % 26) + 1) .. ",1,1,1,,0", "Loud Copy-Realm")
+			end
+			assert(S.ignoring["Loud Copy-Realm"], "a flood is ignored")
+			S.ignoring["Loud Copy-Realm"] = nil
+			-- a tick sends on the channel when it is our turn
+			local P = BT.CommsProbe
+			local wasChannel, wasSend = P.ChannelNumber, P.Send
+			local out
+			P.ChannelNumber = function() return 5 end
+			P.Send = function(t, chatType, target) out = { t = t, chatType = chatType, target = target }; return "Success" end
+			for k in pairs(S.queue) do S.queue[k] = nil end
+			DB.Note(db, "Tick Tock", nil, { class = "DRUID" }, now)
+			S.queue[U.Key("Tick Tock")].due = 0
+			S.lastSent = -math.huge
+			assert(S.Tick() and out.chatType == "CHANNEL" and out.target == "5" and out.t:find("Tick Tock", 1, true),
+				"sent on the channel")
+			assert(not S.Tick(), "and not again until its turn")
+			P.ChannelNumber, P.Send = wasChannel, wasSend
+			-- switched off: neither way
+			S.SetOn(false)
+			assert(not S.On() and S.Heard("S:1:Off Guy,1,1,1,,0", "Other Copy-Realm") == 0, "off, nothing heard")
+			S.SetOn(true)
+			SlashCmdList.BEEBSTOOLKIT("share")
+			for k in pairs(S.queue) do S.queue[k] = nil end
+
+			-- SWITCHES THAT COULD NOT TURN OFF (Josh 2026-09-25): "(not v) and
+			-- false or nil" is nil both ways. Every one of them, clicked off,
+			-- is off now, and clicked on again, on.
+			BT.Window.SetView("censusset")
+			BT.Window.SetView("buffs")
+			BT.Window.SetView("bagwindow")
+			local checks = {
+				["Button in the header"] = function() return BT.settings.censusButton end,
+				["Up to date while open"] = function() return BT.settings.censusLive end,
+				["Share with other BeebMod users"] = function() return BT.settings.shareCensus end,
+			}
+			local found = 0
+			for _, r in ipairs(BT.Widgets.Rows()) do
+				local read = checks[r.label:GetText()]
+				if read then
+					found = found + 1
+					r.switch.on = true
+					r.switch:GetScript("OnClick")(r.switch)
+					assert(read() == false, r.label:GetText() .. " clicked off is off")
+					r.switch:GetScript("OnClick")(r.switch)
+					assert(read() == nil, r.label:GetText() .. " clicked on is on again")
+				end
+			end
+			assert(found == 3, "the census page's three switches: " .. found)
+		end },
+		{ "the comms probe pings, answers and counts a burst", function()
+			-- WHAT THIS CLIENT LETS ADDONS SAY TO EACH OTHER (Josh 2026-09-25):
+			-- both ends of a ping and a burst, the client's calls stubbed
+			local P = BT.CommsProbe
+			local sent = {}
+			local wasChat, wasEnum = _G.C_ChatInfo, _G.Enum
+			_G.Enum = setmetatable({ SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3 } },
+				{ __index = wasEnum })
+			_G.C_ChatInfo = {
+				RegisterAddonMessagePrefix = function() return true end,
+				SendAddonMessage = function(prefix, text, chatType, target)
+					sent[#sent + 1] = { prefix = prefix, text = text, chatType = chatType, target = target }
+					return (#sent > 30) and 3 or 0
+				end,
+			}
+			P.prefixOk = nil
+			P.Listen()
+			local r, id = P.Ping("Pal Friend")
+			assert(r == "Success" and sent[#sent].text == "P:" .. id and sent[#sent].chatType == "WHISPER"
+				and sent[#sent].target == "Pal Friend", "a ping is a hidden whisper: " .. tostring(r))
+			-- the other end answers it
+			P.Heard(P.PREFIX, "P:77", "WHISPER", "Pal Friend-Realm")
+			assert(sent[#sent].text == "Q:77" and sent[#sent].target == "Pal Friend-Realm", "a ping is answered, to its sender")
+			P.Heard(P.PREFIX, "Q:" .. id, "WHISPER", "Pal Friend-Realm")
+			assert(P.pings[id] == nil and P.log[#P.log]:find("there and back", 1, true), "and the answer is timed")
+			-- a burst: what the client let out, by its own names
+			local results = P.Burst("Pal Friend", 40)
+			assert(results.Success and results.AddonMessageThrottle and results.Success + results.AddonMessageThrottle == 40,
+				"a burst says what the client let through and what it held back")
+			-- our own hello back off the channel is not answered
+			local before = #sent
+			P.Heard(P.PREFIX, "H:x", "CHANNEL", (BT.Util.Me() or "Me") .. "-Realm")
+			assert(#sent == before, "your own hello is not a stranger's")
+			P.Heard("SomeoneElse", "P:1", "WHISPER", "Pal Friend")
+			assert(#sent == before, "another addon's messages are not ours")
+			assert(#P.Survey() > 5, "and it can say what the client offers")
+
+			-- IT RUNS ITSELF (Josh 2026-09-25): a hidden hello to each friend
+			-- online, nothing printed, and whoever answers is written down
+			local wasFL, wasAfter, wasPrint = _G.C_FriendList, _G.C_Timer.After, BT.Util.Print
+			local printed = 0
+			BT.Util.Print = function() printed = printed + 1 end
+			_G.C_Timer.After = function(_, fn) fn() end
+			_G.C_FriendList = {
+				GetNumFriends = function() return 3 end,
+				GetFriendInfoByIndex = function(i)
+					return ({ { name = "Pal Friend", connected = true }, { name = "Gone Away", connected = false },
+						{ name = "Old Buddy", connected = true } })[i]
+				end,
+			}
+			P.verbose, P.helloed, P.peers = false, {}, {}
+			sent = {}
+			local greeted = P.HelloAll()
+			local to = {}
+			for _, m in ipairs(sent) do
+				if m.text:find("^H:") then to[#to + 1] = m.target end
+			end
+			assert(greeted == 2 and table.concat(to, ",") == "Pal Friend,Old Buddy",
+				"a hello to the friends online, never to one who is offline: " .. table.concat(to, ","))
+			assert(sent[1].text:find(BT.VERSION, 1, true), "carrying the version")
+			assert(P.HelloAll() == 0, "once a session")
+			-- a friend's answer, with a line about their client
+			sent = {}
+			local wasVersion = BT.VERSION
+			P.Heard(P.PREFIX, "A:0.1.0-beta.2:somebuild:prefix=true;friends=4", "WHISPER", "Pal Friend-Realm")
+			assert(P.peers["pal friend"] and P.peers["pal friend"].report == "prefix=true;friends=4",
+				"whoever answers is written down, with their client's report")
+			local bursts = 0
+			for _, m in ipairs(sent) do
+				if m.text:find("^B:") then bursts = bursts + 1 end
+			end
+			assert(bursts == P.BURST, "and gets the day's short burst: " .. bursts)
+			sent = {}
+			P.Heard(P.PREFIX, "A:0.1.0-beta.2:somebuild:x", "WHISPER", "Pal Friend-Realm")
+			assert(#sent == 0, "only once a day")
+			-- and a hello is answered with our own report
+			P.Heard(P.PREFIX, "H:0.1.0-beta.2:b", "WHISPER", "New Friend-Realm")
+			assert(sent[#sent].text:find("^A:") and sent[#sent].text:find("prefix=", 1, true)
+				and sent[#sent].target == "New Friend-Realm", "a hello is answered, with this client's report")
+			assert(printed == 0, "and none of it said a word in chat")
+			-- a friend on a newer build is the one thing it says
+			P.nagged = nil
+			P.Heard(P.PREFIX, "A:9.0.0:x:y", "WHISPER", "Pal Friend-Realm")
+			assert(printed == 1, "a newer build is mentioned, once")
+			-- EVERYONE, NOT FRIENDS (Josh 2026-09-25): the hidden channel,
+			-- joined quietly, and one hello on it
+			local filters, removed, joined = {}, 0, nil
+			local wasJoin, wasName, wasFilter, wasRemove = _G.JoinTemporaryChannel, _G.GetChannelName,
+				_G.ChatFrame_AddMessageEventFilter, _G.ChatFrame_RemoveChannel
+			_G.JoinTemporaryChannel = function(name) joined = name end
+			_G.GetChannelName = function(name) return joined == name and 5 or 0 end
+			_G.ChatFrame_AddMessageEventFilter = function(event, fn) filters[event] = fn end
+			_G.ChatFrame_RemoveChannel = function() removed = removed + 1 end
+			local wasFrame1 = _G.ChatFrame1
+			_G.ChatFrame1 = _G.ChatFrame1 or {}
+			P.filtered = nil
+			P.helloed, sent = {}, {}
+			P.HelloAll()
+			_G.ChatFrame1 = wasFrame1
+			local onChannel
+			for _, m in ipairs(sent) do
+				if m.chatType == "CHANNEL" and m.text:find("^H:") then onChannel = m end
+			end
+			assert(joined == P.CHANNEL and onChannel and onChannel.target == "5",
+				"the channel joined, and one hello on it")
+			assert(removed > 0 and filters.CHAT_MSG_CHANNEL_NOTICE, "taken off the chat windows, its notices filtered")
+			assert(filters.CHAT_MSG_CHANNEL_NOTICE(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", "", "5. BeebModNet")
+				== true, "its own notice is hidden")
+			assert(filters.CHAT_MSG_CHANNEL_NOTICE(nil, "CHAT_MSG_CHANNEL_NOTICE", "YOU_JOINED", "", "", "2. Trade") == false,
+				"and nobody else's")
+			-- A LOTTERY: with three copies known, every hello is answered; with
+			-- three hundred, about one in a hundred of them answers
+			P.peers = { a = {}, b = {}, c = {} }
+			assert(P.AnswerChance() == 1, "a few copies: all answer")
+			for i = 1, 300 do P.peers["x" .. i] = {} end
+			assert(P.AnswerChance() < 0.011, "hundreds: a lottery, about three answers a hello")
+			P.peers = {}
+			-- heard on the channel, a hello is answered by whisper; a few a minute
+			sent = {}
+			for i = 1, 8 do
+				P.Heard(P.PREFIX, "H:0.1.0-beta.2:b", "CHANNEL", "Stranger" .. i .. "-Realm")
+			end
+			local answers = 0
+			for _, m in ipairs(sent) do
+				if m.text:find("^A:") and m.chatType == "WHISPER" then answers = answers + 1 end
+			end
+			assert(answers <= P.ANSWERS_A_MINUTE and answers > 0,
+				"strangers are answered by whisper, a few a minute at most: " .. answers)
+			_G.JoinTemporaryChannel, _G.GetChannelName = wasJoin, wasName
+			_G.ChatFrame_AddMessageEventFilter, _G.ChatFrame_RemoveChannel = wasFilter, wasRemove
+			-- switched off, nothing goes
+			BT.settings.commsHello = false
+			P.helloed = {}
+			assert(P.HelloAll() == 0, "switched off, no hellos")
+			BT.settings.commsHello = nil
+			_G.C_FriendList, _G.C_Timer.After, BT.Util.Print = wasFL, wasAfter, wasPrint
+			BT.VERSION = wasVersion
+			_G.C_ChatInfo, _G.Enum = wasChat, wasEnum
+			P.prefixOk = nil
 		end },
 		{ "your heals and damage over time run down as bars, a lane a spell", function()
 			-- YOUR HEALS AND DAMAGE OVER TIME, AS BARS (Josh 2026-09-24): a

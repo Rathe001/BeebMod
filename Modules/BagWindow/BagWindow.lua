@@ -674,7 +674,13 @@ function M:BuildTab(panel)
 		function(on)
 			BT.EnsureBound()
 			BT.settings.bagwindow = BT.settings.bagwindow or {}
-			BT.settings.bagwindow.rings = (not on) and false or nil
+			-- off is written down, on (the default) is not: `(not on) and false or nil`
+			-- was nil either way, and the switch could never turn it off (Josh 2026-09-25)
+			if on then
+				BT.settings.bagwindow.rings = nil
+			else
+				BT.settings.bagwindow.rings = false
+			end
 			for b in pairs(slots) do
 				paintQuality(b)
 			end

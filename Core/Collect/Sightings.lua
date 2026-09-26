@@ -430,7 +430,7 @@ handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
 	-- and the book's size, at the same quiet moment (DB.Cap)
 	if BT.db and (BT.settings.bookCap or 0) > 0 then
 		BT.lastRun = BT.lastRun or {}
-		BT.lastRun.capped, BT.lastRun.capFrom = DB.Cap(BT.db, BT.settings.bookCap)
+		BT.lastRun.capped, BT.lastRun.cappedLow, BT.lastRun.capFrom = DB.Cap(BT.db, BT.settings.bookCap)
 	end
 end
 

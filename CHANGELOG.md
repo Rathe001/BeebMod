@@ -5,6 +5,46 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The census is shared** with everyone who has BeebMod, over the hidden
+  channel. Only news goes out - somebody new, somebody seen for the first
+  time today, a new level or guild - never the book as it stands. News waits
+  a random half a minute to two minutes and is dropped if another copy says
+  it first, and the channel has one budget (about two messages a second)
+  shared between everyone sending, so it is as busy as the realm is big,
+  not as the addon is popular. What arrives is filed as "heard": never a
+  sighting of yours, never over a guild you saw more recently, never passed
+  on. A switch on the Census page turns it off both ways; `/bt share` says
+  how it is going.
+- Four switches that could never be turned off now can: the Census's header
+  button and "Up to date while open", the bag window's rings and the buff
+  tray's time text.
+- **A first-login choice: how much should it change?** A fresh install asks
+  once, in a small window: **Full** (everything), **Just the dock** (the
+  dock, the census and your notes; the game keeps its own frames, bars,
+  bags, chat and tooltips) or **Census and notes** (the game's interface
+  untouched, the census and the Ledger quietly running). Each is only a set
+  of module switches, so anything can be changed one at a time later. An
+  install that has already set its switches is not asked; `/bt setup` or
+  "Choose again" on the General page asks again.
+- **BeebMod users find each other.** After the loading screen, out of
+  combat, every copy joins a hidden channel (out of every chat window, its
+  notices filtered away) and says one hello on it; whoever hears it answers
+  by whisper, a few seconds later and never more than a few a minute, and a
+  short daily burst measures how much gets through. Nobody without BeebMod
+  sees anything, and nothing is printed - except, once, that someone has a
+  newer build. The ground the census will be shared on, with everyone who
+  has the addon (notes will be friends-only, once this client's friends list
+  works). `/bt comms friends` lists who answered, `/bt comms log` shows
+  everything, and a switch on the Testing page turns it off; the commands
+  for trying things by hand are still there.
+- **The book's size cap drops low levels first.** Past the cap, characters
+  on file at level 1-10 (bank alts, throwaways) go before anyone else, the
+  longest unseen of them first; only then the rest, oldest "last seen"
+  first. A character with no level on file counts as one of the rest, and
+  anyone you have written on always stays.
+
 ## 0.1.0-beta.2
 
 - **A release pipeline.** Pushing a version tag packages the addon and

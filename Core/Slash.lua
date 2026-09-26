@@ -146,7 +146,7 @@ BT.Command("cap", function(rest)
 	end
 	local c = BT.settings.bookCap or 0
 	U.Print(c > 0
-		and ("keeps up to %d characters · past that, those seen longest ago go at login · yours stay"):format(c)
+		and ("keeps up to %d characters · past that, levels 1-10 go first at login, then those seen longest ago · yours stay"):format(c)
 		or "no size limit")
 end, "cap <characters|off> - the most characters the book keeps")
 
