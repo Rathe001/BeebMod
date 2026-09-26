@@ -90,19 +90,27 @@ function M.DressSoon(menu)
 end
 
 -- the one the manager says is open, and the entries it has just made
+--
+-- NEVER IN THE SAME BREATH (Josh 2026-09-25: "Use of function 'CreateTexture'
+-- is disallowed", from the chat window's menu button). The manager's
+-- OpenMenu hook runs while the client is still composing the menu, and a
+-- texture made on it then is refused - the chat button's menu, opened from
+-- our own code, reached that first. It is dressed a frame later, when it is
+-- built, as the menu looks' own hooks already were (DressSoon).
 function M.AfterOpen()
 	local menu = M.OpenMenu()
 	if not menu then
 		return false
 	end
-	M.DressMenu(menu)
 	if C_Timer and C_Timer.After then
-		-- its entries are laid out as it shows: once more when they are
 		C_Timer.After(0, function()
-			M.DressMenu(M.OpenMenu() or menu)
+			if BT.Enabled("menus") then
+				M.DressMenu(M.OpenMenu() or menu)
+			end
 		end)
+		return true
 	end
-	return true
+	return false
 end
 
 function M.OpenMenu()

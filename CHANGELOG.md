@@ -17,6 +17,9 @@ game and the addon settle.
   sighting of yours, never over a guild you saw more recently, never passed
   on. A switch on the Census page turns it off both ways; `/bt share` says
   how it is going.
+- The chat window's menu button no longer raises "Use of function
+  'CreateTexture' is disallowed": a menu opened from our own code is dressed
+  a frame later, once the client has built it.
 - Four switches that could never be turned off now can: the Census's header
   button and "Up to date while open", the bag window's rings and the buff
   tray's time text.

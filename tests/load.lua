@@ -5192,6 +5192,22 @@ if ok then
 			_G.hooksecurefunc = hadHook
 			b:Hide()
 		end },
+		{ "a menu opened from our own code is dressed a frame later, not while it is built", function()
+			-- NEVER IN THE SAME BREATH (Josh 2026-09-25): the chat button's
+			-- menu raised "CreateTexture is disallowed" when dressed at once
+			local M = BT.GetModule("menus")
+			local menu = _G.CreateFrame("Frame")
+			local wasMenu, wasAfter, wasDress = _G.Menu, _G.C_Timer.After, M.DressMenu
+			local later, dressedNow = nil, 0
+			_G.Menu = { GetManager = function() return { GetOpenMenu = function() return menu end } end }
+			_G.C_Timer.After = function(_, fn) later = fn end
+			M.DressMenu = function() dressedNow = dressedNow + 1 return true end
+			assert(M.AfterOpen(), "a menu is open")
+			assert(dressedNow == 0 and later, "nothing done to it while the client builds it")
+			later()
+			assert(dressedNow == 1, "dressed on the next frame")
+			_G.Menu, _G.C_Timer.After, M.DressMenu = wasMenu, wasAfter, wasDress
+		end },
 		{ "the game's menus wear the toolkit's clothes", function()
 			-- ONE MENU SYSTEM (Josh 2026-09-24): whatever opens a menu, its art
 			-- comes off and ours goes on; the hover light and the ticks stay
