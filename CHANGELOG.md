@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.4
 
 - A party frame's right-click menu no longer raises "Use of function
   'CreateTexture' is disallowed". The client keeps such a menu locked for as
