@@ -56,13 +56,55 @@ M.Keep = keep
 local dresser = BT.Furniture.New({ panelAlpha = 0.97, keep = keep })
 M.Dresser = dresser
 
+-- A MENU NOTHING MAY BE MADE ON (Josh 2026-09-25, a party frame's
+-- right-click menu: "Use of function 'CreateTexture' is disallowed", after a
+-- frame and after retries). The client's compositor takes a menu over when it
+-- is built and gives it back only when it closes: all that time, making a
+-- texture on it - or even looking the name up, pcall or no, which the client
+-- reports anyway - is refused. It is known by its metatable, which the
+-- compositor swaps for one whose __index is a function and whose __newindex
+-- is the table it keeps writes in (a frame's own has neither); nothing
+-- forbidden is touched to find out.
+function M.Composed(menu)
+	local ok, mt = pcall(getmetatable, menu)
+	return ok and type(mt) == "table" and type(rawget(mt, "__index")) == "function"
+		and type(rawget(mt, "__newindex")) == "table" or false
+end
+
+-- ...so the surface goes on a frame of ours just behind it, shown and hidden
+-- with it, and only what is already on the menu is recoloured or put away,
+-- which the compositor allows
+local backings = setmetatable({}, { __mode = "k" })
+function M.Backing(menu)
+	local b = backings[menu]
+	if not b then
+		b = CreateFrame("Frame", nil, UIParent)
+		b.beebs = true
+		b:SetPoint("TOPLEFT", menu, "TOPLEFT", 0, 0)
+		b:SetPoint("BOTTOMRIGHT", menu, "BOTTOMRIGHT", 0, 0)
+		backings[menu] = b
+		pcall(menu.HookScript, menu, "OnShow", function() b:Show() end)
+		pcall(menu.HookScript, menu, "OnHide", function() b:Hide() end)
+	end
+	pcall(function()
+		b:SetFrameStrata(menu:GetFrameStrata())
+		b:SetFrameLevel(math.max(0, (menu:GetFrameLevel() or 1) - 1))
+	end)
+	b:Show()
+	return b
+end
+
 -- a menu, dressed: our surface under it, its art off, its words ours
 local dressed = setmetatable({}, { __mode = "k" })
 function M.DressMenu(menu)
-	if not (type(menu) == "table" and menu.CreateTexture and BT.Enabled("menus")) then
+	if not (type(menu) == "table" and BT.Enabled("menus")) then
 		return false
 	end
-	local ok, err = pcall(dresser.DressRoot, dresser, menu)
+	local surface = M.Composed(menu) and M.Backing(menu) or nil
+	if not (surface or menu.CreateTexture) then
+		return false
+	end
+	local ok, err = pcall(dresser.DressRoot, dresser, menu, surface)
 	if not ok then
 		BT.Err("menus: " .. tostring(err))
 		return false

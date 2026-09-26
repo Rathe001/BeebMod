@@ -236,14 +236,17 @@ function Dresser:DressTree(f, depth, parent)
 	return n
 end
 
--- a window: our surface and shadow on the root, then the tree
-function Dresser:DressRoot(root)
-	self.roots[root] = true
+-- a window: our surface and shadow on the root, then the tree. `surface`,
+-- when given, is a frame of ours the surface is drawn on instead - for a root
+-- nothing may be made on (a menu the client is composing: Modules/Menus)
+function Dresser:DressRoot(root, surface)
+	local host = surface or root
+	self.roots[host] = true
 	local fill = BT.Widgets.FILL
-	BT.Widgets.Panel(root, { fill[1], fill[2], fill[3], self.opts.panelAlpha or 0.96 }, BT.Widgets.RIM)
-	BT.Pill.ShowSurface(BT.Pill.Panels()[root], true)
-	BT.Widgets.Shadow(root)
-	BT.Widgets.ShowShadow(root, true)
+	BT.Widgets.Panel(host, { fill[1], fill[2], fill[3], self.opts.panelAlpha or 0.96 }, BT.Widgets.RIM)
+	BT.Pill.ShowSurface(BT.Pill.Panels()[host], true)
+	BT.Widgets.Shadow(host)
+	BT.Widgets.ShowShadow(host, true)
 	return self:DressTree(root, 0, nil)
 end
 

@@ -5,6 +5,15 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- A party frame's right-click menu no longer raises "Use of function
+  'CreateTexture' is disallowed". The client keeps such a menu locked for as
+  long as it is open, so nothing is made on it: the toolkit's surface goes
+  on a frame of its own just behind the menu, and only what is already
+  there is recoloured or put away. The lock is recognised without touching
+  anything forbidden.
+
 ## 0.1.0-beta.3
 
 - **The census is shared** with everyone who has BeebMod, over the hidden

@@ -5207,6 +5207,30 @@ if ok then
 			later()
 			assert(dressedNow == 1, "dressed on the next frame")
 			_G.Menu, _G.C_Timer.After, M.DressMenu = wasMenu, wasAfter, wasDress
+
+			-- A MENU NOTHING MAY BE MADE ON: the compositor's metatable, whose
+			-- __index answers a forbidden name with an error, even in a pcall -
+			-- so the name is never looked up, and the surface goes behind it
+			local looked = {}
+			local composed = _G.CreateFrame("Frame")
+			local original = getmetatable(composed)
+			setmetatable(composed, { __index = function(_, k)
+				if k == "CreateTexture" or k == "CreateFontString" or k == "SetFont" then
+					looked[#looked + 1] = k
+					error("Use of function '" .. k .. "' is disallowed. (Index)")
+				end
+				local idx = original.__index
+				if type(idx) == "function" then return idx(composed, k) end
+				return idx[k]
+			end, __newindex = {} })
+			assert(M.Composed(composed) and not M.Composed(_G.CreateFrame("Frame")), "a composed menu is known by its metatable")
+			assert(M.DressMenu(composed), "and dressed")
+			assert(#looked == 0, "without a forbidden name looked up: " .. table.concat(looked, ","))
+			local backing = M.Backing(composed)
+			assert(backing and backing:GetParent() == _G.UIParent and backing._points.TOPLEFT.rel == composed,
+				"its surface on a frame of ours, laid over it")
+			assert(BT.Pill.Panels()[backing], "and painted there")
+			_G.C_Timer.After = wasAfter
 		end },
 		{ "the game's menus wear the toolkit's clothes", function()
 			-- ONE MENU SYSTEM (Josh 2026-09-24): whatever opens a menu, its art
