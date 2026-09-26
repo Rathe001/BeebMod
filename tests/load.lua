@@ -909,6 +909,9 @@ if ok then
 			local hadGold, hadClock = BT.Enabled("gold"), BT.Enabled("clock")
 			-- the census icon keeps the dock too (the census on its own)
 			local hadCensus = BT.Enabled("census")
+			-- and the Menagerie's line, which is there with no kills at all
+			local hadMenagerie = BT.Enabled("menagerie")
+			BT.SetEnabled("menagerie", false)
 			BT.SetEnabled("census", false)
 			BT.SetEnabled("clock", false)
 			BT.SetEnabled("minimap", false)
@@ -917,6 +920,7 @@ if ok then
 			BT.Bar.Update()
 			assert(BT.Bar.Toggle() == false and not q:IsShown(), "/bt bar hides it")
 			BT.Bar.Toggle()
+			BT.SetEnabled("menagerie", hadMenagerie)
 			BT.SetEnabled("census", hadCensus)
 			BT.SetEnabled("minimap", hadMap)
 			BT.SetEnabled("perf", hadPerf)
@@ -1218,9 +1222,10 @@ if ok then
 				"Windows: " .. table.concat(BT.Window.GroupKeys("windows"), ","))
 			assert(table.concat(BT.Window.GroupKeys("people"), ",") == "censusset,ledger", "and People")
 			-- a shared page: a switch each, and the tab goes to it
-			assert(table.concat(BT.Window.MembersOf("progress"), ",") == "xp,rep"
-				and BT.Window.TabFor("rep") == "progress" and BT.Window.TabFor("clock") == "dock",
-				"experience and reputation share a page; the clock is on the Dock's")
+			assert(table.concat(BT.Window.MembersOf("progress"), ",") == "xp,rep,menagerie"
+				and BT.Window.TabFor("rep") == "progress" and BT.Window.TabFor("menagerie") == "progress"
+				and BT.Window.TabFor("clock") == "dock",
+				"experience, reputation and the Menagerie share a page; the clock is on the Dock's")
 			-- a heading over each group, made once
 			local heads = rail.heads
 			assert(heads and heads[1]:GetText() == "DOCK" and heads[2]:GetText() == "COMBAT"
@@ -5358,8 +5363,9 @@ if ok then
 			BT.Window.SetView("rep")
 			assert(BT.Window.View() == "progress", "a module on a shared page opens that page")
 			local panel = BT.Window.Panel("progress")
-			assert(panel and #panel.switches == 2 and panel.switches[1].module == "xp"
-				and panel.switches[2].module == "rep", "a switch for each")
+			assert(panel and #panel.switches == 3 and panel.switches[1].module == "xp"
+				and panel.switches[2].module == "rep" and panel.switches[3].module == "menagerie",
+				"a switch for each")
 			assert(panel.enable == nil, "and no one switch over the page")
 			panel.switches[2].switch:GetScript("OnClick")(panel.switches[2].switch)
 			assert(not BT.Enabled("rep"), "the switch switches it")
@@ -6484,14 +6490,14 @@ if ok then
 			BT.Bar.Relayout()
 			assert(railKeys():find("^settings,testing,dock,map,progress"), "no order is the default order")
 			-- A SHARED PAGE MOVES WHOLE (Josh 2026-09-24): Progress dragged above
-			-- the map takes experience and reputation with it, together
+			-- the map takes experience, reputation and the Menagerie with it, together
 			BT.Window.MoveTab("progress", "map")
 			BT.Window.Rebuild()
 			assert(railKeys():find("^settings,testing,dock,progress,map"), "the tab moves: " .. railKeys())
 			keys = {}
 			for _, m in ipairs(BT.Modules()) do keys[#keys + 1] = m.key end
-			assert(table.concat(keys, ","):find("xp,rep,minimap,buttons", 1, true),
-				"and both its modules, in their order, ahead of the map's: " .. table.concat(keys, ","))
+			assert(table.concat(keys, ","):find("xp,rep,menagerie,minimap,buttons", 1, true),
+				"and all its modules, in their order, ahead of the map's: " .. table.concat(keys, ","))
 			BT.settings.order = nil
 			BT.SortModules()
 			BT.Window.Rebuild()
@@ -8740,6 +8746,7 @@ if ok then
 			BT.SetEnabled("gold", false)
 			BT.SetEnabled("clock", false)
 			BT.SetEnabled("micro", false)
+			BT.SetEnabled("menagerie", false)
 			BT.Bar.Relayout()
 			-- THE PANEL SAYS WHOSE IT IS (Josh 2026-09-21). The dock now opens
 			-- with a header carrying the name and the cog, so the stack is
@@ -8981,6 +8988,45 @@ if ok then
 			assert(BT.settings.bookCap == 150000, "and it takes a number")
 		end },
 		{ "/bt help", function() SlashCmdList.BEEBSTOOLKIT("help") end },
+		-- THE MENAGERIE (Josh 2026-09-25): a few kills, then the journal both
+		-- ways round, the dock's line and a toast, against the real widgets
+		{ "/bt menagerie", function()
+			local J, V = BT.Menagerie, BT.MenagerieWindow
+			BT.SetEnabled("menagerie", true)
+			local m = BT.GetModule("menagerie")
+			for npc = 1, 12 do
+				m.Kill({ npc = 250000 + npc, name = "Mob " .. npc, kind = npc % 2 == 0 and "Beast" or "Undead",
+					family = "Cat", rank = npc == 3 and "rare" or "normal", level = 5, zone = "Zephras Isle",
+					myLevel = 5, guid = "Creature-0-1-2-3-" .. (250000 + npc) .. "-X" }, "dead")
+			end
+			assert(m.text:GetText():find("12 kinds"), "the dock's line counts the kinds: " .. tostring(m.text:GetText()))
+			assert(m.eta:GetText():find("pts"), "and says the points")
+			assert(BT.MenagerieToast.Frame() and BT.MenagerieToast.Frame():IsShown(),
+				"ten kinds earned First Pages, and it was toasted")
+			SlashCmdList.BEEBSTOOLKIT("menagerie")
+			assert(V.IsShown(), "/bt menagerie opens the journal")
+			local f = V.Frame()
+			assert(f.bestiary:IsShown() and not f.achievements:IsShown(), "on the bestiary")
+			local rows = f.bestiary.rows
+			assert(rows[1].kind == "Beast" and rows[2].npc, "a heading per type, then its mobs")
+			rows[2]:GetScript("OnClick")(rows[2])
+			assert(V.selected == rows[2].npc and f.bestiary.name:GetText():find("Mob"), "a click opens a mob's page")
+			rows[1]:GetScript("OnClick")(rows[1])
+			assert(rows[2].kind == "Undead", "a heading folds its type away")
+			rows[1]:GetScript("OnClick")(rows[1])
+			f.views.buttons[2]:GetScript("OnClick")(f.views.buttons[2])
+			assert(f.achievements:IsShown() and not f.bestiary:IsShown(), "the achievements view")
+			assert(f.achievements.rows[1]:IsShown(), "with its rows drawn")
+			f.scopes.buttons[2]:GetScript("OnClick")(f.scopes.buttons[2])
+			assert(f.subtitle:GetText():find("all characters"), "and all characters' counts")
+			f.scopes.buttons[1]:GetScript("OnClick")(f.scopes.buttons[1])
+			f.views.buttons[1]:GetScript("OnClick")(f.views.buttons[1])
+			SlashCmdList.BEEBSTOOLKIT("menagerie debug")
+			SlashCmdList.BEEBSTOOLKIT("menagerie toast")
+			SlashCmdList.BEEBSTOOLKIT("menagerie")
+			assert(not V.IsShown(), "and again closes it")
+			BT.MenagerieToast.Next()
+		end },
 	}
 	for _, step in ipairs(steps) do
 		local good, err = pcall(step[2])

@@ -82,7 +82,7 @@ BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-b
 BT.SCHEMA = 12
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. /bt debug prints it, so "did the reload take?" is never a guess.
-BT.BUILD = "2026-09-25-menubacking"
+BT.BUILD = "2026-09-25-menagerie"
 
 BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off

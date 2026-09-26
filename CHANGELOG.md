@@ -5,6 +5,31 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The Menagerie**: a journal of every kind of mob you have killed, rares
+  and elites among them. Each has a kill count and its model, which you can
+  drag to turn, and they are filed by creature type. There is no list of the
+  game's mobs behind it: a new kind is a new page the first time you kill
+  it, so this realm's own creatures are in it too. **Achievements are the
+  score**:
+  - milestones for how many kinds and how many kills;
+  - each creature type, beast families, rares, elites, world bosses and zones;
+  - a mob five levels above you, or one whose level is a skull;
+  - KillTrack-style kill records - "1000 kills on Barn Owl!" - in the game's
+    own achievement toast.
+
+  A line in the dock shows your points (or your kills) and how close the
+  next discovery milestone is; click it for the journal. The journal counts
+  this character's kills or all your characters' together. It is on the
+  Progress page, with switches for the toasts, their sound, and a toast for
+  every new kind.
+- Without the combat log, a kill is a mob you tagged and fought that dies in
+  view. When the kill happens out of sight, the experience line or the loot
+  window counts it instead. A mob somebody else tagged is not yours, and
+  each kill is counted once however many of these see it, a `/reload`
+  included. `/bt menagerie debug` says what saw each one.
+
 ## 0.1.0-beta.4
 
 - A party frame's right-click menu no longer raises "Use of function

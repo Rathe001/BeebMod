@@ -33,7 +33,9 @@ for _, f in ipairs({ "Core/Init.lua", "Core/Cpu.lua", "Core/Util.lua", "Core/Ses
 	-- say in the tooltip, and two of them do that as they load
 	"Core/Tooltip.lua",
 	"Modules/Ledger/Ledger.lua", "Modules/Census/Census.lua", "Modules/Tips/Tips.lua",
-	"Modules/Tracker/Quests.lua", "Modules/Tracker/Tracker.lua" }) do
+	"Modules/Tracker/Quests.lua", "Modules/Tracker/Tracker.lua",
+	-- the Menagerie's book and its kill rules: no frames in either
+	"Modules/Menagerie/Journal.lua", "Modules/Menagerie/Kills.lua" }) do
 	assert(loadfile(f), "cannot load " .. f)("BeebMod", BT)
 end
 local U, DB = BT.Util, BT.DB
@@ -1415,6 +1417,164 @@ do
 	check(added == 1 and zed and zed.class == "HUNTER" and zed.guild == "Far Guild" and zed.realm == "OldRealm",
 		"adopted, it keeps its class and guild, and its realm goes back on its key")
 	check(DB.Get(into, "Some One").guild == "Home Guild", "and this book's own words are untouched")
+end
+
+-- THE MENAGERIE (Josh 2026-09-25): a page per kind of mob, points for
+-- milestones, and a kill counted once however many witnesses there are.
+do
+	local J, K = BT.Menagerie, BT.MenagerieKills
+	newdb()
+	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Drood" or nil end
+	local T = 1000
+	local function bandit(extra)
+		local info = { npc = 251918, name = "Highlands Bandit", kind = "Humanoid", rank = "normal", level = 7,
+			zone = "Zephras Isle", myLevel = 7 }
+		for k, v in pairs(extra or {}) do info[k] = v end
+		return info
+	end
+	local new, news = J.Kill(bandit({ guid = "g1" }), T)
+	check(new and #news == 0, "the first bandit is a new page, and earns nothing yet")
+	new = J.Kill(bandit({ guid = "g2" }), T + 1)
+	local kills = J.Counts("char")
+	check(not new and kills[251918] == 2, "the second is the same page, counted twice")
+	-- a rank the client hid is not a rank of "nothing"
+	J.Learn({ npc = 1, name = "Silverback", rank = "rare" })
+	J.Learn({ npc = 1, name = "Silverback" })
+	check(J.Store().mobs[1].rank == "rare", "a hidden rank keeps the one read before")
+
+	-- ten kinds: the first achievement, earned once and dated
+	local earned = {}
+	for npc = 100, 108 do
+		local _, got = J.Kill({ npc = npc, name = "Mob " .. npc, kind = "Beast", family = "Cat" }, T + npc)
+		for _, a in ipairs(got) do earned[#earned + 1] = a.id end
+	end
+	-- the fifth beast was Beast Hunter I on the way
+	check(table.concat(earned, ",") == "type:Beast:5,kinds:10",
+		"five beasts earn Beast Hunter I, and the tenth kind First Pages: " .. table.concat(earned, ","))
+	local _, again = J.Kill({ npc = 100, name = "Mob 100", kind = "Beast" }, T + 200)
+	check(#again == 0, "and neither is earned a second time")
+	local points = J.Score("char")
+	check(points == 10, ("five points each (%d)"):format(points))
+
+	-- a kill record, crossed by the hundredth kill of one mob (and the
+	-- hundredth kill of anything, Blooded, with it)
+	J.Mine().kills[251918] = 99
+	local _, rec = J.Kill(bandit({ guid = "g3" }), T + 300)
+	local record, blooded
+	for _, a in ipairs(rec) do
+		if a.record then record = a end
+		blooded = blooded or a.id == "total:100"
+	end
+	check(record and record.id == "rec:251918:100" and record.points == 5 and blooded,
+		"the hundredth bandit is a kill record, and the hundredth kill is Blooded")
+	-- a skull is a feat
+	local _, feat = J.Kill({ npc = 900, name = "Big One", level = -1, myLevel = 7 }, T + 400)
+	local skull = false
+	for _, a in ipairs(feat) do skull = skull or a.id == "feat:skull" end
+	check(skull and J.Store().mobs[900].skull, "a skull-level kill is Skull and Bones")
+
+	-- another character: its own page, and the account adds both
+	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Alt" or nil end
+	J.Kill(bandit({ guid = "g4" }), T + 500)
+	local mine, all = J.Counts("char"), J.Counts("account")
+	check(mine[251918] == 1 and all[251918] == 101, "a character counts its own; the account counts all")
+	local pages = J.Pages(all)
+	check(pages[1].kind == "Beast" and pages[2].kind == "Humanoid",
+		"the journal files by type, in the client's usual order")
+	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Drood" or nil end
+
+	-- THE KILL RULES, with a client that answers from a table of units
+	_G.GetTime = function() return T end
+	_G.strsplit = _G.strsplit or function(sep, s)
+		local out = {}
+		for part in (s .. sep):gmatch("(.-)%" .. sep) do out[#out + 1] = part end
+		return (table.unpack or unpack)(out)
+	end
+	local units = {}
+	local function mob(guid, name, over)
+		local u = { guid = guid, name = name, dead = false, denied = false, threat = 3, combat = true }
+		for k, v in pairs(over or {}) do u[k] = v end
+		return u
+	end
+	_G.UnitExists = function(t) return units[t] ~= nil end
+	_G.UnitGUID = function(t) return units[t] and units[t].guid end
+	_G.UnitName = function(t) return units[t] and units[t].name end
+	_G.UnitCreatureType = function() return "Humanoid" end
+	_G.UnitClassification = function() return "normal" end
+	_G.UnitLevel = function() return 7 end
+	_G.UnitPlayerControlled = function() return false end
+	_G.UnitIsDead = function(t) return units[t].dead end
+	_G.UnitIsTapDenied = function(t) return units[t].denied end
+	_G.UnitThreatSituation = function(_, t) return units[t] and units[t].threat end
+	_G.UnitAffectingCombat = function(t) return t == "player" or (units[t] and units[t].combat) end
+	local got = {}
+	K.onKill = function(info, how) got[#got + 1] = info.guid .. ":" .. how end
+	K.Reset({})
+	local A = "Creature-0-1-2-3-251918-A"
+	local B = "Creature-0-1-2-3-251918-B"
+	-- two bandits of one name in view, both ours
+	units.target = mob(A, "Highlands Bandit")
+	units.nameplate1 = mob(B, "Highlands Bandit")
+	K.plates.nameplate1 = true
+	K.Scan(T)
+	-- B dies, and the XP line comes before the look that sees its corpse
+	units.nameplate1.dead = true
+	K.XP("Highlands Bandit dies, you gain 67 experience.", T)
+	check(#got == 0, "the XP line is held, not matched at once")
+	K.Scan(T + 0.2)
+	T = T + 1.5
+	K.Scan(T)
+	check(table.concat(got, ",") == B .. ":dead",
+		"the corpse is counted once, and the bandit still standing is not: " .. table.concat(got, ","))
+	check(K.stats.confirmed == 1, "the XP line was its receipt")
+
+	-- somebody else's tag, then dead: not ours, and no XP comes
+	units.nameplate1 = mob("Creature-0-1-2-3-251918-C", "Highlands Bandit", { denied = true })
+	K.Scan(T)
+	units.nameplate1.dead = true
+	K.Scan(T + 0.2)
+	check(#got == 1, "a mob somebody else tagged is not counted")
+	-- a corpse we never saw standing is nobody's we can name
+	units.mouseover = mob("Creature-0-1-2-3-251918-D", "Highlands Bandit", { dead = true })
+	K.Scan(T + 0.4)
+	units.mouseover = nil
+	check(#got == 1, "a corpse never seen alive is not counted")
+	-- seen alive, then out of sight when it died: the XP line counts it
+	units.nameplate1 = mob("Creature-0-1-2-3-251661-E", "Galestrider")
+	K.Scan(T + 1)
+	units.nameplate1 = nil
+	K.plates.nameplate1 = nil
+	T = T + 5
+	K.XP("Galestrider dies, you gain 35 experience.", T)
+	K.Scan(T + 1.1)
+	check(got[2] == "Creature-0-1-2-3-251661-E:xp", "a death out of sight is counted by its XP line")
+
+	-- the loot window: a corpse counts, a pocket does not
+	_G.GetNumLootItems = function() return 2 end
+	local sources = { "Creature-0-1-2-3-3098-F", "Creature-0-1-2-3-3098-G" }
+	_G.GetLootSourceInfo = function(slot) return sources[slot], 1 end
+	_G.UnitTokenFromGUID = function(guid) return guid == sources[2] and "target" or nil end
+	units.target = mob(sources[2], "Mottled Boar")
+	K.Loot(T + 2)
+	check(got[3] == sources[1] .. ":loot" and #got == 3, "a looted corpse is a kill; a living pocket is not")
+	K.Loot(T + 3)
+	check(#got == 3, "looting it again counts nothing")
+	-- a reload: what was counted stays counted
+	local set = { [B] = true }
+	K.Reset(set)
+	units.target = nil
+	units.nameplate1 = mob(B, "Highlands Bandit", { dead = true })
+	K.plates.nameplate1 = true
+	K.Scan(T + 4)
+	check(#got == 3, "a corpse counted before a reload is not counted again")
+	check(K.XPName("Vuldren dies, you gain 50 experience. (25 exp Rested bonus)") == "Vuldren",
+		"the rested form of the XP line names the mob too")
+	K.plates.nameplate1 = nil
+	for _, g in ipairs({ "GetTime", "UnitExists", "UnitGUID", "UnitName", "UnitCreatureType", "UnitClassification",
+		"UnitLevel", "UnitPlayerControlled", "UnitIsDead", "UnitIsTapDenied", "UnitThreatSituation",
+		"UnitAffectingCombat", "GetNumLootItems", "GetLootSourceInfo", "UnitTokenFromGUID", "GetUnitName" }) do
+		_G[g] = nil
+	end
 end
 
 print("")

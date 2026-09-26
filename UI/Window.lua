@@ -332,8 +332,10 @@ W.PAGES = {
 		blurb = "the panel at the side of the screen: its size, and what sits in its header" },
 	map = { title = "Minimap", group = "dock", members = { "minimap", "buttons" },
 		blurb = "the map in the dock, and the line of other addons' buttons" },
-	progress = { title = "Progress", group = "dock", members = { "xp", "rep" },
-		blurb = "your level and your standing, and roughly how long the rest will take" },
+	-- the Menagerie is progress too, and a tab of its own did not fit on the
+	-- rail (Josh 2026-09-25)
+	progress = { title = "Progress", group = "dock", members = { "xp", "rep", "menagerie" },
+		blurb = "your level and your standing, roughly how long the rest will take, and every kind of mob you have killed" },
 	allmenus = { title = "Menus", group = "windows", members = { "menu", "menus" },
 		blurb = "the menu Escape opens, and every dropdown and right-click menu" },
 	censusset = { title = "Census", group = "people", members = { "census" },

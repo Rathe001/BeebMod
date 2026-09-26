@@ -26,7 +26,7 @@ The settings window's rail is in four groups, by what things are for, after
 |---|---|
 | **Dock** | the panel itself: its size, and the **Clock** (local or server time; click it to switch) and **Census** button in its header |
 | **Minimap** | the client's map, moved into the dock, and **Addon buttons** - other addons' minimap buttons, gathered into a line (a switch each) |
-| **Progress** | **Experience** (the XP bar, and time to level at your current pace) and **Reputation** (the watched faction, and time to the next standing), a switch each |
+| **Progress** | **Experience** (the XP bar, and time to level at your current pace), **Reputation** (the watched faction, and time to the next standing) and the **Menagerie** (every kind of mob you have killed, with a count and a model of each, filed by creature type; achievements are the score, and a line of the dock shows your points - click it for the journal), a switch each |
 | **Metrics** | one grid of readouts, each switched on its own: gold and gold per hour, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency |
 | **Quest tracker** | the client's tracker is hidden and this one draws your quests in the dock, under their zones, lowest level first |
 | **Micro menu** | the game's menu buttons, in the dock |
