@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.3
 
 - **The census is shared** with everyone who has BeebMod, over the hidden
   channel. Only news goes out - somebody new, somebody seen for the first
