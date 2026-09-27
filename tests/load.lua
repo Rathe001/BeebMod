@@ -3490,6 +3490,50 @@ if ok then
 			for k, v in pairs(was) do BT.SetEnabled(k, v) end
 			BT.settings.setup = wasSetup
 		end },
+		{ "made-up data fills every feature for screenshots, and none of it is saved", function()
+			-- MADE-UP DATA (Josh 2026-09-27): the census, ledger and menagerie
+			-- each show a made-up world while the switch is on
+			local D, N, J, U = BT.Demo, BT.Notes, BT.Menagerie, BT.Util
+			local realDb, realBooks = BT.db, BeebModDB.realms
+			local realCount = BT.DB.Stats(BT.db).total
+			local realLedger, realStore = BeebModDB.ledger, BT.settings.menagerie
+			assert(not D.IsOn(), "off to start")
+			SlashCmdList.BEEBSTOOLKIT("demo on")
+			assert(D.IsOn() and not D.failed, "on, every feature's part without an error: "
+				.. table.concat(D.failed or {}, "; "))
+			assert(BT.db ~= realDb and BT.db.demo and BT.DB.Stats(BT.db).total == BT.CensusDemo.size,
+				"the census shows a made-up realm: " .. BT.DB.Stats(BT.db).total)
+			local census = BT.Stats.Census(BT.db)
+			assert(#census.class >= 4 and #census.guild >= 5, "with classes and guilds enough to chart")
+			local me = U.Key(U.Me())
+			assert(N.Get(me) and N.Get(me).note and N.Count() >= 12, "the ledger has notes, one of them on you")
+			local tagged = 0
+			for key, p in N.Each() do
+				if p.flags and BT.DB.Get(BT.db, key) then tagged = tagged + 1 end
+			end
+			assert(tagged >= 5, "on people the made-up census knows too: " .. tagged)
+			local s = J.Store()
+			assert(s.demo and J.Mine().kills[6] == 612, "the menagerie has a made-up journal")
+			local tiers = {}
+			for npc, n in pairs(J.Mine().kills) do tiers[J.Mastery(n, s.mobs[npc])] = true end
+			assert(tiers[0] and tiers[1] and tiers[2] and tiers[3] and tiers[4], "at every mastery")
+			assert(next(J.Mine().earned), "with achievements earned")
+			-- a loading screen binds your book again (as BT.Bind would), and the
+			-- made-up one goes back in after it
+			BT.db = realDb
+			D.World()
+			assert(BT.db.demo, "a loading screen keeps the made-up realm on screen")
+			-- nothing of it in your saved books
+			assert(BeebModDB.realms == realBooks and BeebModDB.ledger == realLedger
+				and BT.settings.menagerie == realStore, "your books are the same tables")
+			for _, book in pairs(BeebModDB.realms) do
+				assert(not book.demo, "the made-up book is not among the saved ones")
+			end
+			SlashCmdList.BEEBSTOOLKIT("demo off")
+			assert(not D.IsOn() and BT.db == realDb and BT.DB.Stats(BT.db).total == realCount,
+				"off, your own census is back as it was")
+			assert(N.demo == nil and J.demo == nil and not J.Store().demo, "and your ledger and journal")
+		end },
 		{ "the census is not shared: what was heard is gone, and the switches with it", function()
 			-- THE CENSUS UNSHARED (Josh 2026-09-26: "kill the whole census
 			-- sharing concept. Players will only see census data for what

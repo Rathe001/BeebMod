@@ -50,6 +50,11 @@ end
 
 -- this realm and side's people, or another book's by its scope key
 function N.People(scopeKey)
+	-- the made-up notes stand in for this book while they are shown
+	-- (Modules/Ledger/Demo.lua); never for a book asked for by name
+	if N.demo and not scopeKey then
+		return N.demo
+	end
 	local root = N.Root()
 	scopeKey = scopeKey or (BT.scope and BT.scope.key)
 	if not (root and scopeKey) then

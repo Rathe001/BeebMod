@@ -43,6 +43,7 @@ Core\DB.lua
 Core\Tooltip.lua
 Core\StatusBars.lua
 Core\Boot.lua
+Core\Demo.lua
 Core\Collect\Meter.lua
 Core\Collect\Rosters.lua
 Core\Collect\Sightings.lua
@@ -64,10 +65,12 @@ Modules\Ledger\Tags.lua
 Modules\Ledger\Find.lua
 Modules\Ledger\Tooltip.lua
 Modules\Ledger\Ledger.lua
+Modules\Ledger\Demo.lua
 Modules\Census\Stats.lua
 Modules\Census\Chart.lua
 Modules\Census\Census.lua
 Modules\Census\Book.lua
+Modules\Census\Demo.lua
 Modules\Tips\Tips.lua
 Modules\Tracker\Quests.lua
 Modules\Tracker\Tracker.lua
@@ -98,6 +101,7 @@ Modules\Menagerie\Toast.lua
 Modules\Menagerie\Card.lua
 Modules\Menagerie\Window.lua
 Modules\Menagerie\Menagerie.lua
+Modules\Menagerie\Demo.lua
 Modules\Chat\Chat.lua
 Modules\DamageMeter\DamageMeter.lua
 Modules\PRD\PRD.lua
@@ -108,6 +112,7 @@ Modules\Frames\Auras.lua
 Modules\Frames\Timers.lua
 Modules\Frames\Buffs.lua
 Modules\Frames\Frames.lua
+Modules\Frames\Demo.lua
 
 Core\Slash.lua
 # where the time and the memory go: /bt mem, /bt prof

@@ -560,6 +560,11 @@ local RECENT = 200
 -- ---------------------------------------------------------------------------
 
 function J.Store()
+	-- the made-up journal stands in for yours while it is shown
+	-- (Modules/Menagerie/Demo.lua)
+	if J.demo then
+		return J.demo
+	end
 	if not BT.settings then
 		return nil
 	end

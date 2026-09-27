@@ -669,6 +669,16 @@ local function testingPage(body)
 	local st = Wd.Stack(body)
 	body.stack = st
 	local look = st:Section("Look at")
+	-- MADE-UP DATA (Josh 2026-09-27: "mock some data for me so we can show off
+	-- all the features/designs"): every feature at once, for screenshots -
+	-- nothing saved, and off again after a reload (Core/Demo.lua)
+	body.demoRow = Wd.SwitchRow(look, "Made-up data", "a made-up realm in the census, notes in the ledger, a journal in the menagerie and a party · nothing is saved · /bt demo",
+		function() return BT.Demo and BT.Demo.IsOn() or false end,
+		function(on)
+			if BT.Demo then
+				BT.Demo.Set(on)
+			end
+		end)
 	-- the unit frames' made-up group (Modules/Frames/Frames.lua)
 	local people = Wd.Row(look, "Made-up people", "see the frames in a group while you are alone · needs Unit frames on")
 	body.peopleSeg = people:SetControl(Wd.Segmented(people, {

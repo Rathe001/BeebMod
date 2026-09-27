@@ -23,6 +23,12 @@ game and the addon settle.
   and Find searches the people you wrote on - and, with the census on,
   everyone else it knows, as before. The census collects only while it is
   switched on, and says "Was in <guild>" on the tooltip itself.
+- **Made-up data, for screenshots.** A switch on the Testing page (or `/bt
+  demo`) shows a made-up world in every feature at once: fifteen hundred
+  characters in the census, notes and tags on a dozen of them (and on you)
+  in the ledger, a menagerie of real Classic mobs at every rank and mastery,
+  and a party on the unit frames. Nothing of it is saved, and it is off again
+  after a reload.
 - **The Menagerie**: a journal of every kind of mob you have killed, rares
   and elites among them, as a card each, five across. A rail down the left
   files them by creature type or by the zone you first met them in - All
