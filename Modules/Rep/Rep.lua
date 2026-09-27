@@ -16,7 +16,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "rep",
-	group = "dock",
+	feature = "dock",
 	onPage = "progress",
 	title = "Reputation",
 	blurb = "the watched faction, and time to the next standing",

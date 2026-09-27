@@ -18,7 +18,7 @@ local U, N = BT.Util, BT.Notes
 
 local M = BT.Module({
 	key = "ledger",
-	group = "people",
+	feature = "ledger",
 	title = "Ledger",
 	blurb = "notes and tags",
 	order = 10,

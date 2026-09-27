@@ -17,7 +17,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "xp",
-	group = "dock",
+	feature = "dock",
 	onPage = "progress",
 	title = "Experience",
 	blurb = "the bar, and time to level",

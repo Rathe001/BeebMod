@@ -15,7 +15,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "charsheet",
-	group = "windows",
+	feature = "interface",
 	title = "Character sheet",
 	blurb = "item level on every slot, and the toolkit's look",
 	order = 57,

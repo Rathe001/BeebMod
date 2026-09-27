@@ -69,7 +69,7 @@ local U, Q = BT.Util, BT.Quests
 
 local M = BT.Module({
 	key = "tracker",
-	group = "dock",
+	feature = "dock",
 	title = "Quest tracker",
 	blurb = "your quests, quieter",
 	order = 40,

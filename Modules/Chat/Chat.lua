@@ -24,7 +24,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "chat",
-	group = "windows",
+	feature = "interface",
 	title = "Chat",
 	blurb = "flat, and out of the way",
 	order = 60,

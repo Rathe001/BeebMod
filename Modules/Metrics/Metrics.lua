@@ -14,7 +14,7 @@ local CreateFrame, C_Timer = BT.Cpu.For("Modules/Metrics/Metrics.lua")
 
 local M = BT.Module({
 	key = "metrics",
-	group = "dock",
+	feature = "dock",
 	title = "Metrics",
 	blurb = "money, bags, durability, item level, pockets, speed and performance, in one grid",
 	order = 38,

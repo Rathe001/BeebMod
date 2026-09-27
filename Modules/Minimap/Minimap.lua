@@ -23,7 +23,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "minimap",
-	group = "dock",
+	feature = "dock",
 	onPage = "map",
 	title = "Minimap",
 	blurb = "in the panel, with the rest",

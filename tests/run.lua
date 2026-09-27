@@ -890,6 +890,49 @@ do
 	check(BT.boot.type == "nil" and BT.boot.total == 0, "an empty login is reported as an empty login")
 end
 
+-- 9b. FEATURES (Josh 2026-09-27: "each of those modules should work
+-- independently... Entire modules should have a toggle switch"). Six, each a
+-- switch over every module in it.
+do
+	newdb()
+	check(BT.FeatureOf("tracker") == "dock" and BT.FeatureOf("ledger") == "ledger"
+		and BT.FeatureOf("census") == "census" and BT.FeatureOf("tips") == "interface",
+		"every module is part of a feature (an older group reads as one)")
+	check(type(BT.settings.features) == "table" and BT.FeatureOn("dock") and BT.FeatureOn("ledger"),
+		"a fresh install's features are on")
+	-- an install from before features: its switches say what it had on
+	BT.settings.features = nil
+	BT.settings.modules.tracker, BT.settings.modules.tips = false, false
+	check(BT.SeedFeatures() and not BT.FeatureOn("interface") and not BT.FeatureOn("dock")
+		and BT.FeatureOn("census") and BT.FeatureOn("ledger"),
+		"seeded once from the modules you had on: a feature with none of them on starts off")
+	check(not BT.SeedFeatures(), "and only once")
+	BT.settings.modules.tracker, BT.settings.modules.tips = true, true
+	BT.SetFeature("dock", true)
+	BT.SetFeature("interface", true)
+	check(BT.Enabled("tracker") and BT.Enabled("tips"), "switched on, they run")
+	-- off takes everything in it, and remembers each one's own switch
+	local disabled = {}
+	local tracker = BT.GetModule("tracker")
+	local wasDisable = tracker.OnDisable
+	tracker.OnDisable = function(...) disabled[#disabled + 1] = "tracker" if wasDisable then return wasDisable(...) end end
+	BT.SetFeature("dock", false)
+	check(not BT.Enabled("tracker") and BT.Switched("tracker") and #disabled == 1,
+		"a feature off: its modules stop, told once, their own switches kept")
+	BT.SetEnabled("tracker", false)
+	BT.SetFeature("dock", true)
+	check(not BT.Enabled("tracker"), "back on, a module you switched off meanwhile stays off")
+	BT.SetEnabled("tracker", true)
+	check(BT.Enabled("tracker"), "and on once you switch it on")
+	tracker.OnDisable = wasDisable
+	-- a feature of one page IS its module
+	BT.SetEnabled("ledger", false)
+	BT.SetFeature("ledger", false)
+	BT.SetFeature("ledger", true)
+	check(BT.Enabled("ledger") and BT.Switched("ledger"), "switched on, a one-page feature's module is on too")
+	check(not BT.SetFeature("nonsense", true), "there is no feature called nonsense")
+end
+
 -- 10. THE TOOLKIT ITSELF: modules, and what switching one off is allowed to
 -- do. The Ledger owning the tag sweep is the load-bearing part - a utility you
 -- have switched off must not be walking your book removing marks from it.

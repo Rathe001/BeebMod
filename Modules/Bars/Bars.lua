@@ -27,7 +27,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "bars",
-	group = "windows",
+	feature = "interface",
 	title = "Action bars",
 	blurb = "flat, like the rest",
 	order = 50,

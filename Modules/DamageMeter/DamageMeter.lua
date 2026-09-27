@@ -37,7 +37,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "damagemeter",
-	group = "combat",
+	feature = "frames",
 	title = "Damage meter",
 	blurb = "the client's own meter, flat like the rest",
 	order = 58,

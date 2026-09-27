@@ -301,7 +301,112 @@ function BT.Enabled(key)
 	if m.part and not BT.Switched(m.part) then
 		return false
 	end
+	-- and a whole feature switched off takes everything in it (BT.SetFeature)
+	local f = BT.FeatureOf(m)
+	if f and not BT.FeatureOn(f) then
+		return false
+	end
 	return BT.Switched(key)
+end
+
+-- ---------------------------------------------------------------------------
+-- FEATURES (Josh 2026-09-27: "I'd like it to be a single addon, but each of
+-- those modules should work independently... Entire modules should have a
+-- toggle switch then, so users can easily turn on or off entire modules
+-- instead of 1 option at a time").
+--
+-- Six of them, each a switch of its own over every module in it. Switching a
+-- feature off takes all of its modules with it and remembers each one's own
+-- switch, so switching it back on brings back exactly what you had. A
+-- feature with one page (the Census, the Ledger, the Menagerie) IS its
+-- module: switched on, the module is on too.
+--
+-- The dock's logo and cog are none of these: they are always there, the way
+-- back into the settings whatever is switched off (UI/Bar.lua).
+-- ---------------------------------------------------------------------------
+BT.FEATURES = {
+	{ key = "dock", title = "Dock", color = { 0.45, 0.75, 0.99 },
+		line = "A panel at the side of the screen: minimap, clock, experience and reputation, gold, bags, durability, the quest tracker." },
+	{ key = "frames", title = "Unit frames", color = { 0.49, 0.77, 0.48 },
+		line = "Your frame, your party and raid, target and focus, buffs, and your heals and damage over time as bars." },
+	{ key = "interface", title = "Interface", color = { 0.88, 0.64, 0.29 },
+		line = "The game's own windows in BeebMod's look: action bars, bags, chat, the character sheet, tooltips and menus." },
+	{ key = "census", title = "Census", color = { 0.69, 0.56, 0.88 }, single = "census",
+		line = "Every character you see, written down: who is on your realm, by class, race, level, guild and zone." },
+	{ key = "ledger", title = "Ledger", color = { 0.90, 0.81, 0.42 }, single = "ledger",
+		line = "Notes, tags and a rating on the people you meet, shown on their tooltip and in the dock when you target them." },
+	{ key = "menagerie", title = "Menagerie", color = { 0.44, 0.64, 0.80 }, single = "menagerie",
+		line = "A journal of every kind of mob you kill: a card for each, its lore, masteries, ranks and achievements." },
+}
+local featureByKey = {}
+for _, f in ipairs(BT.FEATURES) do
+	featureByKey[f.key] = f
+end
+
+function BT.Feature(key)
+	return featureByKey[key]
+end
+
+-- a module that still says the group it used to be filed under
+local FROM_GROUP = { dock = "dock", combat = "frames", windows = "interface" }
+
+-- the feature a module (or a module's key) is part of: its own word, its
+-- owner's for a part, or what its older group meant
+function BT.FeatureOf(m)
+	if type(m) == "string" then
+		m = byKey[m]
+	end
+	if not m then
+		return nil
+	end
+	if m.feature then
+		return m.feature
+	end
+	if m.part then
+		return BT.FeatureOf(byKey[m.part])
+	end
+	if m.group == "people" then
+		return featureByKey[m.key] and m.key or nil
+	end
+	return FROM_GROUP[m.group]
+end
+
+-- on unless switched off: a feature added later arrives on
+function BT.FeatureOn(key)
+	local s = BT.settings and BT.settings.features
+	return not (s and s[key] == false)
+end
+
+-- the modules of a feature, parts included, in module order
+function BT.FeatureModules(key)
+	local out = {}
+	for _, m in ipairs(modules) do
+		if BT.FeatureOf(m) == key then
+			out[#out + 1] = m
+		end
+	end
+	return out
+end
+
+-- A FEATURE'S SWITCH, FOR AN INSTALL THAT NEVER HAD ONE (2026-09-27): on if
+-- anything in it is switched on, off if you had switched all of it off - so
+-- the switches start out saying what you already chose. Once.
+function BT.SeedFeatures()
+	local s = BT.settings
+	if not s or type(s.features) == "table" then
+		return false
+	end
+	s.features = {}
+	for _, f in ipairs(BT.FEATURES) do
+		local on = false
+		for _, m in ipairs(BT.FeatureModules(f.key)) do
+			if not m.part and BT.Switched(m.key) then
+				on = true
+			end
+		end
+		s.features[f.key] = on
+	end
+	return true
 end
 
 -- ONE LOG OF WHAT WENT WRONG (Josh 2026-09-23, audit). Six places appended to
@@ -392,6 +497,42 @@ function BT.SetEnabled(key, on)
 	-- there; Rebuild asks the live modules which cells there should BE. With
 	-- Update, switching the Ledger off left its name, its dots and its note
 	-- sitting on the dock with nothing behind them.
+	if BT.Bar then
+		BT.Bar.Rebuild()
+	end
+	return true
+end
+
+-- A whole feature on or off, now. Every module that goes from running to not
+-- (or back) is told once, whatever its own switch or its owner's said; its
+-- own switch is left as it was, to come back with the feature.
+function BT.SetFeature(key, on)
+	local f = featureByKey[key]
+	if not (f and BT.settings) then
+		return false
+	end
+	local before = {}
+	for _, m in ipairs(modules) do
+		before[m] = BT.Enabled(m.key)
+	end
+	BT.settings.features = BT.settings.features or {}
+	BT.settings.features[key] = on and true or false
+	-- a one-page feature is its module: switched on, it runs
+	if on and f.single and byKey[f.single] and not BT.Switched(f.single) then
+		BT.settings.modules = BT.settings.modules or {}
+		BT.settings.modules[f.single] = true
+	end
+	for _, m in ipairs(modules) do
+		local now = BT.Enabled(m.key)
+		if now and not before[m] then
+			switchOn(m)
+		elseif before[m] and not now then
+			call(m, "OnDisable")
+		end
+	end
+	if BT.Window then
+		BT.Window.Rebuild()
+	end
 	if BT.Bar then
 		BT.Bar.Rebuild()
 	end
@@ -602,6 +743,8 @@ function BT.Bind(realm, faction)
 	BT.TakeStashedSettings()
 	-- after the stashes, which would otherwise bring them back
 	BT.DropRetired()
+	-- a switch for each feature, once, from the modules you already have on
+	BT.SeedFeatures()
 	-- the modules in your order, before the rail or the dock is laid out
 	BT.SortModules()
 	-- BEFORE ANYTHING DRAWS (Josh 2026-09-21). The fill and the rim are a

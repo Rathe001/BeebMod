@@ -20,10 +20,10 @@ function S.Build(parent)
 	stack = W.Stack(parent)
 	S.appearance = {}
 
-	-- HOW MUCH IT CHANGES (Josh 2026-09-25): the question the first login
-	-- asks - full, just the dock, or the census and notes - asked again
-	local layout = stack:Section("How much it changes")
-	local again = W.Row(layout, "Choose again", "everything, just the dock, or the census and your notes · /bt setup")
+	-- WHICH FEATURES (Josh 2026-09-27): the question the first login asks -
+	-- six cards, a switch each - asked again
+	local layout = stack:Section("Features")
+	local again = W.Row(layout, "Choose again", "the first login's six cards: the dock, unit frames, interface, census, ledger, menagerie · /bt setup")
 	local ask = again:SetControl(W.Button(again, "Choose", 70, 20))
 	ask:SetScript("OnClick", function()
 		if BT.Welcome then

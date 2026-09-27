@@ -19,7 +19,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "buttons",
-	group = "dock",
+	feature = "dock",
 	onPage = "map",
 	title = "Addon buttons",
 	blurb = "other addons' minimap buttons, in a line",

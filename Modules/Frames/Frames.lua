@@ -32,7 +32,7 @@ local unpack = unpack or table.unpack
 
 local M = BT.Module({
 	key = "frames",
-	group = "combat",
+	feature = "frames",
 	title = "Unit frames",
 	blurb = "you and your group, the raid, your target, focus and bosses",
 	order = 45,

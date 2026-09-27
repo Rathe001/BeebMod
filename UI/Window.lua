@@ -321,12 +321,12 @@ end
 -- the minimap and the addon buttons that sit on it, experience and
 -- reputation, the two kinds of menu. The Dock and the Census have pages of
 -- their own that are not one module's.
-W.GROUPS = {
-	{ key = "dock", title = "Dock" },
-	{ key = "combat", title = "Combat" },
-	{ key = "windows", title = "Windows" },
-	{ key = "people", title = "People" },
-}
+-- THE GROUPS ARE THE FEATURES (Josh 2026-09-27): six of them, each a block
+-- of its own on the rail with its switch on its heading (BT.FEATURES).
+W.GROUPS = {}
+for _, f in ipairs(BT.FEATURES) do
+	W.GROUPS[#W.GROUPS + 1] = { key = f.key, title = f.title, feature = f }
+end
 
 W.PAGES = {
 	dock = { title = "Dock", group = "dock", fixed = true,
@@ -335,9 +335,9 @@ W.PAGES = {
 		blurb = "the map in the dock, and the line of other addons' buttons" },
 	progress = { title = "Progress", group = "dock", members = { "xp", "rep" },
 		blurb = "your level and your standing, and roughly how long the rest will take" },
-	allmenus = { title = "Menus", group = "windows", members = { "menu", "menus" },
+	allmenus = { title = "Menus", group = "interface", members = { "menu", "menus" },
 		blurb = "the menu Escape opens, and every dropdown and right-click menu" },
-	censusset = { title = "Census", group = "people", members = { "census" },
+	censusset = { title = "Census", group = "census", members = { "census" },
 		blurb = "the realm's charts, in a window of their own" },
 	-- TESTING (Josh 2026-09-24: "let's add a testing or debug section to
 	-- the options panel, and move the options like this to it"): the
@@ -348,8 +348,36 @@ W.PAGES = {
 		blurb = "made-up people and auras to look at while you are alone, and the addon's own reports" },
 }
 
+-- A FEATURE'S OWN PAGE (Josh 2026-09-27): what it is, its switch, and a
+-- switch for each of its parts with the way to that part's settings. One
+-- for each feature with more than one page; a feature of one page is that
+-- page.
+for _, f in ipairs(BT.FEATURES) do
+	if not f.single then
+		W.PAGES["feature:" .. f.key] = { title = f.title, group = f.key, overview = f.key, blurb = f.line }
+	end
+end
+
 function W.Page(key)
 	return W.PAGES[key]
+end
+
+-- the page a feature's heading opens: its own page, or its one page
+function W.HeadTab(fkey)
+	local f = BT.Feature(fkey)
+	if not f then
+		return nil
+	end
+	if f.single then
+		return W.GroupKeys(fkey)[1]
+	end
+	return "feature:" .. fkey
+end
+
+-- is this the page a feature's heading opens
+function W.IsHead(key)
+	local g = key and W.Group(key)
+	return g ~= nil and g ~= "general" and W.HeadTab(g) == key
 end
 
 -- the modules behind a tab: a shared page's, or the one module
@@ -377,6 +405,9 @@ function W.TabOn(key)
 		return true
 	end
 	local page = W.PAGES[key]
+	if page and page.overview then
+		return BT.FeatureOn(page.overview)
+	end
 	if page and page.fixed then
 		return true
 	end
@@ -399,10 +430,12 @@ function W.Group(key)
 		return page.group
 	end
 	local m = BT.GetModule(key)
-	if not m or m.part or m.onPage or not m.group or not BT.ClassFits(m) then
+	local feature = m and BT.FeatureOf(m)
+	-- (standalone: the clock, switched on the Dock's page, with no tab)
+	if not m or m.part or m.onPage or m.standalone or not feature or not BT.ClassFits(m) then
 		return nil
 	end
-	return m.group
+	return feature
 end
 
 -- the tab a module's settings are on
@@ -575,20 +608,6 @@ local function dockPage(body)
 			BT.SetEnabled("clock", on)
 		end)
 	clock.module = "clock"
-	local census = BT.Widgets.SwitchRow(head, "Census", "a chart button beside the cog, for the realm's charts",
-		function() return BT.Enabled("census") end,
-		function(on)
-			BT.EnsureBound()
-			BT.SetEnabled("census", on)
-			if not on and BT.CensusWindow then
-				BT.CensusWindow.Hide()
-			end
-			if BT.Bar then
-				BT.Bar.Relayout()
-			end
-			W.SyncTab("census")
-		end)
-	census.module = "census"
 	st:Layout()
 	W.RefreshDock()
 end
@@ -616,7 +635,7 @@ local function censusPage(body)
 		function() return BT.Enabled("census") end,
 		function(v)
 			BT.EnsureBound()
-			BT.SetEnabled("census", v)
+			BT.SetFeature("census", v)
 			if not v and BT.CensusWindow then
 				BT.CensusWindow.Hide()
 			end
@@ -703,9 +722,9 @@ local function testingPage(body)
 				B.Preview(on)
 			end
 		end)
-	-- THE FIRST LOGIN (Josh 2026-09-25): the choice a fresh install is
-	-- given - full, just the dock, or the census and notes - to see again
-	local first = Wd.Row(look, "First login", "the choice a fresh install gets: everything, just the dock, or the census and notes")
+	-- THE FIRST LOGIN (Josh 2026-09-25; six cards since 2026-09-27): the
+	-- question a fresh install is asked, to see again
+	local first = Wd.Row(look, "First login", "the question a fresh install is asked: six cards, a switch for each feature")
 	body.firstButton = first:SetControl(Wd.Button(first, "Show", 62, 20))
 	body.firstButton:SetScript("OnClick", function()
 		if BT.Welcome then
@@ -738,13 +757,104 @@ local function testingPage(body)
 	st:Layout()
 end
 
+-- the picture of a feature: its screenshot, or its colour and name until
+-- there is one (BT.FEATURES[n].art)
+local PIC_W, PIC_H = 320, 180
+function W.Picture(parent, f, w, h)
+	w, h = w or PIC_W, h or PIC_H
+	local pic = CreateFrame("Frame", nil, parent)
+	pic:SetSize(w, h)
+	local c = f.color or { 0.6, 0.6, 0.6 }
+	pic.fill = pic:CreateTexture(nil, "BACKGROUND")
+	pic.fill:SetAllPoints()
+	pic.fill:SetColorTexture(c[1] * 0.18, c[2] * 0.18, c[3] * 0.18, 0.95)
+	pic.art = pic:CreateTexture(nil, "ARTWORK")
+	pic.art:SetAllPoints()
+	pic.name = pic:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
+	pic.name:SetPoint("CENTER", 0, 0)
+	pic.name:SetText(f.title)
+	pic.name:SetTextColor(c[1], c[2], c[3])
+	if f.art then
+		pic.art:SetTexture(f.art)
+		pic.name:Hide()
+	else
+		pic.art:Hide()
+	end
+	pic.rim = BT.Pill.Panel and select(2, BT.Pill.Panel(pic, { 0, 0, 0, 0 }, BT.Widgets.HAIR))
+	return pic
+end
+
+local function featurePage(panel, fkey)
+	local f = BT.Feature(fkey)
+	panel.feature = fkey
+	panel.enable = BT.Widgets.Switch(panel, function(on)
+		BT.SetFeature(fkey, on)
+		W.SyncFeature(fkey)
+	end)
+	panel.enable:SetPoint("TOPRIGHT", -2, -4)
+	panel.enableWord = BT.Widgets.Label(panel, "", "small", 0.50, 0.55, 0.53)
+	panel.enableWord:SetPoint("RIGHT", panel.enable, "LEFT", -8, 0)
+	panel.off = CreateFrame("Frame", nil, panel)
+	panel.off:SetPoint("TOPLEFT", 0, -HEADER_H - 12)
+	panel.off:SetPoint("TOPRIGHT", 0, -HEADER_H - 12)
+	panel.off:SetHeight(40)
+	panel.off.title = BT.Widgets.Label(panel.off, fkey == "dock" and "The Dock is off: its logo and cog stay"
+		or ("%s is off"):format(f.title), nil, 0.72, 0.77, 0.75)
+	panel.off.title:SetPoint("TOPLEFT", 2, 0)
+	panel.off.blurb = BT.Widgets.Label(panel.off, "everything in it is off · what you chose inside it comes back with it",
+		"small", 0.50, 0.55, 0.53)
+	panel.off.blurb:SetPoint("TOPLEFT", 2, -18)
+	local st = BT.Widgets.Stack(panel.body)
+	local holder = CreateFrame("Frame", nil, panel.body)
+	holder:SetHeight(PIC_H + 4)
+	panel.picture = W.Picture(holder, f)
+	panel.picture:SetPoint("TOPLEFT", 2, -2)
+	st:Add(holder)
+	local parts = st:Section("Parts")
+	panel.partRows = {}
+	for _, m in ipairs(BT.FeatureModules(fkey)) do
+		if not m.part and BT.ClassFits(m) then
+			local r = BT.Widgets.SwitchRow(parts, m.title, m.blurb,
+				function() return BT.Switched(m.key) end,
+				function(on)
+					BT.SetEnabled(m.key, on)
+					W.SyncTab(m.key)
+				end)
+			r.module = m.key
+			r.go = BT.Widgets.Button(r, "Settings", 64, 18)
+			r.go:SetPoint("RIGHT", r.switch, "LEFT", -8, 0)
+			r.go:SetScript("OnClick", function()
+				W.SetView(W.TabFor(m.key))
+			end)
+			panel.partRows[#panel.partRows + 1] = r
+		end
+	end
+	st:Layout()
+	W.SyncFeature(fkey)
+end
+
+-- a feature's switches in step: its page's, and its heading's on the rail
+function W.SyncFeature(fkey)
+	local on = BT.FeatureOn(fkey)
+	local panel = panels["feature:" .. fkey]
+	if panel and panel.enable then
+		panel.enable:SetOn(on)
+		panel.enableWord:SetText(on and "On" or "Off")
+		panel.body:SetShown(on)
+		panel.off:SetShown(not on)
+	end
+	W.PaintHeads()
+end
+
 local function pagePanel(key, page)
 	local panel = CreateFrame("Frame", nil, content)
 	panel:SetAllPoints()
 	panel:Hide()
 	panels[key] = panel
 	header(panel, page.title, page.blurb)
-	if key == "dock" then
+	if page.overview then
+		featurePage(panel, page.overview)
+	elseif key == "dock" then
 		dockPage(panel.body)
 	elseif key == "censusset" then
 		censusPage(panel.body)
@@ -784,8 +894,15 @@ local function panelFor(key)
 	header(panel, m.title, m.blurb)
 	-- AND IT SAYS WHICH WAY IT IS (Josh 2026-09-23): the one switch on the
 	-- page that governs all the others gets the word beside it
+	-- a feature of one page IS this module: its switch is the feature's
+	local fkey = BT.FeatureOf(m)
+	local single = fkey and BT.Feature(fkey) and BT.Feature(fkey).single == key
 	panel.enable = BT.Widgets.Switch(panel, function(on)
-		BT.SetEnabled(key, on)
+		if single then
+			BT.SetFeature(fkey, on)
+		else
+			BT.SetEnabled(key, on)
+		end
 		W.SyncTab(key)
 	end)
 	panel.enable:SetPoint("TOPRIGHT", -2, -4)
@@ -884,11 +1001,14 @@ function W.SetView(key)
 			tabTint(tab, tab.key == key, false)
 		end
 	end
+	W.PaintHeads()
 	BT.Widgets.SyncRows()
 	if key == "settings" then
 		BT.Settings.Refresh()
 	elseif key == "dock" then
 		W.RefreshDock()
+	elseif W.PAGES[key] and W.PAGES[key].overview then
+		W.SyncFeature(W.PAGES[key].overview)
 	else
 		W.SyncTab(key)
 		for _, k in ipairs(W.MembersOf(key)) do
@@ -922,6 +1042,83 @@ local function railRoom()
 	return WINDOW_H - TITLE_H - 8 - PAD - FOOT_H
 end
 
+-- A BLOCK FOR EACH FEATURE (Josh 2026-09-27: "make each section look more
+-- distinct... right now it reads more as a big single list rather than
+-- separate modules"). Its colour down the left edge and across its heading,
+-- its switch on the heading, and its tabs inside it - none, while it is off:
+-- "if disabled we should hide the sub options".
+local BLOCK_HEAD, BLOCK_GAP, BLOCK_PAD, BLOCK_INDENT = 24, 7, 3, 6
+
+local function block(fkey)
+	rail.blocks = rail.blocks or {}
+	local b = rail.blocks[fkey]
+	if b then
+		return b
+	end
+	local area = rail.area or rail
+	b = CreateFrame("Frame", nil, area)
+	b.key = fkey
+	b.fill = b:CreateTexture(nil, "BACKGROUND")
+	b.fill:SetAllPoints()
+	b.edge = b:CreateTexture(nil, "BORDER")
+	b.edge:SetPoint("TOPLEFT", 0, 0)
+	b.edge:SetPoint("BOTTOMLEFT", 0, 0)
+	b.edge:SetWidth(3)
+	b.head = CreateFrame("Button", nil, b)
+	b.head:SetPoint("TOPLEFT", 3, 0)
+	b.head:SetPoint("TOPRIGHT", 0, 0)
+	b.head:SetHeight(BLOCK_HEAD)
+	b.head.band = b.head:CreateTexture(nil, "BACKGROUND", nil, 1)
+	b.head.band:SetAllPoints()
+	b.head.label = b.head:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
+	b.head.label:SetPoint("LEFT", 7, 0)
+	b.head.label:SetJustifyH("LEFT")
+	b.head:SetScript("OnClick", function()
+		W.SetView(W.HeadTab(fkey))
+	end)
+	b.head:SetScript("OnEnter", function(self)
+		self.hot = true
+		W.PaintHeads()
+	end)
+	b.head:SetScript("OnLeave", function(self)
+		self.hot = false
+		W.PaintHeads()
+	end)
+	b.switch = BT.Widgets.Switch(b.head, function(on)
+		BT.SetFeature(fkey, on)
+		W.SetView(W.HeadTab(fkey))
+		W.SyncFeature(fkey)
+	end)
+	b.switch:SetPoint("RIGHT", b.head, "RIGHT", -4, 0)
+	rail.blocks[fkey] = b
+	return b
+end
+
+-- the headings' colours: lit where you are, bright while on, quiet while off
+function W.PaintHeads()
+	for fkey, b in pairs((rail and rail.blocks) or {}) do
+		local f = BT.Feature(fkey)
+		local c = f and f.color or { 0.6, 0.6, 0.6 }
+		local on = BT.FeatureOn(fkey)
+		local lit = W.LitTab() ~= nil and W.LitTab() == W.HeadTab(fkey)
+		b.fill:SetColorTexture(c[1], c[2], c[3], on and 0.05 or 0)
+		if on then
+			b.edge:SetColorTexture(c[1], c[2], c[3], 0.9)
+		else
+			b.edge:SetColorTexture(0.30, 0.32, 0.30, 0.8)
+		end
+		local band = lit and 0.26 or (b.head.hot and 0.18 or (on and 0.11 or 0.03))
+		b.head.band:SetColorTexture(c[1], c[2], c[3], band)
+		if on then
+			b.head.label:SetTextColor(0.92, 0.95, 0.93)
+		else
+			b.head.label:SetTextColor(0.46, 0.50, 0.48)
+		end
+		local single = f and f.single
+		b.switch:SetOn(single and BT.Enabled(single) or (not single and on))
+	end
+end
+
 -- The rail, whenever the list of modules changes.
 function W.Rebuild()
 	if not frame then
@@ -929,16 +1126,18 @@ function W.Rebuild()
 	end
 	local y, shown = -6, 0
 	local area = rail.area or rail
-	local function place(key, title, group)
+	local function place(key, title, group, indent)
+		indent = indent or 0
 		shown = shown + 1
 		local tab = makeTab(shown)
 		tab.key, tab.title, tab.group = key, title, group
 		tab.label:SetText(title)
 		tab:ClearAllPoints()
-		tab:SetPoint("TOPLEFT", area, "TOPLEFT", 6, y)
+		tab:SetPoint("TOPLEFT", area, "TOPLEFT", 6 + indent, y)
+		tab:SetWidth(RAIL - 12 - indent)
 		-- where it sits on the rail, for the drop line
 		tab.railY = y
-		tab:SetFrameLevel((area:GetFrameLevel() or 1) + 1)
+		tab:SetFrameLevel((area:GetFrameLevel() or 1) + 4)
 		tab:Show()
 		W.ShowGrip(tab, false)
 		tabTint(tab, W.LitTab() == key, false)
@@ -999,18 +1198,37 @@ function W.Rebuild()
 	rail.seam:SetPoint("TOPRIGHT", area, "TOPRIGHT", -10, settingsBottom - 5)
 	y = settingsBottom - 8
 
-	-- EVERY module, not only the live ones: its own tab is where its switch
-	-- is, so a utility you have switched off still needs somewhere to be
-	-- switched back on (Josh 2026-09-20)
-	for n, g in ipairs(W.GROUPS) do
-		local keys = W.GroupKeys(g.key)
+	-- A BLOCK EACH (see block): its heading always - the way to switch it
+	-- back on - and its tabs only while it is on. Every module of a feature
+	-- that is on has a tab, switched on or not: its own tab is where its
+	-- switch is (Josh 2026-09-20).
+	for _, g in ipairs(W.GROUPS) do
+		local f = g.feature
+		local keys = W.GroupKeys(f.key)
 		if #keys > 0 then
-			heading(n, g.title)
-			for _, key in ipairs(keys) do
-				place(key, W.TitleOf(key), g.key)
+			y = y - BLOCK_GAP
+			local b = block(f.key)
+			b:ClearAllPoints()
+			b:SetPoint("TOPLEFT", area, "TOPLEFT", 6, y)
+			b:SetWidth(RAIL - 12)
+			b:SetFrameLevel((area:GetFrameLevel() or 1) + 1)
+			b.head.label:SetText(f.title)
+			local top = y
+			y = y - BLOCK_HEAD
+			if BT.FeatureOn(f.key) and not f.single then
+				y = y - BLOCK_PAD
+				for _, key in ipairs(keys) do
+					place(key, W.TitleOf(key), f.key, BLOCK_INDENT)
+				end
+				y = y + (TAB_STRIDE - TAB_H) - BLOCK_PAD
 			end
+			b:SetHeight(top - y)
+			b:Show()
+		elseif rail.blocks and rail.blocks[f.key] then
+			rail.blocks[f.key]:Hide()
 		end
 	end
+	W.PaintHeads()
 	for i = shown + 1, #tabs do
 		tabs[i]:Hide()
 		tabs[i].key, tabs[i].group = nil, nil
@@ -1021,15 +1239,21 @@ function W.Rebuild()
 	if rail.view then
 		rail.view:SetContentHeight(rail.reach + 6)
 	end
-	-- the tab we were on may have just been switched off
-	local live = false
+	-- the tab we were on may have just been folded away with its feature:
+	-- its feature's own page then, where the switch to bring it back is
+	local live = W.IsHead(W.LitTab())
 	for i = 1, shown do
 		if tabs[i].key == W.LitTab() then
 			live = true
 		end
 	end
 	if not live then
-		W.SetView(tabs[1] and tabs[1].key or "settings")
+		local g = W.LitTab() and W.Group(W.LitTab())
+		if g and g ~= "general" and BT.Feature(g) then
+			W.SetView(W.HeadTab(g))
+		else
+			W.SetView(tabs[1] and tabs[1].key or "settings")
+		end
 	end
 end
 
@@ -1223,6 +1447,8 @@ end
 -- the tests reach in here rather than at the frames
 function W.Frame() return frame end
 function W.Tabs() return tabs end
+-- the features' blocks on the rail, by feature
+function W.Blocks() return (rail and rail.blocks) or {} end
 -- the rail itself, for the tests: the line under Settings lives on it
 function W.Rail() return rail end
 function W.Panel(key) return panels[key] end

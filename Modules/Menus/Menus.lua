@@ -27,7 +27,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "menus",
-	group = "windows",
+	feature = "interface",
 	onPage = "allmenus",
 	title = "Dropdown menus",
 	blurb = "the game's right-click and dropdown menus, flat like the rest",

@@ -21,7 +21,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "micro",
-	group = "dock",
+	feature = "dock",
 	title = "Micro menu",
 	blurb = "the game's menu buttons, in the dock",
 	order = 55,

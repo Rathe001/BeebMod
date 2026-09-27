@@ -24,7 +24,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "menu",
-	group = "windows",
+	feature = "interface",
 	onPage = "allmenus",
 	title = "Game menu",
 	blurb = "the Escape menu, in the toolkit's clothes",

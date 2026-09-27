@@ -49,7 +49,7 @@ F.Buffs = B
 
 local M = BT.Module({
 	key = "buffs",
-	group = "combat",
+	feature = "frames",
 	title = "Buffs",
 	blurb = "yours, in a tray beside the dock: buffs over debuffs",
 	order = 46,

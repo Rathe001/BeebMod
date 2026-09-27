@@ -396,11 +396,21 @@ function B.BandColor(f, c)
 	B.PaintBand(f)
 end
 
+-- THE DOCK AT ITS SMALLEST (Josh 2026-09-27: "the bare minimum, if every
+-- module is disabled, should be the dock with logo and options cog. You
+-- should not be able to turn off that minimum state. Turning off the dock
+-- would turn off everything EXCEPT the logo and options cog"). With the Dock
+-- switched off nothing else sits in it - no row, no section, no readout, no
+-- Census icon, whatever feature it belongs to - and the header stays.
+function B.DockOn()
+	return not BT.FeatureOn or BT.FeatureOn("dock")
+end
+
 function B.RowWanted()
 	if not (bar and cells) then
 		return false
 	end
-	return (not (BT.settings and BT.settings.bar == false)) and moduleCells()
+	return B.DockOn() and (not (BT.settings and BT.settings.bar == false)) and moduleCells()
 end
 
 -- A PANEL OF YOUR OWN, UNDER THE ROW. Give it the height and width it would
@@ -584,7 +594,7 @@ local function layoutChips(width, rank)
 	local grid = s.frame
 	local shown = {}
 	for _, c in ipairs(chips) do
-		if c.wanted and BT.Enabled(c.owner) and BT.ClassFits(BT.GetModule(c.owner)) then
+		if c.wanted and B.DockOn() and BT.Enabled(c.owner) and BT.ClassFits(BT.GetModule(c.owner)) then
 			shown[#shown + 1] = c
 		else
 			c:Hide()
@@ -696,7 +706,7 @@ end
 -- the Census icon is in the header while the Census is on, unless you left
 -- it out (its charts are still at /bt census and on its page)
 local function censusInHeader()
-	return BT.Enabled and BT.Enabled("census") and not (BT.settings and BT.settings.censusButton == false)
+	return BT.Enabled and BT.Enabled("census") and B.DockOn() and not (BT.settings and BT.settings.censusButton == false)
 		or false
 end
 
@@ -731,7 +741,12 @@ function B.Relayout()
 	-- the dock's own width; only a row or a header that could not fit in it
 	-- (a setting narrower than its cells) makes it wider
 	local width, live = math.max(B.Width(), rowWidth or MIN_W, MIN_W), false
+	local dockOn = B.DockOn()
 	for _, s in ipairs(ordered) do
+		-- the Dock off: every section away, whoever's it is
+		if not dockOn and s.key ~= "readouts" then
+			s.frame:Hide()
+		end
 		if s.frame:IsShown() and s.key ~= "readouts" then
 			live = true
 		end
@@ -903,6 +918,9 @@ function B.Relayout()
 	end
 	local right
 	for _, f in ipairs(bar.headerItems or {}) do
+		if not dockOn then
+			f:Hide()
+		end
 		if f:IsShown() then
 			f:ClearAllPoints()
 			if right then
@@ -926,12 +944,9 @@ function B.Relayout()
 	-- THE CENSUS ON ITS OWN (Josh 2026-09-24): its icon is a way in as much
 	-- as the clock is, and the census alone is a way to use the addon - the
 	-- name, the icon and the cog, and nothing under them
-	local censusIcon = bar.census ~= nil and bar.census:IsShown()
-	if wantRow or live or right ~= nil or censusIcon then
-		bar:Show()
-	else
-		bar:Hide()
-	end
+	-- ALWAYS THERE (Josh 2026-09-27): the logo and the cog are the way back
+	-- in, whatever is switched off, and nothing switches them off
+	bar:Show()
 end
 
 -- THE DOCK STOPS AT THE BOTTOM OF THE SCREEN (Josh 2026-09-23). It grows

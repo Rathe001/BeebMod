@@ -1,24 +1,17 @@
--- HOW MUCH SHOULD IT CHANGE? (Josh 2026-09-25: "When the player first logs in
--- after installing the addon, can we present them with 3 options? The full UI,
--- just the dock, or census only? Many of my friends don't like using addons,
--- so they probably don't want dramatic UI rewrites. Going through the settings
--- and turning everything off manually is annoying.")
+-- WHICH FEATURES DO YOU WANT? (Josh 2026-09-27: "On startup we should ask
+-- users which modules they want to enable.")
 --
--- The first login after installing asks once, in a small window of its own,
--- and each answer is only a set of module switches - the same ones the
--- settings have, so anything can be changed back one at a time later:
+-- Six cards, one for each feature (BT.FEATURES): a picture of what it looks
+-- like, a line on what it does, and its switch. Start switches the features
+-- as the cards say - the same switches the settings rail has, so any of it
+-- can be changed later. It replaced three presets (full, just the dock, the
+-- census and notes, Josh 2026-09-25): a preset is a guess at what somebody
+-- wants, and six switches with pictures are the question itself.
 --
---   full      everything
---   dock      the dock and what is on it, and the census and your notes; the
---             unit frames, buffs, meter, bars, bags, sheet, chat, menus and
---             tooltips stay the game's
---   census    the census and your notes (Josh: "they kind of go hand in hand
---             I think, and are non-intrusive") and nothing else - the game's
---             own interface, untouched
---
--- An install that already has its modules set is not asked: somebody who
--- has been choosing switches has made their choice. /bt setup, or the button
--- on the General page, asks again.
+-- Asked once, a few seconds after the first loading screen: on a fresh
+-- install, and once for an install from before there were features, its
+-- cards set to what it already has on. Escape puts it off to the next login.
+-- /bt setup, or "Choose again" on the General page, asks again.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("UI/Welcome.lua")
 
@@ -26,61 +19,34 @@ local U = BT.Util
 local W = {}
 BT.Welcome = W
 
-W.CHOICES = {
-	{ key = "full", title = "Full",
-		blurb = "The whole thing: the dock, unit frames, bars, bags, chat and tooltips, all in one look." },
-	{ key = "dock", title = "Just the dock",
-		blurb = "One panel at the side with your map, quests, XP and the numbers you check. The rest stays as the game made it." },
-	{ key = "census", title = "Census and notes",
-		blurb = "Your interface stays exactly as it is. BeebMod quietly keeps the census and your notes on people, from a small button." },
-}
-
--- which group a module is in, for the choices: a part goes with its owner,
--- and the clock lives on the Dock's page
-local function groupOf(m)
-	if m.part then
-		local owner = BT.GetModule(m.part)
-		return owner and groupOf(owner) or nil
-	end
-	if m.key == "clock" then
-		return "dock"
-	end
-	return m.group
-end
-W.GroupOf = groupOf
-
--- whether a choice keeps a module on
-function W.Keeps(choice, m)
-	if choice == "full" then
-		return true
-	end
-	local g = groupOf(m)
-	if choice == "dock" then
-		return g == "dock" or g == "people"
-	end
-	-- census: the census and the ledger, and nothing that belongs to anything
-	-- else - the Ledger's own readout is a part of the Metrics
-	return (m.key == "census" or m.key == "ledger") and not m.part
+-- asked, or not yet: an answer, or nothing at all to go on
+function W.ShouldAsk()
+	local s = BT.settings
+	return s ~= nil and not s.featuresAsked
 end
 
--- the switches for a choice, thrown all at once; a part keeps its own switch
--- and follows its owner, so it is only switched on (never off) here
-function W.Apply(choice)
-	if not (choice == "full" or choice == "dock" or choice == "census") then
-		return false
-	end
+-- the cards' switches, as they stand; set from the features when it opens
+W.picks = {}
+
+function W.Pick(key, on)
+	W.picks[key] = on and true or false
+	W.Paint()
+end
+
+-- every feature as its card says, and the question answered
+function W.Apply(picks)
 	BT.EnsureBound()
-	for _, m in ipairs(BT.Modules()) do
-		local on = W.Keeps(choice, m)
-		if m.part then
-			if on and not BT.Switched(m.key) then
-				BT.SetEnabled(m.key, true)
-			end
-		elseif BT.Switched(m.key) ~= on then
-			BT.SetEnabled(m.key, on)
+	picks = picks or W.picks
+	for _, f in ipairs(BT.FEATURES) do
+		local want = picks[f.key] ~= false
+		-- a one-page feature asks its module too: on here is on
+		local now = BT.FeatureOn(f.key) and (not f.single or BT.Switched(f.single))
+		if want ~= now then
+			BT.SetFeature(f.key, want)
 		end
 	end
-	BT.settings.setup = choice
+	BT.settings.featuresAsked = true
+	BT.settings.setup = "features"
 	if BT.Window and BT.Window.Rebuild then
 		pcall(BT.Window.Rebuild)
 	end
@@ -90,36 +56,45 @@ function W.Apply(choice)
 	return true
 end
 
--- An install that has set module switches has chosen already; so has one
--- that answered this before. A fresh one - or one that never touched a
--- switch - is asked.
-function W.ShouldAsk()
-	local s = BT.settings
-	if not s or s.setup ~= nil then
-		return false
-	end
-	if type(s.modules) == "table" and next(s.modules) ~= nil then
-		s.setup = "kept"
-		return false
-	end
-	return true
-end
-
 -- ---------------------------------------------------------------------------
 -- The window
 -- ---------------------------------------------------------------------------
 
 local frame
-local WIDTH, PAD, CHOICE_H = 440, 18, 58
+local PAD, GAP, COLS = 18, 10, 3
+local CARD_W = 236
+local PIC_H = math.floor(CARD_W * 9 / 16 + 0.5)
+local CARD_H = PIC_H + 12 + 22 + 44
+local WIDTH = PAD * 2 + COLS * CARD_W + (COLS - 1) * GAP
 
 local function inCombat()
 	return InCombatLockdown and InCombatLockdown() or false
 end
 
-local function choose(key)
+-- the cards as the picks say: lit and switched on, or quiet
+function W.Paint()
+	if not frame then
+		return
+	end
+	for _, card in ipairs(frame.cards) do
+		local on = W.picks[card.key] ~= false
+		card.switch:SetOn(on)
+		local c = card.feature.color
+		BT.Pill.Recolour(card, on and { c[1] * 0.16, c[2] * 0.16, c[3] * 0.16, 0.95 } or { 0.06, 0.07, 0.07, 0.95 },
+			on and { c[1], c[2], c[3], 0.7 } or BT.Widgets.HAIR)
+		card.title:SetTextColor(on and 0.93 or 0.50, on and 0.95 or 0.54, on and 0.93 or 0.52)
+		card.picture:SetAlpha(on and 1 or 0.35)
+	end
+end
+
+local function start()
 	-- a fight: switching the frames now would be refused; after it, then
+	local picks = {}
+	for k, v in pairs(W.picks) do
+		picks[k] = v
+	end
 	if inCombat() then
-		W.pending = key
+		W.pending = picks
 		local f = CreateFrame("Frame")
 		f:RegisterEvent("PLAYER_REGEN_ENABLED")
 		f:SetScript("OnEvent", function(self)
@@ -131,18 +106,14 @@ local function choose(key)
 		end)
 		U.Print("BeebMod · set up after this fight")
 	else
-		W.Apply(key)
+		W.Apply(picks)
 	end
 	if frame then
 		frame:Hide()
 	end
-	for _, c in ipairs(W.CHOICES) do
-		if c.key == key then
-			U.Print(("BeebMod · %s · change it any time with /bt"):format(c.title:lower()))
-		end
-	end
+	U.Print("BeebMod · change any of it with /bt, or the cog on the dock")
 end
-W.Choose = choose
+W.Start = start
 
 function W.Build()
 	if frame then
@@ -157,40 +128,78 @@ function W.Build()
 	Wd.Panel(frame, Wd.SOLID)
 	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
 	frame.title:SetPoint("TOPLEFT", PAD, -PAD)
-	frame.title:SetText("|cff74c0fcBeeb|rMod")
-	frame.question = Wd.Label(frame, "How much of your interface should it change?", "normal", 0.91, 0.93, 0.92)
-	frame.question:SetPoint("TOPLEFT", PAD, -PAD - 26)
-	frame.choices = {}
-	local y = -PAD - 54
-	for _, c in ipairs(W.CHOICES) do
-		local b = Wd.Button(frame, "", WIDTH - 2 * PAD, CHOICE_H)
-		b:SetPoint("TOPLEFT", PAD, y)
-		b.label:Hide()
-		b.head = b:CreateFontString(nil, "OVERLAY", "BeebModFontNormal")
-		b.head:SetPoint("TOPLEFT", 12, -10)
-		b.head:SetText(c.title)
-		b.text = Wd.Label(b, c.blurb, "small", 0.62, 0.68, 0.65)
-		b.text:SetPoint("TOPLEFT", 12, -28)
-		b.text:SetPoint("RIGHT", b, "RIGHT", -12, 0)
-		b.text:SetJustifyH("LEFT")
-		b.text:SetWordWrap(true)
-		b.key = c.key
-		b:SetScript("OnClick", function() choose(c.key) end)
-		frame.choices[#frame.choices + 1] = b
-		y = y - CHOICE_H - 8
+	frame.title:SetText("Welcome to |cff74c0fcBeeb|rMod")
+	frame.question = Wd.Label(frame, "Pick what you want · all of it can change later", "small", 0.50, 0.55, 0.53)
+	frame.question:SetPoint("LEFT", frame.title, "RIGHT", 10, -1)
+	Wd.Divider(frame, PAD, -PAD - 26)
+	frame.cards = {}
+	local top = PAD + 36
+	for i, f in ipairs(BT.FEATURES) do
+		local col, row = (i - 1) % COLS, math.floor((i - 1) / COLS)
+		local card = CreateFrame("Button", nil, frame)
+		card:SetSize(CARD_W, CARD_H)
+		card:SetPoint("TOPLEFT", PAD + col * (CARD_W + GAP), -(top + row * (CARD_H + GAP)))
+		BT.Pill.Panel(card, { 0.06, 0.07, 0.07, 0.95 }, Wd.HAIR)
+		card.key, card.feature = f.key, f
+		card.picture = BT.Window.Picture(card, f, CARD_W - 12, PIC_H - 6)
+		card.picture:SetPoint("TOPLEFT", 6, -6)
+		card.title = card:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
+		card.title:SetPoint("TOPLEFT", 8, -(PIC_H + 8))
+		card.title:SetText(f.title)
+		card.switch = Wd.Switch(card, function(on)
+			W.Pick(f.key, on)
+		end)
+		card.switch:SetPoint("TOPRIGHT", -6, -(PIC_H + 4))
+		card.line = Wd.Label(card, f.line, "small", 0.62, 0.68, 0.65)
+		card.line:SetPoint("TOPLEFT", 8, -(PIC_H + 30))
+		card.line:SetPoint("RIGHT", card, "RIGHT", -8, 0)
+		card.line:SetJustifyH("LEFT")
+		card.line:SetJustifyV("TOP")
+		card.line:SetWordWrap(true)
+		-- a click anywhere on the card is a click on its switch
+		card:SetScript("OnClick", function()
+			W.Pick(f.key, W.picks[f.key] == false)
+		end)
+		frame.cards[#frame.cards + 1] = card
 	end
-	frame.foot = Wd.Label(frame, "Every piece can be switched on or off later, one at a time: /bt", "small", 0.50, 0.55, 0.53)
-	frame.foot:SetPoint("TOPLEFT", PAD, y - 4)
-	frame:SetSize(WIDTH, -y + 4 + 14 + PAD)
-	frame:SetPoint("CENTER", 0, 60)
+	local y = top + 2 * CARD_H + GAP + 12
+	frame.foot = Wd.Label(frame, "The dock's logo and cog always stay, so you can find your way back · /bt", "small", 0.50, 0.55, 0.53)
+	frame.foot:SetPoint("TOPLEFT", PAD, -(y + 5))
+	frame.start = Wd.Button(frame, "Start", 72, 22)
+	frame.start:SetPoint("TOPRIGHT", -PAD, -y)
+	frame.start:SetScript("OnClick", start)
+	frame.none = Wd.Button(frame, "None", 56, 22)
+	frame.none:SetPoint("RIGHT", frame.start, "LEFT", -6, 0)
+	frame.none:SetScript("OnClick", function()
+		for _, f in ipairs(BT.FEATURES) do
+			W.picks[f.key] = false
+		end
+		W.Paint()
+	end)
+	frame.all = Wd.Button(frame, "All", 56, 22)
+	frame.all:SetPoint("RIGHT", frame.none, "LEFT", -6, 0)
+	frame.all:SetScript("OnClick", function()
+		for _, f in ipairs(BT.FEATURES) do
+			W.picks[f.key] = true
+		end
+		W.Paint()
+	end)
+	frame:SetSize(WIDTH, y + 22 + PAD)
+	frame:SetPoint("CENTER", 0, 40)
 	-- Escape puts it off to the next login rather than choosing for you
 	tinsert(UISpecialFrames, "BeebModWelcome")
 	frame:Hide()
 	return frame
 end
 
+-- open, its cards set to what is on now
 function W.Show()
+	BT.EnsureBound()
 	W.Build()
+	for _, f in ipairs(BT.FEATURES) do
+		W.picks[f.key] = BT.FeatureOn(f.key) and (not f.single or BT.Switched(f.single))
+	end
+	W.Paint()
 	frame:Show()
 	frame:Raise()
 	return frame
@@ -231,4 +240,4 @@ end)
 
 BT.Command("setup", function()
 	W.Show()
-end, "choose again how much BeebMod changes: full, just the dock, or census and notes")
+end, "choose again which features BeebMod uses")

@@ -25,7 +25,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "prd",
-	group = "combat",
+	feature = "frames",
 	title = "Resource display",
 	blurb = "your own nameplate, flat, with combo points under it",
 	order = 58.5,

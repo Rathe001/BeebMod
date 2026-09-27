@@ -19,7 +19,7 @@ local J, K, T = BT.Menagerie, BT.MenagerieKills, BT.MenagerieToast
 
 local M = BT.Module({
 	key = "menagerie",
-	group = "dock",
+	feature = "menagerie",
 	title = "Menagerie",
 	blurb = "every kind of mob you have killed, and achievements for it",
 	order = 38,

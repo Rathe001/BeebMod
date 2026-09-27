@@ -9,7 +9,7 @@ local CreateFrame, C_Timer = BT.Cpu.For("Modules/Census/Census.lua")
 
 local M = BT.Module({
 	key = "census",
-	group = "people",
+	feature = "census",
 	onPage = "censusset",
 	title = "Census",
 	blurb = "who is on the realm",

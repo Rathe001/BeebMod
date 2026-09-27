@@ -12,6 +12,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "clock",
+	feature = "dock",
 	title = "Clock",
 	blurb = "local or server time · click to switch",
 	order = 4,

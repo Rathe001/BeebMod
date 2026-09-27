@@ -9,10 +9,11 @@
 --   lua tests/load.lua
 local ok = true
 -- every tab on the window's rail, top to bottom, for a warrior with no order set
-ALL_TABS = "settings,testing,dock,map,progress,menagerie,metrics,tracker,micro,"
+-- (the Census, the Ledger and the Menagerie are a feature of one page each:
+-- their block's heading is their tab, 2026-09-27)
+ALL_TABS = "settings,testing,dock,map,progress,metrics,tracker,micro,"
 	.. "buffs,damagemeter,prd,frames,"
-	.. "bars,bagwindow,charsheet,chat,allmenus,tips,"
-	.. "censusset,ledger"
+	.. "bars,bagwindow,charsheet,chat,allmenus,tips"
 local function fail(msg)
 	print("FAIL " .. msg)
 	ok = false
@@ -949,7 +950,10 @@ if ok then
 			BT.SetEnabled("perf", false)
 			BT.SetEnabled("gold", false)
 			BT.Bar.Update()
-			assert(BT.Bar.Toggle() == false and not q:IsShown(), "/bt bar hides it")
+			-- NEVER LESS THAN THE LOGO AND THE COG (Josh 2026-09-27): the row
+			-- goes, and the dock stays as its header
+			assert(BT.Bar.Toggle() == false and q:IsShown() and not BT.Bar.Row():IsShown(),
+				"/bt bar hides the row, and the dock stays as its logo and cog")
 			BT.Bar.Toggle()
 			BT.SetEnabled("menagerie", hadMenagerie)
 			BT.SetEnabled("census", hadCensus)
@@ -1241,27 +1245,58 @@ if ok then
 			BT.Window.Rebuild()
 			BT.Window.Rebuild()
 			assert(rail.seam == seam, "and it is kept, not made again")
-			-- THE RAIL BY WHAT THINGS ARE FOR (Josh 2026-09-24): General, then
-			-- Dock, Combat, Windows and People
+			-- THE RAIL BY FEATURE (Josh 2026-09-27): General, then a block for
+			-- each of the six features
 			assert(table.concat(named, ",") == ALL_TABS,
-				"General, then Dock, Combat, Windows and People: " .. table.concat(named, ","))
-			assert(table.concat(BT.Window.GroupKeys("dock"), ",") == "dock,map,progress,menagerie,metrics,tracker,micro",
-				"the Dock group: its own page first, then in the dock's order")
-			assert(table.concat(BT.Window.GroupKeys("combat"), ",") == "buffs,damagemeter,prd,frames",
-				"Combat, A to Z by name: " .. table.concat(BT.Window.GroupKeys("combat"), ","))
-			assert(table.concat(BT.Window.GroupKeys("windows"), ",") == "bars,bagwindow,charsheet,chat,allmenus,tips",
-				"Windows: " .. table.concat(BT.Window.GroupKeys("windows"), ","))
-			assert(table.concat(BT.Window.GroupKeys("people"), ",") == "censusset,ledger", "and People")
+				"General, then the features' tabs: " .. table.concat(named, ","))
+			assert(table.concat(BT.Window.GroupKeys("dock"), ",") == "dock,map,progress,metrics,tracker,micro",
+				"the Dock: its own page first, then in the dock's order: " .. table.concat(BT.Window.GroupKeys("dock"), ","))
+			assert(table.concat(BT.Window.GroupKeys("frames"), ",") == "buffs,damagemeter,prd,frames",
+				"Unit frames, A to Z by name: " .. table.concat(BT.Window.GroupKeys("frames"), ","))
+			assert(table.concat(BT.Window.GroupKeys("interface"), ",") == "bars,bagwindow,charsheet,chat,allmenus,tips",
+				"Interface: " .. table.concat(BT.Window.GroupKeys("interface"), ","))
+			assert(BT.Window.HeadTab("census") == "censusset" and BT.Window.HeadTab("ledger") == "ledger"
+				and BT.Window.HeadTab("menagerie") == "menagerie" and BT.Window.HeadTab("dock") == "feature:dock",
+				"a feature of one page opens that page; the others a page of their own")
 			-- a shared page: a switch each, and the tab goes to it
 			assert(table.concat(BT.Window.MembersOf("progress"), ",") == "xp,rep"
 				and BT.Window.TabFor("rep") == "progress" and BT.Window.TabFor("clock") == "dock",
 				"experience and reputation share a page; the clock is on the Dock's")
-			-- a heading over each group, made once
-			local heads = rail.heads
-			assert(heads and heads[1]:GetText() == "DOCK" and heads[2]:GetText() == "COMBAT"
-				and heads[3]:GetText() == "WINDOWS" and heads[4]:GetText() == "PEOPLE", "each group is named")
+			-- A BLOCK FOR EACH FEATURE (Josh 2026-09-27): its name and its switch
+			local blocks = BT.Window.Blocks()
+			for _, feat in ipairs(BT.FEATURES) do
+				local b = blocks[feat.key]
+				assert(b and b:IsShown() and b.head.label:GetText() == feat.title and b.switch:IsOn(),
+					"a block for " .. feat.title .. ", named, its switch on")
+			end
 			BT.Window.Rebuild()
-			assert(rail.heads[1] == heads[1], "and the names are kept, not made again")
+			assert(BT.Window.Blocks().dock == blocks.dock, "and the blocks are kept, not made again")
+			-- A FEATURE'S OWN PAGE (Josh 2026-09-27): its heading opens it - its
+			-- picture, its switch, and a switch and a way in for each part
+			blocks.dock.head:GetScript("OnClick")(blocks.dock.head)
+			assert(BT.Window.View() == "feature:dock", "the Dock's heading opens the Dock's own page")
+			local fp = BT.Window.Panel("feature:dock")
+			assert(fp and fp.enable:IsOn() and fp.picture and fp.body:IsShown(), "its switch, on, and its picture")
+			local partKeys = {}
+			for _, r in ipairs(fp.partRows) do partKeys[r.module] = r end
+			assert(partKeys.minimap and partKeys.tracker and partKeys.xp and partKeys.clock and not partKeys.gold,
+				"a row for each part of it (not the readouts' lines, which are Metrics')")
+			partKeys.tracker.go:GetScript("OnClick")(partKeys.tracker.go)
+			assert(BT.Window.View() == "tracker", "a part's button goes to its settings")
+			-- switched off from its page: the page says so, the rail folds its tabs away
+			BT.Window.SetView("feature:dock")
+			fp.enable:GetScript("OnClick")(fp.enable)
+			assert(not BT.FeatureOn("dock") and not fp.body:IsShown() and fp.off:IsShown(),
+				"off, its page says so and shows nothing else")
+			for _, tab in ipairs(BT.Window.Tabs()) do
+				if tab.key and tab:IsShown() then
+					assert(tab.group ~= "dock", "the Dock's tabs are folded away: " .. tab.key)
+				end
+			end
+			assert(not blocks.dock.switch:IsOn(), "and its switch on the rail says off")
+			blocks.dock.switch:GetScript("OnClick")(blocks.dock.switch)
+			assert(BT.FeatureOn("dock") and fp.body:IsShown() and BT.Window.View() == "feature:dock",
+				"switched on from the rail, it is back, its page open")
 			-- EIGHT BUTTONS AT 92 IN A COLUMN 570 WIDE hung the last one off the
 			-- window; the rail has to hold every tab above the line at its foot
 			local fits, reach, room = BT.Window.RailFits()
@@ -1295,8 +1330,12 @@ if ok then
 						"the name says whether " .. tab.key .. " is on")
 				end
 			end
-			-- and the second group has a rule over its heading
-			assert(rail.rules and rail.rules[2] and rail.rules[2]._shown ~= false, "a rule over Combat")
+			-- and each block stands apart from the one above it
+			local dockB, framesB = BT.Window.Blocks().dock, BT.Window.Blocks().frames
+			local dockTop, framesTop = dockB._points.TOPLEFT.y, framesB._points.TOPLEFT.y
+			assert(framesTop < dockTop - (dockB._height or 0),
+				("a gap between the Dock's block and the Unit frames' (%s, %s tall; %s)")
+					:format(tostring(dockTop), tostring(dockB._height), tostring(framesTop)))
 			-- the Census is a window of its own, not a page of this one
 			local wasView = BT.Window.View()
 			BT.Window.SetView("census")
@@ -1464,12 +1503,8 @@ if ok then
 			-- have switched off still needs somewhere to be switched back on
 			assert(table.concat(named, ",") == ALL_TABS,
 				"every tab is still on the rail: " .. table.concat(named, ","))
-			-- and its name dimmed with it, and came back
-			for _, tab in ipairs(BT.Window.Tabs()) do
-				if tab.key == "ledger" then
-					assert(tab.off == false, "the Ledger's name is bright again")
-				end
-			end
+			-- and its block's switch went off with it, and came back
+			assert(BT.Window.Blocks().ledger.switch:IsOn(), "the Ledger's switch on the rail is on again")
 			BT.Settings.Refresh()
 			assert(not censusRow.switch:IsOn(), "and the Census's switch shows it off")
 
@@ -3399,7 +3434,7 @@ if ok then
 			-- width, a two-line note came out one line tall and was drawn over
 			local note = BT.Widgets.Note(_G.UIParent, string.rep("word ", 40))
 			assert(note:Measure() >= 24, "a long note measures more than one line: " .. note:Measure())
-			assert(BT.Window.Group("frames") == "combat", "in the Combat group on the rail")
+			assert(BT.Window.Group("frames") == "frames", "in the Unit frames feature on the rail")
 			assert(BT.moduleErrors == nil, "and no module error: " .. table.concat(BT.moduleErrors or {}, " | "))
 		end },
 		{ "one face for everything the toolkit writes", function()
@@ -3440,55 +3475,61 @@ if ok then
 			BT.Window.SetView("settings")
 			assert(BT.Settings.Appearance().type == nil, "no font picker on General")
 		end },
-		{ "the first login asks how much to change: full, the dock, or census and notes", function()
-			-- HOW MUCH SHOULD IT CHANGE? (Josh 2026-09-25)
+		{ "the first login asks which features: six cards, a switch each", function()
+			-- WHICH FEATURES DO YOU WANT? (Josh 2026-09-27: "On startup we should
+			-- ask users which modules they want to enable")
 			local Wl = BT.Welcome
-			local was = {}
-			for k, v in pairs(BT.settings.modules or {}) do was[k] = v end
-			local wasSetup = BT.settings.setup
-			-- a fresh install is asked; one that has set its switches is not
-			BT.settings.modules, BT.settings.setup = {}, nil
-			assert(Wl.ShouldAsk(), "a fresh install is asked")
-			BT.settings.modules = { tips = false }
-			assert(not Wl.ShouldAsk() and BT.settings.setup == "kept", "one that has chosen switches is not")
-			local function on(key) return BT.Switched(key) end
-			-- just the dock
-			BT.settings.modules, BT.settings.setup = {}, nil
-			assert(Wl.Apply("dock") and BT.settings.setup == "dock", "the dock chosen")
-			assert(on("minimap") and on("tracker") and on("metrics") and on("xp") and on("micro") and on("clock"),
-				"the dock and what is on it stay")
-			assert(on("census") and on("ledger"), "and the census and your notes")
-			assert(not on("frames") and not on("buffs") and not on("bars") and not on("chat") and not on("tips")
-				and not on("bagwindow") and not on("charsheet") and not on("damagemeter") and not on("prd"),
-				"the unit frames, bars, bags, chat and tooltips go back to the game")
-			assert(on("gold") and BT.Enabled("gold"), "a readout goes with its panel")
-			-- census and notes
-			assert(Wl.Apply("census"), "the census chosen")
-			for _, m in ipairs(BT.Modules()) do
-				if not m.part then
-					local want = m.key == "census" or m.key == "ledger"
-					assert(on(m.key) == want, ("census and notes: %s %s"):format(m.key, tostring(on(m.key))))
+			local wasFeatures, wasAsked = {}, BT.settings.featuresAsked
+			for k, v in pairs(BT.settings.features or {}) do wasFeatures[k] = v end
+			BT.settings.featuresAsked = nil
+			assert(Wl.ShouldAsk(), "not asked yet: asked")
+			local f = Wl.Show()
+			assert(#f.cards == 6 and f:IsShown(), "six cards")
+			for i, feat in ipairs(BT.FEATURES) do
+				assert(f.cards[i].key == feat.key and f.cards[i].switch:IsOn(),
+					"every card starts as its feature is: " .. feat.key)
+				assert(f.cards[i].picture and f.cards[i].line:GetText() == feat.line, "with its picture and its line")
+			end
+			-- the unit frames off by their switch, the census by a click on its card
+			f.cards[2].switch:GetScript("OnClick")(f.cards[2].switch)
+			f.cards[4]:GetScript("OnClick")(f.cards[4])
+			assert(Wl.picks.frames == false and Wl.picks.census == false, "a switch, or the card, picks")
+			f.start:GetScript("OnClick")(f.start)
+			assert(not f:IsShown() and not Wl.ShouldAsk(), "Start closes it, and it is not asked again")
+			assert(not BT.FeatureOn("frames") and not BT.Enabled("frames") and not BT.Enabled("buffs")
+				and not BT.Enabled("prd"), "the unit frames are off, every part of them")
+			assert(BT.Switched("frames") and BT.Switched("buffs"),
+				"each part keeping its own switch, for when they come back")
+			assert(not BT.Enabled("census") and BT.Enabled("ledger") and BT.Enabled("minimap"),
+				"the census off, the rest on")
+			-- the rail folds the unit frames away, and keeps their heading
+			BT.Window.Rebuild()
+			for _, tab in ipairs(BT.Window.Tabs()) do
+				if tab.key and tab:IsShown() then
+					assert(tab.group ~= "frames", "no tab of a feature that is off: " .. tab.key)
 				end
 			end
-			assert(not BT.Enabled("gold"), "and the readouts are off with the panel they sit on")
-			-- the dock stays, as the name, the census's icon and the cog
-			assert(BT.Bar.Frame():IsShown(), "and the dock is just its header")
-			-- full
-			assert(Wl.Apply("full"), "everything chosen")
-			for _, m in ipairs(BT.Modules()) do
-				assert(on(m.key), "full: " .. m.key)
+			assert(BT.Window.Blocks().frames:IsShown() and not BT.Window.Blocks().frames.switch:IsOn(),
+				"its heading stays, its switch off")
+			-- None, then All
+			Wl.Show()
+			f.none:GetScript("OnClick")(f.none)
+			for _, card in ipairs(f.cards) do
+				assert(not card.switch:IsOn(), "None: " .. card.key)
 			end
-			-- the window: three choices, and a choice closes it
-			local f = Wl.Show()
-			assert(#f.choices == 3 and f:IsShown(), "three choices")
-			f.choices[3]:GetScript("OnClick")(f.choices[3])
-			assert(not f:IsShown() and BT.settings.setup == "census", "choosing closes it and sets it up")
+			f.all:GetScript("OnClick")(f.all)
+			f.start:GetScript("OnClick")(f.start)
+			for _, feat in ipairs(BT.FEATURES) do
+				assert(BT.FeatureOn(feat.key), "All: " .. feat.key)
+			end
+			assert(BT.Enabled("frames") and BT.Enabled("buffs") and BT.Enabled("census"),
+				"and what was in them is back")
 			assert(BT.Settings.chooseButton, "and the General page can ask again")
 			-- back as it was, for the tests that follow
-			Wl.Apply("full")
-			BT.settings.modules = was
-			for k, v in pairs(was) do BT.SetEnabled(k, v) end
-			BT.settings.setup = wasSetup
+			for _, feat in ipairs(BT.FEATURES) do
+				BT.SetFeature(feat.key, wasFeatures[feat.key] ~= false)
+			end
+			BT.settings.featuresAsked = wasAsked
 		end },
 		{ "made-up data fills every feature for screenshots, and none of it is saved", function()
 			-- MADE-UP DATA (Josh 2026-09-27): the census, ledger and menagerie
@@ -8656,12 +8697,32 @@ if ok then
 			BT.Bar.SetShown(true)
 			assert(BT.Bar.Row():IsShown(), "and comes back")
 
-			-- with nothing following, no row and no census, there is nothing
-			-- to show
+			-- with nothing following, no row and no census, the dock is its
+			-- logo and its cog, and nothing switches those off (Josh 2026-09-27)
 			BT.SetEnabled("tracker", false)
 			BT.SetEnabled("census", false)
 			BT.Bar.SetShown(false)
-			assert(not dock:IsShown(), "an empty dock does not sit there being empty")
+			assert(dock:IsShown() and BT.Bar.Frame().cog:IsShown() and BT.Bar.Frame().header.title:GetText():find("Mod"),
+				"an empty dock is its logo and its cog")
+			BT.SetEnabled("tracker", true)
+			BT.SetEnabled("census", true)
+			BT.Bar.SetShown(true)
+			-- THE DOCK SWITCHED OFF: everything in it goes, whoever's it is -
+			-- the Ledger's row, the tracker, the Census's icon - but the header
+			BT.SetFeature("dock", false)
+			assert(dock:IsShown() and BT.Bar.Frame().cog:IsShown(), "the Dock off: its logo and cog stay")
+			assert(not BT.Bar.Row():IsShown() and not section:IsShown(),
+				"and nothing under them: no row, no quests")
+			assert(BT.Enabled("census") and not BT.Bar.Frame().census:IsShown(),
+				"the Census still on, its icon gone with the dock")
+			assert(not BT.Enabled("tracker") and not BT.Enabled("minimap") and BT.Switched("tracker"),
+				"the dock's own parts off, each keeping its switch")
+			BT.SetFeature("dock", true)
+			assert(BT.Bar.Row():IsShown() and section:IsShown() and BT.Bar.Frame().census:IsShown(),
+				"and all of it back with the Dock")
+			BT.SetEnabled("tracker", false)
+			BT.SetEnabled("census", false)
+			BT.Bar.SetShown(false)
 			-- THE CENSUS ON ITS OWN (Josh 2026-09-24): the name, its icon and
 			-- the cog, and nothing under them
 			BT.SetEnabled("census", true)
