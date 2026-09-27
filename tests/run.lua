@@ -1816,6 +1816,15 @@ do
 	check(got[3] == sources[1] .. ":loot" and #got == 3, "a looted corpse is a kill; a living pocket is not")
 	K.Loot(T + 3)
 	check(#got == 3, "looting it again counts nothing")
+	-- ITS OWN EYE ON PICK POCKET (2026-09-27): the pocket's window, just after
+	-- the cast, is no corpse - the Menagerie watches for the cast itself, with
+	-- the Dock's readout off or not there at all
+	sources[1] = "Creature-0-1-2-3-3098-H"
+	check(K.Cast(921, T + 4) and not K.Cast(133, T + 4), "Pick Pocket is seen, a fireball is not")
+	K.Loot(T + 5)
+	check(#got == 3, "the loot window right after it is a pocket, not a kill")
+	K.Loot(T + 9)
+	check(got[4] == sources[1] .. ":loot", "and a loot window later on is a corpse again")
 	-- a reload: what was counted stays counted
 	local set = { [B] = true }
 	K.Reset(set)
@@ -1823,7 +1832,7 @@ do
 	units.nameplate1 = mob(B, "Highlands Bandit", { dead = true })
 	K.plates.nameplate1 = true
 	K.Scan(T + 4)
-	check(#got == 3, "a corpse counted before a reload is not counted again")
+	check(#got == 4, "a corpse counted before a reload is not counted again")
 	check(K.XPName("Vuldren dies, you gain 50 experience. (25 exp Rested bonus)") == "Vuldren",
 		"the rested form of the XP line names the mob too")
 	K.plates.nameplate1 = nil

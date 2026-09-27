@@ -409,7 +409,15 @@ for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UN
 	"PLAYER_ENTERING_WORLD" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
-M.events:SetScript("OnEvent", function(_, event, a, b)
+-- your own casts, for Pick Pocket (Modules/Menagerie/Kills.lua, K.Cast)
+do
+	local ok = M.events.RegisterUnitEvent
+		and pcall(M.events.RegisterUnitEvent, M.events, "UNIT_SPELLCAST_SUCCEEDED", "player")
+	if not ok then
+		pcall(M.events.RegisterEvent, M.events, "UNIT_SPELLCAST_SUCCEEDED")
+	end
+end
+M.events:SetScript("OnEvent", function(_, event, a, b, c)
 	if not BT.Enabled("menagerie") then
 		return
 	end
@@ -427,6 +435,10 @@ M.events:SetScript("OnEvent", function(_, event, a, b)
 		K.Observe("mouseover")
 	elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
 		K.XP(a)
+	elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+		if a == "player" then
+			K.Cast(c)
+		end
 	elseif event == "LOOT_READY" then
 		K.Loot()
 	elseif event == "PLAYER_ENTERING_WORLD" then

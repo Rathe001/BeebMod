@@ -352,10 +352,35 @@ function K.Settle(t)
 	end
 end
 
+-- ITS OWN EYE ON PICK POCKET (Josh 2026-09-27: "each of those modules should
+-- work independently"). This asked the Pick Pocket readout when you last
+-- picked a pocket - and that readout is part of the Dock, and only watches
+-- while it is on: with the Dock off, a picked pocket's loot window would
+-- have been taken for a corpse's. The Menagerie watches for the cast itself.
+local PICK_POCKET = 921
+local pickName
+
+-- a spell you cast (UNIT_SPELLCAST_SUCCEEDED): Pick Pocket, by its id or by
+-- its name in any rank
+function K.Cast(spellID, t)
+	local isPick = spellID == PICK_POCKET
+	if not isPick and type(GetSpellInfo) == "function" then
+		if not pickName then
+			local ok, name = pcall(GetSpellInfo, PICK_POCKET)
+			pickName = (ok and type(name) == "string") and name or "Pick Pocket"
+		end
+		local ok, name = pcall(GetSpellInfo, spellID)
+		isPick = ok and name == pickName
+	end
+	if isPick then
+		K.pickedAt = t or now()
+	end
+	return isPick
+end
+
 -- is somebody picking this pocket? (then the loot is a living mob's)
 local function pickpocketing(t)
-	local pp = BT.GetModule and BT.GetModule("pickpocket")
-	return pp and pp.castAt and t - pp.castAt <= 3
+	return K.pickedAt ~= nil and t - K.pickedAt <= 3
 end
 
 -- Every corpse in the loot window. Loot you may take is loot from a kill
