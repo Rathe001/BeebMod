@@ -3437,6 +3437,44 @@ if ok then
 			assert(BT.Window.Group("frames") == "frames", "in the Unit frames feature on the rail")
 			assert(BT.moduleErrors == nil, "and no module error: " .. table.concat(BT.moduleErrors or {}, " | "))
 		end },
+		{ "a raid marker shows on the frames, a secret one drawn by the client", function()
+			-- (Josh 2026-09-27: "Target markers don't seem to be showing on these
+			-- unit frames")
+			local F, M = BT.UnitFrames, BT.GetModule("frames")
+			-- the target's frame: your own is a cell of the client's party header,
+			-- which the stub does not build, and paints the same way
+			local cell = M.singles.target
+			assert(cell and cell.marker, "the target's frame, with a place for a mark")
+			local wasIndex, wasIcon = _G.GetRaidTargetIndex, _G.SetRaidTargetIconTexture
+			local drawn
+			_G.SetRaidTargetIconTexture = function(tex, i)
+				-- the client's own call does sums with the mark: a secret throws
+				if _G.issecretvalue(i) then error("attempt to perform arithmetic on a secret value") end
+				drawn = i
+			end
+			-- a mark the client says plainly
+			_G.GetRaidTargetIndex = function(unit) return unit == "target" and 8 or nil end
+			F.Paint(cell, F.Source("target"))
+			assert(cell.marker._shown ~= false and drawn == 8, "a skull said plainly is drawn")
+			-- and one it keeps secret: handed to a call that takes it
+			_G.secretMeasurements = true
+			_G.GetRaidTargetIndex = function(unit) return unit == "target" and _G.SECRET_WIDTH or nil end
+			local cellDrawn
+			cell.marker.SetSpriteSheetCell = function(_, c) cellDrawn = c end
+			F.markerWith = nil
+			F.Paint(cell, F.Source("target"))
+			assert(cell.marker._shown ~= false and cellDrawn == _G.SECRET_WIDTH and F.markerWith == "SetSpriteSheetCell",
+				"a secret mark is drawn by the sheet, never read: " .. tostring(F.markerWith))
+			SlashCmdList.BEEBSTOOLKIT("marker")
+			-- no mark at all: none shown
+			_G.GetRaidTargetIndex = function() return nil end
+			F.Paint(cell, F.Source("target"))
+			assert(cell.marker._shown == false, "no mark, none shown")
+			_G.secretMeasurements = false
+			cell.marker.SetSpriteSheetCell = nil
+			_G.GetRaidTargetIndex, _G.SetRaidTargetIconTexture = wasIndex, wasIcon
+			F.markerWith = nil
+		end },
 		{ "one face for everything the toolkit writes", function()
 			-- OUR FONT OBJECTS (Josh 2026-09-23): the game's are shared with
 			-- every other addon, so the toolkit asks for twins of them

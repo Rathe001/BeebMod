@@ -50,6 +50,30 @@ local function secret(v)
 end
 F.Secret = secret
 
+-- A SECRET MARK, DRAWN BY THE CLIENT (Josh 2026-09-27). The mark on a unit may
+-- come back as a secret: nothing of ours may read it, compare it or do sums
+-- with it, but a call of the client's may be handed it. The client's own
+-- icon call first, then a sprite sheet's cell - the sheet is four by four,
+-- the marks its first eight - and whichever this client takes is kept in
+-- F.markerWith for /bt marker. True when the mark is drawn.
+function F.DrawMarker(tex, marker)
+	if F.markerWith ~= false and _G.SetRaidTargetIconTexture and F.markerWith ~= "SetSpriteSheetCell" then
+		if pcall(_G.SetRaidTargetIconTexture, tex, marker) then
+			F.markerWith = "SetRaidTargetIconTexture"
+			return true
+		end
+	end
+	if tex.SetSpriteSheetCell then
+		tex:SetTexCoord(0, 1, 0, 1)
+		if pcall(tex.SetSpriteSheetCell, tex, marker, 4, 4) then
+			F.markerWith = "SetSpriteSheetCell"
+			return true
+		end
+	end
+	F.markerWith = false
+	return false
+end
+
 -- a plain value from the client, or nil when it will not say or says in secret
 local function plain(fn, ...)
 	if type(fn) ~= "function" then
@@ -380,7 +404,17 @@ function Live:Threat()
 	end
 	return plain(UnitThreatSituation, self.unit)
 end
-function Live:Marker() return plain(GetRaidTargetIndex, self.unit) end
+-- THE MARK AS THE CLIENT GIVES IT (Josh 2026-09-27: "Target markers don't
+-- seem to be showing on these unit frames"). Handed back as it came - a
+-- secret included - because a secret mark can still be drawn by the client
+-- (F.DrawMarker), and plain() read one as no mark at all.
+function Live:Marker()
+	if type(GetRaidTargetIndex) ~= "function" then
+		return nil
+	end
+	local ok, v = pcall(GetRaidTargetIndex, self.unit)
+	return ok and v or nil
+end
 function Live:Leader() return plain(UnitIsGroupLeader, self.unit) and true or false end
 -- A RESURRECTION ON ITS WAY, A SUMMON WAITING (Josh 2026-09-23): plain answers,
 -- both. A summon is 0 none, 1 waiting, 2 taken, 3 turned down.
@@ -1216,7 +1250,10 @@ function F.Paint(b, src)
 
 	-- the marks
 	local marker = src:Marker()
-	if type(marker) == "number" and marker > 0 and marker <= 8 then
+	if secret(marker) then
+		-- never read, only handed to the client to draw
+		b.marker:SetShown(F.DrawMarker(b.marker, marker))
+	elseif type(marker) == "number" and marker > 0 and marker <= 8 then
 		if _G.SetRaidTargetIconTexture then
 			_G.SetRaidTargetIconTexture(b.marker, marker)
 		else

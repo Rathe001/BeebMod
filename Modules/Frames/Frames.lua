@@ -754,6 +754,34 @@ local PLAYER_ONLY = {
 
 local ENEMY_FRAMES = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 
+-- WHO IS MARKED, AS THE CLIENT SAYS IT (Josh 2026-09-27): for you and your
+-- target, whether the client answers with the mark, with nothing, or with a
+-- secret; which of its calls drew a secret one; and whether the frame shows it
+BT.Command("marker", function()
+	local U = BT.Util
+	for _, unit in ipairs({ "player", "target" }) do
+		if UnitExists and UnitExists(unit) then
+			local v = F.Source(unit):Marker()
+			local said = F.Secret(v) and "a secret" or (v == nil and "nothing" or tostring(v))
+			local frame
+			if unit == "target" then
+				frame = M.singles and M.singles.target
+			else
+				for _, child in ipairs(M.Cells()) do
+					if child.bmUnit == "player" then
+						frame = child
+					end
+				end
+			end
+			local shows = frame and frame.marker and frame.marker:IsShown()
+			U.Print(("marker · %s: the client says %s · the frame %s"):format(unit, said,
+				frame and (shows and "shows it" or "shows none") or "is not there"))
+		end
+	end
+	U.Print("marker · a secret one is drawn by: " .. (F.markerWith == nil and "none needed yet"
+		or F.markerWith == false and "|cffff6b6bnothing this client takes|r" or F.markerWith))
+end, "marker - whether the unit frames can see who is marked", "frames")
+
 -- every group cell there is, in every header
 function M.Cells()
 	local out = {}
