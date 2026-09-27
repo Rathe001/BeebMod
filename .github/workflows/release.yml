@@ -58,3 +58,20 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+
+      # WOWUP KNOWS NO WOW: FOREVER (Josh 2026-09-27: installing from the
+      # GitHub link worked, updating did not). WowUp takes a Forever install
+      # for a MoP Classic beta one and looks in release.json for a zip marked
+      # "mists"; the packager rightly marks ours "forever", so WowUp's update
+      # found nothing. The same zip is listed for "mists" as well - on the
+      # GitHub release only; CurseForge and the game are untouched.
+      - name: Let WowUp find the zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release download "$GITHUB_REF_NAME" -p release.json -O release.json --clobber
+          jq -c '.releases[].metadata |= (if any(.[]; .flavor == "mists") then . else . + [{flavor: "mists", interface: .[0].interface}] end)' release.json > patched.json
+          cat patched.json
+          mv patched.json release.json
+          gh release upload "$GITHUB_REF_NAME" release.json --clobber
