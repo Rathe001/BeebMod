@@ -421,6 +421,12 @@ handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
 	if C_GuildInfo and C_GuildInfo.GuildRoster then
 		C_GuildInfo.GuildRoster()
 	end
+	-- and the friends list, which the client sends only when asked: the
+	-- hidden channel used to ask at login (Core/CommsProbe.lua, gone with
+	-- the sharing, Josh 2026-09-26), and FRIENDLIST_UPDATE files what comes
+	if C_FriendList and C_FriendList.ShowFriends then
+		pcall(C_FriendList.ShowFriends)
+	end
 	-- pruning belongs at a quiet moment, not at logout where it would sit in
 	-- front of the saved-variables write
 	if BT.db and (BT.settings.pruneDays or 0) > 0 then

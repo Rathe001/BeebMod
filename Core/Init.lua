@@ -79,7 +79,7 @@ BT.NAME = ADDON
 -- book lives in, and this client is already bad enough at handing that back.
 BT.TITLE = "BeebMod"
 BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-beta.4"
-BT.SCHEMA = 12
+BT.SCHEMA = 13
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. /bt debug prints it, so "did the reload take?" is never a guess.
 BT.BUILD = "2026-09-26-popup"
@@ -505,6 +505,19 @@ end
 -- boot reports. A zone-in with the same book already bound only tells the
 -- modules again: the client re-lays some of its frames out on a loading
 -- screen, and they put their dressing back. Anything else is a full Bind.
+-- THE CENSUS UNSHARED (schema 13, Josh 2026-09-26: "kill the whole census
+-- sharing concept"): what other copies told us is not ours, and nor are the
+-- settings and the log the sharing kept. Once, on the login after it went.
+function BT.Unshare()
+	BT.heardDropped = BT.DB and BT.DB.DropHeard(BeebModDB.realms) or 0
+	BeebModDB.commsProbe = nil
+	local s = BeebModDB.settings
+	if s then
+		s.shareCensus, s.commsHello = nil, nil
+	end
+	return BT.heardDropped
+end
+
 function BT.Rebind(realm, faction)
 	local key = BT.ScopeKey(realm, faction)
 	if BT.db and BT.scope and BT.scope.key == key and type(BeebModDB) == "table"
@@ -570,6 +583,9 @@ function BT.Bind(realm, faction)
 		local slimmed = BT.DB.Slim(BT.db)
 		if slimmed > 0 then
 			BT.slimmedOnLoad = slimmed
+		end
+		if wasSchema < 13 then
+			BT.Unshare()
 		end
 	end
 	BT.boot.bound = key

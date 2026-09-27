@@ -32,6 +32,8 @@
 --   22    2   seen           capped at 4095
 --   24    1   bits           1 = vouched for by a list the client builds,
 --                             2 = heard from another copy, not seen yourself
+--                                 (the census is no longer shared: read only
+--                                 so DB.DropHeard can find such a row)
 --   25    1   server         the realm number in the GUID, words.server
 --   26    6   guid           the rest of the GUID, as a number
 --   32    9n  guild history  guild 3, first 3 (hours), last 3 (hours) each
@@ -323,6 +325,11 @@ end
 -- Just the last sighting, for sorting the book by age without unpacking it.
 function P.Last(s)
 	return at(dec(s, 9, 4), 60)
+end
+
+-- whether a packed row was heard from another copy of BeebMod, not seen
+function P.Heard(s)
+	return math.floor(VALUE[byte(s, 24)] / 2) % 2 == 1
 end
 
 -- and the level, for the same reason (nil when none is on file)

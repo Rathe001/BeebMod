@@ -405,22 +405,11 @@ function DB.Note(db, name, realm, info, now)
 		p = { name = short, realm = rname, first = now, seen = 0 }
 		db.players[key] = p
 	end
-	-- HEARD IS NOT SEEN (Josh 2026-09-25, the census shared: Core/Share.lua).
-	-- A character another copy of BeebMod saw arrives with `info.heard`: it
-	-- is filed, but marked as heard until you see them yourself; it never
-	-- counts as a sighting of yours, never overwrites a guild you saw more
-	-- recently, only fills in a class or race you did not have, and - being
-	-- nobody's news of yours - is never passed on again. What it was before,
-	-- to tell afterwards whether this sighting of yours is news worth sharing:
-	local heard = info.heard and true or false
-	local was = { last = p.last, level = p.level, guild = p.guild }
-	if heard then
-		if was.last == nil then
-			p.heard = true
-		end
-	else
-		p.heard = nil
-	end
+	-- ONLY WHAT YOU SAW (Josh 2026-09-26: "kill the whole census sharing
+	-- concept. Players will only see census data for what they collect").
+	-- A row heard from another copy of BeebMod is gone at login
+	-- (DB.DropHeard); a mark left on one is wiped by your own sighting.
+	p.heard = nil
 	-- a name may gain a surname, never lose one: whatever the source, the
 	-- fuller spelling of a character is the true one
 	if not (p.name and U.HasSurname(p.name) and not U.HasSurname(short)) then
@@ -464,48 +453,28 @@ function DB.Note(db, name, realm, info, now)
 	-- lines above have just taken those off the row, and copying them back in
 	-- here put them on every row again, one sighting at a time
 	for _, f in ipairs({ "class", "race", "guid" }) do
-		if info[f] ~= nil and not (heard and p[f] ~= nil) then
+		if info[f] ~= nil then
 			p[f] = info[f]
 		end
 	end
-	if info.zone ~= nil and not heard then
+	if info.zone ~= nil then
 		p.zone, p.zoneAt = info.zone, now
 	end
-	if info.guild ~= nil and not (heard and (p.guildAt or 0) >= now) then
+	if info.guild ~= nil then
 		DB.SetGuild(p, info.guild, now)
 	end
 	-- LISTED IS NOT SEEN (Josh 2026-09-23, audit): the guild roster names
 	-- offline members too, and marking them seen every minute kept them from
 	-- ever ageing out, and counted a sighting of the whole guild each pass. A
 	-- listed row takes what it is told and keeps its last sighting.
-	if heard then
-		p.last = math.max(p.last or 0, now)
-	elseif not info.listed or not p.last then
+	if not info.listed or not p.last then
 		p.last = now
 	end
-	if not info.listed and not heard then
+	if not info.listed then
 		p.seen = (p.seen or 0) + 1
 		db.stats.sightings = (db.stats.sightings or 0) + 1
 	end
 	touched()
-	-- NEWS, FOR THE CENSUS SHARED: a sighting of yours that says something the
-	-- others may not know - somebody new, somebody seen for the first time
-	-- today, a new level, a new guild. Everything else stays here.
-	if not heard and not info.listed and DB.OnNews then
-		local kind
-		if was.last == nil then
-			kind = "new"
-		elseif p.level ~= was.level then
-			kind = "level"
-		elseif p.guild ~= was.guild then
-			kind = "guild"
-		elseif math.floor(was.last / 86400) < math.floor(now / 86400) then
-			kind = "today"
-		end
-		if kind then
-			pcall(DB.OnNews, db, key, kind)
-		end
-	end
 	return p
 end
 
@@ -731,6 +700,35 @@ function DB.Cleanup(db)
 				DB.Guids(db)[p.guid] = nil
 			end
 			gone = gone + 1
+		end
+	end
+	if gone > 0 then
+		touched()
+	end
+	return gone
+end
+
+-- NOTHING HEARD (Josh 2026-09-26: "kill the whole census sharing concept.
+-- Players will only see census data for what they collect"; "Delete heard
+-- rows"). Every row, in every book, that another copy of BeebMod told us of
+-- and we never saw ourselves - never one written on. What a heard sighting
+-- added to a row we had seen carries no mark and stays: a class, a newer
+-- guild. Returns how many went.
+function DB.DropHeard(realms)
+	local gone = 0
+	for _, book in pairs(realms or {}) do
+		local players = type(book) == "table" and book.players
+		for key, p in pairs(players or {}) do
+			local heard
+			if type(p) == "string" then
+				heard = #p >= 24 and BT.Pack.Heard(p)
+			elseif type(p) == "table" then
+				heard = p.heard == true and not DB.IsMine(p)
+			end
+			if heard then
+				players[key] = nil
+				gone = gone + 1
+			end
 		end
 	end
 	if gone > 0 then

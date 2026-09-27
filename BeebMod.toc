@@ -111,5 +111,3 @@ Core\Slash.lua
 Core\Profile.lua
 # what the client will tell a unit frame: /bt unitprobe
 Core\UnitProbe.lua
-Core\CommsProbe.lua
-Core\Share.lua

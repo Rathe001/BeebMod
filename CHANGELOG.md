@@ -7,6 +7,13 @@ game and the addon settle.
 
 ## Unreleased
 
+- **The census is no longer shared.** It holds only the characters you see
+  yourself. The hidden channel, the hellos to other BeebMod users, the
+  newer-build notice, "Share with other BeebMod users" and `/bt share` and
+  `/bt comms` are gone. On the first login after this version, every
+  character that was only heard from another copy - never seen by you, never
+  written on - leaves the book, and so do the sharing's settings and log.
+  The friends list is still asked for at login, so friends reach the book.
 - **The Menagerie**: a journal of every kind of mob you have killed, rares
   and elites among them, as a card each, five across. A rail down the left
   files them by creature type or by the zone you first met them in - All
