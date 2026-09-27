@@ -3527,6 +3527,7 @@ if ok then
 				assert(f.cards[i].key == feat.key and f.cards[i].switch:IsOn(),
 					"every card starts as its feature is: " .. feat.key)
 				assert(f.cards[i].picture and f.cards[i].line:GetText() == feat.line, "with its picture and its line")
+				assert(feat.art and f.cards[i].picture.name._shown == false, "the screenshot, not the stand-in: " .. feat.key)
 			end
 			-- the unit frames off by their switch, the census by a click on its card
 			f.cards[2].switch:GetScript("OnClick")(f.cards[2].switch)

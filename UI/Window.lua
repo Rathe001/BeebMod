@@ -760,6 +760,9 @@ end
 -- the picture of a feature: its screenshot, or its colour and name until
 -- there is one (BT.FEATURES[n].art)
 local PIC_W, PIC_H = 320, 180
+-- the picture is the left 455 of a 512-wide texture (a power of two each
+-- way): scripts/make-feature-art.ps1
+local FEATURE_ART_U = 455 / 512
 function W.Picture(parent, f, w, h)
 	w, h = w or PIC_W, h or PIC_H
 	local pic = CreateFrame("Frame", nil, parent)
@@ -776,6 +779,7 @@ function W.Picture(parent, f, w, h)
 	pic.name:SetTextColor(c[1], c[2], c[3])
 	if f.art then
 		pic.art:SetTexture(f.art)
+		pic.art:SetTexCoord(0, FEATURE_ART_U, 0, 1)
 		pic.name:Hide()
 	else
 		pic.art:Hide()

@@ -325,17 +325,20 @@ end
 -- back into the settings whatever is switched off (UI/Bar.lua).
 -- ---------------------------------------------------------------------------
 BT.FEATURES = {
-	{ key = "dock", title = "Dock", color = { 0.45, 0.75, 0.99 },
+	-- each with its picture (Art/Features, made by scripts/make-feature-art.ps1
+	-- from screenshots taken with /bt demo on, Josh 2026-09-27)
+	{ key = "dock", title = "Dock", color = { 0.45, 0.75, 0.99 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock",
 		line = "A panel at the side of the screen: minimap, clock, experience and reputation, gold, bags, durability, the quest tracker." },
-	{ key = "frames", title = "Unit frames", color = { 0.49, 0.77, 0.48 },
+	{ key = "frames", title = "Unit frames", color = { 0.49, 0.77, 0.48 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\frames",
 		line = "Your frame, your party and raid, target and focus, buffs, and your heals and damage over time as bars." },
-	{ key = "interface", title = "Interface", color = { 0.88, 0.64, 0.29 },
+	{ key = "interface", title = "Interface", color = { 0.88, 0.64, 0.29 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface",
 		line = "The game's own windows in BeebMod's look: action bars, bags, chat, the character sheet, tooltips and menus." },
-	{ key = "census", title = "Census", color = { 0.69, 0.56, 0.88 }, single = "census",
+	{ key = "census", title = "Census", color = { 0.69, 0.56, 0.88 }, single = "census", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\census",
 		line = "Every character you see, written down: who is on your realm, by class, race, level, guild and zone." },
-	{ key = "ledger", title = "Ledger", color = { 0.90, 0.81, 0.42 }, single = "ledger",
+	{ key = "ledger", title = "Ledger", color = { 0.90, 0.81, 0.42 }, single = "ledger", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger",
 		line = "Notes, tags and a rating on the people you meet, shown on their tooltip and in the dock when you target them." },
 	{ key = "menagerie", title = "Menagerie", color = { 0.44, 0.64, 0.80 }, single = "menagerie",
+		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\menagerie",
 		line = "A journal of every kind of mob you kill: a card for each, its lore, masteries, ranks and achievements." },
 }
 local featureByKey = {}
