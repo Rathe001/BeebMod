@@ -66,6 +66,7 @@ Modules\Ledger\Ledger.lua
 Modules\Census\Stats.lua
 Modules\Census\Chart.lua
 Modules\Census\Census.lua
+Modules\Census\Book.lua
 Modules\Tips\Tips.lua
 Modules\Tracker\Quests.lua
 Modules\Tracker\Tracker.lua

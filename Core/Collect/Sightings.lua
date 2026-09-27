@@ -35,34 +35,9 @@ local function zone()
 	return (GetRealZoneText and GetRealZoneText()) or (GetZoneText and GetZoneText()) or nil
 end
 
--- The FULL name of a unit (Josh 2026-09-18). The ledger filled up with
--- one-word names - "Arch", "Boe", "Night" - beside full ones from chat, which
--- is the same character twice. Whichever of these calls this build answers
--- with both halves, we take: the longest answer wins, and a GUID stitches the
--- halves together anyway (Core/DB.lua).
-function C.UnitFullName(unit)
-	-- On 1.60.1.69893: GetUnitName -> "Febbys Stormseeker", UnitName and
-	-- UnitFullName -> "Febbys". GetUnitName leads for that reason; the others
-	-- stay as a fallback, and the longest answer wins if a build changes its
-	-- mind (Josh 2026-09-18, /bt names).
-	local best, realm
-	local candidates = {
-		{ GetUnitName and GetUnitName(unit, false) },
-		{ UnitFullName and UnitFullName(unit) },
-		{ UnitName and UnitName(unit) },
-	}
-	for _, got in ipairs(candidates) do
-		local n, r = got[1], got[2]
-		if type(n) == "string" and n ~= "" and n ~= UNKNOWNOBJECT then
-			n = n:match("^([^%-]+)") or n -- GetUnitName can append "-Realm"
-			if not best or #n > #best then
-				best = n
-			end
-			realm = realm or r
-		end
-	end
-	return best, realm
-end
+-- The full name of a unit is the core's now (U.UnitFullName): the ledger and
+-- the tooltips want it without a census. The old name stays for callers.
+C.UnitFullName = function(unit) return U.UnitFullName(unit) end
 
 -- A unit token you can still see: the best kind of sighting.
 function C.FromUnit(unit)

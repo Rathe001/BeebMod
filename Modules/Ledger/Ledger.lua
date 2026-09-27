@@ -104,7 +104,7 @@ local function currentTarget()
 	if not (UnitExists and UnitExists("target") and UnitIsPlayer and UnitIsPlayer("target")) then
 		return nil
 	end
-	local name, realm = BT.Collect.UnitFullName("target")
+	local name, realm = BT.Util.UnitFullName("target")
 	if not name then
 		return nil
 	end

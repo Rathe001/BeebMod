@@ -312,7 +312,7 @@ function T.Fill(tip, unit)
 	-- the SAME name resolution the collector uses: UnitName gives only the
 	-- given name on this client, so looking up "Beeb" would never find the
 	-- record filed under "Beeb Bob" (Josh 2026-09-18)
-	local name, realm = BT.Collect.UnitFullName(unit)
+	local name, realm = BT.Util.UnitFullName(unit)
 	local key = name and U.Key(name, realm)
 	local p = key and DB.Get(db, key)
 	if not p then

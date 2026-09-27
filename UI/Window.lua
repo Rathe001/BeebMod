@@ -1117,9 +1117,12 @@ function W.UpdateSubtitle()
 	if not frame then
 		return
 	end
-	local s = BT.DB.Stats(BT.db)
-	frame.subtitle:SetText(("%s · %s · %d characters")
-		:format(BT.scope and BT.scope.realm or "?", BT.scope and BT.scope.faction or "?", s.total))
+	-- the realm and side always; how many characters only with a census
+	local where = ("%s · %s"):format(BT.scope and BT.scope.realm or "?", BT.scope and BT.scope.faction or "?")
+	if BT.DB and BT.db then
+		where = ("%s · %d characters"):format(where, BT.DB.Stats(BT.db).total)
+	end
+	frame.subtitle:SetText(where)
 end
 
 -- the version, and whether the book came back the way it should

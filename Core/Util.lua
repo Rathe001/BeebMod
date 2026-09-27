@@ -264,7 +264,40 @@ function U.Colorize(text, class)
 	return ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255), math.floor(g * 255), math.floor(b * 255), text or "")
 end
 
+-- The FULL name of a unit (Josh 2026-09-18). The ledger filled up with
+-- one-word names - "Arch", "Boe", "Night" - beside full ones from chat, which
+-- is the same character twice. Whichever of these calls this build answers
+-- with both halves, we take: the longest answer wins, and a GUID stitches the
+-- halves together anyway (Core/DB.lua).
+function U.UnitFullName(unit)
+	-- On 1.60.1.69893: GetUnitName -> "Febbys Stormseeker", UnitName and
+	-- UnitFullName -> "Febbys". GetUnitName leads for that reason; the others
+	-- stay as a fallback, and the longest answer wins if a build changes its
+	-- mind (Josh 2026-09-18, /bt names).
+	local best, realm
+	local candidates = {
+		{ GetUnitName and GetUnitName(unit, false) },
+		{ UnitFullName and UnitFullName(unit) },
+		{ UnitName and UnitName(unit) },
+	}
+	for _, got in ipairs(candidates) do
+		local n, r = got[1], got[2]
+		if type(n) == "string" and n ~= "" and n ~= UNKNOWNOBJECT then
+			n = n:match("^([^%-]+)") or n -- GetUnitName can append "-Realm"
+			if not best or #n > #best then
+				best = n
+			end
+			realm = realm or r
+		end
+	end
+	return best, realm
+end
+
+-- a tag by its key; nothing when the Ledger, which keeps the tags, is not here
 function U.FlagByKey(key)
+	if not BT.AllFlags then
+		return nil
+	end
 	for _, f in ipairs(BT.AllFlags()) do
 		if f.key == key then
 			return f
