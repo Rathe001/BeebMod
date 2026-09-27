@@ -106,12 +106,38 @@ local function learn(w, unit)
 	end
 end
 
+-- WHERE ON THE MAP (Josh 2026-09-26: the zone's map behind the portrait, the
+-- patch of it where you met the mob). Our own spot, as the client's map has
+-- it, the moment it died - near enough the mob's, and the one place a kill
+-- is always in view of. Nothing, rather than a guess, in an instance or
+-- wherever the client will not say.
+function K.Where()
+	if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetPlayerMapPosition) then
+		return nil
+	end
+	local map = ask(C_Map.GetBestMapForUnit, "player")
+	if type(map) ~= "number" then
+		return nil
+	end
+	local pos = ask(C_Map.GetPlayerMapPosition, map, "player")
+	if type(pos) ~= "table" or type(pos.GetXY) ~= "function" then
+		return map
+	end
+	local ok, x, y = pcall(pos.GetXY, pos)
+	if not ok or secret(x) or secret(y) or type(x) ~= "number" or type(y) ~= "number" or (x == 0 and y == 0) then
+		return map
+	end
+	return map, x, y
+end
+
 -- the page's worth of a watched mob, for the journal
 local function info(guid, w)
+	local map, x, y = K.Where()
 	return {
 		guid = guid, npc = w.npc, name = w.name, kind = w.kind, family = w.family,
 		rank = w.rank, level = w.level, zone = w.zone,
 		myLevel = ask(UnitLevel, "player"),
+		map = map, mx = x, my = y,
 	}
 end
 

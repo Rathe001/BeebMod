@@ -9,7 +9,7 @@
 --
 --   Journal.lua   the book, the achievements and the arithmetic
 --   Kills.lua     what counts as a kill, with no combat log to ask
---   Toast.lua     "1000 kills on Barn Owl!"
+--   Toast.lua     "Gold mastery! 150 kills on Barn Owl"
 --   Window.lua    the journal
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Menagerie/Menagerie.lua")
@@ -20,11 +20,11 @@ local J, K, T = BT.Menagerie, BT.MenagerieKills, BT.MenagerieToast
 local M = BT.Module({
 	key = "menagerie",
 	group = "dock",
-	-- on the Progress page, beside Experience and Reputation
-	onPage = "progress",
 	title = "Menagerie",
 	blurb = "every kind of mob you have killed, and achievements for it",
 	order = 38,
+	-- A TAB OF ITS OWN (Josh 2026-09-25): on the right panel, so it goes where
+	-- its tab is dragged, and its settings have a page to grow into
 	dock = true,
 })
 
@@ -38,6 +38,8 @@ local INSET = 6
 local SCAN_EVERY = 0.2
 
 local WORDS = "|cff8a9894%s|r"
+-- the Menagerie's own colour: the blue of the loading screens' ink wash
+M.INK = { 0.44, 0.64, 0.80 }
 
 local big = BT.MenagerieWindow.Big
 
@@ -89,6 +91,7 @@ function M.Kill(info, how)
 	if not BT.Enabled("menagerie") then
 		return
 	end
+	local rankBefore = J.Rank((J.Score("char")))
 	local new, news = J.Kill(info)
 	local s = M.session
 	if s then
@@ -103,12 +106,14 @@ function M.Kill(info, how)
 	local icon = T.Icon(info.kind)
 	local name = info.name or ("#" .. info.npc)
 	if new and on("menagerieDiscover", false) then
-		T.Push({ head = "New to the Menagerie", text = name, icon = icon, onClick = openOn(info.npc) })
+		local _, worth = J.Worth(J.Store().mobs[info.npc])
+		T.Push({ head = "New to the Menagerie", text = name, points = worth, icon = icon,
+			onClick = openOn(info.npc) })
 	end
 	for _, a in ipairs(news or {}) do
-		if a.record then
+		if a.mastery then
 			T.Push({
-				head = "Kill Record!", text = ("%s kills on %s!"):format(big(a.need), name),
+				head = ("%s mastery!"):format(a.name), text = ("%s %s on %s"):format(big(a.need), a.need == 1 and "kill" or "kills", name),
 				points = a.points, icon = icon, onClick = openOn(info.npc),
 			})
 		else
@@ -118,6 +123,15 @@ function M.Kill(info, how)
 				onClick = function() BT.MenagerieWindow.Show(nil, "achievements") end,
 			})
 		end
+	end
+	-- a new rank last, once everything that earned it has been shown
+	local rank, title = J.Rank((J.Score("char")))
+	if rank > rankBefore then
+		T.Push({
+			head = "Menagerie rank", text = ("%s %s"):format(title, WORDS:format(("· rank %d of %d")
+				:format(rank, #J.RANKS))),
+			icon = T.RANK_ICON, onClick = function() BT.MenagerieWindow.Show(nil, "achievements") end,
+		})
 	end
 	M.Update()
 	BT.MenagerieWindow.Changed()
@@ -129,8 +143,13 @@ K.onKill = M.Kill
 -- The line and the bar
 -- ---------------------------------------------------------------------------
 
+-- THE RANK, NOT THE COUNT (Josh 2026-09-25): "Menagerie · Scholar", where
+-- it said how many kinds; the kinds are on the hover
+-- and where that rank stands (Josh 2026-09-25: "Novice (1/10)", so a player
+-- has an idea how far up it is)
 function M.Lines(points, st)
-	local left = ("Menagerie %s"):format(WORDS:format(("· %s kinds"):format(big(st.kinds))))
+	local rank, title = J.Rank(points)
+	local left = ("Menagerie %s"):format(WORDS:format(("· %s (%d/%d)"):format(title, rank, #J.RANKS)))
 	local right
 	if M.Shows() == "kills" then
 		right = ("%s %s"):format(big(st.total), WORDS:format("kills"))
@@ -153,12 +172,16 @@ function M.Update()
 	if w <= 0 then
 		return
 	end
-	-- the bar: from the last discovery milestone to the next
-	local prev, nextAt = J.NextDiscovery(st.kinds)
-	local share = nextAt and (st.kinds - prev) / (nextAt - prev) or 1
-	local a = BT.Widgets.ACCENT
+	-- the bar: from this rank to the next, full at the top
+	local _, _, prev, nextAt = J.Rank(points)
+	local share = nextAt and (points - prev) / (nextAt - prev) or 1
+	-- OWN COLOUR (Josh 2026-09-26): it wore Experience's accent, and two
+	-- orange rows read as one; it takes the loading screens' ink blue, for
+	-- its bar and for the band behind it
+	local a = M.INK
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(a[1], a[2], a[3], 0.9)
+	BT.Bar.BandColor(M.frame, a)
 	-- a texture of no width is drawn as a whole one, so an empty part is hidden
 	M.fill:SetShown(share > 0)
 	M.fill:SetWidth(math.max(1, w * math.min(1, share)))
@@ -168,7 +191,7 @@ function M.Tip()
 	if not (GameTooltip and BT.Bar and BT.Bar.Tip and J.Store()) then
 		return
 	end
-	local points, count, st = J.Score("char")
+	local points, count, st, kindPoints, masteryPoints = J.Score("char")
 	local allPoints, _, all = J.Score("account")
 	local s = M.session
 	BT.Bar.Tip(M.frame, function()
@@ -176,19 +199,25 @@ function M.Tip()
 		local function pair(l, r)
 			GameTooltip:AddDoubleLine(l, r, grey[1], grey[2], grey[3], 1, 1, 1)
 		end
-		GameTooltip:AddLine("Menagerie", 1, 1, 1)
-		pair("points", ("%s · %d achievements"):format(big(points), count))
+		local rank, title, _, nextAt, nextTitle = J.Rank(points)
+		GameTooltip:AddDoubleLine("Menagerie", ("%s · rank %d of %d"):format(title, rank, #J.RANKS),
+			1, 1, 1, 1, 1, 1)
+		if nextAt then
+			pair("next rank", ("%s at %s · %s to go"):format(nextTitle, big(nextAt), big(nextAt - points)))
+		end
+		pair("points", big(points))
+		kindPoints, masteryPoints = kindPoints or 0, masteryPoints or 0
+		pair("    from every kind", big(kindPoints))
+		pair("    from masteries", big(masteryPoints))
+		pair("    from achievements", ("%s · %d earned"):format(big(points - kindPoints - masteryPoints), count))
 		pair("kinds of mob", big(st.kinds))
 		pair("kills", big(st.total))
 		if s and (s.kills or 0) > 0 then
 			pair("this session", ("%s kills · %d new"):format(big(s.kills), s.new or 0))
 		end
 		if all.kinds ~= st.kinds or allPoints ~= points then
-			pair("all characters", ("%s points · %s kinds"):format(big(allPoints), big(all.kinds)))
-		end
-		local _, nextAt, title = J.NextDiscovery(st.kinds)
-		if nextAt then
-			pair("next", ("%s at %d kinds · %d to go"):format(title, nextAt, nextAt - st.kinds))
+			local _, allTitle = J.Rank(allPoints)
+			pair("all characters", ("%s · %s points · %s kinds"):format(allTitle, big(allPoints), big(all.kinds)))
 		end
 		GameTooltip:AddLine("click for the journal", 0.5, 0.55, 0.53)
 	end)
@@ -238,12 +267,145 @@ function M.Build()
 end
 
 -- ---------------------------------------------------------------------------
+-- The quest log, for lore
+-- ---------------------------------------------------------------------------
+--
+-- A quest's story is only to be had for the SELECTED quest (the client's own
+-- log shows one at a time), so each quest not yet kept is selected, read,
+-- and the selection put back - and never while the quest log is open in
+-- front of you, where it would jump about. A quest is read once: after that
+-- the journal has it (Journal.lua, J.QuestSeen).
+
+local function questCount()
+	if C_QuestLog and C_QuestLog.GetNumQuestLogEntries then
+		local ok, n = pcall(C_QuestLog.GetNumQuestLogEntries)
+		if ok then
+			return tonumber(n) or 0
+		end
+	end
+	if GetNumQuestLogEntries then
+		local ok, n = pcall(GetNumQuestLogEntries)
+		return ok and tonumber(n) or 0
+	end
+	return 0
+end
+
+-- title, is it a heading, quest id
+local function questEntry(i)
+	if GetQuestLogTitle then
+		local ok, title, _, _, isHeader, _, _, _, questID = pcall(GetQuestLogTitle, i)
+		if ok then
+			return title, isHeader, questID
+		end
+	end
+	if C_QuestLog and C_QuestLog.GetInfo then
+		local ok, info = pcall(C_QuestLog.GetInfo, i)
+		if ok and type(info) == "table" then
+			return info.title, info.isHeader, info.questID
+		end
+	end
+	return nil
+end
+
+local function questObjectives(i, questID)
+	local out = {}
+	if GetNumQuestLeaderBoards and GetQuestLogLeaderBoard then
+		local ok, n = pcall(GetNumQuestLeaderBoards, i)
+		for j = 1, (ok and tonumber(n) or 0) do
+			local okT, text = pcall(GetQuestLogLeaderBoard, j, i)
+			if okT and type(text) == "string" and text ~= "" then
+				out[#out + 1] = text
+			end
+		end
+	end
+	if #out == 0 and questID and C_QuestLog and C_QuestLog.GetNumQuestObjectives and GetQuestObjectiveInfo then
+		local ok, n = pcall(C_QuestLog.GetNumQuestObjectives, questID)
+		for j = 1, (ok and tonumber(n) or 0) do
+			local okT, text = pcall(GetQuestObjectiveInfo, questID, j, false)
+			if okT and type(text) == "string" and text ~= "" then
+				out[#out + 1] = text
+			end
+		end
+	end
+	return out
+end
+
+local function select_(i, questID)
+	if SelectQuestLogEntry then
+		return pcall(SelectQuestLogEntry, i)
+	elseif C_QuestLog and C_QuestLog.SetSelectedQuest and questID then
+		return pcall(C_QuestLog.SetSelectedQuest, questID)
+	end
+	return false
+end
+
+local function logOpen()
+	for _, name in ipairs({ "QuestLogFrame", "QuestLogDetailFrame", "QuestMapFrame", "WorldMapFrame" }) do
+		local f = _G[name]
+		if f and f.IsShown and f:IsShown() then
+			return true
+		end
+	end
+	return false
+end
+
+-- Read every quest in the log the journal has not kept yet. Returns how
+-- many were read.
+function M.ReadQuests()
+	local s = J.Store()
+	if not s or logOpen() or type(GetQuestLogQuestText) ~= "function" then
+		return 0
+	end
+	s.quests = s.quests or {}
+	local was = GetQuestLogSelection and select(2, pcall(GetQuestLogSelection))
+	local wasID = C_QuestLog and C_QuestLog.GetSelectedQuest and select(2, pcall(C_QuestLog.GetSelectedQuest))
+	local read, lore = 0, 0
+	for i = 1, questCount() do
+		local title, isHeader, questID = questEntry(i)
+		if title and not isHeader and questID and not s.quests[questID] and select_(i, questID) then
+			local ok, text = pcall(GetQuestLogQuestText, i)
+			if ok and type(text) == "string" and text ~= "" then
+				lore = lore + J.QuestSeen({ id = questID, title = title, text = text,
+					objectives = questObjectives(i, questID) })
+				read = read + 1
+			end
+		end
+	end
+	-- the selection put back as it was
+	if read > 0 then
+		if type(was) == "number" and SelectQuestLogEntry then
+			pcall(SelectQuestLogEntry, was)
+		elseif type(wasID) == "number" and C_QuestLog and C_QuestLog.SetSelectedQuest then
+			pcall(C_QuestLog.SetSelectedQuest, wasID)
+		end
+	end
+	if lore > 0 then
+		BT.MenagerieWindow.Changed()
+	end
+	return read, lore
+end
+
+-- the log changes often; read it a beat after it settles, not every time
+function M.QuestsChanged()
+	if M.questsPending or not (C_Timer and C_Timer.After) then
+		return
+	end
+	M.questsPending = true
+	C_Timer.After(2, function()
+		M.questsPending = nil
+		if BT.Enabled("menagerie") then
+			M.ReadQuests()
+		end
+	end)
+end
+
+-- ---------------------------------------------------------------------------
 -- Events
 -- ---------------------------------------------------------------------------
 
 M.events = CreateFrame("Frame")
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "UNIT_FLAGS",
-	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "CHAT_MSG_COMBAT_XP_GAIN", "LOOT_READY",
+	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "CHAT_MSG_COMBAT_XP_GAIN", "LOOT_READY", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE",
 	"PLAYER_ENTERING_WORLD" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
@@ -269,6 +431,9 @@ M.events:SetScript("OnEvent", function(_, event, a, b)
 		K.Loot()
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		BT.Session.OnWorld(M, a, b)
+		M.QuestsChanged()
+	elseif event == "QUEST_ACCEPTED" or event == "QUEST_LOG_UPDATE" then
+		M.QuestsChanged()
 	end
 end)
 
@@ -325,7 +490,7 @@ function M:BuildTab(panel)
 		.. "experience or loot for it · click the Menagerie line in the dock for the journal", true)
 
 	local journal = page:Section("The journal")
-	local open = W.Row(journal, "Open the Menagerie", "the bestiary and the achievements · /bt menagerie")
+	local open = W.Row(journal, "Open the Menagerie", "the compendium and the achievements · /bt menagerie")
 	open:SetControl(W.Button(open, "Open", 80, 20)):SetScript("OnClick", function()
 		BT.MenagerieWindow.Show()
 	end)
@@ -338,7 +503,7 @@ function M:BuildTab(panel)
 		end, 62))
 
 	local toasts = page:Section("Toasts")
-	W.SwitchRow(toasts, "Achievements and kill records", "a toast at the top of the screen when you earn one",
+	W.SwitchRow(toasts, "Achievements, masteries and ranks", "a toast at the top of the screen when you earn one",
 		function() return on("menagerieToasts", true) end,
 		function(v)
 			BT.EnsureBound()
@@ -387,15 +552,169 @@ BT.Command("menagerie", function(rest)
 		for i = 1, math.min(10, #M.recent) do
 			U.Print("  " .. M.recent[i])
 		end
+		-- whether the card portraits could be held still, and how
+		local how = BT.MenagerieWindow.freezeWith
+		U.Print(("menagerie portraits: %s · effects %s"):format(how == nil and "none drawn yet - open the journal"
+			or how == false and "this client has no way to stop them moving"
+			or ("held still by %s"):format(how),
+			BT.MenagerieWindow.canHideEffects and "could be switched off (SetParticlesEnabled)"
+				or "cannot be switched off"))
+		return
+	elseif cmd == "lore" then
+		-- WHERE EACH MOB'S LORE CAME FROM (Josh 2026-09-26: "Is there a way we
+		-- can make sure we're matching the mob properly with the lore?"):
+		-- every mob, the page it leads with, and how that page was found. A
+		-- mob that got no nearer than its type is one the wiki data lacks,
+		-- or that has no page: run scripts/fetch-lore.ps1 and /reload.
+		BT.EnsureBound()
+		local s = J.Store()
+		local list = {}
+		for _, m in pairs(s and s.mobs or {}) do
+			list[#list + 1] = m
+		end
+		table.sort(list, function(a, b) return (a.name or "") < (b.name or "") end)
+		local HOW = { name = "its own page", part = "part of its name", says = "its page says so",
+			body = "same body as a known one", family = "its family", type = "only its type" }
+		local lines, vague = {}, 0
+		for _, m in ipairs(list) do
+			local e = J.WikiLore(m)[1]
+			local line
+			if not e then
+				line = ("%s: nothing"):format(m.name or "?")
+				vague = vague + 1
+			else
+				line = ("%s: %s (%s, %s)"):format(m.name or "?", e.title, e.kind, HOW[e.how] or e.how or "?")
+				if e.how == "type" or e.how == "family" then
+					vague = vague + 1
+				end
+			end
+			lines[#lines + 1] = line
+			U.Print("  " .. line)
+		end
+		U.Print(("menagerie lore: %d mobs, %d with nothing nearer than their family or type · "
+			.. "written down, /reload to save it"):format(#list, vague))
+		BT.settings.menagerieLoreReport = lines
+		return
+	elseif cmd == "model" then
+		-- what the client will do with the camera on a mob's page, written
+		-- into the saved file as well, since it is a wall of numbers
+		local lines = BT.MenagerieWindow.ModelReport()
+		if not lines then
+			U.Print("menagerie model: open a mob's page in the journal first")
+			return
+		end
+		for _, line in ipairs(lines) do
+			U.Print("  " .. line)
+		end
+		BT.EnsureBound()
+		BT.settings.menagerieModelReport = lines
+		U.Print("menagerie model: written down · /reload to save it")
+		return
+	elseif cmd == "map" then
+		-- what the client says about maps, for the cards' backgrounds
+		local lines = {}
+		local function say(fmt, ...)
+			lines[#lines + 1] = fmt:format(...)
+		end
+		local calls = {}
+		for _, name in ipairs({ "GetBestMapForUnit", "GetPlayerMapPosition", "GetMapInfo", "GetMapArtLayers",
+			"GetMapArtLayerTextures" }) do
+			calls[#calls + 1] = ("%s %s"):format(name, (C_Map and type(C_Map[name]) == "function") and "yes" or "NO")
+		end
+		say("calls: %s", table.concat(calls, " · "))
+		local map, x, y = K.Where()
+		local info = map and C_Map.GetMapInfo and select(2, pcall(C_Map.GetMapInfo, map))
+		say("here: map %s (%s) at %s, %s", tostring(map), type(info) == "table" and tostring(info.name) or "?",
+			x and ("%.3f"):format(x) or "no position", y and ("%.3f"):format(y) or "-")
+		local art = map and BT.MenagerieWindow.MapArt(map)
+		if art then
+			say("art: %d x %d in tiles of %d x %d, %d across, %d tiles, first %s", art.lw, art.lh, art.tw, art.th,
+				art.cols, #art.files, tostring(art.files[1]))
+		else
+			say("art: none for this map")
+		end
+		local spots, all = 0, 0
+		for _, m in pairs(J.Store().mobs) do
+			all = all + 1
+			if m.mx then
+				spots = spots + 1
+			end
+		end
+		say("journal: %d of %d kinds have a spot on the map (a kind gets one on its next kill)", spots, all)
+		for _, line in ipairs(lines) do
+			U.Print("  " .. line)
+		end
+		BT.EnsureBound()
+		BT.settings.menagerieMapReport = lines
+		return
+	elseif cmd == "scene" then
+		-- THE CHARACTER SHEET'S SCENE (Josh 2026-09-26: "the default character
+		-- sheet has a background... could we maybe use that?"). What the
+		-- client hangs behind your own model - which our character sheet takes
+		-- off (Modules/CharSheet) - and which races' scenes this client has,
+		-- as files or as atlases, for the cards and the model page.
+		local lines = {}
+		local function say(fmt, ...)
+			lines[#lines + 1] = fmt:format(...)
+		end
+		local function describe(label, t)
+			if type(t) ~= "table" or type(t.GetTexture) ~= "function" then
+				return
+			end
+			local _, tex = pcall(t.GetTexture, t)
+			local _, file = pcall(t.GetTextureFileID or function() return nil end, t)
+			local _, atlas = pcall(t.GetAtlas or function() return nil end, t)
+			local okC, l, r, top, bottom = pcall(t.GetTexCoord, t)
+			say("%s: texture %s · file %s · atlas %s · coords %s", label, tostring(tex), tostring(file),
+				tostring(atlas), okC and ("%.2f %.2f %.2f %.2f"):format(l or 0, r or 0, top or 0, bottom or 0) or "?")
+		end
+		local scene = _G.CharacterModelScene
+		if scene then
+			for key, v in pairs(scene) do
+				if type(v) == "table" and type(key) == "string" and key:find("Background") then
+					describe("CharacterModelScene." .. key, v)
+				end
+			end
+			local ok, regions = pcall(function() return { scene:GetRegions() } end)
+			for i, r in ipairs(ok and regions or {}) do
+				describe(("CharacterModelScene region %d"):format(i), r)
+			end
+		else
+			say("CharacterModelScene: not there")
+		end
+		for _, name in ipairs({ "CharacterModelFrameBackgroundTopLeft", "CharacterModelFrameBackgroundTopRight",
+			"CharacterModelFrameBackgroundBotLeft", "CharacterModelFrameBackgroundBotRight" }) do
+			describe(name, _G[name])
+		end
+		-- every race's scene, both ways the client might keep it
+		local fileOf = GetFileIDFromPath
+		local atlasOf = C_Texture and C_Texture.GetAtlasInfo
+		for _, race in ipairs({ "Human", "Dwarf", "NightElf", "Gnome", "Orc", "Scourge", "Tauren", "Troll",
+			"BloodElf", "Draenei", "Goblin", "Worgen", "Pandaren", "VoidElf", "Nightborne", "HighmountainTauren",
+			"LightforgedDraenei", "DarkIronDwarf", "MagharOrc", "ZandalariTroll", "KulTiran", "Vulpera",
+			"Mechagnome", "Dracthyr", "EarthenDwarf" }) do
+			local f = fileOf and select(2, pcall(fileOf, "Interface\\DressUpFrame\\DressUpBackground-" .. race .. "1"))
+			local a = atlasOf and select(2, pcall(atlasOf, "dressingroom-background-" .. race:lower()))
+			if f or type(a) == "table" then
+				say("%s: file %s · atlas %s", race, tostring(f),
+					type(a) == "table" and ("%sx%s"):format(tostring(a.width), tostring(a.height)) or "none")
+			end
+		end
+		for _, line in ipairs(lines) do
+			U.Print("  " .. line)
+		end
+		BT.EnsureBound()
+		BT.settings.menagerieSceneReport = lines
+		U.Print("menagerie scene: written down · /reload to save it")
 		return
 	elseif cmd == "toast" then
 		local c = J.Mine()
 		local last = c and c.last and J.Store().mobs[c.last.npc]
 		T.Push({
-			head = "Kill Record!", text = ("1000 kills on %s!"):format(last and last.name or "Barn Owl"),
-			points = 20, icon = T.Icon(last and last.kind),
+			head = "Platinum mastery!", text = ("500 kills on %s"):format(last and last.name or "Barn Owl"),
+			points = 10, icon = T.Icon(last and last.kind),
 		})
 		return
 	end
 	BT.MenagerieWindow.Toggle()
-end, "menagerie [debug|toast] - the journal of every mob you have killed", "menagerie")
+end, "menagerie [debug|map|model|scene|toast] - the journal of every mob you have killed", "menagerie")

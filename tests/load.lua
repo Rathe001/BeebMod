@@ -9,7 +9,7 @@
 --   lua tests/load.lua
 local ok = true
 -- every tab on the window's rail, top to bottom, for a warrior with no order set
-ALL_TABS = "settings,testing,dock,map,progress,metrics,tracker,micro,"
+ALL_TABS = "settings,testing,dock,map,progress,menagerie,metrics,tracker,micro,"
 	.. "buffs,damagemeter,prd,frames,"
 	.. "bars,bagwindow,charsheet,chat,allmenus,tips,"
 	.. "censusset,ledger"
@@ -501,6 +501,36 @@ do
 		fail("texture paths that name nothing: " .. table.concat(bad, ", "))
 	else
 		print("ok   every texture path names a file that is here")
+	end
+end
+
+-- A FONT OBJECT THAT DOES NOT EXIST (2026-09-26): the Menagerie's lore
+-- headings asked for "BeebModFontNormalSmall", which Core/Fonts.lua never
+-- makes, and the stub here would have drawn them anyway. Every one of ours
+-- the source names has to be one of its twins.
+do
+	local made, bad = {}, {}
+	for name in io.open("Core/Fonts.lua"):read("*a"):gmatch('{ "(BeebMod[%w]*Font[%w]*)"') do
+		made[name] = true
+	end
+	for _, f in ipairs(files) do
+		local handle = io.open(f, "r")
+		if handle then
+			local text = handle:read("*a")
+			handle:close()
+			for name in text:gmatch('"(BeebMod[%w]*Font[%w]+)"') do
+				if not made[name] then
+					bad[#bad + 1] = ("%s -> %s"):format(f, name)
+				end
+			end
+		end
+	end
+	if not next(made) then
+		fail("found no font objects in Core/Fonts.lua")
+	elseif #bad > 0 then
+		fail("font objects nobody makes: " .. table.concat(bad, ", "))
+	else
+		print("ok   every font object named is one Core/Fonts.lua makes")
 	end
 end
 
@@ -1214,7 +1244,7 @@ if ok then
 			-- Dock, Combat, Windows and People
 			assert(table.concat(named, ",") == ALL_TABS,
 				"General, then Dock, Combat, Windows and People: " .. table.concat(named, ","))
-			assert(table.concat(BT.Window.GroupKeys("dock"), ",") == "dock,map,progress,metrics,tracker,micro",
+			assert(table.concat(BT.Window.GroupKeys("dock"), ",") == "dock,map,progress,menagerie,metrics,tracker,micro",
 				"the Dock group: its own page first, then in the dock's order")
 			assert(table.concat(BT.Window.GroupKeys("combat"), ",") == "buffs,damagemeter,prd,frames",
 				"Combat, A to Z by name: " .. table.concat(BT.Window.GroupKeys("combat"), ","))
@@ -1222,10 +1252,9 @@ if ok then
 				"Windows: " .. table.concat(BT.Window.GroupKeys("windows"), ","))
 			assert(table.concat(BT.Window.GroupKeys("people"), ",") == "censusset,ledger", "and People")
 			-- a shared page: a switch each, and the tab goes to it
-			assert(table.concat(BT.Window.MembersOf("progress"), ",") == "xp,rep,menagerie"
-				and BT.Window.TabFor("rep") == "progress" and BT.Window.TabFor("menagerie") == "progress"
-				and BT.Window.TabFor("clock") == "dock",
-				"experience, reputation and the Menagerie share a page; the clock is on the Dock's")
+			assert(table.concat(BT.Window.MembersOf("progress"), ",") == "xp,rep"
+				and BT.Window.TabFor("rep") == "progress" and BT.Window.TabFor("clock") == "dock",
+				"experience and reputation share a page; the clock is on the Dock's")
 			-- a heading over each group, made once
 			local heads = rail.heads
 			assert(heads and heads[1]:GetText() == "DOCK" and heads[2]:GetText() == "COMBAT"
@@ -5363,9 +5392,8 @@ if ok then
 			BT.Window.SetView("rep")
 			assert(BT.Window.View() == "progress", "a module on a shared page opens that page")
 			local panel = BT.Window.Panel("progress")
-			assert(panel and #panel.switches == 3 and panel.switches[1].module == "xp"
-				and panel.switches[2].module == "rep" and panel.switches[3].module == "menagerie",
-				"a switch for each")
+			assert(panel and #panel.switches == 2 and panel.switches[1].module == "xp"
+				and panel.switches[2].module == "rep", "a switch for each")
 			assert(panel.enable == nil, "and no one switch over the page")
 			panel.switches[2].switch:GetScript("OnClick")(panel.switches[2].switch)
 			assert(not BT.Enabled("rep"), "the switch switches it")
@@ -6490,14 +6518,14 @@ if ok then
 			BT.Bar.Relayout()
 			assert(railKeys():find("^settings,testing,dock,map,progress"), "no order is the default order")
 			-- A SHARED PAGE MOVES WHOLE (Josh 2026-09-24): Progress dragged above
-			-- the map takes experience, reputation and the Menagerie with it, together
+			-- the map takes experience and reputation with it, together
 			BT.Window.MoveTab("progress", "map")
 			BT.Window.Rebuild()
 			assert(railKeys():find("^settings,testing,dock,progress,map"), "the tab moves: " .. railKeys())
 			keys = {}
 			for _, m in ipairs(BT.Modules()) do keys[#keys + 1] = m.key end
-			assert(table.concat(keys, ","):find("xp,rep,menagerie,minimap,buttons", 1, true),
-				"and all its modules, in their order, ahead of the map's: " .. table.concat(keys, ","))
+			assert(table.concat(keys, ","):find("xp,rep,minimap,buttons", 1, true),
+				"and both its modules, in their order, ahead of the map's: " .. table.concat(keys, ","))
 			BT.settings.order = nil
 			BT.SortModules()
 			BT.Window.Rebuild()
@@ -8996,32 +9024,375 @@ if ok then
 			local m = BT.GetModule("menagerie")
 			for npc = 1, 12 do
 				m.Kill({ npc = 250000 + npc, name = "Mob " .. npc, kind = npc % 2 == 0 and "Beast" or "Undead",
-					family = "Cat", rank = npc == 3 and "rare" or "normal", level = 5, zone = "Zephras Isle",
+					family = "Cat", rank = (npc == 3 and "rare") or ((npc == 5 or npc == 7) and "rareelite") or "normal", level = 5, zone = "Zephras Isle",
 					myLevel = 5, guid = "Creature-0-1-2-3-" .. (250000 + npc) .. "-X" }, "dead")
 			end
-			assert(m.text:GetText():find("12 kinds"), "the dock's line counts the kinds: " .. tostring(m.text:GetText()))
+			local points = J.Score("char")
+			local _, title = J.Rank(points)
+			assert(points >= 25 and title ~= "Novice" and m.text:GetText():find(title),
+				("the dock's line says the rank (%s at %d): %s"):format(title, points, tostring(m.text:GetText())))
+			assert(m.text:GetText():find("%(%d+/10%)"), "and where that rank stands: " .. m.text:GetText())
 			assert(m.eta:GetText():find("pts"), "and says the points")
+			BT.Bar.Relayout()
+			assert(m.frame.beebsBand and m.frame.beebsBand:IsShown(),
+				"a meter row sits on a band of its own, apart from the rows round it")
+			local bc = m.frame.beebsBandColor
+			assert(bc and bc[1] == m.INK[1] and bc[3] == m.INK[3],
+				"and the Menagerie's band is its own ink blue, not Experience's accent")
 			assert(BT.MenagerieToast.Frame() and BT.MenagerieToast.Frame():IsShown(),
 				"ten kinds earned First Pages, and it was toasted")
+			local ranked
+			for _, spec in ipairs(BT.MenagerieToast.queue) do
+				ranked = ranked or (spec.head == "Menagerie rank" and spec.text:find(title))
+			end
+			assert(ranked, "and the new rank is toasted after the achievements that earned it")
 			SlashCmdList.BEEBSTOOLKIT("menagerie")
 			assert(V.IsShown(), "/bt menagerie opens the journal")
 			local f = V.Frame()
-			assert(f.bestiary:IsShown() and not f.achievements:IsShown(), "on the bestiary")
-			local rows = f.bestiary.rows
-			assert(rows[1].kind == "Beast" and rows[2].npc, "a heading per type, then its mobs")
-			rows[2]:GetScript("OnClick")(rows[2])
-			assert(V.selected == rows[2].npc and f.bestiary.name:GetText():find("Mob"), "a click opens a mob's page")
-			rows[1]:GetScript("OnClick")(rows[1])
-			assert(rows[2].kind == "Undead", "a heading folds its type away")
-			rows[1]:GetScript("OnClick")(rows[1])
+			assert(f.bestiary:IsShown() and not f.achievements:IsShown(), "on the compendium")
+			-- A RAIL (Josh 2026-09-26): All, then a row per type with its count
+			-- and points, and the grid shows the one picked
+			local b = f.bestiary
+			local rail = b.railRows
+			assert(rail[1].key == V.ALL and rail[1].chosen and rail[1].text:GetText():find("All")
+				and rail[1].text:GetText():find("12"), "All comes first, picked: " .. tostring(rail[1].text:GetText()))
+			-- six ordinary beasts at a point each (the rare and rare elites are undead)
+			assert(rail[2].key == "Beast" and rail[2].text:GetText():find("Beasts") and rail[2].sub:GetText() == "6 points",
+				"then a row per type, with its points: " .. tostring(rail[2].sub:GetText()))
+			-- three at a point, the rare at 5, two rare elites at 8
+			assert(rail[3].key == "Undead" and rail[3].sub:GetText() == "24 points",
+				"the undead say theirs: " .. tostring(rail[3].sub:GetText()))
+			local c = b.cards[1]
+			assert(c and c:IsShown() and c.npc and c.name:GetText():find("MOB") and c.kills:GetText() == "1"
+				and not c.lore:IsShown(),
+				"then a card per mob, with its name and its kills, and no lore")
+			-- THE BORDER IS THE MASTERY (Josh 2026-09-26): each tier its own
+			-- ornaments, and only its own
+			local Card = BT.MenagerieCard
+			local tc = Card.New(_G.UIParent)
+			Card.Layout(tc, 140)
+			assert(tc:GetHeight() == Card.Height(140) and Card.Height(140) == 130, "a card is as tall as what is on it")
+			local function dressed(tier)
+				Card.Dress(tc, { name = "Test", kind = "Beast", lore = "", kills = "1", points = "1", tier = tier })
+				return {
+					corners = tc.corners[1]:IsShown(), second = tc.lines[2][1]:IsShown(), third = tc.lines[3][1]:IsShown(),
+					archIn = tc.archIn[1]:IsShown(), crest = tc.crest:IsShown(), sides = tc.sides[1]:IsShown(),
+					pendant = tc.pendant:IsShown(), fan = tc.fan:IsShown(), gems = tc.cornerGems[1]:IsShown(),
+				}
+			end
+			local t0, t1, t2, t3, t4 = dressed(0), dressed(1), dressed(2), dressed(3), dressed(4)
+			assert(not (t0.corners or t0.second or t0.archIn or t0.crest), "unmastered: one bare line")
+			assert(t1.corners and t1.second and not (t1.archIn or t1.crest), "bronze: the double line and a corner")
+			assert(t2.corners and not t2.crest, "silver: the diamond corner, no crest yet")
+			assert(t3.crest and t3.sides and t3.fan and not (t3.third or t3.pendant or t3.gems), "gold: crest, studs, fan")
+			assert(t4.third and t4.pendant and t4.gems and t4.crest, "platinum: all of it")
+			-- mastery never touches the arch: that is the rank's
+			assert(not (t0.archIn or t2.archIn or t4.archIn), "the arch is the same at every mastery")
+			-- THE ARCH IS THE RANK (Josh 2026-09-26): plain for an ordinary mob,
+			-- silver for a rare, gold and bracketed for an elite
+			Card.Dress(tc, { name = "Plain", tier = 2, rank = "normal" })
+			assert(not tc.keystone:IsShown() and not tc.archIn[1]:IsShown() and not tc.archGems[1]:IsShown(),
+				"an ordinary mob's arch is one plain line, with no gem")
+			Card.Dress(tc, { name = "Rare", tier = 0, rank = "rare" })
+			assert(tc.keystone:IsShown() and tc.archIn[1]:IsShown() and tc.archGems[1]:IsShown()
+				and not tc.brackets[1]:IsShown(), "a rare's arch is doubled, with a diamond on each step")
+			Card.Dress(tc, { name = "Elite", tier = 0, rank = "elite" })
+			assert(tc.brackets[1]:IsShown() and not tc.rays[1]:IsShown(), "an elite's has brackets at its foot")
+			Card.Dress(tc, { name = "Boss", tier = 0, rank = "worldboss" })
+			assert(tc.rays[1]:IsShown(), "and a world boss's has rays over the keystone")
+			-- SMALLER, WITHOUT THE LORE (Josh 2026-09-26): the card is as tall as
+			-- what is on it, and the lore is the mob's page's
+			Card.Layout(tc, 179)
+			Card.Dress(tc, { name = "Lore", tier = 0, lore = "words" })
+			assert(not tc.lore:IsShown() and Card.Height(179) == 166,
+				"no lore on the card, and the card no taller than it needs: " .. tostring(Card.Height(179)))
+			-- KILLS AND POINTS IN THE SHOULDERS (Josh 2026-09-26): up beside the
+			-- arch's top, not in a foot; the border says the mastery
+			assert(tc.kills._point.point == "TOP" and tc.kills._point.y < 0 and tc.points._point.point == "TOP"
+				and not tc.tier:IsShown(), "kills and points sit in the arch's shoulders, and no mastery word")
+			Card.Layout(tc, 140)
+			-- A LONG NAME, SMALLER (Josh 2026-09-26): down to a floor, and a short
+			-- one keeps its size
+			tc.name.GetStringWidth = function(self) return (self.fontSize or 10) * 20 end
+			Card.Dress(tc, { name = "Al'Aketh Stormcaller the Longwinded", tier = 0 })
+			assert(tc.nameFitted == 8, "a long name steps down to the floor: " .. tostring(tc.nameFitted))
+			tc.name.GetStringWidth = function() return 40 end
+			Card.Dress(tc, { name = "Vuldren", tier = 0 })
+			assert(tc.nameFitted == tc.nameSize, "a short one keeps its size")
+			tc.name.GetStringWidth = nil
+			-- THE GROUND FOLLOWS THE NOTCH (Josh 2026-09-26): clear in the corners
+			-- where the corner art steps in, whole where there is none
+			Card.Dress(tc, { name = "Plain", tier = 1 })
+			assert(tc.notched > 0 and tc.ground[2]:IsShown(), "a mastered card's corners are left clear")
+			Card.Dress(tc, { name = "Plain", tier = 0 })
+			assert(tc.notched == 0 and not tc.ground[2]:IsShown(), "an unmastered card is a whole rectangle")
+			-- the arch's outline closes: twelve runs, the last back to the first
+			local runs = Card.ArchRuns(100, 80, 0)
+			assert(#runs == 12 and runs[1][1] == 0 and runs[3][2] == 0 and runs[6][2] == 79, "the arch outline is whole")
+			-- a rank's second line runs OUTSIDE the first, so no strip of the
+			-- mob shows between them (Josh 2026-09-26)
+			local out = Card.ArchRuns(100, 80, -3)
+			assert(out[1][1] < 0 and out[3][2] < 0 and out[6][2] > 79 and out[12][1] > 99, "the second line is outside the first")
+			tc:Hide()
+			local function shown(pred)
+				local n = 0
+				for _, card in ipairs(b.cards) do
+					if card:IsShown() and (not pred or pred(card)) then n = n + 1 end
+				end
+				return n
+			end
+			-- FOUR ACROSS AT THE MOCKUP'S SIZE, ONLY WHAT IS IN VIEW: two rows of
+			-- all twelve, then the third once the strip scrolls to it
+			assert(b.layout.w == 179, "five across, near the mockup's size: " .. tostring(b.layout.w))
+			assert(shown() == 12, ("three rows in view: all twelve are dealt (%d)"):format(shown()))
+			local rare
+			for _, card in ipairs(b.cards) do
+				if card:IsShown() and card.keystone:IsShown() then rare = card end
+			end
+			assert(rare, "a rare's card wears its gem at the top of the arch")
+			b.grid:ScrollTo(0)
+			-- LIFTED, NOT GROWN (Josh 2026-09-26): the card under the cursor
+			-- rises a few units over its shadow and stays its size, so its
+			-- model is never framed afresh
+			local restingY = c.slotY
+			local creatureCalls = 0
+			c.portrait.SetCreature = function() creatureCalls = creatureCalls + 1 end
+			c:GetScript("OnEnter")(c)
+			assert(c.lifted and c:GetScale() == 1 and c.slotY == restingY, "a card lifts under the cursor, its size unchanged")
+			assert(c.shadow and c.shadow[1]:IsShown() and c.lit[1]:IsShown(), "over a shadow of its own, and brighter")
+			assert(creatureCalls == 0, "and its model is left exactly as it was")
+			c:GetScript("OnLeave")(c)
+			assert(not c.lifted and not c.shadow[1]:IsShown(), "and settles when the cursor leaves")
+			c.portrait.SetCreature = nil
+			-- STILL PORTRAITS (Josh 2026-09-25): held on a frame where the
+			-- client can, paused where it can only pause, and said so
+			local held = { FreezeAnimation = function(self, a, v, fr) self.at = { a, v, fr } end }
+			assert(V.Freeze(held) and held.at[1] == 0 and held.at[3] == 0 and V.freezeWith == "FreezeAnimation",
+				"a portrait is held on the first frame of standing")
+			local paused = { SetPaused = function(self, on) self.paused = on end }
+			assert(V.Freeze(paused) and paused.paused == true and V.freezeWith == "SetPaused",
+				"or paused, where that is all the client has")
+			-- both, where it has both: the pause is what may stop the effects
+			local both = { FreezeAnimation = held.FreezeAnimation, SetPaused = paused.SetPaused }
+			assert(V.Freeze(both) and both.at and both.paused and V.freezeWith == "FreezeAnimation + SetPaused",
+				"held and paused, where it has both: " .. tostring(V.freezeWith))
+			-- A POPUP (Josh 2026-09-26): a click opens the mob over the dimmed
+			-- grid, which stays where it was
+			c:GetScript("OnClick")(c)
+			assert(V.open == c.npc and b.dim:IsShown() and b.box:IsShown()
+				and b.page.name:GetText():upper() == c.name:GetText(), "a click opens a mob's popup over the grid")
+			assert(b.page.kills.value:GetText() == "1" and b.page.mastery.value:GetText() == "None"
+				and b.page.ladder.rungs[1].name:GetText() == "Bronze"
+				and b.page.ladder.togo:GetText():find("to go"), "with its kills and the way to its first mastery")
+			assert(b.page.count:GetText():find("^1 of 12") and b.page.next:IsShown(), "and where it is among the grid's")
+			-- WHEN A MODEL ARRIVES (22:05, "Window.lua:486: attempt to call a
+			-- nil value"): the stub never loads one, so its handlers are run
+			-- here, as the client runs them - with a model file to learn
+			for _, m in ipairs({ b.page.model, c.portrait }) do
+				m.GetModelFileID = function() return 123456 end
+				m:GetScript("OnModelLoaded")(m)
+				m.GetModelFileID = nil
+			end
+			assert(BT.Menagerie.Store().mobs[c.npc].body == 123456, "a model that arrives tells us its body")
+			-- THE LORE, SET OUT (Josh 2026-09-26): the best page bare, the
+			-- rest under headings with an ornament between, one credit last
+			local MJ = BT.Menagerie
+			local wiki = MJ.WikiLore
+			MJ.WikiLore = function()
+				return { { title = "Timberling", text = "Bog beasts, [Fel Moss] and all." },
+					{ title = "Elemental", text = "Ageless spirits." } }
+			end
+			V.Refresh()
+			local lp = b.page.lorePieces
+			assert(not lp[1].rule:IsShown() and not lp[1].head:IsShown()
+				and lp[1].text:GetText() == "Bog beasts, Fel Moss and all.", "the best page first, bare, its links plain")
+			assert(lp[2].rule:IsShown() and lp[2].head:GetText() == "ELEMENTAL", "the next under its title, an ornament over it")
+			assert(b.page.loreFrom:GetText() == "Warcraft Wiki: Timberling, Elemental · CC BY-SA 3.0",
+				"and the pages credited once, at the end")
+			MJ.WikiLore = wiki
+			V.Refresh()
+			b.page.next:GetScript("OnClick")(b.page.next)
+			assert(V.open == V.mobs[2].npc and b.page.count:GetText():find("^2 of 12"), "the arrow steps to the next")
+			b.page:GetScript("OnKeyDown")(b.page, "LEFT")
+			assert(V.open == c.npc, "and the arrow key back")
+			b.page:GetScript("OnKeyDown")(b.page, "LEFT")
+			assert(V.open == V.mobs[12].npc, "round from the first to the last")
+			b.page:GetScript("OnKeyDown")(b.page, "ESCAPE")
+			assert(V.open == nil and not b.dim:IsShown() and V.IsShown(), "Escape closes the popup, not the window")
+			assert(c.portrait:IsShown() and not c.portrait.covered, "and the grid's portraits come back")
+			-- one portrait behind the popup's model, one off to the side
+			local function at(f, l, t, w, h)
+				f.GetLeft = function() return l end
+				f.GetTop = function() return t end
+				f.GetWidth = function() return w end
+				f.GetHeight = function() return h end
+			end
+			local stage, behind, beside = b.page.stage, c.portrait, b.cards[5].portrait
+			at(stage, 500, 700, 448, 220)
+			at(behind, 520, 650, 150, 100)
+			at(beside, 1100, 650, 150, 100)
+			c:GetScript("OnClick")(c)
+			assert(not behind:IsShown() and beside:IsShown() and not beside.covered,
+				"only a portrait behind the popup's model is put away; the rest stay, dimmed")
+			b.page:GetScript("OnKeyDown")(b.page, "ESCAPE")
+			assert(behind:IsShown(), "and it comes back when the popup closes")
+			for _, f in ipairs({ stage, behind, beside }) do
+				f.GetLeft, f.GetTop, f.GetWidth, f.GetHeight = nil, nil, nil, nil
+			end
+			c:GetScript("OnClick")(c)
+			-- YOURS TO FRAME (Josh 2026-09-26): right-drag moves it, the wheel
+			-- comes closer, Reset view is the client's framing again
+			local pm = b.page.model
+			local cursor = _G.GetCursorPosition
+			pm:GetScript("OnMouseDown")(pm, "RightButton")
+			_G.GetCursorPosition = function() return 420, 310 end
+			pm:GetScript("OnUpdate")(pm, 0.1)
+			pm:GetScript("OnMouseUp")(pm, "RightButton")
+			assert(math.abs(pm.panY - 0.2) < 1e-9 and math.abs(pm.panZ - 0.1) < 1e-9,
+				("right-drag moves it right and up (%s, %s)"):format(tostring(pm.panY), tostring(pm.panZ)))
+			pm:GetScript("OnMouseWheel")(pm, 1)
+			assert(pm.zoom < 1, "the wheel comes closer")
+			_G.GetCursorPosition = cursor
+			b.page.reset:GetScript("OnClick")(b.page.reset)
+			assert(pm.panY == 0 and pm.panZ == 0 and pm.zoom == 1 and pm.facing == 0,
+				"Reset view puts it back as the client framed it")
+			-- THE MAP BEHIND THE PORTRAIT (Josh 2026-09-26): a patch no wider
+			-- than a tile, from the tiles it touches, placed to fill the card
+			local art = { lw = 1002, lh = 668, tw = 256, th = 256, cols = 4, files = {} }
+			for f = 1, 12 do art.files[f] = 1000 + f end
+			local pieces = V.ArtPieces(art, 0.5, 0.5, 138, 104)
+			local area, inRange = 0, true
+			for _, p in ipairs(pieces) do
+				area = area + p.w * p.h
+				for _, v in ipairs({ p.l, p.r, p.t, p.b }) do
+					inRange = inRange and v >= 0 and v <= 1
+				end
+			end
+			assert(#pieces >= 1 and #pieces <= 4 and inRange and math.abs(area - 138 * 104) < 0.5,
+				("the patch fills the card from at most four tiles (%d pieces, %.1f of %d)"):format(#pieces, area, 138 * 104))
+			local corner = V.ArtPieces(art, 0, 0, 138, 104)
+			assert(corner[1].file == 1001 and corner[1].l == 0 and corner[1].t == 0,
+				"a spot at the map's corner keeps the patch on the map")
+			-- where each mob's lore came from, written down
+			SlashCmdList.BEEBSTOOLKIT("menagerie lore")
+			local report = BT.settings.menagerieLoreReport
+			assert(type(report) == "table" and #report >= 12 and report[1]:find(": "),
+				"/bt menagerie lore writes down every mob's page and how it was found")
+			-- what the client will do with the camera, asked and written down
+			SlashCmdList.BEEBSTOOLKIT("menagerie model")
+			assert(type(BT.settings.menagerieModelReport) == "table"
+				and BT.settings.menagerieModelReport[1]:find("NPC " .. c.npc),
+				"/bt menagerie model writes down the open model's calls")
+			b.dim:GetScript("OnMouseDown")(b.dim, "LeftButton")
+			assert(V.open == nil and b.box:IsShown() and not b.dim:IsShown(), "a click outside it closes the popup")
+			-- CARDS OR A LIST (Josh 2026-09-26): the list is three slim rows
+			-- across, and the cards are put away while it is up
+			b.layouts.buttons[2]:GetScript("OnClick")(b.layouts.buttons[2])
+			local rowsShown = 0
+			for _, r in ipairs(b.rows or {}) do
+				if r:IsShown() then rowsShown = rowsShown + 1 end
+			end
+			assert(b.layout.list and rowsShown == 12 and shown() == 0,
+				("the list shows every mob as a row, and no cards (%d rows, %d cards)"):format(rowsShown, shown()))
+			local row = b.rows[1]
+			assert(row.name:GetText() and row.kills:GetText() == "1" and row.npc, "a row has the mob's name and kills")
+			row:GetScript("OnClick")(row)
+			assert(V.open == row.npc and b.dim:IsShown(), "a row opens the mob's popup")
+			b.page.close:GetScript("OnClick")(b.page.close)
+			assert(V.open == nil and not b.dim:IsShown(), "and its close button closes it")
+			b.layouts.buttons[1]:GetScript("OnClick")(b.layouts.buttons[1])
+			assert(not b.layout.list and shown() == 12 and not b.rows[1]:IsShown(), "and the cards come back")
+			-- a row of the rail shows its type alone
+			rail[3]:GetScript("OnClick")(rail[3])
+			assert(rail[3].chosen and not rail[1].chosen and shown() == 6
+				and shown(function(card) return card.keystone:IsShown() end) == 3,
+				("picked on the rail, the undead alone (%d)"):format(shown()))
+			rail[1]:GetScript("OnClick")(rail[1])
+			assert(rail[1].chosen and shown() == 12, "and All is all of them again")
+			-- VIEWS (Josh 2026-09-25): by zone, then by mastery
+			b.groups.buttons[2]:GetScript("OnClick")(b.groups.buttons[2])
+			assert(rail[2].text:GetText():find("Zephras Isle") and rail[2].text:GetText():find("12")
+				and not (rail[3] and rail[3]:IsShown()),
+				"grouped by zone, one zone on the rail: " .. tostring(rail[2].text:GetText()))
+			for i = 1, 2 do
+				m.Kill({ npc = 250011, name = "Mob 11", kind = "Undead", zone = "Zephras Isle",
+					guid = "Creature-0-1-2-3-250011-again" .. i }, "dead")
+			end
+			b.sorts.buttons[2]:GetScript("OnClick")(b.sorts.buttons[2])
+			assert(b.cards[1].npc == 250011 and b.cards[1].kills:GetText() == "3",
+				"sorted by mastery, the most killed is first: " .. tostring(b.cards[1].name:GetText()))
+			b.sorts.buttons[1]:GetScript("OnClick")(b.sorts.buttons[1])
+			assert(b.cards[1].name:GetText() == "MOB 1", "and back to A to Z")
+			b.groups.buttons[1]:GetScript("OnClick")(b.groups.buttons[1])
+			assert(rail[2].key == "Beast", "and back to types")
 			f.views.buttons[2]:GetScript("OnClick")(f.views.buttons[2])
 			assert(f.achievements:IsShown() and not f.bestiary:IsShown(), "the achievements view")
 			assert(f.achievements.rows[1]:IsShown(), "with its rows drawn")
+			assert(f.achievements.heads[1].text:GetText() == "EVERY KIND"
+				and f.achievements.heads[1].count:GetText() == "30 points",
+				"what the kinds are worth comes first: 9 at a point, a rare at 5, two rare elites at 8 - "
+					.. tostring(f.achievements.heads[1].count:GetText()))
+			assert(f.achievements.heads[2].text:GetText() == "MASTERIES", "then the masteries")
 			f.scopes.buttons[2]:GetScript("OnClick")(f.scopes.buttons[2])
 			assert(f.subtitle:GetText():find("all characters"), "and all characters' counts")
 			f.scopes.buttons[1]:GetScript("OnClick")(f.scopes.buttons[1])
 			f.views.buttons[1]:GetScript("OnClick")(f.views.buttons[1])
+			-- A TAB OF ITS OWN (Josh 2026-09-25): its switch at the top, and
+			-- dragged above the map it takes its line in the dock with it
+			BT.Window.Build()
+			BT.Window.SetView("menagerie")
+			assert(BT.Window.View() == "menagerie" and BT.Window.Panel("menagerie").enable,
+				"the Menagerie has a tab, with its switch on it")
+			BT.Window.MoveTab("menagerie", "map")
+			local order = {}
+			for _, mod in ipairs(BT.Modules()) do order[#order + 1] = mod.key end
+			assert(table.concat(order, ","):find("menagerie,minimap", 1, true),
+				"dragged, the dock's order follows: " .. table.concat(order, ","))
+			BT.settings.order = nil
+			BT.SortModules()
+			BT.Window.Rebuild()
 			SlashCmdList.BEEBSTOOLKIT("menagerie debug")
+			SlashCmdList.BEEBSTOOLKIT("menagerie map")
+			SlashCmdList.BEEBSTOOLKIT("menagerie scene")
+			-- LORE FROM THE QUEST LOG (Josh 2026-09-26): each quest read once,
+			-- its words kept, and the log's selection put back as it was
+			local saved = {}
+			for _, g in ipairs({ "GetNumQuestLogEntries", "GetQuestLogTitle", "SelectQuestLogEntry", "GetQuestLogSelection",
+				"GetQuestLogQuestText", "GetNumQuestLeaderBoards", "GetQuestLogLeaderBoard", "C_QuestLog", "QuestLogFrame" }) do
+				saved[g] = _G[g]
+			end
+			local selected = 7
+			local log = {
+				{ "Zephras Isle", true },
+				{ "Storm Warning", false, 4401, "The stormcallers gather on the cliffs. Al'Aketh Stormcaller leads them. Stop him.",
+					{ "Al'Aketh Stormcaller slain: 0/1" } },
+			}
+			_G.C_QuestLog = nil
+			_G.QuestLogFrame = nil
+			_G.GetNumQuestLogEntries = function() return #log end
+			_G.GetQuestLogTitle = function(i) local e = log[i]; return e[1], 1, nil, e[2], false, false, nil, e[3] end
+			_G.SelectQuestLogEntry = function(i) selected = i end
+			_G.GetQuestLogSelection = function() return selected end
+			_G.GetQuestLogQuestText = function() local e = log[selected]; return e and e[4] or "", "" end
+			_G.GetNumQuestLeaderBoards = function(i) return #(log[i][5] or {}) end
+			_G.GetQuestLogLeaderBoard = function(j, i) return log[i][5][j], "monster", false end
+			J.Learn({ npc = 252068, name = "Al'Aketh Stormcaller", kind = "Humanoid", zone = "Zephras Isle" })
+			local read = m.ReadQuests()
+			local al = J.Store().mobs[252068]
+			assert(read == 1 and al.lore and al.lore.quest == "Storm Warning"
+				and al.lore.line == "Al'Aketh Stormcaller leads them.",
+				"a quest in the log gives the mob it names its lore: " .. tostring(al.lore and al.lore.line))
+			assert(selected == 7, "and the log's selection is put back")
+			assert(m.ReadQuests() == 0, "a quest already kept is not read again")
+			J.Store().quests[4401] = nil
+			_G.QuestLogFrame = { IsShown = function() return true end }
+			assert(m.ReadQuests() == 0, "nothing is read while the quest log is open in front of you")
+			for g, v in pairs(saved) do _G[g] = v end
+			al.lore = nil
+			assert(type(BT.settings.menagerieSceneReport) == "table",
+				"/bt menagerie scene writes down the character sheet's scene")
+			assert(type(BT.settings.menagerieMapReport) == "table" and BT.settings.menagerieMapReport[1]:find("calls"),
+				"/bt menagerie map writes down what the client says about maps")
 			SlashCmdList.BEEBSTOOLKIT("menagerie toast")
 			SlashCmdList.BEEBSTOOLKIT("menagerie")
 			assert(not V.IsShown(), "and again closes it")

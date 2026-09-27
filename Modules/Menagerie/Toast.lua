@@ -1,4 +1,4 @@
--- The Menagerie's toast: "1000 kills on Barn Owl!" (Josh 2026-09-25).
+-- The Menagerie's toast: "Gold mastery! 150 kills on Barn Owl" (Josh 2026-09-25).
 --
 -- In the game's own achievement art, which this client still ships - the
 -- MobProbe drew it on 70009 from these very files and coordinates. One at a
@@ -27,6 +27,9 @@ local TYPE_ICONS = {
 	Elemental = "Spell_Frost_SummonWaterElemental",
 	Mechanical = "INV_Misc_Gear_01",
 }
+
+-- a rank is knowledge: a book, where the client has one
+T.RANK_ICON = "Interface\\Icons\\INV_Misc_Book_09"
 
 local known = {}
 local function exists(path)
@@ -131,7 +134,12 @@ local function show(spec)
 	T.Build()
 	frame.spec = spec
 	frame.age = 0
-	frame.icon:SetTexture(spec.icon or SKULL)
+	-- an icon this client does not have is the skull, not a green square
+	local icon = spec.icon
+	if icon ~= SKULL and not (icon and exists(icon)) then
+		icon = SKULL
+	end
+	frame.icon:SetTexture(icon)
 	frame.head:SetText(spec.head or "")
 	frame.text:SetText(spec.text or "")
 	frame.points:SetText(spec.points and tostring(spec.points) or "")

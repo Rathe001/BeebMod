@@ -5,3 +5,8 @@ Data/Live
 
 # crash dumps from the shell
 *.stackdump
+
+# what scripts/fetch-lore.ps1 fetched, kept so a rebuild need not ask the wiki
+# again; it is built from the wiki, not part of the addon
+scripts/lore-cache.json
+scripts/lore-missing.json

@@ -8,22 +8,61 @@ game and the addon settle.
 ## Unreleased
 
 - **The Menagerie**: a journal of every kind of mob you have killed, rares
-  and elites among them. Each has a kill count and its model, which you can
-  drag to turn, and they are filed by creature type. There is no list of the
+  and elites among them, as a card each, five across. A rail down the left
+  files them by creature type or by the zone you first met them in - All
+  first, then each with its count and points - and they sort A to Z or the
+  most killed first, as cards or as a list (three slim rows across, thirty in
+  view). A card lifts over its shadow under the cursor. The mob looks
+  out through a stepped Art Deco arch, over the patch of the zone's map where
+  you first killed it. **The arch is its rank**, in the tooltips' gold and
+  silver: a plain line for an ordinary mob, silver and doubled with a diamond
+  on each step for a rare, gold with brackets at its foot for an elite, rays
+  over the keystone for a world boss, and a gem at the top of the arch for
+  all but the ordinary. Under it: its name (smaller when it is long), what it is,
+  its kills, its mastery and its points - the lore is on its page. **The card's border
+  is its mastery**, and grows more ornate as the mastery climbs: a bare iron
+  line, then bronze, silver, gold, and platinum with a crest, wings, a
+  pendant and a sheen that sweeps across it. The lore comes from the Warcraft
+  Wiki (CC BY-SA 3.0, credited): the most specific page a mob matches - its
+  own, its tribe or clan, its race, its beast family - or else a quest line
+  that names it, or else a line of what the journal knows. Click a card and
+  the mob opens in a popup over the dimmed grid: its whole model in a plain
+  box, to turn (drag), move (right-drag) and zoom (the wheel); its
+  kills, points and mastery; the mastery ladder at its rank; and its lore
+  in a box that scrolls - the best page first, then each page it borrows
+  (its race, family, type) and any quest under a heading of its own, with an
+  ornament between each and the wiki's credit once at the end. A mob whose
+  name and pages never say what it is (this realm's own named mobs) borrows
+  the race of another mob drawn from the same model: Witchmother Arysa
+  has the harpy's body, so she has the Harpy page. The lore covers every
+  mob of every Classic zone, dungeon and raid ahead of the first kill, and
+  the kinds of animal they are (a Darkshore Thresher is a threshadon);
+  `/bt menagerie lore` lists each mob's page and how it was found. The arrows beside
+  it (or the arrow keys) step through the mobs the grid is showing, and
+  Escape or a click outside closes it, leaving the window open. There is no list of the
   game's mobs behind it: a new kind is a new page the first time you kill
-  it, so this realm's own creatures are in it too. **Achievements are the
-  score**:
-  - milestones for how many kinds and how many kills;
-  - each creature type, beast families, rares, elites, world bosses and zones;
-  - a mob five levels above you, or one whose level is a skull;
-  - KillTrack-style kill records - "1000 kills on Barn Owl!" - in the game's
-    own achievement toast.
+  it, so this realm's own creatures are in it too. **Points are the score.**
+  Every kind is worth points of its own: 1, or 3 for an elite, 5 for a
+  rare, 8 for a rare elite and 15 for a world boss.
+  - **Masteries**: Bronze, Silver, Gold and Platinum at 10, 50, 150 and 500
+    kills of one mob, worth 2, 3, 5 and 10 points, each earned on the way
+    to the next. The rarer kinds take fewer: an elite 5, 25, 75 and 250; a
+    rare or rare elite 2, 5, 10 and 20; a world boss 1, 2, 3 and 5. A
+    card's border is its metal, and "Mastery" order puts the highest first.
+  - Achievements: milestones for how many kinds and how many kills; each
+    creature type, beast families, rares, elites, world bosses and zones;
+    a mob five levels above you, or one whose level is a skull.
+  - Masteries and achievements toast in the game's own achievement art.
 
-  A line in the dock shows your points (or your kills) and how close the
-  next discovery milestone is; click it for the journal. The journal counts
-  this character's kills or all your characters' together. It is on the
-  Progress page, with switches for the toasts, their sound, and a toast for
-  every new kind.
+  **Points make a rank**, ten of them: Novice, Scribbler, Observer,
+  Chronicler, Scholar, Lorekeeper, Taxonomist, Loresage, Savant and
+  Polymath. A line in the dock shows your rank - "Scholar (5/10)" - and your
+  points (or your kills), and its bar fills toward the next rank; reaching one is a toast of
+  its own. Click the line for the journal. The journal counts
+  this character's kills or all your characters' together. It has a tab of
+  its own in the Dock group - drag it to move its line in the dock - with
+  switches for the toasts, their sound, and a toast for every new kind. The
+  settings window is a tab taller to make room for it.
 - Without the combat log, a kill is a mob you tagged and fought that dies in
   view. When the kill happens out of sight, the experience line or the loot
   window counts it instead. A mob somebody else tagged is not yours, and

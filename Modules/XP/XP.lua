@@ -195,6 +195,7 @@ function M.Update()
 	local a = BT.Widgets.ACCENT
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(a[1], a[2], a[3], 0.9)
+	BT.Bar.BandColor(M.frame, a)
 	M.rested:SetColorTexture(a[1], a[2], a[3], 0.30)
 	local done = max > 0 and math.min(1, cur / max) or 0
 	local ahead = max > 0 and math.min(1 - done, (rested or 0) / max) or 0

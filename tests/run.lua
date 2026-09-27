@@ -1437,6 +1437,117 @@ do
 	new = J.Kill(bandit({ guid = "g2" }), T + 1)
 	local kills = J.Counts("char")
 	check(not new and kills[251918] == 2, "the second is the same page, counted twice")
+	-- THE SPOT ON THE MAP (Josh 2026-09-26): the first one kept, and a mob met
+	-- before spots were kept takes its next
+	J.Learn({ npc = 251918, map = 2991, mx = 0.4, my = 0.6 })
+	J.Learn({ npc = 251918, map = 2991, mx = 0.9, my = 0.1 })
+	local spot = J.Store().mobs[251918]
+	check(spot.map == 2991 and spot.mx == 0.4 and spot.my == 0.6, "a mob's spot on the map is where it was first met")
+	-- a mob with no spot borrows the middle of its zone's map, until a kill
+	J.Learn({ npc = 777, name = "Old Kill", zone = "Zephras Isle" })
+	check(J.GuessSpots("Zephras Isle", 2991) >= 1 and J.Store().mobs[777].mx == 0.5 and J.Store().mobs[777].spotGuess,
+		"a mob met before spots were kept borrows the middle of its zone's map")
+	J.Learn({ npc = 777, map = 2991, mx = 0.2, my = 0.3 })
+	check(J.Store().mobs[777].mx == 0.2 and not J.Store().mobs[777].spotGuess, "and its next kill puts the real spot in")
+	J.Store().mobs[777] = nil
+	-- LORE FROM QUESTS (Josh 2026-09-26): the game's own words about a mob
+	check(J.LoreSentence("The isle is quiet. Prideclaws stalk the ridge at dusk! Bring me eight pelts.", "Prideclaw")
+		== "Prideclaws stalk the ridge at dusk!", "the sentence that names the mob")
+	check(J.LoreSentence("Nothing here names it. At all.", "Vuldren") == "Nothing here names it.",
+		"or the quest's first sentence")
+	local long = ("word "):rep(60) .. "end."
+	check(#J.LoreSentence(long, "x") <= 150 and J.LoreSentence(long, "x"):find("%.%.%.$"),
+		"a long sentence is cut short at a word")
+	J.Learn({ npc = 5001, name = "Prideclaw", kind = "Beast" })
+	J.Learn({ npc = 5002, name = "Galestrider", kind = "Beast" })
+	local gave = J.QuestSeen({ id = 900, title = "Pride of the Isle",
+		text = "The isle is quiet. The prideclaws stalk the ridge at dusk. Bring me eight pelts.",
+		objectives = { "Galestrider slain: 0/6" } })
+	local pc, gs = J.Store().mobs[5001], J.Store().mobs[5002]
+	check(gave == 2 and gs.lore and gs.lore.quest == "Pride of the Isle", "a quest that names a mob in its objectives gives it lore")
+	check(pc.lore and pc.lore.line == "The prideclaws stalk the ridge at dusk.", "and one that names it in the story, plural and all")
+	check(J.LoreLine(pc) == "The prideclaws stalk the ridge at dusk.", "the card's line is the quest's")
+	-- a mob met after the quest still finds it
+	J.Learn({ npc = 5003, name = "Ridge Stalker" })
+	J.QuestSeen({ id = 901, title = "Up the Ridge", text = "Something hunts on the ridge. Find the Ridge Stalker and end it." })
+	J.Store().mobs[5003].lore = nil
+	J.Learn({ npc = 5003, name = "Ridge Stalker" })
+	check(J.Store().mobs[5003].lore and J.Store().mobs[5003].lore.questID == 901, "a mob met after its quest still finds it")
+	-- and one no quest names keeps the journal's own line, made only of facts
+	J.Learn({ npc = 5004, name = "Vuldren", kind = "Beast", family = "Fox", zone = "Zephras Isle", level = 6 })
+	check(J.LoreLine(J.Store().mobs[5004]) == "A fox of Zephras Isle, first met at level 6.", "with no quest, a line of facts")
+	check(J.LoreLine({ kind = "Elemental" }) == "An elemental.", "with the right article")
+	for _, npc in ipairs({ 5001, 5002, 5003, 5004 }) do J.Store().mobs[npc] = nil end
+	-- LORE FROM THE WIKI (Josh 2026-09-26): matched by the words of a mob's
+	-- name, the most specific first, then its family, then its type
+	local hadData = BT.MenagerieLoreData
+	BT.MenagerieLoreData = {
+		["trogg"] = { "race", "Trogg", "The troggs are a race of brutish, cave-dwelling humanoids." },
+		["rockjaw"] = { "group", "Rockjaw tribe", "The Rockjaw tribe is a tribe of troggs found in Dun Morogh." },
+		["rockjaw tribe"] = { "group", "Rockjaw tribe", "The Rockjaw tribe is a tribe of troggs found in Dun Morogh." },
+		["burly"] = { "group", "Burly", "A page that happens to be called Burly." },
+		["cat"] = { "family", "Cat", "Cats are carnivorous predators." },
+		["humanoid"] = { "type", "Humanoid", "A humanoid usually has two arms." },
+		["hogger"] = { "npc", "Hogger", "Hogger is a gnoll found atop Hogger Hill." },
+		["gnoll"] = { "race", "Gnoll", "Gnolls are hyena-like humanoids." },
+	}
+	local trogg = { name = "Burly Rockjaw Trogg", kind = "Humanoid" }
+	local lore = J.WikiLore(trogg)
+	check(lore[1] and lore[1].title == "Rockjaw tribe" and lore[2].title == "Trogg" and lore[3].title == "Humanoid"
+		and #lore == 3, "the tribe first, then the race, then the type - and a common word is not a match")
+	check(J.LoreLine(trogg) == "The Rockjaw tribe is a tribe of troggs found in Dun Morogh."
+		.. " The troggs are a race of brutish, cave-dwelling humanoids.",
+		"the card takes the most specific, and a short one is followed by the next that says more")
+	-- A PAGE LEADS TO ITS RACE (Josh 2026-09-26): "Bloodfeather Sorceresses are
+	-- harpies" - the name never says harpy, the page does
+	BT.MenagerieLoreData["bloodfeather sorceress"] = { "npc", "Bloodfeather Sorceress",
+		"Bloodfeather Sorceresses are harpies found in Teldrassil." }
+	BT.MenagerieLoreData["harpy"] = { "race", "Harpy", "Harpies are vicious, flying creatures." }
+	local sorc = J.WikiLore({ name = "Bloodfeather Sorceress", kind = "Humanoid" })
+	check(sorc[1].title == "Bloodfeather Sorceress" and sorc[2].title == "Harpy", "a mob's own page leads to the race it names")
+	check(J.LoreLine({ name = "Bloodfeather Sorceress", kind = "Humanoid" })
+		== "Bloodfeather Sorceresses are harpies found in Teldrassil. Harpies are vicious, flying creatures.",
+		"and the card follows the one line with the race's")
+	check(J.Singular(BT.MenagerieLoreData, "harpies")[2] == "Harpy" and J.Singular(BT.MenagerieLoreData, "troggs")[2] == "Trogg",
+		"plurals find their pages: harpies, troggs")
+	check(J.WikiLore({ name = "Prideclaw", kind = "Beast", family = "Cat" })[1].title == "Cat",
+		"a name the wiki does not know falls to its family")
+	check(J.WikiLore({ name = "Hogger", kind = "Humanoid" })[1].title == "Hogger", "a mob with a page of its own has it")
+	check(J.WikiLore({ name = "Riverpaw Gnolls" })[1].title == "Gnoll", "a plural finds its page")
+	-- ANOTHER MOB'S PAGE ONLY BY TWO WORDS OR MORE (Josh 2026-09-26)
+	BT.MenagerieLoreData["darkshore thresher"] = { "npc", "Darkshore Thresher", "Darkshore Threshers are threshadons." }
+	BT.MenagerieLoreData["threshadon"] = { "beast", "Threshadon", "Threshadons are large aquatic dinosaurs." }
+	BT.MenagerieLoreData["vermin"] = { "npc", "Vermin", "Vermin is a rat in Stormwind." }
+	local elder = J.WikiLore({ name = "Elder Darkshore Thresher", kind = "Beast" })
+	check(elder[1].title == "Darkshore Thresher" and elder[1].how == "part" and elder[2].title == "Threshadon"
+		and elder[2].how == "says", "two words of a name reach a kin's page, and its page the kind of creature")
+	local vermin = J.WikiLore({ name = "Kobold Vermin", kind = "Humanoid" })
+	check(vermin[1].title ~= "Vermin", "one word of a name does not take another mob's page")
+	-- THE SAME BODY (Josh 2026-09-26: "Is there no way to determine that this
+	-- named mob is a harpy?"): a name that says nothing borrows the race of a
+	-- mob drawn from the same model file
+	J.Learn({ npc = 6001, name = "Bloodfeather Sorceress", kind = "Humanoid" })
+	J.Learn({ npc = 6002, name = "Witchmother Arysa", kind = "Humanoid" })
+	local arysa = J.Store().mobs[6002]
+	check(J.WikiLore(arysa)[1].title == "Humanoid", "with no body known, only her type")
+	check(J.Body(6001, 131000) and J.Body(6002, 131000) and not J.Body(6002, 131000),
+		"a body is learnt once")
+	local kin = J.WikiLore(arysa)
+	check(kin[1].title == "Harpy" and kin[1].kin == "Bloodfeather Sorceress" and kin[2].title == "Humanoid",
+		"then she is a harpy, like the Bloodfeather Sorceress")
+	J.Learn({ npc = 6002, name = "Witchmother Arysa", kind = "Humanoid" })
+	check(J.Store().mobs[6002].body == 131000, "and learning her again keeps her body")
+	check(J.WikiLore(J.Store().mobs[6001])[2].kin == nil, "a mob whose own page says what it is borrows nothing")
+	check(not J.Body(6003, 5), "a body for a mob the journal has not met is not kept")
+	J.Store().mobs[6001], J.Store().mobs[6002] = nil, nil
+	-- a quest's line only when it names the mob
+	BT.MenagerieLoreData = {}
+	check(J.LoreLine({ name = "Burly Rockjaw Trogg", kind = "Humanoid", zone = "Dun Morogh",
+		lore = { line = "I hope you're here to lend us a hand, shaman.", named = nil } })
+		== "A humanoid of Dun Morogh.", "a quest giver's greeting is not a trogg's lore")
+	check(J.LoreLine({ name = "Prideclaw", lore = { line = "Prideclaws stalk the ridge.", named = true } })
+		== "Prideclaws stalk the ridge.", "but a quest line that names it is")
+	BT.MenagerieLoreData = hadData
 	-- a rank the client hid is not a rank of "nothing"
 	J.Learn({ npc = 1, name = "Silverback", rank = "rare" })
 	J.Learn({ npc = 1, name = "Silverback" })
@@ -1453,20 +1564,69 @@ do
 		"five beasts earn Beast Hunter I, and the tenth kind First Pages: " .. table.concat(earned, ","))
 	local _, again = J.Kill({ npc = 100, name = "Mob 100", kind = "Beast" }, T + 200)
 	check(#again == 0, "and neither is earned a second time")
-	local points = J.Score("char")
-	check(points == 10, ("five points each (%d)"):format(points))
+	local points, count, _, kindPoints = J.Score("char")
+	check(points == 20 and count == 2 and kindPoints == 10,
+		("five points each, and a point for each of the ten kinds (%d, %d from kinds)"):format(points, kindPoints))
+	-- the ranks: Novice at nothing, Polymath at the top, each from its own points
+	local r0, t0 = J.Rank(0)
+	local r1, t1, at1, nextAt, nextTitle = J.Rank(49)
+	local r2, t2 = J.Rank(50)
+	local rTop, tTop, _, beyond = J.Rank(99999)
+	check(r0 == 1 and t0 == "Novice" and r1 == 1 and nextAt == 50 and nextTitle == "Scribbler" and at1 == 0,
+		"49 points is still a Novice, with Scribbler at 50")
+	check(r2 == 2 and t2 == "Scribbler", "50 is a Scribbler")
+	check(rTop == 10 and tTop == "Polymath" and beyond == nil, "the top rank is Polymath, with nothing after it")
+	-- a rarer kind is worth more, and a rank read later is worth it from then
+	J.Kill({ npc = 1, name = "Silverback" }, T + 250)
+	local _, _, _, withRare = J.Score("char")
+	check(withRare == 15, ("a rare is five points of its own (%d)"):format(withRare))
+	J.Learn({ npc = 104, rank = "elite" })
+	local _, _, _, withElite = J.Score("char")
+	check(withElite == 17, ("a rank read after the kill counts from then (%d)"):format(withElite))
 
-	-- a kill record, crossed by the hundredth kill of one mob (and the
-	-- hundredth kill of anything, Blooded, with it)
-	J.Mine().kills[251918] = 99
-	local _, rec = J.Kill(bandit({ guid = "g3" }), T + 300)
-	local record, blooded
-	for _, a in ipairs(rec) do
-		if a.record then record = a end
+	-- MASTERIES (Josh 2026-09-25): the 150th bandit is Gold, and the kill
+	-- that makes it is the hundredth of anything, Blooded, as well
+	J.Mine().kills[251918] = 149
+	local _, got150 = J.Kill(bandit({ guid = "g3" }), T + 300)
+	local gold, blooded
+	for _, a in ipairs(got150) do
+		if a.mastery then gold = a end
 		blooded = blooded or a.id == "total:100"
 	end
-	check(record and record.id == "rec:251918:100" and record.points == 5 and blooded,
-		"the hundredth bandit is a kill record, and the hundredth kill is Blooded")
+	check(gold and gold.name == "Gold" and gold.tier == 3 and gold.points == 5
+		and J.Mine().earned["mastery:251918:3"] and blooded,
+		"the 150th bandit is Gold mastery, and the hundredth kill is Blooded")
+	local _, got151 = J.Kill(bandit({ guid = "g3b" }), T + 301)
+	local again151 = false
+	for _, a in ipairs(got151) do again151 = again151 or a.mastery end
+	check(not again151, "the 151st is not Gold again")
+	-- a Gold mob has been worth Bronze, Silver and Gold: 2 + 3 + 5
+	local masteryTotal, byTier = J.Masteries({ [90001] = 150, [90002] = 10, [90003] = 9 })
+	check(masteryTotal == 12 and byTier[3].mobs == 1 and byTier[1].mobs == 1 and byTier[1].points == 4,
+		("each tier is earned on the way to the next (%d)"):format(masteryTotal))
+	check(J.MobPoints({ rank = "rare" }, 10) == 15 and J.MobPoints({}, 9) == 1,
+		"a mob is worth its kind and its masteries: a Gold rare is 5 + 2 + 3 + 5")
+	local next = J.NextMasteries({ [90001] = 44, [90002] = 9, [90003] = 1 }, 2)
+	check(#next == 2 and next[1].npc == 90002 and next[1].need == 10 and next[2].npc == 90001 and next[2].need == 50,
+		"the nearest masteries come first")
+	-- FEWER KILLS FOR THE RARER KINDS (Josh 2026-09-26): an elite's Platinum
+	-- is 250, a rare's 20 and a world boss's 5; the metals pay the same
+	check(J.Mastery(250, { rank = "elite" }) == 4 and J.Mastery(249, { rank = "elite" }) == 3
+		and J.Mastery(20, { rank = "rare" }) == 4 and J.Mastery(2, { rank = "rareelite" }) == 1
+		and J.Mastery(1, { rank = "worldboss" }) == 1 and J.Mastery(499) == 3,
+		"elites, rares and world bosses reach each mastery in fewer kills")
+	check(J.MobPoints({ rank = "worldboss" }, 5) == 15 + 20, "a Platinum world boss is 15 + 20")
+	J.Learn({ npc = 90004, name = "Old Rare", rank = "rare" })
+	local _, rareNews = J.Kill({ npc = 90004, name = "Old Rare", guid = "r1" }, T + 350)
+	local _, rareNews2 = J.Kill({ npc = 90004, name = "Old Rare", guid = "r2" }, T + 351)
+	local rareBronze
+	for _, a in ipairs(rareNews2) do
+		if a.mastery then rareBronze = a end
+	end
+	local firstRare = false
+	for _, a in ipairs(rareNews) do firstRare = firstRare or a.mastery end
+	check(not firstRare and rareBronze and rareBronze.name == "Bronze" and rareBronze.need == 2,
+		"the second kill of a rare is its Bronze")
 	-- a skull is a feat
 	local _, feat = J.Kill({ npc = 900, name = "Big One", level = -1, myLevel = 7 }, T + 400)
 	local skull = false
@@ -1477,10 +1637,19 @@ do
 	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Alt" or nil end
 	J.Kill(bandit({ guid = "g4" }), T + 500)
 	local mine, all = J.Counts("char"), J.Counts("account")
-	check(mine[251918] == 1 and all[251918] == 101, "a character counts its own; the account counts all")
+	check(mine[251918] == 1 and all[251918] == 152, "a character counts its own; the account counts all")
 	local pages = J.Pages(all)
 	check(pages[1].kind == "Beast" and pages[2].kind == "Humanoid",
 		"the journal files by type, in the client's usual order")
+	-- VIEWS (Josh 2026-09-25): by zone, A to Z with the unknown last; by mastery
+	local zones = J.Pages(all, "zone", "mastery")
+	check(zones[1].kind == "Zephras Isle" and zones[#zones].kind == J.NOWHERE,
+		"by zone: the zones A to Z, and the mobs with none on record last")
+	local unknown = zones[#zones].mobs
+	-- the rare's two kills are Bronze, so it leads the ordinary mob's two
+	check(unknown[1].npc == 90004 and unknown[2].npc == 100 and unknown[2].n == 2 and unknown[3].n == 1
+		and (unknown[3].m.name or "") <= (unknown[4].m.name or ""),
+		"by mastery: the highest mastery first, then the most killed, then A to Z")
 	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Drood" or nil end
 
 	-- THE KILL RULES, with a client that answers from a table of units

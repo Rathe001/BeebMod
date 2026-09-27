@@ -44,8 +44,9 @@ local GROUP_H, GROUP_GAP, FOOT_H = 20, 8, 16
 -- with two headings since the unit frames, buffs and game menu arrived - and
 -- they need the room
 -- (640 tall, Josh 2026-09-24: the rail's five groups want the room; 660
--- the same day, for the Testing tab under General)
-local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 660
+-- the same day, for the Testing tab under General; 682, a tab's stride more,
+-- for the Menagerie's, Josh 2026-09-25)
+local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 682
 -- the page's own header: its name, a line under it, and its switch
 local HEADER_H = 54
 
@@ -332,10 +333,8 @@ W.PAGES = {
 		blurb = "the panel at the side of the screen: its size, and what sits in its header" },
 	map = { title = "Minimap", group = "dock", members = { "minimap", "buttons" },
 		blurb = "the map in the dock, and the line of other addons' buttons" },
-	-- the Menagerie is progress too, and a tab of its own did not fit on the
-	-- rail (Josh 2026-09-25)
-	progress = { title = "Progress", group = "dock", members = { "xp", "rep", "menagerie" },
-		blurb = "your level and your standing, roughly how long the rest will take, and every kind of mob you have killed" },
+	progress = { title = "Progress", group = "dock", members = { "xp", "rep" },
+		blurb = "your level and your standing, and roughly how long the rest will take" },
 	allmenus = { title = "Menus", group = "windows", members = { "menu", "menus" },
 		blurb = "the menu Escape opens, and every dropdown and right-click menu" },
 	censusset = { title = "Census", group = "people", members = { "census" },

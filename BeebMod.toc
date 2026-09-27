@@ -88,9 +88,11 @@ Modules\XP\XP.lua
 Modules\Rep\Rep.lua
 # every kind of mob you have killed: the book, what counts as a kill, the
 # toast and the journal window before the module that drives them
+Modules\Menagerie\LoreData.lua
 Modules\Menagerie\Journal.lua
 Modules\Menagerie\Kills.lua
 Modules\Menagerie\Toast.lua
+Modules\Menagerie\Card.lua
 Modules\Menagerie\Window.lua
 Modules\Menagerie\Menagerie.lua
 Modules\Chat\Chat.lua

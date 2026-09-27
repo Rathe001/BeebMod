@@ -362,6 +362,40 @@ local function layout()
 	B.Relayout()
 end
 
+-- EACH BAND IN ITS OWN ROW'S COLOUR (Josh 2026-09-26: "you added the same
+-- background color to all of these. Can we make them look different so they
+-- are easier to find at a glance?"). A meter says the colour of its bar -
+-- Experience the accent, Reputation its standing, the Menagerie its ink -
+-- and its band is a faint wash of the same, so each row is known by colour
+-- before it is read. No colour said, a faint lightening.
+local BAND_ALPHA, PLAIN_ALPHA = 0.11, 0.045
+
+function B.PaintBand(f)
+	local band = f and f.beebsBand
+	if not band then
+		return
+	end
+	local c = f.beebsBandColor
+	if c then
+		band:SetColorTexture(c[1], c[2], c[3], BAND_ALPHA)
+	else
+		band:SetColorTexture(1, 1, 1, PLAIN_ALPHA)
+	end
+end
+
+-- a meter's colour, whenever its bar is painted
+function B.BandColor(f, c)
+	if not f then
+		return
+	end
+	local was = f.beebsBandColor
+	if was and c and was[1] == c[1] and was[2] == c[2] and was[3] == c[3] then
+		return
+	end
+	f.beebsBandColor = c and { c[1], c[2], c[3] } or nil
+	B.PaintBand(f)
+end
+
 function B.RowWanted()
 	if not (bar and cells) then
 		return false
@@ -795,6 +829,23 @@ function B.Relayout()
 		-- left without one between them, and read as one bar with two labels
 		if rule then
 			rule:SetShown(n < #stack)
+		end
+		-- A BAND BEHIND EACH METER (Josh 2026-09-26: "anything we can do to
+		-- make these rows look more distinct? Maybe a subtle background?").
+		-- Experience, Reputation and the Menagerie sat flush on one fill, the
+		-- hairline between them too fine to part them; each now sits on a
+		-- faint lightened strip, inset from the panel's edge and from the
+		-- line under it, so three rows read as three.
+		if f and not item.row then
+			if item.kind == "meter" and not f.beebsBand then
+				f.beebsBand = f:CreateTexture(nil, "BACKGROUND")
+				f.beebsBand:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -1)
+				f.beebsBand:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 2)
+				B.PaintBand(f)
+			end
+			if f.beebsBand then
+				f.beebsBand:SetShown(item.kind == "meter")
+			end
 		end
 	end
 	B.stack = stack

@@ -220,6 +220,7 @@ function M.Update()
 	local c = M.StandingColour(f.reaction)
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(c[1], c[2], c[3], 0.9)
+	BT.Bar.BandColor(M.frame, c)
 	local done = (f.reaction >= TOP or f.max <= 0) and 1 or math.min(1, f.cur / f.max)
 	-- a texture of no width is drawn as a whole one, so an empty bar is hidden
 	M.fill:SetShown(done > 0)
