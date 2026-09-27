@@ -7,8 +7,10 @@ local U, DB = BT.Util, BT.DB
 
 BT.Command("stats", function()
 	local s = DB.Stats(BT.db)
+	-- noted: the Ledger's to count (its own book), when there is a Ledger
+	local noted = BT.Notes and BT.Notes.Count() or s.mine
 	U.Print(("%s %s · %d characters · %d noted · %d guilded · %d sightings")
-		:format(BT.scope.realm, BT.scope.faction, s.total, s.mine, s.guilded, BT.db.stats.sightings or 0))
+		:format(BT.scope.realm, BT.scope.faction, s.total, noted, s.guilded, BT.db.stats.sightings or 0))
 	-- how the book is kept (Core/Pack.lua): packed, and how big it may grow
 	local n, packed = DB.Count(BT.db)
 	local cap = BT.settings.bookCap or 0
@@ -29,19 +31,11 @@ BT.Command("stats", function()
 	end
 end, "this book")
 
--- No longer a switch: the book is filled because the Ledger or the Census
--- wants it, so this says which (Josh 2026-09-20).
+-- No longer a switch: the book is filled because the Census wants it
+-- (Josh 2026-09-20; the Census alone since 2026-09-26).
 BT.Command("collect", function()
-	local who = {}
-	if BT.Enabled("ledger") then
-		who[#who + 1] = "ledger"
-	end
-	if BT.Enabled("census") then
-		who[#who + 1] = "census"
-	end
-	U.Print(#who > 0
-		and ("collecting for " .. table.concat(who, " and "))
-		or "not collecting - the ledger and the census are both off")
+	U.Print(BT.Enabled("census") and "collecting for the census"
+		or "not collecting - the census is off")
 end, "who the book is being filled for")
 
 BT.Command("prune", function(rest)

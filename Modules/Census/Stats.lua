@@ -150,9 +150,9 @@ local keyOf = {
 }
 S.PICKABLE = { class = true, race = true, guild = true, zone = true, flag = true }
 
-local function picks(pick, p)
+local function picks(pick, p, flags)
 	if pick.mode == "flag" then
-		return p.flags ~= nil and p.flags[pick.key] ~= nil
+		return flags ~= nil and flags[pick.key] ~= nil
 	end
 	local of = keyOf[pick.mode]
 	return of ~= nil and of(p) == pick.key
@@ -198,7 +198,18 @@ end
 -- an empty table to walk their tags when they had none, and searched the
 -- bands and the age buckets in order.
 local AGE = S.AGE_BUCKETS
-local function count(t, p)
+-- YOUR TAGS ARE THE LEDGER'S (Josh 2026-09-26): what you wrote on someone is
+-- in its own book (Modules/Ledger/Store.lua), looked up by the key; a row an
+-- older version wrote on, not moved yet, still carries its own
+local function yours(key, p)
+	local mine = key and BT.Notes and BT.Notes.Get(key)
+	if mine then
+		return true, mine.flags
+	end
+	return DB.IsMine(p), p.flags
+end
+
+local function count(t, p, key)
 	t.book = t.book + 1
 	local age = t.now - (p.last or t.now)
 	-- not seen lately: on no chart at all (never seen has no age, so it is
@@ -208,7 +219,8 @@ local function count(t, p)
 	end
 	t.total = t.total + 1
 	local pick = t.pick
-	local matched = pick == nil or picks(pick, p)
+	local isMine, flags = yours(key, p)
+	local matched = pick == nil or picks(pick, p, flags)
 	-- a chart counts a character the pick picks - or anybody, if the pick
 	-- was made on that chart
 	local pickMode = pick and pick.mode
@@ -225,7 +237,7 @@ local function count(t, p)
 	if not ((not t.filtering) or (myBand ~= nil and t.bands[myBand])) then
 		matched, pickMode = false, nil
 	end
-	if DB.IsMine(p) then
+	if isMine then
 		t.mine = t.mine + 1
 	end
 	if matched or pickMode == "class" then
@@ -261,7 +273,6 @@ local function count(t, p)
 		end
 	end
 	if matched or pickMode == "flag" then
-		local flags = p.flags
 		if flags and next(flags) then
 			t.tagged = t.tagged + 1
 			for key in pairs(flags) do
@@ -269,7 +280,7 @@ local function count(t, p)
 			end
 		end
 	end
-	if pick and not picks(pick, p) then
+	if pick and not picks(pick, p, flags) then
 		return
 	end
 	t.ages[#t.ages + 1] = age
@@ -357,8 +368,8 @@ function S.Census(db, now, filter)
 	local t = begin(now or U.Now(), filter)
 	-- read where they lie: a packed character is read out of its string
 	-- into a borrowed table, never unpacked into a row of its own
-	for _, p in DB.Each(db) do
-		count(t, p)
+	for key, p in DB.Each(db) do
+		count(t, p, key)
 	end
 	return finish(t)
 end
@@ -382,7 +393,7 @@ function S.CensusJob(db, now, filter, per)
 	return function()
 		local stop = math.min(#list, at + per)
 		for i = at + 1, stop do
-			count(t, DB.View(db, keys[i], list[i]))
+			count(t, DB.View(db, keys[i], list[i]), keys[i])
 		end
 		at = stop
 		if at >= #list then

@@ -45,3 +45,23 @@ end, "the charts, in their own window", "census")
 BT.Command("age", function()
 	BT.Util.Print(BT.Stats.AgeLine(BT.Stats.Census(BT.db)))
 end, "how old this book is", "census")
+
+-- WAS IN A GUILD (moved from the Ledger's tooltip, Josh 2026-09-26): a guild
+-- change is the census's to know, so it says so itself, for anyone in the
+-- book - after the Ledger's note and tags
+BT.OnUnitTooltip("census", 30, function(tip, unit)
+	if not (BT.settings and BT.settings.tooltipGuild and BT.db and tip and unit and UnitIsPlayer(unit)) then
+		return
+	end
+	local U = BT.Util
+	local name, realm = U.UnitFullName(unit)
+	local key = name and U.Key(name, realm)
+	local p = key and BT.DB.Get(BT.db, key)
+	local former, when = BT.DB.FormerGuild(p)
+	if former then
+		tip:AddLine(("Was in %s, %s"):format(former, U.Since(when)), 0.6, 0.65, 0.7)
+		if tip.Show then
+			tip:Show()
+		end
+	end
+end)

@@ -18,7 +18,34 @@
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Find.lua")
 
-local U, DB = BT.Util, BT.DB
+local U, N = BT.Util, BT.Notes
+
+-- THE LEDGER'S OWN BOOK, AND THE CENSUS'S WHEN THERE IS ONE (Josh
+-- 2026-09-26). What you wrote is on the Ledger's rows (Modules/Ledger/
+-- Store.lua); anyone else is found in the census's book, if a census is here.
+local function census()
+	return BT.DB and BT.db and BT.DB or nil
+end
+
+-- a person's face to show: yours, else the census's, else what the unit
+-- in front of you said when the panel was opened on them
+local function face(key, info)
+	if not key then
+		return nil
+	end
+	local p = N.Get(key)
+	if p then
+		return p
+	end
+	local C = census()
+	return (C and C.Get(BT.db, key)) or info
+end
+
+-- both books' changes, as one number that only rises
+local function rev()
+	local C = census()
+	return N.rev + (C and C.rev or 0)
+end
 local B = {}
 BT.Find = B
 
@@ -393,7 +420,7 @@ function B.RebuildFlags()
 					end
 					return
 				end
-				DB.ToggleFlag(BT.db, selected, self.flagKey)
+				N.ToggleFlag(selected, self.flagKey, editor and editor.info)
 				B.Refresh()
 			end)
 			e.pool[i] = row
@@ -506,7 +533,7 @@ local function refreshEditor()
 		return
 	end
 	editorRefreshes = editorRefreshes + 1
-	local p = selected and DB.Get(BT.db, selected)
+	local p = face(selected, editor.info)
 	if not p then
 		return
 	end
@@ -636,11 +663,14 @@ function B.FloatEditor(anchor)
 	end
 end
 
-function B.OpenEditorFor(key, anchor)
-	if not (editor and key and DB.Get(BT.db, key)) then
+-- `info`: what a unit in front of you says about them, for someone neither
+-- book has yet - the first note on a stranger makes their row
+function B.OpenEditorFor(key, anchor, info)
+	if not (editor and key and face(key, info)) then
 		return false
 	end
 	selected = key
+	editor.info = info
 	if panel and BT.Window.IsShown() and BT.Window.View() == "ledger" then
 		B.DockEditor()
 	else
@@ -687,9 +717,10 @@ function B.SaveText(key, text)
 	if not (key and type(text) == "string") then
 		return false
 	end
-	local p = DB.Get(BT.db, key)
+	local info = editor and editor.info
+	local p = face(key, info)
 	if p and (p.note or "") ~= text then
-		DB.SetNote(BT.db, key, text)
+		N.SetNote(key, text, key == selected and info or nil)
 		return true
 	end
 	return false
@@ -805,7 +836,7 @@ local function cardTag(card, i)
 		t:SetScript("OnLeave", function(self) self.hot:Hide() end)
 		t:SetScript("OnClick", function(self)
 			if card.key and self.flagKey then
-				DB.ToggleFlag(BT.db, card.key, self.flagKey)
+				N.ToggleFlag(card.key, self.flagKey)
 				B.Refresh()
 			end
 		end)
@@ -962,7 +993,27 @@ local function refreshFind()
 		limit = CARDS + 1,
 	}
 	local asked = query.text ~= nil or query.flag ~= nil or query.mineOnly
-	results = asked and DB.Search(BT.db, query) or {}
+	results = {}
+	if asked then
+		-- the people you wrote on first; then, with a census, anyone else it
+		-- knows - but a tag or "yours only" is a question for the Ledger alone
+		local have = {}
+		for _, r in ipairs(N.Search(query)) do
+			results[#results + 1] = r
+			have[r.key] = true
+		end
+		local C = census()
+		if C and not query.flag and not query.mineOnly and #results < query.limit then
+			for _, r in ipairs(C.Search(BT.db, query)) do
+				if #results >= query.limit then
+					break
+				end
+				if not have[r.key] then
+					results[#results + 1] = r
+				end
+			end
+		end
+	end
 	shownCards, cardsHeight = 0, 0
 	for i, card in ipairs(cards) do
 		local row = results[i]
@@ -979,9 +1030,11 @@ local function refreshFind()
 			card:Hide()
 		end
 	end
-	local s = DB.Stats(BT.db)
 	if not asked then
-		emptyLine:SetText(("%d characters · %d with something of yours on them"):format(s.total, s.mine))
+		local C = census()
+		emptyLine:SetText(C
+			and ("%d characters · %d with something of yours on them"):format(C.Stats(BT.db).total, N.Count())
+			or ("%d with something of yours on them"):format(N.Count()))
 		emptyLine:Show()
 	elseif #results == 0 then
 		emptyLine:SetText("no match")
@@ -1007,7 +1060,7 @@ function B.Tick()
 	if not (panel and BT.Enabled("ledger") and BT.Window.IsShown() and BT.Window.View() == "ledger") then
 		return false
 	end
-	if DB.rev == seenRev then
+	if rev() == seenRev then
 		return false
 	end
 	-- NOT UNDER THE POINTER (Josh 2026-09-23, audit): the list is sorted by
@@ -1018,7 +1071,7 @@ function B.Tick()
 	if panel.IsMouseOver and panel:IsMouseOver() then
 		return false
 	end
-	seenRev = DB.rev
+	seenRev = rev()
 	-- never overwrite a note you are in the middle of typing
 	if B.EditorShown() then
 		refreshFind()
@@ -1047,8 +1100,8 @@ function B.Refresh()
 	-- rebuilds it - so doing it on every DB.rev meant doing it on every
 	-- sighting, which in a city is several a second, and the tooltip under
 	-- your cursor jumped the whole time the window was open.
-	if DB.noteRev ~= restackedAt and BT.Tooltip and BT.Tooltip.Restack then
-		restackedAt = DB.noteRev
+	if N.noteRev ~= restackedAt and BT.Tooltip and BT.Tooltip.Restack then
+		restackedAt = N.noteRev
 		BT.Tooltip.Restack()
 	end
 end

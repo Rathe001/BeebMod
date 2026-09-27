@@ -95,10 +95,9 @@ function BT.AddTag(label, colorIndex, key)
 	}
 	BT.settings.tags[#BT.settings.tags + 1] = tag
 	-- a new tag is something a tooltip can show, so the tooltip's own
-	-- counter moves too (see DB.noteRev)
-	if BT.DB then
-		BT.DB.rev = BT.DB.rev + 1
-		BT.DB.noteRev = (BT.DB.noteRev or 0) + 1
+	-- counter moves too (see BT.Notes.noteRev)
+	if BT.Notes then
+		BT.Notes.Touched(true)
 	end
 	return tag
 end
@@ -106,11 +105,17 @@ end
 -- How many characters carry this tag, and in how many books. Deleting is not
 -- reversible, so the question "how much am I about to throw away" has to have
 -- an answer before the click, not after (Josh 2026-09-19).
+-- Every book of the Ledger's (Modules/Ledger/Store.lua), realm and side each.
+local function ledgerBooks()
+	local root = BT.Notes and BT.Notes.Root()
+	return (root and root.realms) or {}
+end
+
 function BT.TagUsage(key)
 	local characters, books = 0, 0
-	for _, book in pairs((BeebModDB and BeebModDB.realms) or {}) do
+	for _, book in pairs(ledgerBooks()) do
 		local here = 0
-		for _, p in pairs(book.players or {}) do
+		for _, p in pairs(book.people or {}) do
 			if p.flags and p.flags[key] then
 				here = here + 1
 			end
@@ -139,20 +144,24 @@ function BT.RemoveTag(key)
 	if not found then
 		return false
 	end
-	for _, book in pairs((BeebModDB and BeebModDB.realms) or {}) do
-		for _, p in pairs(book.players or {}) do
+	for _, book in pairs(ledgerBooks()) do
+		local people = book.people or {}
+		for key, p in pairs(people) do
 			if p.flags and p.flags[found.key] then
 				p.flags[found.key] = nil
 				if not next(p.flags) then
 					p.flags = nil
 				end
+				-- a row that was only this tag is nobody's any more
+				if BT.Notes and not BT.Notes.IsMine(p) then
+					people[key] = nil
+				end
 			end
 		end
 	end
-	if BT.DB then
-		BT.DB.rev = BT.DB.rev + 1
-		-- and the tooltip under the cursor stops showing the deleted tag
-		BT.DB.noteRev = (BT.DB.noteRev or 0) + 1
+	-- and the tooltip under the cursor stops showing the deleted tag
+	if BT.Notes then
+		BT.Notes.Touched(true)
 	end
 	return true, found
 end
@@ -162,8 +171,10 @@ end
 -- thing the addon does on an ordinary login. It runs from the Ledger module's
 -- OnBind and nowhere else, so a toolkit with the Ledger switched off never
 -- tidies away judgements it is not currently showing you.
-function BT.MigrateTags(db)
-	if not (db and BT.settings) then
+function BT.MigrateTags()
+	-- the people written on in this book: the tags live on the Ledger's rows
+	local db = { players = BT.Notes and BT.Notes.People() }
+	if not (db.players and BT.settings) then
 		return
 	end
 	local live = {}

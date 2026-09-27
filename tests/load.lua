@@ -608,8 +608,8 @@ if ok then
 			end
 			-- the tooltip is about whoever the unit is, and the stub's unit is
 			-- Beeb Bob: tag THEM, not somebody else
-			BT.DB.SetFlag(BT.db, "Beeb Bob", "good", true)
-			BT.DB.SetFlag(BT.db, "Beeb Bob", "troll", true)
+			BT.Notes.SetFlag("Beeb Bob", "good", true)
+			BT.Notes.SetFlag("Beeb Bob", "troll", true)
 			BT.Tooltip.Fill(tip, "target")
 
 			-- BACK INSIDE THE TOOLTIP (Josh 2026-09-20). They sat on a strip
@@ -697,7 +697,7 @@ if ok then
 				end,
 				NumLines = function() return #lines end,
 			}, { __index = function() return function() end end })
-			BT.DB.SetNote(BT.db, "Beeb Bob", "the best lol")
+			BT.Notes.SetNote("Beeb Bob", "the best lol")
 			BT.Tooltip.Fill(tip, "target")
 			local joined = table.concat(lines, " | ")
 			-- THE NOTE FLOATS (Josh 2026-09-19). It was four lines inside the
@@ -772,14 +772,15 @@ if ok then
 
 			-- and it goes when there is nothing to say at all: no note AND no
 			-- tags, since the tags live on it too now
-			BT.DB.SetNote(BT.db, "Beeb Bob", "")
-			local hadGood = BT.DB.Get(BT.db, "Beeb Bob").flags
-			BT.DB.Get(BT.db, "Beeb Bob").flags = nil
+			BT.Notes.SetNote("Beeb Bob", "")
+			local bob = BT.Notes.Get("Beeb Bob")
+			local hadGood = bob.flags
+			bob.flags = nil
 			BT.Tooltip.Fill(tip, "target")
 			assert(not card:IsShown() and not quote:IsShown(),
 				"nothing of yours, nothing above the tooltip")
-			BT.DB.Get(BT.db, "Beeb Bob").flags = hadGood
-			BT.DB.SetNote(BT.db, "Beeb Bob", "the best lol")
+			bob.flags = hadGood
+			BT.Notes.SetNote("Beeb Bob", "the best lol")
 		end },
 		{ "the bar on the world", function()
 			BT.Bar.Create()
@@ -804,9 +805,9 @@ if ok then
 
 			-- somebody you have written about: a dot per tag, and a note mark
 			BT.DB.Note(BT.db, "Beeb Bob", nil, { guid = "Player-4372-0002BFB1", class = "WARRIOR" })
-			BT.DB.SetFlag(BT.db, "Beeb Bob", "good", true)
-			BT.DB.SetFlag(BT.db, "Beeb Bob", "troll", true)
-			BT.DB.SetNote(BT.db, "Beeb Bob", "held the door")
+			BT.Notes.SetFlag("Beeb Bob", "good", true)
+			BT.Notes.SetFlag("Beeb Bob", "troll", true)
+			BT.Notes.SetNote("Beeb Bob", "held the door")
 			BT.Bar.Update()
 			assert(cell.who.key == "Beeb Bob", "it knows who you have targeted")
 			assert(#q.dots.tags == 2 and q.dots.list[1]:IsShown() and q.dots.list[2]:IsShown(),
@@ -827,10 +828,10 @@ if ok then
 				"the tags step aside for it rather than sitting under it")
 
 			-- and it goes when the note does
-			BT.DB.SetNote(BT.db, "Beeb Bob", "")
+			BT.Notes.SetNote("Beeb Bob", "")
 			BT.Bar.Update()
 			assert(not q.dots.note:IsShown(), "no note, no mark")
-			BT.DB.SetNote(BT.db, "Beeb Bob", "held the door")
+			BT.Notes.SetNote("Beeb Bob", "held the door")
 			BT.Bar.Update()
 
 			assert(cell.dots.side == "right" and cell.cog.side == "right",
@@ -1027,7 +1028,7 @@ if ok then
 			assert(flags.good.swatch and flags.good.text, "each tag is a swatch and a label")
 			assert(flags.good.pillLeft == nil, "and not a pill any more")
 			flags.good:GetScript("OnClick")(flags.good, "LeftButton")
-			assert(BT.DB.Get(BT.db, "Trilly Lightbolt").flags.good, "the tag went on")
+			assert((BT.Notes.Get("Trilly Lightbolt") or {}).flags.good, "the tag went on")
 			assert(BT.Find.EditorRefreshes() > before, "and the panel was redrawn")
 			-- ON IS THREE THINGS AT ONCE: a wash behind the line, a solid
 			-- square, and the name in full ink. One difference was not enough
@@ -1064,7 +1065,7 @@ if ok then
 			-- one that somebody carries still asks
 			mine = BT.AddTag("Carried")
 			BT.Find.RebuildFlags()
-			BT.DB.SetFlag(BT.db, "Trilly Lightbolt", mine.key, true)
+			BT.Notes.SetFlag("Trilly Lightbolt", mine.key, true)
 			row = BT.Find.EditorFlagButtons()[mine.key]
 			row.kill:GetScript("OnClick")(row.kill)
 			assert(BT.Find.ConfirmShown(), "a tag somebody carries asks before deleting")
@@ -1075,7 +1076,7 @@ if ok then
 			row:GetScript("OnClick")(row, "RightButton")
 			assert(BT.Find.ConfirmShown(), "right-clicking one of yours asks too")
 			BT.Find.ConfirmButtons().no:GetScript("OnClick")(BT.Find.ConfirmButtons().no)
-			BT.DB.SetFlag(BT.db, "Trilly Lightbolt", mine.key, false)
+			BT.Notes.SetFlag("Trilly Lightbolt", mine.key, false)
 			BT.RemoveTag(mine.key)
 			BT.Find.RebuildFlags()
 
@@ -1099,7 +1100,7 @@ if ok then
 				"and sits below it")
 			catch:GetScript("OnClick")(catch, "LeftButton")
 			assert(not BT.Find.EditorShown(), "clicking outside closes the panel")
-			assert(BT.DB.Get(BT.db, "Trilly Lightbolt").note == "half typed",
+			assert((BT.Notes.Get("Trilly Lightbolt") or {}).note == "half typed",
 				"and writes down what was in the box")
 			assert(not catch:IsShown(), "the catcher goes with it")
 			BT.Find.CloseEditor()
@@ -1107,7 +1108,7 @@ if ok then
 			BT.Find.OpenEditorFor("Trilly Lightbolt", _G.BeebModBar)
 			BT.Find.EditorNoteBox():SetText("typed, then the X")
 			BT.Find.CloseEditor()
-			assert(BT.DB.Get(BT.db, "Trilly Lightbolt").note == "typed, then the X",
+			assert((BT.Notes.Get("Trilly Lightbolt") or {}).note == "typed, then the X",
 				"closing the panel any way keeps what was typed")
 			-- and a save that changes nothing keeps who wrote it and when
 			local row = BT.DB.Get(BT.db, "Trilly Lightbolt")
@@ -1164,16 +1165,16 @@ if ok then
 			end
 			assert(troll, "the Troll tag is one of them")
 			troll:GetScript("OnClick")(troll)
-			assert(BT.DB.Get(BT.db, "Beeb Lighthammer").flags.troll, "clicking it tags them")
+			assert((BT.Notes.Get("Beeb Lighthammer") or {}).flags.troll, "clicking it tags them")
 			troll:GetScript("OnClick")(troll)
-			assert(BT.DB.Get(BT.db, "Beeb Lighthammer").flags == nil, "clicking again takes it off")
+			assert((BT.Notes.Get("Beeb Lighthammer") or {}).flags == nil, "clicking again takes it off")
 
 			-- the note is typed on the row and saved with enter
 			local box = BT.Find.CardNoteBox(card)
 			assert(box:IsShown(), "the open row has a note field")
 			box.GetText = function() return "held the cave pull on his own" end
 			box:GetScript("OnEnterPressed")(box)
-			assert(BT.DB.Get(BT.db, "Beeb Lighthammer").note == "held the cave pull on his own",
+			assert((BT.Notes.Get("Beeb Lighthammer") or {}).note == "held the cave pull on his own",
 				"enter saves the note")
 
 			-- clicking the open row again closes it
@@ -1397,13 +1398,14 @@ if ok then
 			for _, r in ipairs(BT.Settings.Extras()) do
 				assert(r.field ~= "collect", "there is no collecting switch to get wrong")
 			end
-			assert(BT.Collecting(), "it follows the two utilities that read it")
+			-- the Census's alone now: the Ledger keeps its own book (2026-09-26)
+			assert(BT.Collecting(), "it follows the census")
 			local hadLedger, hadCensus = BT.Enabled("ledger"), BT.Enabled("census")
-			BT.SetEnabled("ledger", false)
 			BT.SetEnabled("census", false)
-			assert(not BT.Collecting(), "with both off, nothing is written down")
+			assert(not BT.Collecting(), "with the census off, nothing is written down, whatever the Ledger is doing")
 			BT.SetEnabled("census", true)
-			assert(BT.Collecting(), "and either one on is reason enough")
+			BT.SetEnabled("ledger", false)
+			assert(BT.Collecting(), "and the census alone is reason enough")
 			BT.SetEnabled("ledger", hadLedger)
 			BT.SetEnabled("census", hadCensus)
 		end },
@@ -1545,7 +1547,7 @@ if ok then
 
 			-- the Ledger's note is a card above the tooltip, not a line in it,
 			-- so the tooltip keeps the size it had
-			BT.DB.SetNote(BT.db, "Beeb Bob", "held the door")
+			BT.Notes.SetNote("Beeb Bob", "held the door")
 			local was = #lines
 			BT.Tooltip.Fill(tip, "target")
 			for i = 3, #lines do
@@ -1604,7 +1606,7 @@ if ok then
 		end },
 		{ "a note on a card is quoted, right-aligned, and signed", function()
 			local key = "Beeb Bob"
-			BT.DB.SetNote(BT.db, key, "held the line")
+			BT.Notes.SetNote(key, "held the line")
 			BT.Find.Select(nil)
 			BT.Find.Search("beeb")
 			local found, keys = nil, {}
@@ -1630,15 +1632,16 @@ if ok then
 			-- which tears the tooltip down and builds it again. The Ledger used
 			-- to do that on every DB.rev - so every sighting, several a second
 			-- in a city, while the window was open.
-			local notes = BT.DB.noteRev
+			-- what a tooltip shows is the Ledger's, and so is its counter
+			local notes = BT.Notes.noteRev
 			BT.DB.Note(BT.db, "Passer By", nil, { guid = "Player-70-0000DDDD", class = "WARRIOR" })
-			assert(BT.DB.noteRev == notes, "a sighting is not something a tooltip shows")
+			assert(BT.Notes.noteRev == notes, "a sighting is not something a tooltip shows")
 			assert(BT.DB.rev > 0, "but it is still a write the list should notice")
-			BT.DB.SetNote(BT.db, "Passer By", "shared a quest")
-			assert(BT.DB.noteRev > notes, "writing a note is")
-			local tagged = BT.DB.noteRev
-			BT.DB.SetFlag(BT.db, "Passer By", "good", true)
-			assert(BT.DB.noteRev > tagged, "and so is tagging somebody")
+			BT.Notes.SetNote("Passer By", "shared a quest")
+			assert(BT.Notes.noteRev > notes, "writing a note is")
+			local tagged = BT.Notes.noteRev
+			BT.Notes.SetFlag("Passer By", "good", true)
+			assert(BT.Notes.noteRev > tagged, "and so is tagging somebody")
 		end },
 		{ "the tracker's switches redraw the panel they are about", function()
 			-- the same quest log the tracker test set up, with quest 2 finished
@@ -8775,29 +8778,29 @@ if ok then
 		{ "/bt stats", function() SlashCmdList.BEEBSTOOLKIT("stats") end },
 		{ "/bt note", function()
 			SlashCmdList.BEEBSTOOLKIT("note Beeb Bob solid tank")
-			assert(BT.DB.Get(BT.db, "Beeb Bob").note == "solid tank", "the command wrote the note")
+			assert((BT.Notes.Get("Beeb Bob") or {}).note == "solid tank", "the command wrote the note")
 			-- NOTHING TYPED READS IT BACK: it used to erase the note
 			SlashCmdList.BEEBSTOOLKIT("note Beeb Bob")
-			assert(BT.DB.Get(BT.db, "Beeb Bob").note == "solid tank", "a bare /bt note keeps the note")
+			assert((BT.Notes.Get("Beeb Bob") or {}).note == "solid tank", "a bare /bt note keeps the note")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob 4")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob 9")
-			assert(BT.DB.Get(BT.db, "Beeb Bob").rating == 4, "a bare or wrong rating keeps the rating")
+			assert((BT.Notes.Get("Beeb Bob") or {}).rating == 4, "a bare or wrong rating keeps the rating")
 			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob clear")
-			assert(BT.DB.Get(BT.db, "Beeb Bob").rating == nil, "and clear clears it")
+			assert((BT.Notes.Get("Beeb Bob") or {}).rating == nil, "and clear clears it")
 		end },
 		{ "/bt flag", function()
 			-- a toggle, so the check is that it CHANGED, not what it landed on
-			local before = BT.DB.Get(BT.db, "Beeb Bob").flags
+			local before = (BT.Notes.Get("Beeb Bob") or {}).flags
 			before = before and before.troll or false
 			SlashCmdList.BEEBSTOOLKIT("flag Beeb Bob troll")
-			local after = BT.DB.Get(BT.db, "Beeb Bob").flags
+			local after = (BT.Notes.Get("Beeb Bob") or {}).flags
 			after = after and after.troll or false
 			assert(after ~= before, "the command toggled the tag")
 			-- by its label too, in any case
 			local label = BT.Util.FlagByKey("troll").label
 			SlashCmdList.BEEBSTOOLKIT("flag Beeb Bob " .. label:upper())
-			local back = BT.DB.Get(BT.db, "Beeb Bob").flags
+			local back = (BT.Notes.Get("Beeb Bob") or {}).flags
 			back = back and back.troll or false
 			assert(back == before, "toggled back by its label: " .. label)
 		end },
@@ -9213,10 +9216,10 @@ if ok then
 			fail(step[1] .. ": " .. tostring(err))
 		end
 	end
-	local p = BT.DB.Get(BT.db, "Beeb Bob")
+	local p = BT.Notes.Get("Beeb Bob")
 	-- each command checks its own effect above; this is the belt to that braces
 	if not (p and p.note) then
-		fail("the slash commands did not reach the database")
+		fail("the slash commands did not reach the Ledger")
 	else
 		print("ok   the slash commands wrote a note and a flag")
 	end
@@ -9235,8 +9238,14 @@ do
 		assert(packed > packedBefore and (BeebModDB.packedAtLogout or 0) > 0,
 			("characters were packed (%d of %d)"):format(packed, after))
 		assert(BT.Stats.Census(BT.db).total == census, "the census counts the packed book the same")
+		-- a row an older version wrote on, not moved yet, is never packed
+		-- (Core/Pack.lua): the census keeps it whole until the Ledger takes it
 		local p = BT.DB.Get(BT.db, "Beeb Bob")
-		assert(p and p.note, "a character you wrote on is still a table with your note")
+		assert(p and p.note == nil, "what you wrote is the Ledger's, not on the census's row")
+		p.note = "an old note"
+		BT.Collect.Handlers.PLAYER_LOGOUT()
+		assert(type(BT.db.players["Beeb Bob"]) == "table" and BT.DB.Get(BT.db, "Beeb Bob").note == "an old note",
+			"an old note left on a row keeps that row a table")
 		for key, row in pairs(BT.db.players) do
 			if type(row) == "string" then
 				local back = BT.DB.Get(BT.db, key)

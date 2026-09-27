@@ -526,60 +526,10 @@ function DB.FormerGuild(p)
 	return prev.name, prev.last
 end
 
-function DB.SetNote(db, key, text)
-	local p = DB.Get(db, key)
-	if not p then
-		return nil
-	end
-	text = text and text:match("^%s*(.-)%s*$") or ""
-	p.note = text ~= "" and text or nil
-	p.noted = p.note and U.Now() or nil
-	-- and by whom: every character on this realm and side writes in the same
-	-- book, so a note without a name on it is a note from nobody
-	p.notedBy = p.note and U.Me() or nil
-	touched(true)
-	BT.KeepRow(key, p)
-	return p
-end
-
-function DB.SetFlag(db, key, flag, on)
-	local p = DB.Get(db, key)
-	if not (p and U.FlagByKey(flag)) then
-		return nil
-	end
-	p.flags = p.flags or {}
-	p.flags[flag] = on and true or nil
-	if not next(p.flags) then
-		p.flags = nil
-	end
-	touched(true)
-	BT.KeepRow(key, p)
-	return p
-end
-
-function DB.ToggleFlag(db, key, flag)
-	local p = DB.Get(db, key)
-	if not p then
-		return nil
-	end
-	local on = not (p.flags and p.flags[flag])
-	return DB.SetFlag(db, key, flag, on), on
-end
-
-function DB.SetRating(db, key, rating)
-	local p = DB.Get(db, key)
-	if not p then
-		return nil
-	end
-	rating = tonumber(rating)
-	p.rating = (rating and rating >= 1 and rating <= 5) and math.floor(rating) or nil
-	touched(true)
-	BT.KeepRow(key, p)
-	return p
-end
-
--- A record is YOURS once you have written on it; those are never pruned and
--- always sort first in a search.
+-- WHAT YOU WRITE IS THE LEDGER'S (Josh 2026-09-26): notes, tags and ratings
+-- are kept in its own book (Modules/Ledger/Store.lua), and moved off these
+-- rows once. A row that still carries one - written by an older version and
+-- not yet moved - is still yours, and nothing here drops it.
 function DB.IsMine(p)
 	return (p.note ~= nil) or (p.flags ~= nil) or (p.rating ~= nil)
 end

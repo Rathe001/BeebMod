@@ -59,6 +59,7 @@ UI\Bar.lua
 
 # the utilities. Each one registers a tab, its cells on the bar and its own
 # commands, and can be switched off in Settings without the rest noticing.
+Modules\Ledger\Store.lua
 Modules\Ledger\Tags.lua
 Modules\Ledger\Find.lua
 Modules\Ledger\Tooltip.lua

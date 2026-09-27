@@ -5,7 +5,7 @@
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Tooltip.lua")
 
-local U, DB = BT.Util, BT.DB
+local U = BT.Util
 local T = {}
 BT.Tooltip = T
 
@@ -300,8 +300,7 @@ T.HidePills = hidePills
 -- Adds at most four lines, and only lines that say something: silence is the
 -- correct output for a stranger you have never written on.
 function T.Fill(tip, unit)
-	local db = BT.db
-	if not (db and BT.settings and BT.settings.tooltip and tip and unit and UnitIsPlayer(unit)) then
+	if not (BT.settings and BT.settings.tooltip and tip and unit and UnitIsPlayer(unit)) then
 		-- A SWATCH OUTLIVING ITS TOOLTIP (Josh 2026-09-19). The squares are
 		-- laid OVER tooltip lines rather than being part of them, so returning
 		-- early without putting them away leaves the last character's tag
@@ -314,11 +313,15 @@ function T.Fill(tip, unit)
 	-- record filed under "Beeb Bob" (Josh 2026-09-18)
 	local name, realm = BT.Util.UnitFullName(unit)
 	local key = name and U.Key(name, realm)
-	local p = key and DB.Get(db, key)
+	-- what YOU wrote, from the Ledger's own book (Modules/Ledger/Store.lua)
+	local p = key and BT.Notes.Get(key)
 	if not p then
 		hidePills()
 		return
 	end
+	-- someone you wrote on, in front of you: their face brought up to date
+	local _, info = BT.Notes.Face(unit)
+	BT.Notes.Seen(key, info)
 	local flags = flagsOn(p)
 	-- A THIN LINE, NOT A BLANK ONE (Josh 2026-09-19). The note wanted air above
 	-- and below it. A blank tooltip line is ten pixels, which is a gap rather
@@ -337,12 +340,6 @@ function T.Fill(tip, unit)
 	-- together and out of the tooltip leaves the tooltip saying only what the
 	-- game knows (Josh 2026-09-19).
 	T.ShowNote(tip, p)
-	if BT.settings.tooltipGuild then
-		local former, when = DB.FormerGuild(p)
-		if former then
-			tip:AddLine(("Was in %s, %s"):format(former, U.Since(when)), 0.6, 0.65, 0.7)
-		end
-	end
 	-- ONE ROW, NOT TWO COLUMNS (Josh 2026-09-20). Two tags to a line put the
 	-- second one at the far right of the tooltip, so three tags read as a
 	-- little table with a hole in it. Packed along a single line with an even

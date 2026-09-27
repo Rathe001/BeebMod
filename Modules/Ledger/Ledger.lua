@@ -2,9 +2,9 @@
 --
 -- It owns the Find tab, the tooltip decoration, and the part of the floating
 -- bar that is about whoever you are pointing at: their name, a dot per tag,
--- and your note. Switch it off and all of that goes - the book carries on
--- filling, because the book belongs to the toolkit, and the Census still has
--- everything to draw.
+-- and your note. What you write is kept in the Ledger's own book
+-- (Modules/Ledger/Store.lua), not on the census's rows: the Ledger works
+-- with no census at all, and uses one to find people when there is one.
 --
 -- THE TAG SWEEP RUNS HERE AND NOWHERE ELSE. Migrating tags walks every
 -- character and removes marks whose meaning no longer exists, which is the
@@ -14,7 +14,7 @@
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Ledger.lua")
 
-local U, DB = BT.Util, BT.DB
+local U, N = BT.Util, BT.Notes
 
 local M = BT.Module({
 	key = "ledger",
@@ -67,8 +67,10 @@ function M:Refresh()
 	BT.Find.Refresh()
 end
 
-function M:OnBind(db)
-	BT.MigrateTags(db)
+function M:OnBind()
+	-- once: what you wrote on the census's rows, into the Ledger's own book
+	N.Move()
+	BT.MigrateTags()
 end
 
 function M:OnDisable()
@@ -100,15 +102,9 @@ local EMPTY = "|cff7d8a84target a player to add notes and tags|r"
 -- what the hint claims of the row: a name's worth, never the whole sentence
 local HINT_W = 90
 
+-- your target: its key, its name, and what the unit says about it
 local function currentTarget()
-	if not (UnitExists and UnitExists("target") and UnitIsPlayer and UnitIsPlayer("target")) then
-		return nil
-	end
-	local name, realm = BT.Util.UnitFullName("target")
-	if not name then
-		return nil
-	end
-	return U.Key(name, realm), name
+	return N.Target()
 end
 
 local function tagsOn(p)
@@ -195,9 +191,9 @@ function M:Cells()
 		if not who.key then
 			return -- nobody targeted: there is nothing to write on
 		end
-		BT.Collect.FromUnit("target") -- make sure there is a record to open
 		BT.Find.EnsureBuilt()
-		BT.Find.OpenEditorFor(who.key, who)
+		-- what the unit says, for a row the note is the first thing on
+		BT.Find.OpenEditorFor(who.key, who, who.info)
 	end)
 	who.Offer = offer
 
@@ -282,9 +278,10 @@ function M:Cells()
 	-- panel.
 
 	who.Update = function(self)
-		local key, name = currentTarget()
-		self.key, who.key = key, key
-		local p = key and DB.Get(BT.db, key)
+		local key, name, info = currentTarget()
+		self.key, who.key, who.info = key, key, info
+		-- someone you wrote on, seen again: their face brought up to date
+		local p = key and N.Seen(key, info)
 		-- NOBODY TARGETED SAYS WHAT TO DO (Josh 2026-09-22). "target a player"
 		-- beside the toolkit's page glyph read as a label on a document; the
 		-- slot shows a reticle now - the thing to do - and the words say why,
@@ -297,7 +294,7 @@ function M:Cells()
 		self.text:SetPoint("LEFT", PAD, 0)
 		if key then
 			self.text:SetFontObject(BeebModFontHighlight)
-			self.text:SetText(U.Colorize(name, p and p.class))
+			self.text:SetText(U.Colorize(name, (info and info.class) or (p and p.class)))
 		else
 			self.text:SetFontObject(BeebModFontHighlightSmall)
 			self.text:SetText(EMPTY)
@@ -307,7 +304,8 @@ function M:Cells()
 			end
 		end
 		-- the first slot becomes their class while you are pointing at them
-		local class = p and p.class
+		-- the unit's own class: a stranger has no row to read it from
+		local class = (info and info.class) or (p and p.class)
 		if class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class] then
 			BT.Bar.SetMark("Interface\\TargetingFrame\\UI-Classes-Circles", CLASS_ICON_TCOORDS[class])
 		elseif key then
@@ -380,30 +378,31 @@ end, "find <text> - names, guilds, notes", "ledger")
 -- written; typing the command to read a note deleted it. Now it reads it
 -- back, and clearing takes the word.
 BT.Command("note", function(rest)
-	local key, text, name = BT.WhoAndRest(rest)
+	local key, text, name, info = N.WhoAndRest(rest)
 	if not key then
 		U.Print("no such character, and no player targeted")
 		return
 	end
 	text = (text or ""):match("^%s*(.-)%s*$")
 	if text == "" then
-		local p = DB.Get(BT.db, key)
+		local p = N.Get(key)
 		U.Print(p and p.note and p.note ~= "" and ("note on %s · \"%s\""):format(name, p.note)
 			or ("no note on %s · /bt note %s <text> writes one"):format(name, name))
 		return
 	end
 	if text:lower() == "clear" then
-		DB.SetNote(BT.db, key, "")
+		N.SetNote(key, "", info)
 		U.Print("note cleared on " .. name)
-	else
-		DB.SetNote(BT.db, key, text)
+	elseif N.SetNote(key, text, info) then
 		U.Print(("note on %s · \"%s\""):format(name, text))
+	else
+		U.Print(("could not write on %s · target them first"):format(name))
 	end
 	BT.Find.Refresh()
 end, "note [name] <text|clear> - name defaults to your target; no text reads it back", "ledger")
 
 BT.Command("flag", function(rest)
-	local key, flag, name = BT.WhoAndRest(rest)
+	local key, flag, name, info = N.WhoAndRest(rest)
 	-- WhoAndRest returns nothing at all when nobody matches and nothing is
 	-- targeted, and indexing that nil was a Lua error where the usage
 	-- line should have been
@@ -425,7 +424,11 @@ BT.Command("flag", function(rest)
 		U.Print("usage: /bt flag [name] <" .. table.concat(labels, " | ") .. ">")
 		return
 	end
-	local _, on = DB.ToggleFlag(BT.db, key, tag.key)
+	local p, on = N.ToggleFlag(key, tag.key, info)
+	if not p and on then
+		U.Print(("could not tag %s · target them first"):format(name))
+		return
+	end
 	U.Print(("%s %s on %s"):format(on and "set" or "cleared", tag.label, name))
 	BT.Find.Refresh()
 end, "flag [name] <tag> - toggle a tag, by its name", "ledger")
@@ -459,7 +462,7 @@ BT.Command("tag", function(rest)
 end, "tag - list them | tag new <name> | tag delete <name>", "ledger")
 
 BT.Command("rate", function(rest)
-	local key, n, name = BT.WhoAndRest(rest)
+	local key, n, name, info = N.WhoAndRest(rest)
 	if not key then
 		U.Print("no such character, and no player targeted")
 		return
@@ -467,7 +470,7 @@ BT.Command("rate", function(rest)
 	-- as with a note: nothing reads the rating back, "clear" clears it, and a
 	-- number that is not 1 to 5 changes nothing (it used to clear it)
 	n = (n or ""):match("^%s*(.-)%s*$")
-	local current = DB.Get(BT.db, key)
+	local current = N.Get(key)
 	if n == "" then
 		local r = current and current.rating
 		U.Print(r and ("%s is rated %d/5"):format(name, r) or ("%s is not rated"):format(name))
@@ -475,7 +478,7 @@ BT.Command("rate", function(rest)
 	end
 	local want = tonumber(n)
 	if n:lower() == "clear" then
-		DB.SetRating(BT.db, key, nil)
+		N.SetRating(key, nil, info)
 		U.Print("rating cleared on " .. name)
 		return
 	end
@@ -483,7 +486,7 @@ BT.Command("rate", function(rest)
 		U.Print("usage: /bt rate [name] <1-5|clear>")
 		return
 	end
-	local p = DB.SetRating(BT.db, key, math.floor(want))
+	local p = N.SetRating(key, math.floor(want), info)
 	local rating = p and p.rating
 	U.Print(rating and ("rated %s %d/5"):format(name, rating) or ("could not rate " .. name))
 end, "rate [name] <1-5|clear> - no number reads it back", "ledger")

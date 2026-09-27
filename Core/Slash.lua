@@ -4,60 +4,12 @@
 -- branch for a utility it has not heard of, and a command belonging to
 -- something you have switched off says so instead of half-working.
 --
--- Every command that names a character also works on your target when you
--- leave the name out, which is how you actually use this: you just met
--- someone.
+-- A command that names a character is the Ledger's, and reads the name the
+-- Ledger's way (BT.Notes.WhoAndRest): your target when you leave it out.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Core/Slash.lua")
 
-local U, DB = BT.Util, BT.DB
-
-function BT.TargetKey()
-	if UnitExists("target") and UnitIsPlayer("target") then
-		local name, realm = BT.Util.UnitFullName("target")
-		BT.Collect.FromUnit("target") -- make sure there is a row to write on
-		return U.Key(name, realm), name
-	end
-	return nil
-end
-
--- Pulls a character off the front of a command (Josh 2026-09-18). Names have
--- two parts here, so "note Beeb Bob solid tank" has to read as Beeb Bob and
--- "solid tank", not as Beeb and "Bob solid tank". We try the longest thing
--- that is actually a character we know, then fall back to your target - which
--- is how you use this anyway, right after meeting someone.
---   /bt note "Beeb Bob" text     quotes win outright
---   /bt note Beeb Bob text       two words, when Beeb Bob is on file
---   /bt note Beeb text           one word, when Beeb is on file
---   /bt note text                your target
-function BT.WhoAndRest(rest)
-	local quoted, qtail = rest:match('^"([^"]+)"%s*(.*)$')
-	if quoted then
-		local key, full = U.Key(quoted)
-		if key then
-			return key, qtail, full
-		end
-	end
-	local w1, w2, tail2 = rest:match("^(%S+)%s+(%S+)%s*(.*)$")
-	if w1 and w2 then
-		local key, full = U.Key(w1 .. " " .. w2)
-		if key and DB.Get(BT.db, key) then
-			return key, tail2, full
-		end
-	end
-	local w, tail = rest:match("^(%S+)%s*(.*)$")
-	if w then
-		local key, full = U.Key(w)
-		if key and DB.Get(BT.db, key) then
-			return key, tail, full
-		end
-	end
-	local key, tname = BT.TargetKey()
-	if key then
-		return key, rest, tname
-	end
-	return nil
-end
+local U = BT.Util
 
 -- ---------------------------------------------------------------------------
 -- The toolkit's own commands: the target row, and what is switched on. The

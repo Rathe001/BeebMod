@@ -147,8 +147,11 @@ end
 --
 -- So it follows them. Nothing to set, and no way to end up with the Ledger on
 -- and an empty book.
+-- THE CENSUS ALONE (Josh 2026-09-26): the Ledger keeps what you write in a
+-- book of its own, and needs nobody collected to write on someone - so the
+-- census's book is filled for the census, and only while it is on.
 function BT.Collecting()
-	return BT.db ~= nil and (BT.Enabled("ledger") or BT.Enabled("census"))
+	return BT.db ~= nil and BT.Enabled("census")
 end
 
 function BT.Modules()
@@ -564,7 +567,6 @@ function BT.Bind(realm, faction)
 				end
 			end
 		end
-		BT.RekeyKept()
 	end
 	-- THE BOOK'S OWN HYGIENE IS THE CORE'S (Josh 2026-09-19). Dropping rows
 	-- that are a name and nothing else says nothing about what anybody thinks
@@ -598,7 +600,6 @@ function BT.Bind(realm, faction)
 	-- none - then what you wrote, which is the floor under both
 	BT.TakeStashed(key)
 	BT.TakeStashedSettings()
-	BT.TakeKept(key)
 	-- after the stashes, which would otherwise bring them back
 	BT.DropRetired()
 	-- the modules in your order, before the rail or the dock is laid out
@@ -804,179 +805,10 @@ function BT.OtherBooks()
 end
 
 -- ---------------------------------------------------------------------------
--- WHAT YOU WROTE, KEPT APART FROM WHAT WAS COLLECTED
--- ---------------------------------------------------------------------------
---
--- A sighting is replaceable: walk past the same person tomorrow and it is
--- back. A note is not. So every note, tag and rating is mirrored into a second
--- saved variable that holds nothing else - small enough to be read back by a
--- client that may be choking on the size of the first, and small enough that
--- losing it would be a surprise rather than a pattern.
---
--- Nothing reads from it while the book is intact. It is a floor, not a source.
-
-local KEEP_FIELDS = { "name", "realm", "class", "race", "level", "guild",
-	"note", "noted", "notedBy", "rating" }
-
--- THREE CHANNELS, ONE QUESTION (Josh 2026-09-20). The book goes in the
--- account-wide variable and never comes back. The same handful of notes goes
--- in a second account-wide variable, which is a few kilobytes rather than a
--- megabyte and a half - and in a per-character one, which is a different file
--- written by different code in the client.
---
--- One reload says which of the three the client honours, and whichever it is,
--- everything moves there.
-function BT.Keep()
-	if type(BeebModKeep) ~= "table" then
-		BeebModKeep = {}
-	end
-	BeebModKeep.realms = BeebModKeep.realms or {}
-	if type(BeebModChar) ~= "table" then
-		BeebModChar = {}
-	end
-	BeebModChar.realms = BeebModChar.realms or {}
-	return BeebModKeep, BeebModChar
-end
-
--- The same row, written into whichever channels exist.
-local function keepInto(store, scopeKey, who, row)
-	local book = store.realms[scopeKey]
-	if not book then
-		book = { players = {} }
-		store.realms[scopeKey] = book
-	end
-	book.players[who] = row
-	-- NOT THE SETTINGS (Josh 2026-09-22). A copy went in here with every
-	-- note, and once saved it was a snapshot that never changed again: it
-	-- switched modules back off that you had since switched on. The account
-	-- file carries the settings now; only the tags, which your notes use,
-	-- ride along.
-	store.settings = nil
-	store.tags = BT.settings and BT.settings.tags
-end
-
--- The kept rows, keyed as the book is now: "Name@Realm" in a book of that
--- realm is "Name" (U.Key, Josh 2026-09-24).
-function BT.RekeyKept()
-	for _, store in ipairs({ BeebModKeep, BeebModChar }) do
-		if type(store) == "table" and type(store.realms) == "table" then
-			for scopeKey, book in pairs(store.realms) do
-				local realm = type(scopeKey) == "string" and scopeKey:match("^(.-)|")
-				if realm and type(book) == "table" and type(book.players) == "table" then
-					local rekey = {}
-					for who in pairs(book.players) do
-						local name, r = tostring(who):match("^(.*)@(.*)$")
-						if name and r == realm then
-							rekey[who] = name
-						end
-					end
-					for from, to in pairs(rekey) do
-						book.players[to] = book.players[to] or book.players[from]
-						book.players[from] = nil
-					end
-				end
-			end
-		end
-	end
-end
-
--- Called after every write that a person made by hand.
-function BT.KeepRow(key, p)
-	if not (key and type(p) == "table" and BT.scope) then
-		return nil
-	end
-	local keep, char = BT.Keep()
-	-- nothing of yours left on it: it does not belong in here any more
-	local row = nil
-	if BT.DB and BT.DB.IsMine(p) then
-		row = {}
-		for _, field in ipairs(KEEP_FIELDS) do
-			row[field] = p[field]
-		end
-		if p.flags then
-			row.flags = {}
-			for flag in pairs(p.flags) do
-				row.flags[flag] = true
-			end
-		end
-	end
-	keepInto(keep, BT.scope.key, key, row)
-	keepInto(char, BT.scope.key, key, row)
-
-	return row
-end
-
--- At login, once the book is bound: anything you wrote that the book has lost.
--- Returns how many rows it put back.
-function BT.TakeKept(key)
-	local book = BT.db
-	if not (book and BT.DB) then
-		return 0
-	end
-	-- whichever channel came back; the per-character one first, because if it
-	-- works at all it is the one written by THIS character
-	local from = nil
-	for _, store in ipairs({ BeebModChar, BeebModKeep }) do
-		if type(store) == "table" and type(store.realms) == "table"
-			and type(store.realms[key]) == "table"
-			and type(store.realms[key].players) == "table" then
-			from = store.realms[key]
-			break
-		end
-	end
-	if not from then
-		return 0
-	end
-	-- the tags your marks use, if the settings came back without them
-	local store
-	for _, s in ipairs({ BeebModChar, BeebModKeep }) do
-		if type(s) == "table" and type(s.realms) == "table" and s.realms[key] == from then
-			store = s
-		end
-	end
-	if BT.settings and #(BT.settings.tags or {}) == 0 and type(store) == "table"
-		and type(store.tags) == "table" and #store.tags > 0 then
-		BT.settings.tags = {}
-		for i, t in ipairs(store.tags) do
-			if type(t) == "table" then
-				local copy = {}
-				for k, v in pairs(t) do
-					copy[k] = v
-				end
-				BT.settings.tags[i] = copy
-			end
-		end
-	end
-	book.players = book.players or {}
-	local back = 0
-	-- COPIES, NOT THE KEEP'S OWN TABLES (Josh 2026-09-23, audit): the row
-	-- itself went into the book, so every sighting after that wrote zones,
-	-- guilds and GUIDs into the small keep as well
-	local function copy(t)
-		local out = {}
-		for k, v in pairs(t) do
-			out[k] = type(v) == "table" and copy(v) or v
-		end
-		return out
-	end
-	for who, row in pairs(from.players) do
-		local have = BT.DB.Get(book, who)
-		if not have then
-			book.players[who] = copy(row)
-			back = back + 1
-		elseif not BT.DB.IsMine(have) then
-			-- the row survived but what you wrote on it did not
-			have.note, have.noted, have.notedBy = row.note, row.noted, row.notedBy
-			have.rating, have.flags = row.rating, row.flags and copy(row.flags) or nil
-			back = back + 1
-		end
-	end
-	if back > 0 and BT.DB then
-		BT.DB.rev = (BT.DB.rev or 0) + 1
-	end
-	BT.keptTaken = back > 0 and back or nil
-	return back
-end
+-- The Ledger keeps what you write in a book of its own now (Josh 2026-09-26,
+-- Modules/Ledger/Store.lua), in the account file this client hands back
+-- since build 70009. BeebModKeep is read once more, by the Ledger's move, and
+-- written no longer.
 
 -- ---------------------------------------------------------------------------
 -- THE WHOLE BOOK, IN THE ONE CHANNEL THAT HAS COME BACK
