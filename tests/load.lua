@@ -1748,9 +1748,17 @@ if ok then
 			BT.bakedTaken, BT.foldedOnLoad = 2592, 14
 			BT.boot = BT.boot or {}
 			BT.boot.boundCount, BT.boot.total, BT.boot.type = 0, 800, "table"
-			local handler = BT.Collect.Handlers and BT.Collect.Handlers.PLAYER_ENTERING_WORLD
+			-- the core's login, which runs the census's after it (Core/Boot.lua)
+			local handler = BT.Boot and BT.Boot.handlers.PLAYER_ENTERING_WORLD
 			assert(handler, "the login handler is reachable")
+			assert(not (BT.Collect.Handlers and BT.Collect.Handlers.PLAYER_ENTERING_WORLD),
+				"and the census no longer logs the addon in")
+			local ranCensus = false
+			local world = BT.Collect.World
+			BT.Collect.World = function(...) ranCensus = true return world(...) end
 			pcall(handler)
+			BT.Collect.World = world
+			assert(ranCensus, "the census's share of the loading screen ran after the core's")
 			_G.print = realPrint
 			assert(#said == 0, "nothing was printed at login: " .. table.concat(said, " | "))
 			-- but the facts survived for the command that reports them

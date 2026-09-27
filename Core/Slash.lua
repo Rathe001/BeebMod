@@ -282,8 +282,10 @@ BT.Command("debug", function()
 	end
 	U.Print("modules: " .. table.concat(on, ", "))
 	local refused = {}
-	for event, why in pairs(BT.Collect.refused or {}) do
-		refused[#refused + 1] = ("%s (%s)"):format(event, tostring(why):sub(1, 40))
+	for _, from in ipairs({ BT.Boot and BT.Boot.refused, BT.Collect and BT.Collect.refused }) do
+		for event, why in pairs(from or {}) do
+			refused[#refused + 1] = ("%s (%s)"):format(event, tostring(why):sub(1, 40))
+		end
 	end
 	U.Print("refused events: " .. (#refused > 0 and table.concat(refused, ", ") or "none"))
 	for _, line in ipairs(BT.blockedLog or {}) do

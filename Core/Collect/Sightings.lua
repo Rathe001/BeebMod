@@ -294,11 +294,9 @@ function C.FromUnitAndTarget(unit)
 end
 
 handlers.UPDATE_MOUSEOVER_UNIT = function() C.FromUnitAndTarget("mouseover") end
+-- (the dock's target row is the core's to light: Core/Boot.lua)
 handlers.PLAYER_TARGET_CHANGED = function()
 	C.FromUnitAndTarget("target")
-	if BT.Bar then
-		BT.Bar.Update() -- light the floating bar up, or let it go dark
-	end
 end
 handlers.NAME_PLATE_UNIT_ADDED = function(_, _, unit) C.FromUnit(unit) end
 
@@ -368,23 +366,12 @@ handlers.GUILD_ROSTER_UPDATE = function()
 	end
 end
 
-handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
+-- AFTER THE CORE HAS BOUND (Core/Boot.lua, Josh 2026-09-26): the core logs
+-- itself in - the settings, the book, the dock - and this is the census's
+-- share of every loading screen, which it used to do all of
+function C.World(initial, reloading)
 	myFaction = UnitFactionGroup and UnitFactionGroup("player") or nil
 	myRealm = GetRealmName and GetRealmName() or nil
-	U.realm = myRealm
-	U.LearnRealm(myRealm)
-	-- the realm and faction are only knowable now, and they choose the book
-	-- every character on this side of this realm shares. A plain zone-in
-	-- (the client says neither login nor reload) with that book bound does
-	-- not bind it all over again (see BT.Rebind).
-	if initial == false and reloading == false then
-		BT.Rebind(myRealm, myFaction)
-	else
-		BT.Bind(myRealm, myFaction)
-	end
-	if BT.Bar then
-		BT.Bar.Create()
-	end
 	-- SILENT AT LOGIN (Josh 2026-09-19). The addon says nothing when you log
 	-- in - not one line, however interesting it is to the addon. Everything
 	-- that used to be announced here is kept and shown where you would go
@@ -491,8 +478,9 @@ function C.Start()
 			C.refused[event] = tostring(err)
 		end
 	end
-	-- last resort: if the event we most depend on was refused, bind anyway
-	if C.refused and C.refused.PLAYER_ENTERING_WORLD then
-		BT.Bind(GetRealmName and GetRealmName(), UnitFactionGroup and UnitFactionGroup("player"))
-	end
 end
+
+-- the census's share of every loading screen, once the core has bound
+BT.OnWorld(function(initial, reloading)
+	C.World(initial, reloading)
+end)

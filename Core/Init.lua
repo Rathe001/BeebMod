@@ -1128,4 +1128,8 @@ loader:SetScript("OnEvent", function(_, event, addon)
 	if BT.Collect and BT.Collect.Start then
 		BT.Collect.Start() -- events only; nothing is written until BT.Bind runs
 	end
+	-- if the client kept the loading screen from us, log in now (Core/Boot.lua)
+	if BT.Boot then
+		BT.Boot.Fallback()
+	end
 end)

@@ -42,6 +42,7 @@ Core\Pack.lua
 Core\DB.lua
 Core\Tooltip.lua
 Core\StatusBars.lua
+Core\Boot.lua
 Core\Collect\Meter.lua
 Core\Collect\Rosters.lua
 Core\Collect\Sightings.lua
