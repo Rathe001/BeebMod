@@ -235,9 +235,19 @@ function J.WikiLore(m, ownOnly)
 		local e = out[i]
 		if e.kind == "npc" or e.kind == "group" then
 			local first = (e.text:match("^(.-[%.!%?])%s") or e.text):lower()
+			-- NOT ITS OWN NAME (Josh 2026-09-27: "This is definitely not a
+			-- cursed centaur"). "Cursed Highborne are banshees..." begins with
+			-- the mob's own words, and "cursed" alone found the Cursed
+			-- Centaur's page. What the sentence says it IS comes after them.
+			local own = {}
+			for _, said in ipairs({ e.title or "", m.name or "" }) do
+				for w in said:lower():gmatch("[%a'%-]+") do
+					own[w] = true
+				end
+			end
 			local race, other
 			for w in first:gmatch("[%a'%-]+") do
-				local r = not COMMON[w] and J.Singular(data, w)
+				local r = not COMMON[w] and not own[w] and J.Singular(data, w)
 				if r and r[2] ~= e.title then
 					if r[1] == "race" then
 						race = race or r

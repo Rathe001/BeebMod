@@ -1556,6 +1556,16 @@ do
 	local elder = J.WikiLore({ name = "Elder Darkshore Thresher", kind = "Beast" })
 	check(elder[1].title == "Darkshore Thresher" and elder[1].how == "part" and elder[2].title == "Threshadon"
 		and elder[2].how == "says", "two words of a name reach a kin's page, and its page the kind of creature")
+	-- NOT ITS OWN NAME (Josh 2026-09-27: "This is definitely not a cursed
+	-- centaur"): a page that opens with the mob's own words is read after them
+	BT.MenagerieLoreData["cursed highborne"] = { "npc", "Cursed Highborne", "Cursed Highborne are banshees of Ameth'Aran." }
+	BT.MenagerieLoreData["cursed"] = { "npc", "Cursed Centaur", "The Cursed Centaur is a rare centaur." }
+	BT.MenagerieLoreData["banshee"] = { "race", "Banshee", "Banshees are the spirits of dead elves." }
+	local cursed = J.WikiLore({ name = "Cursed Highborne", kind = "Undead" })
+	local titles = {}
+	for _, e in ipairs(cursed) do titles[#titles + 1] = e.title end
+	check(cursed[2] and cursed[2].title == "Banshee" and not table.concat(titles, "|"):find("Centaur"),
+		"its own name's words are not what its page says it is: " .. table.concat(titles, " > "))
 	local vermin = J.WikiLore({ name = "Kobold Vermin", kind = "Humanoid" })
 	check(vermin[1].title ~= "Vermin", "one word of a name does not take another mob's page")
 	-- THE SAME BODY (Josh 2026-09-26: "Is there no way to determine that this

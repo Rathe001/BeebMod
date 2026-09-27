@@ -319,13 +319,21 @@ function IsGroupTitle([string]$Title) {
 # the key a page is found by: its title in lower case, without "(pet family)"
 # and the like; a tribe or clan also by its name alone ("frostmane"), and a
 # people of a race by theirs ("bloodfeather")
-function Keys([string]$Title) {
+# A GROUP'S NAME ONLY (Josh 2026-09-27: "This is definitely not a cursed
+# centaur"). "Cursed Centaur" is one creature, and taking its first word as a
+# people's name made "cursed" its key: any mob with "cursed" in its name or
+# its page was a centaur. Only a tribe, a clan or a people named in the
+# plural ("Bloodfeather harpies") is found by its name alone.
+$RacePeople = '^(\S+) (harpies|trolls|troggs|gnolls|kobolds|murlocs|ogres|quilboar|centaurs|satyrs|furbolgs|naga|dwarves|goblins|orcs|humans|elves|tauren|draenei|arakkoa|ethereals|nerubians|trogs|wolvar|gorlocs|jinyu|hozen|mogu|saurok|sethrak|vulpera|tortollans)$'
+function Keys([string]$Title, [string]$Kind) {
 	$k = ($Title -replace '\s*\([^)]*\)\s*$', '').ToLowerInvariant().Trim()
 	$out = @($k)
-	$bare = $k -replace '\s+(tribe|tribes|clan|clans|pack|brood|gang|cartel|family|order|legion|kingdom|horde)$', ''
-	if ($bare -ne $k) { $out += $bare }
-	$people = [regex]::Match($k, $RacePlural)
-	if ($people.Success) { $out += $people.Groups[1].Value }
+	if ($Kind -eq "group") {
+		$bare = $k -replace '\s+(tribe|tribes|clan|clans|pack|brood|gang|cartel|family|order|legion|kingdom|horde)$', ''
+		if ($bare -ne $k) { $out += $bare }
+		$people = [regex]::Match($k, $RacePeople)
+		if ($people.Success) { $out += $people.Groups[1].Value }
+	}
 	return ,$out
 }
 
@@ -341,19 +349,29 @@ foreach ($asked in $lore.Keys) {
 		$dropped++
 		continue
 	}
-	foreach ($k in (Keys $asked)) {
+	# A TITLE WITH A QUALIFIER IS A SECOND CHOICE (Josh 2026-09-27): "Beast
+	# (Rumble)" is Warcraft Rumble's beast, and read as "beast" it outranked
+	# the creature type's own page. Written "Name (something)", a page only
+	# fills a key nothing else has (below).
+	if ($asked -match '\(') { continue }
+	foreach ($k in (Keys $asked $e.kind)) {
 		if (-not $entries.ContainsKey($k) -or $Rank[$e.kind] -gt $Rank[$entries[$k].kind]) {
 			$entries[$k] = $e
 		}
 	}
 }
-# and by the page the wiki led to, where nothing has that name already:
-# "threshadons" was asked, "Threshadon" is the page, and a mob's page says
-# "threshadon" as often as "threshadons"
+# and by the page the wiki led to, or a title with a qualifier, where nothing
+# has that name already: "threshadons" was asked, "Threshadon" is the page,
+# and a mob's page says "threshadon" as often as "threshadons"
 foreach ($asked in $lore.Keys) {
 	$e = $lore[$asked]
 	if ($e.kind -eq "group" -and -not (IsGroupTitle $e.title)) { continue }
-	foreach ($k in (Keys $e.title)) {
+	# two loops, not one list: joining two of these with + nests them (the
+	# memory note on pipeline flattening), and a list became a key
+	foreach ($k in (Keys $asked $e.kind)) {
+		if (-not $entries.ContainsKey($k)) { $entries[$k] = $e }
+	}
+	foreach ($k in (Keys $e.title $e.kind)) {
 		if (-not $entries.ContainsKey($k)) { $entries[$k] = $e }
 	}
 }
