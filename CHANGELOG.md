@@ -14,6 +14,15 @@ game and the addon settle.
   character that was only heard from another copy - never seen by you, never
   written on - leaves the book, and so do the sharing's settings and log.
   The friends list is still asked for at login, so friends reach the book.
+- **The Ledger keeps its own book.** Notes, tags and ratings are no longer
+  written on the census's rows: each person you write on has a row of the
+  Ledger's own, with the class, level and guild they had when you last
+  wrote or saw them. The first login after this version moves everything
+  you wrote across, once, from every realm and side. The Ledger no longer
+  needs the census: a first note on a stranger is written from your target,
+  and Find searches the people you wrote on - and, with the census on,
+  everyone else it knows, as before. The census collects only while it is
+  switched on, and says "Was in <guild>" on the tooltip itself.
 - **The Menagerie**: a journal of every kind of mob you have killed, rares
   and elites among them, as a card each, five across. A rail down the left
   files them by creature type or by the zone you first met them in - All
