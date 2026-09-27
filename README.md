@@ -8,31 +8,30 @@ A set of small utilities for WoW: Forever, behind one window and one button.
 
 ## The shape of it
 
-The **core** owns the parts every utility would otherwise reinvent: the window
-with the tabs down its left side, the dock, the look of a button and a
-pill, and **the book** - every player this client has told us about, kept once
-and shared.
+One addon, **six features**, each one switch. The first login asks which you
+want - six cards, each with a picture and a line on what it does - and the
+settings window's rail has a block for each, in its own colour, with its switch
+on its heading. A feature switched off takes everything in it with it and keeps
+each part's own switch for when it comes back. No feature needs another.
 
-A **module** is a utility. It registers a tab, perhaps some cells in the dock
-and its own slash commands, and it can be switched off on its tab without the
-rest noticing. The tabs down the window's left side come in three groups.
-
-The settings window's rail is in four groups, by what things are for, after
-**General** (the colours of every panel; the typeface is Google Sans).
+The **core** is what every feature would otherwise reinvent: the settings
+window, the dock's header, the look of a button and a pill, and **General** (the
+colours of every panel; the typeface is Google Sans). The dock's **logo and cog
+are always there**: with the Dock off, or everything off, they are all of
+BeebMod on the screen, and the way back into the settings.
 
 **Dock** - the panel at the side of the screen, and what is in it:
 
 | tab | what it is |
 |---|---|
-| **Dock** | the panel itself: its size, and the **Clock** (local or server time; click it to switch) and **Census** button in its header |
+| **Dock** | the panel itself: its size, and the **Clock** in its header (local or server time; click it to switch) |
 | **Minimap** | the client's map, moved into the dock, and **Addon buttons** - other addons' minimap buttons, gathered into a line (a switch each) |
 | **Progress** | **Experience** (the XP bar, and time to level at your current pace) and **Reputation** (the watched faction, and time to the next standing), a switch each |
-| **Menagerie** | every kind of mob you have killed, with a count and a model of each, filed by creature type; every kind and every achievement is worth points, the points make a rank from Novice to Polymath, and a line of the dock shows both - click it for the journal |
 | **Metrics** | one grid of readouts, each switched on its own: gold and gold per hour, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency |
 | **Quest tracker** | the client's tracker is hidden and this one draws your quests in the dock, under their zones, lowest level first |
 | **Micro menu** | the game's menu buttons, in the dock |
 
-**Combat** - what you watch in a fight:
+**Unit frames** - what you watch in a fight:
 
 | tab | what it is |
 |---|---|
@@ -41,7 +40,7 @@ The settings window's rail is in four groups, by what things are for, after
 | **Resource display** | your own nameplate, flat, with combo points under it (rogues, cat druids) |
 | **Damage meter** | the client's own meter, flat, with each row's amount a second and the fight's length |
 
-**Windows** - the game's own windows and menus, in the toolkit's clothes:
+**Interface** - the game's own windows and menus, in the toolkit's clothes:
 
 | tab | what it is |
 |---|---|
@@ -50,18 +49,23 @@ The settings window's rail is in four groups, by what things are for, after
 | **Menus** | the **Game menu** Escape opens (the game keeps some of its buttons from addons, so those stay its own) and every **Dropdown menu**, a switch each |
 | **Tooltips** | unit tooltips rebuilt into two lines, in the toolkit's skin; elites and rares wear a gold or silver border |
 
-**People** - the book:
+**Census** - every character you see, written down: what the realm is made of,
+by class, race, level, guild and zone, in a window of its own (from the dock's
+header, or `/bt census`). It is never shared: it holds only who you saw.
 
-| tab | what it is |
-|---|---|
-| **Ledger** | notes and tags on the people you meet, on their tooltip and in the target row at the top of the dock; the Find tab searches the book |
-| **Census** | what the realm is made of - class, race, level and your tags - in a window of its own, opened from the dock's header |
+**Ledger** - notes, tags and a rating on the people you meet, on their tooltip
+and in the target row at the top of the dock; its page searches the people you
+wrote on (and, with the Census on, everyone it knows). What you write is kept
+in the Ledger's own book (`BeebModDB.ledger`), so it needs no census.
 
-The Ledger and the Census read the same book, which is why the book belongs to
-the core: turning the Ledger off must not blind the Census, and turning the
-Census off must not lose a note. With everything off the dock goes away - `/bt`
-still opens the window - and it comes back a cell at a time as you switch
-things on.
+**Menagerie** - every kind of mob you have killed, a card for each with its
+model, its lore from the Warcraft Wiki and its mastery; every kind and every
+achievement is worth points, the points make a rank from Novice to Polymath,
+and a line of the dock shows both - click it for the journal.
+
+**Made-up data**, for screenshots: a switch on the Testing page (or `/bt demo`)
+shows a made-up realm, notes, a journal and a party in every feature at once;
+nothing of it is saved.
 
 ### Adding a utility
 
@@ -70,19 +74,19 @@ One file, one call, and it has a tab and a place on the bar:
 ```lua
 local M = BT.Module({
     key = "myutility", title = "My Utility", order = 30,
+    feature = "dock",   -- the feature it is part of: its switch covers this too
     blurb = "one line, shown on the tab and in Settings",
 })
 function M:BuildTab(parent) ... end    -- built once, the first time it is opened
 function M:Cells() return { ... } end  -- what it adds to the dock
-function M:OnBind(db) ... end          -- a book was bound: migrate, sweep
+function M:OnBind(db) ... end          -- the settings were bound: migrate, sweep
 BT.Command("mycmd", function(rest) ... end, "what it does", "myutility")
 ```
 
-A hook that walks the book and **removes** anything belongs to the module that
-owns that meaning, never to the core: a utility you have switched off must not
-be tidying away data it is not currently showing you. That is why migrating tags
-lives in `Modules/Ledger`, and why the Census can be off for a month without
-losing a mark.
+A hook that walks saved data and **removes** anything belongs to the module
+that owns that meaning, never to the core: a utility you have switched off must
+not be tidying away data it is not currently showing you. That is why migrating
+tags lives in `Modules/Ledger`.
 
 ## Files
 
@@ -93,7 +97,10 @@ losing a mark.
     Core/DB.lua          one row per character: read, write, merge, prune
     Core/Collect/        what the client tells us unasked
     Core/Slash.lua       /bt, and the toolkit's own commands
-    UI/Window.lua        the window: one rail in four groups, a page per tab (some shared)
+    Core/Boot.lua        the core's own login: the settings, the dock, then BT.OnWorld
+    Core/Demo.lua        made-up data for screenshots: one switch, each feature's own
+    UI/Window.lua        the window: a block per feature on the rail, a page per tab
+    UI/Welcome.lua       the first login's six cards, a switch per feature
     UI/Settings.lua      General: the look, and the panel header's switches
     UI/Bar.lua           the dock: a row of cells, and sections under it
     UI/Pill.lua          the pill, and the one place a measurement is judged
@@ -103,7 +110,7 @@ losing a mark.
                          unit frame and its tooltip alike
     Core/Tooltip.lua     one hook on the unit tooltip, several participants
     Core/Furniture.lua   dressing the client's own frames by what each piece is
-    Modules/Ledger/      tags, the Find tab, the notes on a tooltip
+    Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab, the notes on a tooltip
     Modules/Minimap/     the map in the dock; Modules/Buttons/ the addon buttons
     Modules/XP/, Rep/    the experience and reputation lines of the dock
     Modules/Metrics/     the readout grid; Gold/, Space/, Durability/,

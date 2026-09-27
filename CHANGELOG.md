@@ -7,6 +7,25 @@ game and the addon settle.
 
 ## Unreleased
 
+- **Six features, each one switch.** Everything BeebMod does is now one of
+  six features - the **Dock**, **Unit frames**, **Interface**, the
+  **Census**, the **Ledger** and the **Menagerie** - and none needs another.
+  Switching a feature off takes everything in it with it, and switching it
+  back on brings back exactly what you had inside it. The settings rail is a
+  block for each feature in its own colour, its switch on its heading and its
+  tabs folded away while it is off; the heading opens the feature's own page,
+  with its picture and a switch and a way in for each of its parts.
+- **The first login asks which features you want**: six cards, each with a
+  picture and a line on what it does, and All, None and Start. It replaces
+  the three presets (full, just the dock, census and notes), and asks once
+  more on an install from before it, its cards set to what you already have
+  on. "Choose again" on the General page, or `/bt setup`, asks again.
+- **The dock is never less than its logo and cog.** With the Dock switched
+  off - or everything off - the dock is its header alone, the way back into
+  the settings, and nothing switches that off. (It used to disappear once
+  nothing was left in it.)
+- The Menagerie watches for Pick Pocket itself, so a picked pocket's loot is
+  never taken for a kill with the Dock off.
 - **The census is no longer shared.** It holds only the characters you see
   yourself. The hidden channel, the hellos to other BeebMod users, the
   newer-build notice, "Share with other BeebMod users" and `/bt share` and
