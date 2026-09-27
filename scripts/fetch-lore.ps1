@@ -173,7 +173,11 @@ $lore = @{}
 # has never been asked for, so gathering every Classic mob is a long first
 # run and a short one after
 if (Test-Path $Cache) {
-	$json = Get-Content -Raw -LiteralPath $Cache | ConvertFrom-Json
+	# AS UTF-8 (Josh 2026-09-27: a naga's lore came out as a wall of
+	# A-tildes). Windows PowerShell reads a file without a byte-order mark in
+	# the ANSI code page, so every rebuild read the UTF-8 cache wrong and wrote
+	# it back a layer worse: a pronunciation, a dash, an accent grew into it.
+	$json = Get-Content -Raw -Encoding UTF8 -LiteralPath $Cache | ConvertFrom-Json
 	foreach ($p in $json.PSObject.Properties) {
 		$lore[$p.Name] = @{ title = $p.Value.title; text = $p.Value.text; kind = $p.Value.kind }
 	}
@@ -188,13 +192,13 @@ function Add-Nothing($v) {
 	if ($v -is [array]) { foreach ($x in $v) { Add-Nothing $x } } elseif ($v) { $nothing[[string]$v] = $true }
 }
 if (Test-Path $Missing) {
-	$read = Get-Content -Raw -LiteralPath $Missing | ConvertFrom-Json
+	$read = Get-Content -Raw -Encoding UTF8 -LiteralPath $Missing | ConvertFrom-Json
 	Add-Nothing $read
 }
 if ($Rebuild) {
 	if ($lore.Count -gt 0) {
 	} elseif (Test-Path $Out) {
-		foreach ($line in (Get-Content -LiteralPath $Out)) {
+		foreach ($line in (Get-Content -Encoding UTF8 -LiteralPath $Out)) {
 			$m = [regex]::Match($line, '^\s*\["(?:[^"\\]|\\.)*"\] = \{ "([a-z]+)", "((?:[^"\\]|\\.)*)", "((?:[^"\\]|\\.)*)" \},$')
 			if ($m.Success) {
 				$title = $m.Groups[2].Value -replace '\\"', '"' -replace '\\\\', '\'
@@ -256,7 +260,7 @@ foreach ($t in $Types) { if ($lore.ContainsKey($t)) { $lore[$t].kind = "type" } 
 # every mob in the journal, by its exact name
 if ($Saved -and (Test-Path $Saved)) {
 	Write-Host "reading the journal's mobs from $Saved"
-	$text = Get-Content -Raw -LiteralPath $Saved
+	$text = Get-Content -Raw -Encoding UTF8 -LiteralPath $Saved
 	$m = [regex]::Match($text, '\["menagerie"\]\s*=\s*\{')
 	if ($m.Success) {
 		$names = [regex]::Matches($text.Substring($m.Index), '\["name"\]\s*=\s*"((?:[^"\\]|\\.)*)"')
@@ -336,6 +340,31 @@ function Keys([string]$Title, [string]$Kind) {
 	}
 	return ,$out
 }
+
+# TEXT MADE READABLE AGAIN, AND KEPT THAT WAY. A text the old reads garbled
+# is decoded back, a layer at a time, for as long as that makes it cleaner;
+# what cannot be brought back (the ANSI page has holes, and a byte that fell
+# in one is gone) is dropped rather than shown. A pronunciation - "(/.../)" -
+# goes too: the game's fonts have no letters for it. (The characters are
+# written as \u escapes: this file has no byte-order mark either.)
+$Enc1252 = [Text.Encoding]::GetEncoding(1252)
+$Garbled = '(\u00C3.|\u00C2.|\u00E2\u20AC.|\u00C6.|\uFFFD)'
+function Clean-Text([string]$s) {
+	for ($i = 0; $i -lt 8 -and $s -match $Garbled; $i++) {
+		$back = [Text.Encoding]::UTF8.GetString($Enc1252.GetBytes($s))
+		if (([regex]::Matches($back, $Garbled)).Count -ge ([regex]::Matches($s, $Garbled)).Count) { break }
+		$s = $back
+	}
+	# whatever is still garbled, and the brackets it leaves empty
+	$s = [regex]::Replace($s, '[\u00C3\u00C2\u00E2\u20AC\u00C6\uFFFD][^\s,.;:()]*', '')
+	$s = [regex]::Replace($s, '\s*\((?:/[^)]*|[^\w)]*)\)', '')
+	$s = [regex]::Replace($s, '\s*\([^)]*/[^)]*/[^)]*\)', '')
+	return ($s -replace '\s{2,}', ' ' -replace '\s+([,.;:])', '$1').Trim()
+}
+foreach ($k in @($lore.Keys)) {
+	$lore[$k].text = Clean-Text $lore[$k].text
+}
+Save-Cache
 
 function LuaString([string]$s) {
 	return '"' + ($s -replace '\\', '\\' -replace '"', '\"' -replace "`r", '' -replace "`n", '\n') + '"'
