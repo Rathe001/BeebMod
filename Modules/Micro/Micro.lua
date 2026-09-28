@@ -23,7 +23,7 @@ local M = BT.Module({
 	key = "micro",
 	feature = "dock",
 	title = "Micro menu",
-	blurb = "the game's menu buttons, in the dock",
+	blurb = "Puts the game's menu buttons in the dock",
 	order = 55,
 	-- IN THE PANEL (Josh 2026-09-22): the row can live in the dock, so the
 	-- module has a tab on the rail
@@ -883,8 +883,8 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the client's own buttons, moved into the panel · every one still does what it did")
-	page:Note("switched off, the client's micro menu is back where it was, exactly as it came", true)
+	page:Note("BeebMod moves the game's own buttons into the dock. Every one still does what it did before.")
+	page:Note("Switch this off and the game's micro menu comes back as it was.", true)
 	local list = page:Section("Buttons")
 	for _, b in ipairs(M.Buttons()) do
 		local name = b.GetName and b:GetName()
@@ -901,7 +901,7 @@ end
 
 function M:RefreshTab()
 	if self.found then
-		self.found:SetText(("%d buttons dressed"):format(M.lastCount or 0))
+		self.found:SetText(("%d buttons redrawn"):format(M.lastCount or 0))
 	end
 end
 
@@ -939,9 +939,9 @@ BT.Command("microdump", function()
 	end
 	BT.EnsureBound()
 	BeebModDB.microDump = { at = U.Now(), lines = lines }
-	U.Print(("micro menu: %d lines written down · /reload to save them"):format(#lines))
-end, "microdump - the menu buttons' pictures, into the saved file", "micro")
+	U.Print(("Micro menu: wrote down %d lines. Type /reload to save them."):format(#lines))
+end, "microdump - write the menu buttons' pictures into the saved file", "micro")
 
 BT.Command("micro", function()
-	U.Print(("%d micro buttons dressed"):format(M.StyleAll()))
+	U.Print(("Micro menu: redrew %d buttons."):format(M.StyleAll()))
 end, "restyle the micro menu now", "micro")

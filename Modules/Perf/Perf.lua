@@ -19,7 +19,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "perf",
 	title = "Performance",
-	blurb = "frame rate and latency",
+	blurb = "Frame rate and latency",
 	order = 39.8,
 	-- on the right panel, as a row of the Metrics grid (a part has no tab of
 	-- its own: its switch is on the Metrics tab)
@@ -102,20 +102,31 @@ function M.Update()
 	end
 end
 
+-- a cell's state as the tooltip colours it
+local TIP_STATE = { warn = "warn", alert = "bad" }
+
+-- (Josh 2026-09-27, the dock's tooltips redrawn) three tiles, coloured by
+-- how they are doing, and a line on which latency is which
 function M.Tip(owner)
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not BT.Tip then
 		return
 	end
 	local fps, home, world = M.Read()
-	BT.Bar.Tip(owner, function()
-		GameTooltip:AddLine("Performance", 1, 1, 1)
-		GameTooltip:AddDoubleLine("frame rate", fps and ("%d fps"):format(math.floor(fps + 0.5)) or "-",
-			0.7, 0.75, 0.73, 1, 1, 1)
-		GameTooltip:AddDoubleLine("home: your realm", home and ("%d ms"):format(home) or "-",
-			0.7, 0.75, 0.73, 1, 1, 1)
-		GameTooltip:AddDoubleLine("world · combat and other players", world and ("%d ms"):format(world) or "-",
-			0.7, 0.75, 0.73, 1, 1, 1)
-	end)
+	BT.Tip.Show(owner, { build = function(t)
+		local fs = fps and TIP_STATE[M.FpsState(fps) or ""]
+		local hs = home and TIP_STATE[M.MsState(home) or ""]
+		local ws = world and TIP_STATE[M.MsState(world) or ""]
+		local worst = (fs == "bad" or hs == "bad" or ws == "bad") and "bad"
+			or ((fs or hs or ws) and "warn" or "good")
+		t:Header({ name = "Performance", sub = "This computer and its connection",
+			pill = worst == "bad" and "Slow" or (worst == "warn" and "Uneven" or "Smooth"), pillState = worst })
+		t:Stats({
+			{ fps and math.floor(fps + 0.5) or "-", "frames a second", fs or "good" },
+			{ home or "-", "home ms", hs or "good" },
+			{ world or "-", "world ms", ws or "good" },
+		})
+		t:Note("Home latency is chat and the auction house. World latency is combat. Above about 150 ms, casts and swings feel late.")
+	end })
 end
 
 function M.Build()
@@ -176,14 +187,14 @@ end
 
 function M:BuildTab(panel)
 	local note = BT.Widgets.Label(panel,
-		"frames a second, and latency to your realm (the house) and to the world server (the globe)",
+		"Frames a second, and latency to your realm (the house) and to the world server (the globe).",
 		"small", 0.55, 0.60, 0.58)
 	note:SetPoint("TOPLEFT", 0, -2)
 	note:SetWidth(520)
 	note:SetJustifyH("LEFT")
 
 	local why = BT.Widgets.Label(panel,
-		"plain is fine, amber is worth noticing, red is why that felt wrong",
+		"Amber below 50 fps or from 100 ms. Red below 30 fps or from 250 ms.",
 		"small", 0.45, 0.50, 0.48)
 	why:SetPoint("TOPLEFT", 0, -22)
 	why:SetWidth(520)
@@ -203,6 +214,6 @@ end
 
 BT.Command("perf", function()
 	local fps, home, world = M.Read()
-	U.Print(("%s fps · home %s ms · world %s ms"):format(
+	U.Print(("Performance: %s fps · home %s ms · world %s ms"):format(
 		fps and math.floor(fps + 0.5) or "?", tostring(home or "?"), tostring(world or "?")))
-end, "frame rate and latency, once", "perf")
+end, "print the frame rate and latency", "perf")

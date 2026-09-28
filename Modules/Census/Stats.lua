@@ -425,7 +425,7 @@ local function subtitle(mode, census, counted)
 		local noLevel = (census.unknown and census.unknown.level) or 0
 		return noLevel > 0
 			and ("%d of %d · %d no level"):format(counted, of, noLevel)
-			or ("all %d"):format(counted)
+			or ("All %d"):format(counted)
 	end
 	-- with brackets switched off, say what is being left out rather than
 	-- letting the chart read like the whole book
@@ -437,11 +437,11 @@ local function subtitle(mode, census, counted)
 	end
 	if unknown > 0 then
 		if mode == "class" then
-			return ("all %d · %d unknown"):format(counted, unknown)
+			return ("All %d · %d unknown"):format(counted, unknown)
 		end
 		return ("%d of %d · %d no %s"):format(counted, of, unknown, NOUN[mode] or mode)
 	end
-	return ("all %d"):format(counted)
+	return ("All %d"):format(counted)
 end
 
 function S.Subtitle(mode, census, counted)
@@ -451,11 +451,19 @@ function S.Subtitle(mode, census, counted)
 end
 
 -- "median 2 days, average 5 days" - how much of this book you should believe.
+-- NOBODY TO COUNT (Josh 2026-09-28, "fix it"): an empty book, the Seen filter
+-- and a picked bar all leave no ages, and only the first is an empty book, so
+-- the line says which one it is.
 function S.AgeLine(census)
 	local a = census.age
 	if not a.median then
-		return "nothing yet"
+		if (census.book or 0) == 0 then
+			return "Nobody in the book yet. Characters you see go in it."
+		elseif (census.total or 0) == 0 and SEEN_AS[census.seen] then
+			return ("Nobody in the book was %s."):format(SEEN_AS[census.seen])
+		end
+		return "Nobody in the book matches the bar you picked."
 	end
-	return ("median %s old · average %s"):format(
+	return ("Median %s old · average %s"):format(
 		U.Ago(0, a.median), U.Ago(0, math.floor(a.mean or a.median)))
 end

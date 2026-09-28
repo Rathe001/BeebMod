@@ -67,22 +67,22 @@ end
 -- you read; keys are private and never reused.
 function BT.AddTag(label, colorIndex, key)
 	if not BT.settings then
-		return nil, "no book is open yet"
+		return nil, "no book is open yet."
 	end
 	label = type(label) == "string" and label:match("^%s*(.-)%s*$") or ""
 	if label == "" then
-		return nil, "a tag needs a name"
+		return nil, "a tag needs a name."
 	end
 	if #label > 20 then
-		return nil, "that name is too long for a button"
+		return nil, "that name is too long for a button."
 	end
 	for _, f in ipairs(BT.AllFlags()) do
 		if f.label:lower() == label:lower() then
-			return nil, ("there is already a tag called %s"):format(f.label)
+			return nil, ("there is already a tag called %s."):format(f.label)
 		end
 	end
 	if #(BT.settings.tags or {}) >= 12 then
-		return nil, "twelve tags is as many as the panel can show"
+		return nil, "you have 12 tags, the most the panel can show."
 	end
 	local pick = BT.TAG_COLORS[tonumber(colorIndex) or (#(BT.settings.tags or {}) % #BT.TAG_COLORS + 1)]
 		or BT.TAG_COLORS[1]

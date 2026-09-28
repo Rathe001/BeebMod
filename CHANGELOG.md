@@ -5,6 +5,54 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The Menagerie is now Nesingwary's Expedition.** "Menagerie" sounded like
+  pets, and you hunt these mobs. The window's two tabs are **Field Journal**,
+  the cards, and **Commendations**, the achievements. The ranks are named for
+  hunters and take the same points as before. They are Greenhorn, Tracker,
+  Trapper, Stalker, Pathfinder, Huntsman, Big-Game Hunter, Trophy Hunter,
+  Master of the Hunt and Nesingwary's Equal. The commendation for 1,000 kinds
+  of mob is The Green Hills of Azeroth. Type `/bt expedition` to open the
+  window; `/bt menagerie` still works. Your journal carries over unchanged.
+- **You can move the Expedition's line and the Ledger's row in the dock.**
+  Each has its own tab under Dock in the settings, in the same place as its
+  row in the dock. Drag the tab and the row moves with it. The Expedition's tab
+  picks points or kills for the line. The Ledger's tab holds the switch for its
+  target row. A tab hides while its module is off.
+- **The Dock's tabs show a grip before you point at them.** The grip is faint
+  and gets brighter under the pointer. The Dock's page says that the tabs are
+  in the same order as the dock.
+- **New tooltips for everything in the dock.** Each one starts with what you
+  pointed at: your money and whether it went up, how many bag slots are free,
+  your rank and the points to the next. Under that come one or two short
+  lists, worst or nearest first, such as the gear that needs repair or the
+  masteries you're closest to. The clicks are at the bottom. BeebMod
+  draws the tooltips, with a coloured top edge for the feature they belong to.
+- **Quests in the tracker have a tooltip.** It shows the zone, the level and
+  each objective's progress.
+- **All of BeebMod's text is rewritten to be plainer.** Settings, notes,
+  tooltips, chat lines and the README follow one style, windowpane prose,
+  written down in `docs/writing-style.md`. A few lines were out of date and now
+  match what the dock shows, such as the Gold, Durability and Pick Pocket
+  notes. The frame rate and latency page gives the numbers where the colours
+  change.
+- **The census footer says why nobody is counted.** It used to say "Nobody in
+  the book yet" whenever it had no one to count. Now it says so only when the
+  book is empty. When the Seen filter or a picked bar leaves nobody, the
+  footer says that instead.
+- **Every description in the Field Journal was read and checked.** The wiki
+  describes the world as it is now, so many pages talked about Outland,
+  Pandaria or the Cataclysm's changes to the old zones. Pages about things
+  that were never in Classic are gone. The rest keep only what is true for
+  Classic, in one to three plain sentences. The journal has about 5,800
+  descriptions, down from about 8,000. The wiki's notes about itself ("...
+  redirect here", "This section concerns...") and its quest levels ("[14]")
+  no longer show.
+- **A mob's card no longer borrows a page for a place.** A Sickly Deer
+  "located in Olsen's Farthing" showed the page of a priest named Farthing.
+  The card now reads only the part of a page that says what a mob is.
+
 ## 0.1.0-beta.6
 
 - **Nine kinds of mob, scored by how hard they are and how often you meet

@@ -451,14 +451,31 @@ $ThingWords = @(
 	"Heroic", "(?i:heroic (?:mode|difficulty|dungeon))", "Mythic", "Timewalking", "(?i:pet battles?|battle pets?)",
 	"(?i:garrisons?)", "Order Hall", "(?i:world quests?)", "Warfront", "Island Expedition", "Torghast",
 	"Warcraft Rumble", "Hearthstone", "Heroes of the Storm", "(?i:arena (?:battlemaster|organizer|team|vendor|master))",
-	"\[\d+-\d+\]", "(?i:patch (?:[2-9]|1\d)\.\d)", "Plunderstorm", "Remix", "Dungeon Journal", "Adventure Guide",
+	"\[\d+-\d+\]", "\[(?:6[1-9]|[7-9]\d|1\d\d)[A-Z]*\]","(?i:patch (?:[2-9]|1\d)\.\d)", "Plunderstorm", "Remix", "Dungeon Journal", "Adventure Guide",
 	"Raid Finder", "Trading Post", "(?i:scenario)", "Warcraft: Legion",
 	# THE SEASONS ARE NOT VANILLA (Josh 2026-09-27: Ragnaros was "the final
 	# boss in the Season of Discovery Molten Core raid")
-	"Season of Discovery", "(?i:Season of Mastery)", "(?i:Hardcore realms?)"
+	"Season of Discovery", "(?i:Season of Mastery)", "(?i:Hardcore realms?)",
+	# THE EVENTS SINCE (Josh 2026-09-28: a Sickly Deer lived "in Olsen's
+	# Farthing during the Heritage of Lordaeron"): each is named for itself,
+	# so a sentence that names one is about the game since
+	"Heritage of (?:the )?[A-Z][a-z']+", "Lion's Heritage", "War of the Thorns", "Battle for (?:Darkshore|Stromgarde|the Undercity|Andorhal)",
+	"Nightmare Incursions?", "Radiant Echoes", "Un'Goro Madness", "(?i:micro-holiday)", "Elemental Unrest", "Legion Invasions?",
+	"Operation: Gnomeregan", "Brewfest", "Classic Hardcore", "Undermarket", "Anniversary event", "Call to Arms",
+	"Blackrock Eruption", "Tarren Mill vs\.? Southshore", "Old Hillsbrad", "Stormwind Harbor",
+	# and quests of the old world written since, named often enough to list
+	"In Darkest Night", "Tracking Tipoff", "Dark Ranger Round-Up", "Death Rising",
+	"Dark Portal Opens", "Zombie Infestation", "Silithus: The Wound", "Valaar.s Berth",
+	# an item, not a creature, in several versions that each take the key
+	# when the last one is left out
+	"Signet Ring of the Bronze Dragonflight"
 )
-# a page written for one of them, by the qualifier on its title
-$SeasonTitle = '\((?:Season of Discovery|Season of Mastery|Plunderstorm|Hardcore|Remix)\)'
+# a page written for one of them, by the qualifier on its title. A LATER
+# VERSION BY ITS NAME TOO (Josh 2026-09-28, the lore review): when the
+# review left out "Shattered Hand clan (alternate universe)", its "(film
+# universe)" page took the key next; a qualifier that names a later game,
+# universe or event marks the whole page as later
+$SeasonTitle = '\((?:[^()]*\b(?:Season of Discovery|Season of Mastery|Plunderstorm|Hardcore|Remix|SoD|alternate universe|film universe|BC Classic|Wrath Classic|Cataclysm Classic|Mists Classic|Anniversary|Battle for Azeroth|Legion|Death Rising|War of the Thorns|Zalazane''s Fall|Dark Portal Opens|Darkspear Rebellion|Battle for Stromgarde)\b[^()]*)\)'
 # each word a whole word, where it starts or ends with a letter
 function WordsRegex($words) {
 	return [regex]::new((($words | ForEach-Object {
@@ -489,7 +506,19 @@ $Dangling = [regex]::new('(?:\s*[,;:\-]|\s+(?:and|or|but|though|although|while|w
 function Vanilla-Places([string]$s) {
 	$s = [regex]::Replace($s, '\b([Tt]he )?(?:Northern|Southern) Barrens\b', { param($m) $(if ($m.Groups[1].Success) { $m.Groups[1].Value } else { "the " }) + "Barrens" })
 	$s = [regex]::Replace($s, '\b(?:[Tt]he )?(?:Northern Stranglethorn|Cape of Stranglethorn)\b', 'Stranglethorn Vale')
+	# THE WIKI'S OWN HABITS (Josh 2026-09-28, the lore review): "found here
+	# prior to the Shattering" is vanilla described from later, so the phrase
+	# goes and the fact stays; "a rare mob murloc" is the game's "a rare murloc"
+	$s = [regex]::Replace($s, ',?\s+(?:prior to|before) the Shattering\b', '')
+	$s = [regex]::Replace($s, '\brare mob (?=[a-z])(?!(?:found|located|that|which|who|in|on|at|of|and|with|spawns?|spawning)\b)', 'rare ')
 	return $s
+}
+
+# a quest's level, as the wiki tags it: "[14] The Principal Source" is
+# "The Principal Source" in the game (a quest past level 60 is later, and is
+# cut before this: $ThingWords)
+function No-QuestLevels([string]$s) {
+	return [regex]::Replace($s, '\[\d+[A-Z]*\]\s+', '')
 }
 
 # one sentence as vanilla would have it, or nothing
@@ -536,7 +565,11 @@ function Vanilla-Sentence([string]$s) {
 
 # the note a page opens with about other pages: "This page is about trolls
 # in general. For the playable races, see..."
-$Hatnote = [regex]::new('^(?:This (?:page|article) is about|For [^.]*\bsee\b|For other uses|Not to be confused|See also)')
+# MORE OF THE WIKI TALKING ABOUT ITSELF (Josh 2026-09-28, on the Snake page:
+# "The redirect sentence here is weird"): '"Cobra" and "viper" redirect
+# here', "This section concerns content related to Legion", "This article
+# concerns the original ... encounter", "This page is a list of ..."
+$Hatnote = [regex]::new('^(?:This (?:page|article) is (?:about|a list)|This (?:page|article|section) concerns|For [^.]*\bsee\b|For other uses|Not to be confused|See also|"[^"]+"(?:,? (?:and|or) "[^"]+")* redirects? here)')
 
 # a page's text as vanilla would have it: its first three sentences that
 # survive, or nothing when its first does not
@@ -554,6 +587,21 @@ function Vanilla-Text([string]$s) {
 	}
 	return (($out -join " ") -replace '\s{2,}', ' ' -replace '\s+([,.;:])', '$1').Trim()
 }
+
+# THE PAGES READ BY HAND (Josh 2026-09-28, the lore rewrite): every page was
+# read against docs/lore-rules.md, and scripts/lore-curated.json says, by page
+# title, what became of it. "drop" leaves the page out, "rewrite" puts the
+# plain text written for it in place of the wiki's, "keep" lets the filter's
+# text stand. It is applied after the filter, so a later fetch never
+# overwrites what was written by hand.
+$CuratedFile = Join-Path $PSScriptRoot "lore-curated.json"
+$curated = @{}
+if (Test-Path $CuratedFile) {
+	$c = Get-Content $CuratedFile -Raw -Encoding UTF8 | ConvertFrom-Json
+	foreach ($p in $c.PSObject.Properties) { $curated[$p.Name] = $p.Value }
+}
+$handDropped = 0
+$handWritten = 0
 
 # every page as it is written out: the vanilla part of it, and the pages with
 # nothing vanilla to say left out
@@ -574,6 +622,16 @@ foreach ($asked in $lore.Keys) {
 		continue
 	}
 	$text = Vanilla-Text $e.text
+	$hand = $curated[$e.title]
+	if ($hand -and $hand.status -eq "drop") {
+		$handDropped++
+		continue
+	}
+	if ($hand -and $hand.status -eq "rewrite" -and $hand.text) {
+		$text = $hand.text
+		$handWritten++
+	}
+	$text = No-QuestLevels $text
 	if ($text) {
 		$shown[$asked] = @{ title = $e.title; kind = $e.kind; text = $text }
 	} else {
@@ -586,7 +644,13 @@ function LuaString([string]$s) {
 }
 
 $entries = @{}
-foreach ($asked in $shown.Keys) {
+# THE SAME PAGE EVERY TIME (Josh 2026-09-28: "Add the fix"): a hashtable
+# hands its keys back in no set order, and when two pages tie for a key -
+# "Azuregos (Anniversary)" and "Azuregos (tactics)" - the one seen first
+# took it, so a rebuild could swap them and lose a page written by hand in
+# scripts/lore-curated.json. Both loops go in sorted order.
+$askedInOrder = @($shown.Keys | Sort-Object)
+foreach ($asked in $askedInOrder) {
 	$e = $shown[$asked]
 	# A TITLE WITH A QUALIFIER IS A SECOND CHOICE (Josh 2026-09-27): "Beast
 	# (Rumble)" is Warcraft Rumble's beast, and read as "beast" it outranked
@@ -602,7 +666,7 @@ foreach ($asked in $shown.Keys) {
 # and by the page the wiki led to, or a title with a qualifier, where nothing
 # has that name already: "threshadons" was asked, "Threshadon" is the page,
 # and a mob's page says "threshadon" as often as "threshadons"
-foreach ($asked in $shown.Keys) {
+foreach ($asked in $askedInOrder) {
 	$e = $shown[$asked]
 	# two loops, not one list: joining two of these with + nests them (the
 	# memory note on pipeline flattening), and a list became a key
@@ -649,3 +713,4 @@ foreach ($k in ($entries.Keys | Sort-Object)) {
 [void]$sb.AppendLine("}")
 [IO.File]::WriteAllText($Out, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
 Write-Host ("wrote {0}: {1} keys to {2} pages, from {3} fetched ({4} members of groups left out, {5} pages with nothing vanilla to say)" -f $Out, $entries.Count, $n, $lore.Count, $dropped, $wentLater)
+Write-Host ("by hand (lore-curated.json): {0} rewritten, {1} dropped (counted once for each title the wiki was asked)" -f $handWritten, $handDropped)

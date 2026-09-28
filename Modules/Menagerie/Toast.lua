@@ -174,7 +174,7 @@ function T.Push(spec)
 			if queue[i].minor then
 				local gone = table.remove(queue, i)
 				if BT.Util and BT.Util.Print then
-					BT.Util.Print(("Menagerie: %s · %s"):format(gone.head or "", gone.text or ""))
+					BT.Util.Print(("Expedition: %s · %s"):format(gone.head or "", gone.text or ""))
 				end
 				break
 			end
@@ -182,7 +182,7 @@ function T.Push(spec)
 	end
 	if #queue >= QUEUE_MAX then
 		if BT.Util and BT.Util.Print then
-			BT.Util.Print(("Menagerie: %s · %s"):format(spec.head or "", spec.text or ""))
+			BT.Util.Print(("Expedition: %s · %s"):format(spec.head or "", spec.text or ""))
 		end
 		return false
 	end

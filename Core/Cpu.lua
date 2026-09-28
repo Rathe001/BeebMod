@@ -215,10 +215,10 @@ function P.Report(list, secs)
 		total = total + e.ms
 	end
 	local lines = {}
-	lines[#lines + 1] = ("measured %.1f s: %.2f ms a second across %d things"):format(secs, total / secs, #list)
+	lines[#lines + 1] = ("Time measured · %.1f s · %.2f ms a second · %d things"):format(secs, total / secs, #list)
 	local game = P.GameFigure()
 	if game then
-		lines[#lines + 1] = ("the game's own figure for BeebMod: %.3f ms a frame"):format(game)
+		lines[#lines + 1] = ("The game's own figure for BeebMod · %.3f ms a frame"):format(game)
 	end
 	for i = 1, math.min(12, #list) do
 		local e = list[i]
@@ -239,15 +239,15 @@ BT.Command("cpu", function(rest)
 	local seconds = tonumber((rest or ""):match("%d+")) or 10
 	seconds = math.max(2, math.min(120, seconds))
 	if P.on then
-		BT.Util.Print("already measuring")
+		BT.Util.Print("Already measuring. The report comes when it ends.")
 		return
 	end
 	P.Start(seconds)
-	BT.Util.Print(("measuring for %d seconds - play as you normally would"):format(seconds))
+	BT.Util.Print(("Measuring for %d seconds. Play as you normally would."):format(seconds))
 	local after = _G.C_Timer and _G.C_Timer.After
 	if after then
 		after(seconds, function()
 			P.Report(P.Stop())
 		end)
 	end
-end, "cpu [seconds] - time the toolkit's updates, events and timers, and list the costliest")
+end, "cpu [seconds] - time BeebMod's updates, events and timers, and list the costliest")

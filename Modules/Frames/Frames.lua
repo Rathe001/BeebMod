@@ -34,7 +34,7 @@ local M = BT.Module({
 	key = "frames",
 	feature = "frames",
 	title = "Unit frames",
-	blurb = "you and your group, the raid, your target, focus and bosses",
+	blurb = "Frames for you, your group, the raid, your target, focus and bosses",
 	order = 45,
 })
 
@@ -205,7 +205,7 @@ function M.Handle(f, key)
 			return
 		end
 		if inCombat() then
-			U.Print("unit frames stay put in a fight - move them when it is over")
+			U.Print("Unit frames: you can't move frames in a fight. Move them when it's over.")
 			return
 		end
 		local h = holder(self.bmHandle)
@@ -774,12 +774,17 @@ BT.Command("marker", function()
 				end
 			end
 			local shows = frame and frame.marker and frame.marker:IsShown()
-			U.Print(("marker · %s: the client says %s · the frame %s"):format(unit, said,
+			U.Print(("Marker: %s. The game says %s. The frame %s."):format(unit, said,
 				frame and (shows and "shows it" or "shows none") or "is not there"))
 		end
 	end
-	U.Print("marker · a secret one is drawn by: " .. (F.markerWith == nil and "none needed yet"
-		or F.markerWith == false and "|cffff6b6bnothing this client takes|r" or F.markerWith))
+	if F.markerWith == nil then
+		U.Print("Marker: no secret mark has come up yet.")
+	elseif F.markerWith == false then
+		U.Print("Marker: |cffff6b6bthis client accepts no way to draw a secret mark.|r")
+	else
+		U.Print(("Marker: BeebMod draws a secret mark with %s."):format(tostring(F.markerWith)))
+	end
 end, "marker - whether the unit frames can see who is marked", "frames")
 
 -- every group cell there is, in every header
@@ -1343,8 +1348,8 @@ BT.Command("framesdump", function()
 	end
 	BT.EnsureBound()
 	BeebModDB.framesDump = { at = U.Now(), lines = lines }
-	U.Print(("unit frames: %d lines written down · /reload to save them"):format(#lines))
-end, "framesdump - write down what the client holds for the unit frames' names", "frames")
+	U.Print(("Unit frames: wrote down %d lines. Type /reload to save them."):format(#lines))
+end, "framesdump - write down what the game holds for the unit frames' names", "frames")
 
 BT.Command("frames", function(rest)
 	rest = (rest or ""):lower()
@@ -1355,17 +1360,18 @@ BT.Command("frames", function(rest)
 	elseif rest == "off" then
 		M.Preview(nil)
 	elseif rest == "reset" then
-		U.Print(M.ResetPlaces() and "unit frames: every block back where it started"
-			or "unit frames: back where they started when this fight is over")
+		U.Print(M.ResetPlaces() and "Unit frames: every block is back where it started."
+			or "Unit frames: they go back where they started when this fight is over.")
 		return
 	else
-		U.Print("/bt frames test (or party) · a made-up party and four bosses · /bt frames raid · forty · /bt frames off")
-		U.Print("shift-drag any frame to move its block · /bt frames reset puts them all back")
+		U.Print("Unit frames: type /bt frames test (or party) to show a made-up party and 4 bosses. "
+			.. "Type /bt frames raid for a raid of 40. Type /bt frames off to hide them.")
+		U.Print("Unit frames: shift-drag any frame to move its block. Type /bt frames reset to put them all back.")
 		return
 	end
-	U.Print(M.previewing and ("unit frames: previewing a %s · /bt frames off to put it away"):format(M.previewing)
-		or "unit frames: preview put away")
-end, "frames test|raid|off|reset - preview the group frames with made-up people, or put them back where they started", "frames")
+	U.Print(M.previewing and ("Unit frames: showing a made-up %s. Type /bt frames off to hide it."):format(M.previewing)
+		or "Unit frames: made-up frames hidden.")
+end, "frames test|raid|off|reset - show the group frames with made-up people, or put them back where they started", "frames")
 
 -- ---------------------------------------------------------------------------
 -- Your cast bar
@@ -1584,23 +1590,23 @@ function M:BuildTab(panel)
 	local W = BT.Widgets
 	local page = W.Stack(panel)
 	local groups = page:Section("Show")
-	W.SwitchRow(groups, "Party", "you and your pet at the top, then four others with their pets and targets",
+	W.SwitchRow(groups, "Party", "You and your pet at the top, then 4 others with their pets and targets",
 		function() return opt("party", true) end, function(on) setOpt("party", on) end)
-	W.SwitchRow(groups, "Raid", "a column for each group in use · the game's raid frames are put away",
+	W.SwitchRow(groups, "Raid", "A column for each group in use, in place of the game's raid frames",
 		function() return opt("raid", true) end, function(on) setOpt("raid", on) end)
-	W.SwitchRow(groups, "Main tanks", "in a raid, above it, each with its target",
+	W.SwitchRow(groups, "Main tanks", "In a raid, above the raid frames, each with its target",
 		function() return opt("tanks", true) end, function(on) setOpt("tanks", on) end)
-	W.SwitchRow(groups, "Bosses", "up to five, with their casts and their mechanics",
+	W.SwitchRow(groups, "Bosses", "Up to 5, with their casts and mechanics",
 		function() return opt("boss", true) end, function(on) setOpt("boss", on) end)
-	W.SwitchRow(groups, "Your cast bar", "under the resource display · the game's own is put away",
+	W.SwitchRow(groups, "Your cast bar", "Under the resource display, in place of the game's cast bar",
 		function() return opt("cast", true) end, function(on) setOpt("cast", on) end)
 	local where = page:Section("Place")
-	local move = W.Row(where, "Shift-drag to move", "any block, out of combat")
+	local move = W.Row(where, "Shift-drag to move", "Any block, out of combat")
 	local reset = move:SetControl(W.Button(move, "Reset", 62, 20))
 	reset:SetScript("OnClick", function()
 		M.ResetPlaces()
 	end)
-	local size = W.Row(where, "Size", "every unit frame, and the cast bar")
+	local size = W.Row(where, "Size", "Every unit frame, and the cast bar")
 	self.sizeStep = size:SetControl(W.Stepper(size, function(dir)
 		M.SetScale(M.Scale() + dir * M.SCALE_STEP)
 		M:ShowTab()
@@ -1608,7 +1614,7 @@ function M:BuildTab(panel)
 	-- WHAT THEY SAY AND HOW THEY MOVE (Josh 2026-09-24)
 	local health = page:Section("Health text")
 	self.healthSegs = {}
-	for _, pair in ipairs({ { "party", "Party" }, { "raid", "Raid", "main tanks too" }, { "target", "Target" },
+	for _, pair in ipairs({ { "party", "Party" }, { "raid", "Raid", "Main tanks too" }, { "target", "Target" },
 		{ "focus", "Focus" }, { "boss", "Bosses" } }) do
 		local key = pair[1]
 		local row = W.Row(health, pair[2], pair[3] or "")
@@ -1625,16 +1631,16 @@ function M:BuildTab(panel)
 		self.healthSegs[#self.healthSegs + 1] = seg
 	end
 	local look = page:Section("Feel")
-	local fadeRow = W.Row(look, "Out of range", "how far a frame you cannot reach fades")
+	local fadeRow = W.Row(look, "Out of range", "How much a frame fades when it's out of range")
 	self.fadeSeg = fadeRow:SetControl(W.Segmented(fadeRow, {
 		{ "light", "Light" }, { "medium", "Medium" }, { "strong", "Strong" },
 	}, function(key)
 		setOpt("fade", key)
 		M.PaintAll()
 	end))
-	W.SwitchRow(look, "Bars slide", "health and power ease to a new value · off, they jump",
+	W.SwitchRow(look, "Bars slide", "Health and power slide to a new value. Off, they jump.",
 		function() return opt("animate", true) end, function(on) setOpt("animate", on) end)
-	W.SwitchRow(look, "Target's buffs", "the row of its buffs under the target, beside its debuffs",
+	W.SwitchRow(look, "Target's buffs", "A row of your target's buffs, beside its debuffs",
 		function() return opt("targetBuffs", true) end,
 		function(on)
 			setOpt("targetBuffs", on)
@@ -1649,7 +1655,7 @@ function M:BuildTab(panel)
 	if T and #T.Spells("hot") > 0 then
 		local timers = page:Section("Heal over time")
 		for _, name in ipairs(T.Spells("hot")) do
-			W.SwitchRow(timers, name, "a bar on the friend it is on, running down",
+			W.SwitchRow(timers, name, "A bar on the player who has it, counting down",
 				function() return T.On(name) end,
 				function(on)
 					T.SetOn(name, on)
@@ -1663,7 +1669,7 @@ function M:BuildTab(panel)
 	local more = page:Section("More")
 	if M.MouseoverSupported() then
 		self.mouseoverRow = W.SwitchRow(more, "Cast on what you point at",
-			"heals go to the frame under the cursor · attacks still go to your target",
+			"Heals go to the frame under the pointer. Attacks still go to your target.",
 			function() return M.Mouseover() end,
 			function(on) M.SetMouseover(on) end)
 	end

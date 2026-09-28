@@ -11,7 +11,9 @@ local ok = true
 -- every tab on the window's rail, top to bottom, for a warrior with no order set
 -- (the Census, the Ledger and the Menagerie are a feature of one page each:
 -- their block's heading is their tab, 2026-09-27)
-ALL_TABS = "settings,testing,dock,map,progress,metrics,tracker,micro,"
+-- the Ledger's row and the Menagerie's line have a tab in the Dock's block too,
+-- at their places in the dock (Josh 2026-09-27)
+ALL_TABS = "settings,testing,dock,map,dock:ledger,progress,dock:menagerie,metrics,tracker,micro,"
 	.. "buffs,damagemeter,prd,frames,"
 	.. "bars,bagwindow,charsheet,chat,allmenus,tips"
 local function fail(msg)
@@ -859,45 +861,22 @@ if ok then
 
 			-- the cells that carry content carry a tooltip; nothing else does
 			assert(q.dots:GetScript("OnEnter"), "the dots are hoverable")
-			-- the tag tooltip: no name on it, one size for every line, and the
-			-- colour as a square rather than as the words
-			_G.GameTooltipTextLeft1 = _G.CreateFrame("FontString")
-			_G.GameTooltipTextLeft2 = _G.CreateFrame("FontString")
-			_G.GameTooltip.GetName = function() return "GameTooltip" end
-			local said = {}
-			_G.GameTooltip.AddLine = function(_, text) said[#said + 1] = tostring(text) end
-			_G.GameTooltip.NumLines = function() return #said end
-			_G.GameTooltipTextLeft3 = _G.CreateFrame("FontString")
-			_G.GameTooltipTextLeft4 = _G.CreateFrame("FontString")
-			_G.GameTooltipTextRight2 = _G.CreateFrame("FontString")
-			_G.GameTooltip.AddDoubleLine = function(_, l, r)
-				said[#said + 1] = tostring(l)
-				said.right = said.right or {}
-				said.right[#said] = tostring(r)
-			end
+			-- THE SAME QUOTATION IT IS EVERYWHERE ELSE (Josh 2026-09-20), in the
+			-- dock's own tooltip now (Josh 2026-09-27): the words, who wrote them
+			-- and when, and the tags as chips
 			q.dots:GetScript("OnEnter")(q.dots)
-			-- THE SAME QUOTATION IT IS EVERYWHERE ELSE (Josh 2026-09-20): the
-			-- words, then who said them, then a line per tag
-			assert(#said == 4, ("the note, its source and a line per tag (%d)"):format(#said))
-			assert(said[1]:find("held the door", 1, true),
-				"the words are on the tooltip, where there is room: " .. said[1])
-			assert(said.right[2] and said.right[2]:find("Beeb", 1, true),
-				"with who wrote it: " .. tostring(said.right[2]))
-			assert(said.right[2]:find("%d+/%d+/%d+"), "and when: " .. said.right[2])
-			-- set the way the unit tooltip sets it: large, and the source small
-			local quoteSize = select(2, _G.GameTooltipTextLeft1:GetFont())
-			assert(quoteSize and quoteSize >= 14, "the note is set large: " .. tostring(quoteSize))
-			assert(_G.GameTooltipTextLeft1._justify == "CENTER", "and centred")
-			assert(select(2, _G.GameTooltipTextLeft2:GetFont()) < quoteSize,
-				"the source stays small under it")
-			assert(not said[3]:find("Beeb", 1, true), "no name on the tags: " .. said[3])
-			assert(said[3]:find("^%s") ~= nil, "each tag line leaves room for its swatch")
-			assert(select(2, _G.GameTooltipTextLeft3:GetFont())
-				== select(2, _G.GameTooltipTextLeft4:GetFont()),
-				"and every tag line is the same size")
-			_G.GameTooltip.AddDoubleLine = nil
-			_G.GameTooltip.AddLine, _G.GameTooltip.NumLines = nil, nil
+			local Tip = BT.Tip
+			assert(Tip.IsShown(), "hovering the dots shows the dock's tooltip")
+			assert(Tip.Says("held the door"), "the words are on the tooltip: " .. table.concat(Tip.Texts(), " | "))
+			local credit
+			for _, s in ipairs(Tip.Texts()) do
+				if type(s) == "string" and s:find("Beeb", 1, true) and s:find("%d+/%d+/%d+") then
+					credit = s
+				end
+			end
+			assert(credit, "with who wrote it, and when: " .. table.concat(Tip.Texts(), " | "))
 			q.dots:GetScript("OnLeave")(q.dots)
+			assert(not Tip.IsShown(), "and it goes when the pointer leaves")
 
 			-- A PENCIL, ON HOVER. The name is a name; hovering it offers a
 			-- pencil, and only the pencil writes - clicking a name used to
@@ -1249,7 +1228,7 @@ if ok then
 			-- each of the six features
 			assert(table.concat(named, ",") == ALL_TABS,
 				"General, then the features' tabs: " .. table.concat(named, ","))
-			assert(table.concat(BT.Window.GroupKeys("dock"), ",") == "dock,map,progress,metrics,tracker,micro",
+			assert(table.concat(BT.Window.GroupKeys("dock"), ",") == "dock,map,dock:ledger,progress,dock:menagerie,metrics,tracker,micro",
 				"the Dock: its own page first, then in the dock's order: " .. table.concat(BT.Window.GroupKeys("dock"), ","))
 			assert(table.concat(BT.Window.GroupKeys("frames"), ",") == "buffs,damagemeter,prd,frames",
 				"Unit frames, A to Z by name: " .. table.concat(BT.Window.GroupKeys("frames"), ","))
@@ -1266,7 +1245,7 @@ if ok then
 			local blocks = BT.Window.Blocks()
 			for _, feat in ipairs(BT.FEATURES) do
 				local b = blocks[feat.key]
-				assert(b and b:IsShown() and b.head.label:GetText() == feat.title and b.switch:IsOn(),
+				assert(b and b:IsShown() and b.head.label:GetText() == (feat.short or feat.title) and b.switch:IsOn(),
 					"a block for " .. feat.title .. ", named, its switch on")
 			end
 			BT.Window.Rebuild()
@@ -1413,9 +1392,11 @@ if ok then
 			-- GENERAL IS THE LOOK (Josh 2026-09-24): the clock and the census
 			-- button are the Dock's page's, the target row the Ledger's
 			assert(#BT.Settings.Extras() == 0, "nothing on General but the look")
-			BT.Window.SetView("ledger")
+			-- (Josh 2026-09-27) on the Ledger's tab in the Dock's block, now
+			BT.Window.SetView("dock:ledger")
 			assert(BT.GetModule("ledger").rowRow and BT.GetModule("ledger").rowRow.field == "bar",
-				"the target row's switch is on the Ledger's page")
+				"the target row's switch is on the Ledger's tab in the Dock's block")
+			BT.Window.SetView("ledger")
 			-- NOTES ON TOOLTIPS ARE THE LEDGER'S (Josh 2026-09-23): the switch
 			-- left General for the Ledger's page, and still writes the setting
 			for _, r in ipairs(BT.Settings.Extras()) do
@@ -5325,20 +5306,68 @@ if ok then
 			local panel = BT.Window.Panel("tips") or BT.Window.BuildPanel("tips")
 			assert(panel.view and panel.body == panel.view.content, "and a page's body on a strip of its own")
 		end },
+		{ "every dock tooltip opens, says something, and breaks nothing", function()
+			-- THE DOCK'S OWN TOOLTIPS (Josh 2026-09-27): each one built from the
+			-- shared pieces in UI/Tip.lua. Opened one after another here, with
+			-- what each should lead with.
+			local Tip = BT.Tip
+			local function opened(label, show, words)
+				Tip.lastError = nil
+				show()
+				assert(Tip.lastError == nil, label .. " broke: " .. tostring(Tip.lastError))
+				assert(Tip.IsShown(), label .. " is shown")
+				if words then
+					assert(Tip.Says(words), ("%s says %q: %s"):format(label, words, table.concat(Tip.Texts(), " | ")))
+				end
+				Tip.Hide()
+			end
+			for _, key in ipairs({ "gold", "bagspace", "durability", "ilevel", "perf", "speed", "clock", "xp",
+				"menagerie" }) do
+				BT.SetEnabled(key, true)
+			end
+			local gold = BT.GetModule("gold")
+			gold.Build()
+			opened("Money", function() gold.Tip() end, "Money")
+			local bags = BT.GetModule("bagspace")
+			bags.Build()
+			opened("Bags", function() bags.Tip() end, "Bags")
+			local dura = BT.GetModule("durability")
+			dura.Build()
+			opened("Durability", function() dura.Tip() end, "Durability")
+			local ilvl = BT.GetModule("ilevel")
+			ilvl.Build()
+			opened("Item level", function() ilvl.Tip() end, "Item level")
+			local perf = BT.GetModule("perf")
+			local chips = perf.Build()
+			opened("Performance", function() perf.Tip(chips.fps) end, "home ms")
+			local speed = BT.GetModule("speed")
+			speed.Build()
+			opened("Speed", function() speed.Tip() end, "Movement speed")
+			local clock = BT.GetModule("clock")
+			clock.Build()
+			opened("Clock", function() clock.Tip() end, "Clock")
+			local xp = BT.GetModule("xp")
+			xp.Build()
+			opened("Experience", function() xp.Tip() end, "Experience")
+			local exp = BT.GetModule("menagerie")
+			exp.Build()
+			opened("Expedition", function() exp.Tip() end, "Nesingwary's Expedition")
+			local tracker = BT.GetModule("tracker")
+			opened("A quest", function()
+				tracker.QuestTip(BT.Bar.Frame(), { title = "The Defias Brotherhood", zone = "Westfall", level = 14,
+					objectives = { { text = "Defias Trapper slain", have = 7, need = 10 },
+						{ text = "Red Leather Bandana", have = 15, need = 15, done = true } } })
+			end, "1 OF 2")
+		end },
 		{ "the cog says what it opens", function()
 			-- A TOOLTIP LIKE THE CENSUS'S (Josh 2026-09-24)
 			BT.Bar.Create()
 			local cog = BT.Bar.Cog()
-			local lines, wasTip = {}, BT.Bar.Tip
-			BT.Bar.Tip = function(_, fill)
-				local wasAdd = _G.GameTooltip.AddLine
-				_G.GameTooltip.AddLine = function(_, text) lines[#lines + 1] = text end
-				fill()
-				_G.GameTooltip.AddLine = wasAdd
-			end
 			cog.button:GetScript("OnEnter")(cog.button)
-			BT.Bar.Tip = wasTip
-			assert(lines[1] == "Settings", "hovering the cog says Settings: " .. tostring(lines[1]))
+			-- in the dock's own tooltip, with its click (Josh 2026-09-27)
+			assert(BT.Tip.Says("Settings") and BT.Tip.Says("open the settings"),
+				"hovering the cog says Settings, and what a click does: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
 		end },
 		{ "shared pages: a switch each, and each one's settings under it while it is on", function()
 			-- (Josh 2026-09-24) Experience and Reputation on one page, the Dock's
@@ -6356,7 +6385,7 @@ if ok then
 			-- move the quest tracker to the top
 			BT.MoveModule("tracker", 1)
 			BT.Window.Rebuild()
-			assert(railKeys():find("^settings,testing,dock,tracker,map,progress"), "the rail follows: " .. railKeys())
+			assert(railKeys():find("^settings,testing,dock,tracker,map,dock:ledger,progress"), "the rail follows: " .. railKeys())
 			assert(BT.settings.order and BT.settings.order[1] == "tracker",
 				"and the order is a setting, so it is saved")
 			BT.SetEnabled("perf", true)
@@ -6426,8 +6455,11 @@ if ok then
 			tab:GetScript("OnEnter")(tab)
 			assert(tab.grip[1]._shown ~= false and tab.grip[2]._shown ~= false,
 				"pointing at a module's tab shows it can be moved")
+			assert(tab.grip[1]._vertex and tab.grip[1]._vertex[4] > 0.9, "bright under the pointer")
 			tab:GetScript("OnLeave")(tab)
-			assert(tab.grip[1]._shown == false, "and leaving puts the grip away")
+			-- AND FAINTLY WITHOUT (Josh 2026-09-27): still there, only quieter
+			assert(tab.grip[1]._shown ~= false and tab.grip[1]._vertex[4] < 0.5,
+				"and leaving quiets the grip rather than putting it away")
 			settingsTab:GetScript("OnEnter")(settingsTab)
 			assert(settingsTab.grip[1]._shown == false, "Settings shows no grip")
 			settingsTab:GetScript("OnLeave")(settingsTab)
@@ -6473,7 +6505,21 @@ if ok then
 			BT.SortModules()
 			BT.Window.Rebuild()
 			BT.Bar.Relayout()
-			assert(railKeys():find("^settings,testing,dock,map,progress"), "no order is the default order")
+			assert(railKeys():find("^settings,testing,dock,map,dock:ledger,progress"), "no order is the default order")
+			-- ANOTHER FEATURE'S ROW (Josh 2026-09-27): the Menagerie's tab in the
+			-- Dock's block moves its line, and is gone while the Menagerie is
+			local W = BT.Window
+			W.MoveTab("dock:menagerie", "map", nil)
+			assert(table.concat(W.GroupKeys("dock"), ","):find("^dock,dock:menagerie,map"),
+				"dragged above the map, the Menagerie's line goes above it: " .. table.concat(W.GroupKeys("dock"), ","))
+			BT.SetEnabled("menagerie", false)
+			assert(not table.concat(W.GroupKeys("dock"), ","):find("dock:menagerie", 1, true),
+				"switched off, its tab leaves the Dock's block")
+			BT.SetEnabled("menagerie", true)
+			assert(table.concat(W.GroupKeys("dock"), ","):find("dock:menagerie", 1, true), "and comes back with it")
+			BT.settings.order = nil
+			BT.SortModules()
+			W.Rebuild()
 			-- A SHARED PAGE MOVES WHOLE (Josh 2026-09-24): Progress dragged above
 			-- the map takes experience and reputation with it, together
 			BT.Window.MoveTab("progress", "map")
@@ -7225,7 +7271,7 @@ if ok then
 			local wasUnit, wasExists = _G.UnitName, _G.UnitExists
 			_G.UnitExists = function() return false end
 			who:Update()
-			assert(who.text._text:find("target a player to add notes and tags", 1, true),
+			assert(who.text._text:find("Target a player to add notes and tags.", 1, true),
 				"it says what targeting is for: " .. tostring(who.text._text))
 			assert((who.cellWidth or 0) < 150, "claiming a name's width, not the sentence's: "
 				.. tostring(who.cellWidth))
@@ -9012,7 +9058,7 @@ if ok then
 			end
 			local points = J.Score("char")
 			local _, title = J.Rank(points)
-			assert(points >= 25 and title ~= "Novice" and m.text:GetText():find(title),
+			assert(points >= 25 and title ~= "Greenhorn" and m.text:GetText():find(title),
 				("the dock's line says the rank (%s at %d): %s"):format(title, points, tostring(m.text:GetText())))
 			assert(m.text:GetText():find("%(%d+/10%)"), "and where that rank stands: " .. m.text:GetText())
 			assert(m.eta:GetText():find("pts"), "and says the points")
@@ -9026,7 +9072,7 @@ if ok then
 				"ten kinds earned First Pages, and it was toasted")
 			local ranked
 			for _, spec in ipairs(BT.MenagerieToast.queue) do
-				ranked = ranked or (spec.head == "Menagerie rank" and spec.text:find(title))
+				ranked = ranked or (spec.head == "Expedition rank" and spec.text:find(title))
 			end
 			assert(ranked, "and the new rank is toasted after the achievements that earned it")
 			-- NEW PAGES ON BY DEFAULT (Josh 2026-09-27), and they give way
@@ -9437,7 +9483,7 @@ if ok then
 			local kindRow = ach.rows[1]
 			assert(kindRow.lit:IsShown() and kindRow.edge:IsShown() and kindRow.check:IsShown(),
 				"an earned row is lit, with an edge and a tick")
-			assert(ach.tally:GetText():find("^%d+ of %d+ achievements earned$"), "and the page says how many")
+			assert(ach.tally:GetText():find("^%d+ of %d+ commendations earned$"), "and the page says how many")
 			local function drawnRows()
 				local out = {}
 				for _, r in ipairs(ach.rows) do
@@ -9460,7 +9506,7 @@ if ok then
 				("the two views are All between them (%d + %d of %d)"):format(#earnedRows, #todoRows, everything))
 			ach.shows.buttons[1]:GetScript("OnClick")(ach.shows.buttons[1])
 			f.scopes.buttons[2]:GetScript("OnClick")(f.scopes.buttons[2])
-			assert(f.subtitle:GetText():find("all characters"), "and all characters' counts")
+			assert(f.subtitle:GetText():find("All characters"), "and all characters' counts")
 			f.scopes.buttons[1]:GetScript("OnClick")(f.scopes.buttons[1])
 			f.views.buttons[1]:GetScript("OnClick")(f.views.buttons[1])
 			-- A TAB OF ITS OWN (Josh 2026-09-25): its switch at the top, and

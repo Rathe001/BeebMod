@@ -467,15 +467,15 @@ do
 	check(c.age.buckets[1].key == "today" and c.age.buckets[1].n == 1
 		and c.age.buckets[2].n == 1 and c.age.buckets[3].n == 0 and c.age.buckets[4].n == 2,
 		"sightings fall into today, this week, this month, older")
-	check(BT.Stats.AgeLine(c):find("median", 1, true) ~= nil, "the age line reads as a sentence")
+	check(BT.Stats.AgeLine(c):find("Median", 1, true) ~= nil, "the age line reads as a sentence")
 	-- the subtitle says what the chart covers, and mentions the unidentified
 	-- only when there are some
-	check(BT.Stats.Subtitle("class", c, 4) == "all 4 · 1 unknown",
+	check(BT.Stats.Subtitle("class", c, 4) == "All 4 · 1 unknown",
 		"the class chart owns up to its gap")
 	check(BT.Stats.Subtitle("race", c, 3) == "3 of 4 · 1 no race",
 		"a chart that leaves people out says how many")
 	local clean = { total = 9, unknown = { class = 0, race = 0, level = 0, flag = 0 } }
-	check(BT.Stats.Subtitle("class", clean, 9) == "all 9",
+	check(BT.Stats.Subtitle("class", clean, 9) == "All 9",
 		"and with nothing unidentified, there is no caveat at all")
 	check(BT.Stats.Subtitle("flag", clean, 2) == "2 of 9 tagged", "tags read their own way")
 
@@ -493,7 +493,7 @@ do
 		("and says so (%s)"):format(BT.Stats.Subtitle("class", only60, 1)))
 	check(BT.Stats.Subtitle("class", only60, 1):find("1 no level", 1, true) ~= nil,
 		"including who has no level to filter by")
-	check(BT.Stats.AgeLine(BT.Stats.Census(newdb(), now)) == "nothing yet",
+	check(BT.Stats.AgeLine(BT.Stats.Census(newdb(), now)) == "Nobody in the book yet. Characters you see go in it.",
 		"an empty book says so")
 end
 
@@ -1307,6 +1307,10 @@ do
 	check(week.total == 4, "this week adds the one seen two days ago")
 	check(S.Census(db, now, { seen = "month" }).total == 4, "the month leaves out forty days ago and never")
 	check(S.Census(db, now, { seen = "nonsense" }).total == 6, "a seen that is not one of ours is no filter")
+	check(S.AgeLine(S.Census(db, now + 100 * DAY, { seen = "today" })) == "Nobody in the book was seen today.",
+		"a Seen filter that leaves nobody says so, not that the book is empty")
+	check(S.AgeLine(S.Census(db, now, { pick = { mode = "class", key = "WARLOCK" } }))
+		== "Nobody in the book matches the bar you picked.", "and so does a picked bar that leaves nobody")
 
 	-- the guild chart: guilds, then the unguilded; the never-seen are a caveat
 	check(all.guild[1].key == "Vanguard" and all.guild[1].n == 3, "the largest guild first")
@@ -1609,6 +1613,17 @@ do
 	for _, e in ipairs(cursed) do titles[#titles + 1] = e.title end
 	check(cursed[2] and cursed[2].title == "Banshee" and not table.concat(titles, "|"):find("Centaur"),
 		"its own name's words are not what its page says it is: " .. table.concat(titles, " > "))
+	-- WHAT IT IS, NOT WHERE (Josh 2026-09-28): "located in Olsen's Farthing"
+	-- is where a Sickly Deer lives, and Farthing is a priest's page
+	BT.MenagerieLoreData["sickly deer"] = { "npc", "Sickly Deer",
+		"Sickly Deer are deer located in Olsen's Farthing in Silverpine Forest." }
+	BT.MenagerieLoreData["farthing"] = { "npc", "Farthing", "Farthing is a human priest." }
+	BT.MenagerieLoreData["deer"] = { "beast", "Deer", "Deer are hoofed, plant-eating mammals." }
+	local deer = J.WikiLore({ name = "Sickly Deer", kind = "Critter" })
+	local deerTitles = {}
+	for _, e in ipairs(deer) do deerTitles[#deerTitles + 1] = e.title end
+	check(deer[2] and deer[2].title == "Deer" and not table.concat(deerTitles, "|"):find("Farthing"),
+		"a place its page names is not what it is: " .. table.concat(deerTitles, " > "))
 	local vermin = J.WikiLore({ name = "Kobold Vermin", kind = "Humanoid" })
 	check(vermin[1].title ~= "Vermin", "one word of a name does not take another mob's page")
 	-- THE SAME BODY (Josh 2026-09-26: "Is there no way to determine that this
@@ -1660,10 +1675,10 @@ do
 	local r1, t1, at1, nextAt, nextTitle = J.Rank(49)
 	local r2, t2 = J.Rank(50)
 	local rTop, tTop, _, beyond = J.Rank(99999)
-	check(r0 == 1 and t0 == "Novice" and r1 == 1 and nextAt == 50 and nextTitle == "Scribbler" and at1 == 0,
-		"49 points is still a Novice, with Scribbler at 50")
-	check(r2 == 2 and t2 == "Scribbler", "50 is a Scribbler")
-	check(rTop == 10 and tTop == "Polymath" and beyond == nil, "the top rank is Polymath, with nothing after it")
+	check(r0 == 1 and t0 == "Greenhorn" and r1 == 1 and nextAt == 50 and nextTitle == "Tracker" and at1 == 0,
+		"49 points is still a Greenhorn, with Tracker at 50")
+	check(r2 == 2 and t2 == "Tracker", "50 is a Tracker")
+	check(rTop == 10 and tTop == "Nesingwary's Equal" and beyond == nil, "the top rank is Nesingwary's Equal, with nothing after it")
 	-- a rarer kind is worth more, and a rank read later is worth it from then
 	J.Kill({ npc = 1, name = "Silverback" }, T + 250)
 	local _, _, _, withRare = J.Score("char")

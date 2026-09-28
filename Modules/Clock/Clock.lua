@@ -14,7 +14,7 @@ local M = BT.Module({
 	key = "clock",
 	feature = "dock",
 	title = "Clock",
-	blurb = "local or server time · click to switch",
+	blurb = "Local or server time. Click it to switch.",
 	order = 4,
 	-- NOT A TAB (Josh 2026-09-22): it lives in the header, where there is
 	-- nothing to move, so it is a switch on the Settings page like the Census
@@ -104,15 +104,28 @@ function M.Label(which)
 	return M.Text(which) .. " " .. M.MARK[which]
 end
 
+-- when this session began: the login, or the last reload
+M.since = type(time) == "function" and time() or nil
+
+-- (Josh 2026-09-27, the dock's tooltips redrawn) both clocks side by side,
+-- the header's lit, the date, and how long you have played
 function M.Tip()
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not BT.Tip then
 		return
 	end
-	BT.Bar.Tip(M.frame, function()
-		GameTooltip:AddDoubleLine("Clock", "click to switch", 1, 1, 1, 0.55, 0.60, 0.58)
-		GameTooltip:AddDoubleLine("local", M.Text("local"), 0.7, 0.75, 0.73, 1, 1, 1)
-		GameTooltip:AddDoubleLine("server", M.Text("server"), 0.7, 0.75, 0.73, 1, 1, 1)
-	end)
+	BT.Tip.Show(M.frame, { build = function(t)
+		local day = type(date) == "function" and date("%A %d %B") or nil
+		t:Header({ name = "Clock", sub = day and (day:gsub(" 0", " ")) or nil })
+		local which = M.Which()
+		t:Stats({
+			{ M.Text("local"), which == "local" and "local, in the header" or "local", nil, which == "local" },
+			{ M.Text("server"), which == "server" and "server, in the header" or "server", nil, which == "server" },
+		}, 16)
+		if M.since and type(time) == "function" then
+			t:Note(("Played this session: %s."):format(BT.Session.Duration(time() - M.since)))
+		end
+		t:Foot({ { "Click", which == "local" and "show server time instead" or "show local time instead" } })
+	end })
 end
 
 function M.Build()
@@ -131,7 +144,7 @@ function M.Build()
 	M.frame:SetScript("OnMouseUp", function()
 		M.Toggle()
 		-- the tooltip says both; redrawn so it is not a click behind
-		if GameTooltip and GameTooltip:IsShown() then
+		if BT.Tip and BT.Tip.IsShown() then
 			M.Tip()
 		end
 	end)
@@ -178,5 +191,5 @@ function M:OnDisable()
 end
 
 BT.Command("time", function()
-	U.Print(("local %s · server %s"):format(M.Text("local"), M.Text("server")))
-end, "the time, local and the realm's", "clock")
+	U.Print(("Clock: local %s · server %s"):format(M.Text("local"), M.Text("server")))
+end, "print the local and the server time", "clock")

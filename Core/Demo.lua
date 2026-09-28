@@ -225,9 +225,9 @@ BT.Command("demo", function(rest)
 		on = not D.on
 	end
 	D.Set(on)
-	U.Print(D.on and "made-up data on · the census, ledger and menagerie show a made-up world · nothing is saved · /bt demo off"
-		or "made-up data off · your own is back")
+	U.Print(D.on and "Made-up data is on. The census, the Ledger, the Expedition, the unit frames and the buff tray show made-up data. BeebMod saves none of it. Type /bt demo off to see your own again."
+		or "Made-up data is off. Your own data is back.")
 	for _, line in ipairs(D.failed or {}) do
-		U.Print("|cffff6b6bcould not|r " .. line)
+		U.Print("|cffff6b6bCould not make up data for|r " .. line)
 	end
-end, "demo [on|off] - made-up data in every feature, for screenshots; nothing is saved")
+end, "demo [on|off] - show made-up data in every feature, for screenshots. BeebMod saves none of it.")

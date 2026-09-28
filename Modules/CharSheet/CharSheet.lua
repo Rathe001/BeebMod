@@ -17,7 +17,7 @@ local M = BT.Module({
 	key = "charsheet",
 	feature = "interface",
 	title = "Character sheet",
-	blurb = "item level on every slot, and the toolkit's look",
+	blurb = "Item level on every slot, and BeebMod's look",
 	order = 57,
 })
 
@@ -218,18 +218,18 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the game's character sheet, in the toolkit's look · click a stat heading to fold its section")
+	page:Note("BeebMod redraws the game's character sheet. Click a stat heading to fold its section.")
 	local sheet = page:Section("Sheet")
 	self.levelSwitch = BT.Widgets.SwitchRow(sheet, "Item level on every slot",
-		"in the corner of each piece you wear · shirts and tabards show none",
+		"In the corner of each piece you wear. Shirts and tabards show none.",
 		function() return opt("levels", true) and true or false end,
 		function(on) M.SetShowsLevels(on) end).switch
-	self.themeSwitch = BT.Widgets.SwitchRow(sheet, "In the toolkit's look",
-		"flat panels and quiet headers · off gives the game's art back",
+	self.themeSwitch = BT.Widgets.SwitchRow(sheet, "In BeebMod's look",
+		"Flat panels and plain headings. Off, the game's art comes back.",
 		function() return opt("theme", true) and true or false end,
 		function(on) M.SetThemed(on) end).switch
 	self.moveSwitch = BT.Widgets.SwitchRow(sheet, "Drag it by its title",
-		"it opens where you left it · /bt sheet reset puts it back",
+		"It opens where you left it. Type /bt sheet reset to put it back.",
 		function() return opt("move", true) and true or false end,
 		function(on)
 			BT.EnsureBound()
@@ -2818,20 +2818,20 @@ BT.Command("sheetdump", function(rest)
 	if (rest or "") == "clear" then
 		BT.EnsureBound()
 		BeebModDB.sheetDump = nil
-		U.Print("character sheet dump cleared")
+		U.Print("Character sheet: cleared the dump.")
 		return
 	end
 	local n = M.Dump()
-	U.Print(("character sheet: %d lines written down · /reload to save them"):format(n))
+	U.Print(("Character sheet: wrote down %d lines. Type /reload to save them."):format(n))
 end, "sheetdump [clear] - write the character window's frames into the saved file", "charsheet")
 
 BT.Command("sheet", function(rest)
 	if (rest or ""):lower() == "reset" then
 		M.ResetPosition()
-		U.Print("character sheet: back in the game's own place")
+		U.Print("Character sheet: the window is back where the game puts it.")
 		return
 	end
 	local n = M.UpdateAll()
-	U.Print(opt("levels", true) and ("character sheet: item level on %d slots"):format(n)
-		or "character sheet: item levels are off")
-end, "sheet [reset] - item level on every slot now; reset puts the window back in the game's place", "charsheet")
+	U.Print(opt("levels", true) and ("Character sheet: item level on %d slots."):format(n)
+		or "Character sheet: item levels are off.")
+end, "sheet [reset] - item level on every slot now, or reset to put the window back where the game puts it", "charsheet")

@@ -140,10 +140,14 @@ end
 -- so ~1,650 thoroughly and ~1,100 at an ordinary pace: Taxonomist to
 -- Loresage at 60, and the last two for whoever stays to master their mobs.
 -- The saved file says what real play earns; move these when it does.
+-- THE EXPEDITION'S RANKS (Josh 2026-09-27: the journal became Nesingwary's
+-- Expedition, and its ranks hunters' - "I like all of this, including the
+-- rank rename to hunter themed"). The points are as they were; the top one
+-- stands beside the man himself.
 J.RANKS = {
-	{ 0, "Novice" }, { 50, "Scribbler" }, { 150, "Observer" }, { 300, "Chronicler" }, { 500, "Scholar" },
-	{ 800, "Lorekeeper" }, { 1200, "Taxonomist" }, { 1800, "Loresage" }, { 2600, "Savant" },
-	{ 3600, "Polymath" },
+	{ 0, "Greenhorn" }, { 50, "Tracker" }, { 150, "Trapper" }, { 300, "Stalker" }, { 500, "Pathfinder" },
+	{ 800, "Huntsman" }, { 1200, "Big-Game Hunter" }, { 1800, "Trophy Hunter" }, { 2600, "Master of the Hunt" },
+	{ 3600, "Nesingwary's Equal" },
 }
 
 -- the rank `points` earn: its number, its title, the points it began at, and
@@ -196,6 +200,13 @@ end
 -- in full on the mob's own page. Elemental, Undead, Demon and the rest say
 -- something, and stay.
 local PLAIN_TYPES = { Humanoid = true, Beast = true, Critter = true, Mechanical = true }
+-- where a page's "X is a Y" stops saying what X is and starts saying where
+local WHERE_WORDS = {}
+for w in ([[located found that which who whose in on at near from of living dwelling residing
+	summoned seen spawned spawns patrolling wandering roaming guarding with by during inside within
+	around along when where while under below above outside]]):gmatch("%S+") do
+	WHERE_WORDS[w] = true
+end
 -- a page shorter than this, on a card, is followed by the next that says more
 local SHORT_LORE = 140
 
@@ -329,8 +340,29 @@ function J.WikiLore(m, ownOnly)
 					own[w] = true
 				end
 			end
+			-- WHAT IT IS, NOT WHERE (Josh 2026-09-28: a Sickly Deer's page says
+			-- it is "located in Olsen's Farthing", and a priest named Farthing
+			-- turned up under it). What it is comes after "is" or "are" and ends
+			-- where the where begins: "Sickly Deer are deer | located in...".
+			local at
+			for _, verb in ipairs({ " is ", " are ", " was ", " were " }) do
+				local i = first:find(verb, 1, true)
+				if i and (not at or i < at) then
+					at = i + #verb
+				end
+			end
+			local is = ""
+			if at then
+				is = first:sub(at)
+				for w in is:gmatch("[%a'%-]+") do
+					if WHERE_WORDS[w] then
+						is = is:sub(1, (is:find("%f[%a'%-]" .. w:gsub("%p", "%%%0") .. "%f[^%a'%-]") or #is + 1) - 1)
+						break
+					end
+				end
+			end
 			local race, other
-			for w in first:gmatch("[%a'%-]+") do
+			for w in is:gmatch("[%a'%-]+") do
 				local r = not COMMON[w] and not own[w] and J.Singular(data, w)
 				if r and r[2] ~= e.title then
 					if r[1] == "race" then
@@ -421,7 +453,7 @@ function J.LoreLine(m)
 	if m.family then
 		what = m.family:lower()
 	elseif kind == J.UNTYPED then
-		what = "creature of no known kind"
+		what = "mob of no known type"
 	else
 		what = kind:lower()
 	end
@@ -435,7 +467,7 @@ function J.LoreLine(m)
 	if m.lo then
 		out = out .. (", first met at level %d"):format(m.lo)
 	elseif m.skull then
-		out = out .. ", too strong to measure"
+		out = out .. ", its level shown as a skull"
 	end
 	return out .. "."
 end
@@ -928,7 +960,7 @@ J.GROUPS = {
 local DISCOVER = {
 	{ 10, 5, "First Pages" }, { 25, 5, "Field Notes" }, { 50, 10, "Naturalist" },
 	{ 100, 10, "Collector" }, { 200, 15, "Cataloguer" }, { 350, 20, "Curator" },
-	{ 500, 25, "Encyclopedist" }, { 750, 25, "Grand Archivist" }, { 1000, 50, "The Menagerie" },
+	{ 500, 25, "Encyclopedist" }, { 750, 25, "Grand Archivist" }, { 1000, 50, "The Green Hills of Azeroth" },
 }
 local SLAUGHTER = {
 	{ 100, 5, "Blooded" }, { 500, 5, "Hunter" }, { 1000, 10, "Slayer" }, { 5000, 15, "Reaper" },
@@ -958,38 +990,38 @@ end
 function J.List(st)
 	st = st or J.Stats()
 	local out = {}
-	tiers(out, "discover", "kinds", st.kinds, DISCOVER, "kill %d different kinds of mob")
-	tiers(out, "slaughter", "total", st.total, SLAUGHTER, "kill %d mobs")
+	tiers(out, "discover", "kinds", st.kinds, DISCOVER, "Kill %d different kinds of mob")
+	tiers(out, "slaughter", "total", st.total, SLAUGHTER, "Kill %d mobs")
 	for _, kind in ipairs(J.Types(st)) do
 		for _, t in ipairs(TYPE_TIERS) do
 			out[#out + 1] = {
 				id = "type:" .. kind .. ":" .. t[1], group = "types", kind = kind,
 				title = ("%s Hunter %s"):format(kind, t[3]), points = t[2], need = t[1],
 				have = st.byType[kind] or 0,
-				text = ("kill %d different kinds of %s"):format(t[1], kind:lower()),
+				text = ("Kill %d different kinds of %s"):format(t[1], kind:lower()),
 			}
 		end
 	end
-	tiers(out, "types", "family", st.families, FAMILIES, "kill beasts of %d different families")
+	tiers(out, "types", "family", st.families, FAMILIES, "Kill beasts of %d different families")
 	for _, t in ipairs(RARES) do
 		out[#out + 1] = {
 			id = "rare:" .. t[1], group = "rank", title = t[3], points = t[2], need = t[1], have = st.rares,
-			text = ("kill %d %s"):format(t[1], plural(t[1], "rare", "different rares")),
+			text = ("Kill %d %s"):format(t[1], plural(t[1], "rare", "different rares")),
 		}
 	end
-	tiers(out, "rank", "elite", st.elites, ELITES, "kill %d different kinds of elite")
+	tiers(out, "rank", "elite", st.elites, ELITES, "Kill %d different kinds of elite")
 	out[#out + 1] = {
 		id = "boss:1", group = "rank", title = "Worldbreaker", points = 25, need = 1, have = st.bosses,
-		text = "kill a world boss",
+		text = "Kill a world boss",
 	}
-	tiers(out, "world", "zones", st.zones, ZONES, "meet your kills in %d different zones")
+	tiers(out, "world", "zones", st.zones, ZONES, "Kill mobs in %d different zones")
 	out[#out + 1] = {
 		id = "feat:up5", group = "world", title = "Punching Up", points = 10, need = 1,
-		have = st.feats.up5 and 1 or 0, text = "kill a mob five or more levels above you",
+		have = st.feats.up5 and 1 or 0, text = "Kill a mob 5 or more levels above you",
 	}
 	out[#out + 1] = {
 		id = "feat:skull", group = "world", title = "Skull and Bones", points = 25, need = 1,
-		have = st.feats.skull and 1 or 0, text = "kill a mob whose level is a skull",
+		have = st.feats.skull and 1 or 0, text = "Kill a mob whose level shows as a skull",
 	}
 	return out
 end

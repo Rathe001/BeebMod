@@ -27,7 +27,7 @@ local M = BT.Module({
 	key = "prd",
 	feature = "frames",
 	title = "Resource display",
-	blurb = "your own nameplate, flat, with combo points under it",
+	blurb = "Draws your own nameplate flat, with combo points under it",
 	order = 58.5,
 })
 
@@ -587,18 +587,19 @@ function M.Said()
 	if not show then
 		return "no points to show"
 	elseif hidden then
-		return ("count kept secret by the client · out of %d · the row still shows it"):format(max)
+		return ("out of %d, count hidden from addons but shown on the row"):format(max)
 	end
 	return ("%d of %d points"):format(cur, max)
 end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("your own nameplate, when the client shows one (nameplateShowSelf) · /bt prddump writes its frames into the saved file")
+	page:Note("This is your own nameplate. The game shows it when the nameplateShowSelf setting is on. "
+		.. "Type /bt prddump to write its frames into the saved file.")
 	local plateSection = page:Section("The display")
 	self.rows = {
-		switchRow(plateSection, "Theme the bars", "flat bars in a one-pixel rim, the client's art off", "theme", true),
-		switchRow(plateSection, "Combo points under it", "a segment a point · rogues, and druids in cat form", "combo", true),
+		switchRow(plateSection, "Theme the bars", "Flat bars in a one-pixel rim, in place of the game's art", "theme", true),
+		switchRow(plateSection, "Combo points under it", "One segment per point, for rogues and druids in cat form", "combo", true),
 	}
 	-- what the display is doing right now, as a row of its own: pinned to
 	-- the foot of the panel it sat on the rows once the page grew
@@ -624,9 +625,9 @@ function M:RefreshTab()
 	end
 	if self.found then
 		if not (plate and plate.IsVisible and plate:IsVisible()) then
-			self.found:SetText("no resource display on screen · is nameplateShowSelf on?")
+			self.found:SetText("Not on screen. It needs nameplateShowSelf on.")
 		else
-			self.found:SetText(("%d pieces dressed · %s"):format(M.lastCount or 0, M.Said()))
+			self.found:SetText(("%d pieces redrawn · %s"):format(M.lastCount or 0, M.Said()))
 		end
 	end
 end
@@ -657,9 +658,9 @@ end
 BT.Command("prd", function()
 	local n = M.Apply()
 	if not (plate and plate.IsVisible and plate:IsVisible()) then
-		U.Print("no resource display on screen · is nameplateShowSelf on? · /bt prddump says what is there")
+		U.Print("Resource display: not on screen. It needs nameplateShowSelf on. Type /bt prddump to see what is there.")
 	else
-		U.Print(("resource display: %d pieces dressed · %s"):format(n, M.Said()))
+		U.Print(("Resource display: %d pieces redrawn · %s"):format(n, M.Said()))
 	end
 	-- THE RAW ANSWERS (Josh 2026-09-22), because "0 of 5" can be a client
 	-- that counts points somewhere else, and "not shown" can be a row hung
@@ -699,7 +700,7 @@ BT.Command("prddump", function(rest)
 	if (rest or "") == "clear" then
 		BT.EnsureBound()
 		BeebModDB.prdDump = nil
-		U.Print("resource display dump cleared")
+		U.Print("Resource display: cleared the dump.")
 		return
 	end
 	local p, how = M.Plate()
@@ -751,5 +752,5 @@ BT.Command("prddump", function(rest)
 		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
 		lines = lines,
 	}
-	U.Print(("resource display: %d lines written down · /reload to save them"):format(#lines))
+	U.Print(("Resource display: wrote down %d lines. Type /reload to save them."):format(#lines))
 end, "prddump [clear] - write the resource display's frames into the saved file", "prd")

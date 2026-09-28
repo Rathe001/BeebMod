@@ -21,7 +21,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "bagspace",
 	title = "Bags",
-	blurb = "slots used, and your class's reagents",
+	blurb = "Slots used, and your class's reagents",
 	order = 39.5,
 	-- on the right panel, as a row of the Metrics grid (a part has no tab of
 	-- its own: its switch is on the Metrics tab)
@@ -45,7 +45,9 @@ end
 function M.Bags()
 	local numSlots = container("GetContainerNumSlots")
 	local numFree = container("GetContainerNumFreeSlots")
-	local out = { bags = { used = 0, total = 0 }, reagents = { used = 0, total = 0 } }
+	-- `each`: every bag on its own, in order, for the tooltip's one segment a
+	-- bag (Josh 2026-09-27)
+	local out = { bags = { used = 0, total = 0 }, reagents = { used = 0, total = 0 }, each = {} }
 	if type(numSlots) ~= "function" or type(numFree) ~= "function" then
 		return out
 	end
@@ -69,6 +71,7 @@ function M.Bags()
 			local into = special and out.reagents or out.bags
 			into.total = into.total + slots
 			into.used = into.used + math.max(0, slots - free)
+			out.each[#out.each + 1] = { used = math.max(0, slots - free), total = slots, special = special }
 		end
 	end
 	return out
@@ -267,30 +270,40 @@ local function hideTip()
 	end
 end
 
+-- (Josh 2026-09-27, the dock's tooltips redrawn) how many slots are free,
+-- each bag as a segment, and the class's reagents
 function M.Tip(owner)
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not BT.Tip then
 		return
 	end
 	local b = M.Bags()
-	BT.Bar.Tip(owner or M.chip, function()
-		GameTooltip:AddDoubleLine("Bags", "click to open", 1, 1, 1, 0.55, 0.60, 0.58)
-		GameTooltip:AddDoubleLine("bags", ("%d used, %d free"):format(b.bags.used,
-			b.bags.total - b.bags.used), 0.7, 0.75, 0.73, 1, 1, 1)
+	BT.Tip.Show(owner or M.chip, { build = function(t)
+		local free = b.bags.total - b.bags.used
+		local st = state(free)
+		t:Header({ icon = BACKPACK, name = "Bags", sub = ("%d %s"):format(#b.each, #b.each == 1 and "bag" or "bags"),
+			pill = st == "alert" and "Full" or (st == "warn" and "Nearly full" or nil),
+			pillState = st == "alert" and "bad" or "warn" })
+		t:Headline(free, ("free of %d"):format(b.bags.total), st == "alert" and "bad" or (st == "warn" and "warn" or nil))
+		local segs = {}
+		for _, bag in ipairs(b.each) do
+			local share = bag.total > 0 and bag.used / bag.total or 0
+			local left = bag.total - bag.used
+			segs[#segs + 1] = { share, left <= 0 and "bad" or (left <= 2 and "warn" or nil) }
+		end
+		t:Segments(segs)
 		if b.reagents.total > 0 then
-			GameTooltip:AddDoubleLine("reagent bags", ("%d used, %d free"):format(b.reagents.used,
-				b.reagents.total - b.reagents.used), 0.7, 0.75, 0.73, 1, 1, 1)
+			t:Row("Reagent bags", ("%d free of %d"):format(b.reagents.total - b.reagents.used, b.reagents.total))
 		end
 		-- every reagent of the class, the ones you have none of included
 		local list = M.Reagents()
 		if #list > 0 then
-			GameTooltip:AddLine(" ")
+			t:Section("Reagents")
 			for _, r in ipairs(list) do
-				local zero = r.count <= 0
-				GameTooltip:AddDoubleLine(("|T%s:13:13:0:0|t %s"):format(tostring(r.icon), r.name),
-					tostring(r.count), 0.7, 0.75, 0.73, zero and 0.95 or 1, zero and 0.40 or 1, zero and 0.35 or 1)
+				t:Row(("|T%s:13:13:0:0|t %s"):format(tostring(r.icon), r.name), r.count, r.count <= 0 and "bad" or nil)
 			end
 		end
-	end)
+		t:Foot({ { "Click", "open your bags" } })
+	end })
 end
 
 -- a cell of the grid, made the first time it is wanted
@@ -486,8 +499,8 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("slots used of the slots you have, and under them your class's reagents - a warlock's shards, a hunter's ammo")
-	page:Note("amber at four free, red when full · herb, enchanting, soul and ammunition bags count as reagents", true)
+	page:Note("Bag slots used out of the slots you have. Under them go your class's reagents, such as a warlock's shards or a hunter's ammo.")
+	page:Note("Amber at 4 free slots, red when full. Herb, enchanting, soul and ammunition bags count as reagent bags.", true)
 	-- (the switch that puts the game's bag bar away is on the Bag window's page)
 	page:Layout()
 end
@@ -505,6 +518,6 @@ end
 
 BT.Command("space", function()
 	local b = M.Bags()
-	U.Print(("bags %d/%d · reagents %d/%d"):format(b.bags.used, b.bags.total,
+	U.Print(("Bags: %d/%d · reagents %d/%d"):format(b.bags.used, b.bags.total,
 		b.reagents.used, b.reagents.total))
-end, "how full your bags are", "bagspace")
+end, "print how full your bags are", "bagspace")

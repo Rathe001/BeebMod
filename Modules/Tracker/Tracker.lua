@@ -71,7 +71,7 @@ local M = BT.Module({
 	key = "tracker",
 	feature = "dock",
 	title = "Quest tracker",
-	blurb = "your quests, quieter",
+	blurb = "The quests you track, in the dock",
 	order = 40,
 	-- on the right panel, so it has a tab on the rail (Josh 2026-09-22)
 	dock = true,
@@ -250,9 +250,10 @@ local function rowFrame(i)
 			local c = BT.Widgets.RIM
 			self.hot:SetColorTexture(c[1], c[2], c[3], self.hot.beebsTint)
 			self.hot:Show()
-			BT.Bar.Tip(self, function()
-				GameTooltip:AddLine("Track on map", 1, 1, 1)
-			end)
+			BT.Tip.Show(self, { build = function(t)
+				t:Header({ icon = false, name = self.quest.title or "Quest" })
+				t:Foot({ { "Click", "track it on the map" } })
+			end })
 		end
 	end)
 	row.mark:SetScript("OnLeave", function(self)
@@ -292,8 +293,16 @@ local function rowFrame(i)
 			self.hot:SetColorTexture(c[1], c[2], c[3], self.hot.beebsTint)
 			self.hot:Show()
 		end
+		if self.quest and self.kind == "title" then
+			M.QuestTip(self, self.quest)
+		end
 	end)
-	row:SetScript("OnLeave", function(self) self.hot:Hide() end)
+	row:SetScript("OnLeave", function(self)
+		self.hot:Hide()
+		if BT.Tip then
+			BT.Tip.Hide()
+		end
+	end)
 	row:SetScript("OnClick", function(self, click)
 		if self.isHeader then
 			setOpt("collapsed", not opt("collapsed", false))
@@ -731,6 +740,56 @@ local function hereZone()
 	return ok and type(z) == "string" and z ~= "" and z or nil
 end
 
+-- A QUEST'S OWN TOOLTIP (Josh 2026-09-27, the dock's tooltips redrawn; the
+-- rows had none): its zone and level, how many objectives are done, each one
+-- with its count and a bar, and the clicks a row already answers to
+function M.QuestTip(owner, q)
+	if not (BT.Tip and q) then
+		return
+	end
+	BT.Tip.Show(owner, { build = function(t)
+		local objectives = q.objectives or {}
+		local done = 0
+		for _, o in ipairs(objectives) do
+			if o.done then
+				done = done + 1
+			end
+		end
+		local sub = {}
+		if q.zone then
+			sub[#sub + 1] = q.zone
+		end
+		if q.level then
+			sub[#sub + 1] = "Level " .. q.level
+		end
+		local pill, pillState
+		if q.failed then
+			pill, pillState = "Failed", "bad"
+		elseif q.complete then
+			pill, pillState = "Ready to turn in", "good"
+		elseif #objectives > 0 then
+			pill = ("%d of %d"):format(done, #objectives)
+		end
+		t:Header({ icon = false, name = q.title or "Quest", sub = #sub > 0 and table.concat(sub, " · ") or nil,
+			pill = pill, pillState = pillState })
+		if #objectives > 0 then
+			t:Section()
+			for _, o in ipairs(objectives) do
+				local need = tonumber(o.need)
+				local have = tonumber(o.have)
+				local count = need and need > 0 and have and ("%d / %d"):format(have, need) or (o.done and "done" or "")
+				t:Row(o.text or "", count, o.done and "good" or nil,
+					(need and need > 1 and not o.done) and { (have or 0) / need } or nil, o.done and "good" or nil)
+			end
+		end
+		t:Foot({
+			{ "Click", "open it in the quest log" },
+			{ "Right-click", "fold its objectives" },
+			{ "Shift-click", "stop tracking it" },
+		})
+	end })
+end
+
 function M.Update()
 	if not frame then
 		return 0
@@ -757,7 +816,7 @@ function M.Update()
 		or (opt("combatFold", false) and InCombatLockdown and InCombatLockdown() and true or false)
 	local i, y = 0, PAD
 	i = i + 1
-	y = setRow(i, y, "head", "QUESTS   " .. tint(MUTED, tostring(#quests)), nil, MUTED, nil)
+	y = setRow(i, y, "head", string.upper("Quests") .. "   " .. tint(MUTED, tostring(#quests)), nil, MUTED, nil)
 	y = y + GAP
 
 	local bandTop, bandFoot = nil, nil
@@ -1134,7 +1193,7 @@ M.OnBind = M.OnEnable
 -- ---------------------------------------------------------------------------
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("click a quest to open it, right-click to fold it, shift-click to drop it")
+	page:Note("Click a quest to open it. Right-click to fold it. Shift-click to stop tracking it.")
 
 	self.rows = {}
 	local quests = page:Section("Quests")
@@ -1145,12 +1204,12 @@ function M:BuildTab(panel)
 		r.optName, r.default = name, default
 		self.rows[#self.rows + 1] = r
 	end
-	row("By level", "under each zone, lowest first · off, the quest log's own order", "byLevel", true)
-	row("Zone headings", "each zone's name over its quests · off, one list", "zones", true)
-	row("Only this zone", "the quests of the zone you are in, and none from elsewhere", "hereOnly", false)
-	row("Fold in combat", "the list folds while you fight, and opens again after", "combatFold", false)
-	row("Hide when empty", "nothing followed, no panel", "hideEmpty", true)
-	row("Fold finished quests", "hide their objectives", "hideDone", false)
+	row("By level", "Lowest level first in each zone, instead of the quest log's order", "byLevel", true)
+	row("Zone headings", "Each zone's name over its quests, instead of one list", "zones", true)
+	row("Only this zone", "Only the quests of the zone you are in", "hereOnly", false)
+	row("Fold in combat", "The list folds while you fight and unfolds after", "combatFold", false)
+	row("Hide when empty", "Hides the panel when you track no quests", "hideEmpty", true)
+	row("Fold finished quests", "Hides their objectives", "hideDone", false)
 	-- "Fold the list" used to be a row here. Folding the list is something you
 	-- do to the panel in front of you and undo a second later - it is state,
 	-- not a preference, and the chevron on the QUESTS header already is the
@@ -1169,7 +1228,7 @@ function M:RefreshTab()
 		r.switch:SetOn(opt(r.optName, r.default) and true or false)
 	end
 	if self.found then
-		self.found:SetText(("%d followed · client tracker %s")
+		self.found:SetText(("%d tracked · game's tracker %s")
 			:format(M.lastCount or 0, M.ClientFrame() and "hidden" or "not found"))
 	end
 end
@@ -1203,10 +1262,10 @@ BT.Command("tracker", function(rest)
 				GetQuestDifficultyColor and "yes" or "MISSING"))
 		return
 	end
-	U.Print(("%d quests · dock %d%% · client tracker %s")
+	U.Print(("Quest tracker: %d quests · dock %d%% · game's tracker %s")
 		:format(M.lastCount or 0, math.floor(BT.Bar.Scale() * 100 + 0.5),
 			M.ClientFrame() and "hidden" or "not found"))
-end, "tracker [0.7-1.3] - the whole dock's size · tracker colours - what each quest title's colour came from", "tracker")
+end, "tracker [0.7-1.3] - set the whole dock's size · /bt tracker colours - show where each quest title's colour came from", "tracker")
 
 -- the tests reach in here rather than at the frames
 function M.Frame() return frame end

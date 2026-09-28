@@ -26,7 +26,7 @@ local M = BT.Module({
 	feature = "dock",
 	onPage = "map",
 	title = "Minimap",
-	blurb = "in the panel, with the rest",
+	blurb = "The game's minimap, in the dock",
 	order = 5,
 	-- on the right panel, so it has a tab on the rail (Josh 2026-09-22)
 	dock = true,
@@ -1505,17 +1505,17 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the client's own map, moved into the panel · the wheel still zooms and a right-click still opens tracking")
-	page:Note("square, because a circle in a stack of rectangles leaves four corners of world showing", true)
+	page:Note("BeebMod moves the game's own minimap into the dock. The mouse wheel still zooms, and right-click still opens tracking.")
+	page:Note("It is square. A round map in a stack of rectangles leaves four corners of world showing.", true)
 	-- WHAT IT SAYS AND WHEN (Josh 2026-09-24)
 	local show = page:Section("Show")
-	BT.Widgets.SwitchRow(show, "Zone name", "over the map, in the colour of the ground you stand on",
+	BT.Widgets.SwitchRow(show, "Zone name", "Above the map, coloured by who controls the zone",
 		function() return opt("zoneName", true) and true or false end,
 		function(on) setOpt("zoneName", on) end)
-	BT.Widgets.SwitchRow(show, "Coordinates", "where you are standing, beside the zone",
+	BT.Widgets.SwitchRow(show, "Coordinates", "Where you are standing, beside the zone name",
 		function() return opt("coords", true) and true or false end,
 		function(on) setOpt("coords", on) end)
-	local corners = BT.Widgets.Row(show, "Corner buttons", "tracking, the day and night, the world map")
+	local corners = BT.Widgets.Row(show, "Corner buttons", "Tracking, time of day and the world map")
 	self.controlsSeg = corners:SetControl(BT.Widgets.Segmented(corners, {
 		{ "hover", "On hover" }, { "always", "Always" },
 	}, function(key)
@@ -1546,7 +1546,7 @@ end
 BT.Command("minimap", function()
 	M.Apply()
 	local frame = M.frame
-	U.Print(("minimap: panel %s, map %s"):format(
+	U.Print(("Minimap: panel %s, map %s"):format(
 		frame and frame:IsShown() and "up" or "down",
 		(_G.Minimap and _G.Minimap.GetParent and _G.Minimap:GetParent() == frame)
 			and "in it" or "NOT in it"))
@@ -1566,13 +1566,13 @@ BT.Command("minimap", function()
 		local m = moved[f]
 		U.Print(("  %s: %s - %s%s"):format(kind,
 			(f.GetName and f:GetName()) or "(no name)", where,
-			(m and m.took == false) and " (the client refused the move)" or ""))
+			(m and m.took == false) and " (the game refused the move)" or ""))
 		if f.beebsSnap then
 			U.Print("    corner: " .. f.beebsSnap)
 		end
 	end
 	if not any then
-		U.Print("  nothing found: the client keeps these somewhere new again")
+		U.Print("  Nothing found. This build keeps them somewhere else.")
 	end
 	-- THE ROW ALONG THE BOTTOM, PIECE BY PIECE (Josh 2026-09-22). The
 	-- day/night dial is in it and has been placed wrong twice, so this says
@@ -1615,7 +1615,7 @@ BT.Command("minimap", function()
 		end
 		regions(f, 0)
 	end
-end, "put the minimap back in the panel, and say what it found", "minimap")
+end, "put the minimap back in the dock, and say what it found", "minimap")
 
 -- STOP GUESSING WHAT THEY ARE CALLED (Josh 2026-09-21). Four rounds of this
 -- module were spent naming frames that turned out to be called something else

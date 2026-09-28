@@ -25,7 +25,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "pickpocket",
 	title = "Pick Pocket",
-	blurb = "coin, and what the items would sell for, from pockets",
+	blurb = "Coin from pockets, and what the items sell for",
 	order = 39.7,
 	-- on the right panel, and only for rogues
 	dock = true,
@@ -271,26 +271,59 @@ function M.Update()
 	end
 end
 
+-- the item that has fetched the most, all told: its name and how many
+function M.Best(r)
+	local bestID, bestWorth, bestCount
+	for id, count in pairs(r and r.items or {}) do
+		local worth = price(id) * count
+		if not bestWorth or worth > bestWorth then
+			bestID, bestWorth, bestCount = id, worth, count
+		end
+	end
+	if not bestID then
+		return nil
+	end
+	local name = "item " .. tostring(bestID)
+	if type(GetItemInfo) == "function" then
+		local ok, n = pcall(GetItemInfo, bestID)
+		if ok and type(n) == "string" then
+			name = n
+		end
+	end
+	return name, bestCount
+end
+
+-- (Josh 2026-09-27, the dock's tooltips redrawn) one total, coin and loot
+-- together: this session's first, with what a pocket is worth, then all time
 function M.Tip()
 	local r = M.Record()
-	if not (r and GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not (r and BT.Tip) then
 		return
 	end
 	local s = M.session
-	BT.Bar.Tip(M.chip, function()
-		GameTooltip:AddLine("Pick Pocket", 1, 1, 1)
-		for _, part in ipairs({ { "All time", r }, { "This session", s } }) do
-			local label, rec = part[1], part[2]
-			if rec then
-				local c, i = M.Worth(rec)
-				GameTooltip:AddLine(label, 1, 1, 1)
-				GameTooltip:AddDoubleLine("coin", coins(c), 0.7, 0.75, 0.73, 1, 1, 1)
-				GameTooltip:AddDoubleLine("items, at the vendor", coins(i), 0.7, 0.75, 0.73, 1, 1, 1)
-				GameTooltip:AddDoubleLine("pockets picked", tostring(rec.picks or 0),
-					0.7, 0.75, 0.73, 1, 1, 1)
+	BT.Tip.Show(M.chip, { build = function(t)
+		t:Header({ icon = POUCH, name = "Pick Pocket", sub = "Coin and loot, at vendor prices" })
+		local sc, si = M.Worth(s)
+		local picks = s and s.picks or 0
+		if picks > 0 then
+			t:Headline(coins(sc + si))
+			t:Note(("This session, from %d %s. %s a pocket."):format(picks, picks == 1 and "pocket" or "pockets",
+				coins(math.floor((sc + si) / picks))))
+		else
+			t:Headline(coins(0))
+			t:Note("No pockets picked this session.")
+		end
+		local c, i = M.Worth(r)
+		if (r.picks or 0) > 0 then
+			t:Section("All time")
+			t:Row("Coin and loot", coins(c + i))
+			t:Row("Pockets picked", r.picks)
+			local name, count = M.Best(r)
+			if name then
+				t:Row("Best find", ("%s ×%d"):format(name, count))
 			end
 		end
-	end)
+	end })
 end
 
 function M.Build()
@@ -382,14 +415,14 @@ end
 
 function M:BuildTab(panel)
 	local note = BT.Widgets.Label(panel,
-		"everything pickpocketed, as money: the coin, and what a vendor would give for the items",
+		"The coin you pickpocket, plus what a vendor would pay for the items.",
 		"small", 0.55, 0.60, 0.58)
 	note:SetPoint("TOPLEFT", 0, -2)
 	note:SetWidth(520)
 	note:SetJustifyH("LEFT")
 
 	local why = BT.Widgets.Label(panel,
-		"all time on the left, this session on the right · only items you actually take are counted",
+		"The total is all time. Point at it for this session. Only items you loot count.",
 		"small", 0.45, 0.50, 0.48)
 	why:SetPoint("TOPLEFT", 0, -22)
 	why:SetWidth(520)
@@ -422,10 +455,10 @@ BT.Command("pockets", function(rest)
 		end
 		M.session = nil
 		M.Start(true, false)
-		U.Print("pickpocket record cleared")
+		U.Print("Pick Pocket: record cleared.")
 		return
 	end
 	local c, i = M.Worth(r)
-	U.Print(("pickpocketed %s · coin %s · items %s · %d pockets"):format(
+	U.Print(("Pick Pocket: %s · coin %s · items %s · %d pockets"):format(
 		coins(c + i), coins(c), coins(i), r.picks or 0))
-end, "pockets [reset] - what pickpocketing has been worth", "pickpocket")
+end, "pockets [reset] - show what pickpocketing has been worth, or clear the record", "pickpocket")

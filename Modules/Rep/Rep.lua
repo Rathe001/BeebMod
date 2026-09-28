@@ -19,7 +19,7 @@ local M = BT.Module({
 	feature = "dock",
 	onPage = "progress",
 	title = "Reputation",
-	blurb = "the watched faction, and time to the next standing",
+	blurb = "The faction you watch, and time to the next standing",
 	order = 37.5,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -227,29 +227,45 @@ function M.Update()
 	M.fill:SetWidth(math.max(1, w * done))
 end
 
+-- (Josh 2026-09-27, the dock's tooltips redrawn) the watched faction's
+-- standing and how long the next one takes at your pace, then every faction
+-- that moved this session
 function M.Tip()
 	local f = M.Read()
-	if not (f and GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not (f and BT.Tip) then
 		return
 	end
-	local t = M.session and M.session.factions and M.session.factions[f.name]
-	local rate = M.Rate(t)
-	BT.Bar.Tip(M.frame, function()
-		GameTooltip:AddLine(f.name, 1, 1, 1)
-		GameTooltip:AddDoubleLine(M.StandingName(f.reaction), ("%s / %s"):format(big(f.cur), big(f.max)),
-			0.7, 0.75, 0.73, 1, 1, 1)
-		if f.reaction < TOP and f.max > 0 then
-			GameTooltip:AddDoubleLine("to " .. M.StandingName(f.reaction + 1), big(f.max - f.cur),
-				0.7, 0.75, 0.73, 1, 1, 1)
+	local session = M.session and M.session.factions and M.session.factions[f.name]
+	local rate = M.Rate(session)
+	BT.Tip.Show(M.frame, { build = function(t)
+		local c = M.StandingColour(f.reaction)
+		t:Header({ name = f.name, sub = "The faction you watch", pill = M.StandingName(f.reaction), pillState = c })
+		local top = f.reaction >= TOP or f.max <= 0
+		if top then
+			t:Headline(M.StandingName(f.reaction), nil, c, true)
+		else
+			t:Headline(big(f.cur), "/ " .. big(f.max))
+			t:Bar(f.cur / f.max, c)
+			local togo = f.max - f.cur
+			local secs = rate and rate > 0 and togo * 3600 / rate or nil
+			t:Scale(("%s to %s"):format(big(togo), M.StandingName(f.reaction + 1)),
+				secs and ("about %s"):format(duration(secs)) or nil)
 		end
-		if t then
-			GameTooltip:AddDoubleLine("this session", ("+%s over %s"):format(big(t.gained or 0),
-				duration(U.Now() - (t.since or U.Now()))), 0.7, 0.75, 0.73, 1, 1, 1)
+		local moved = {}
+		for name, entry in pairs(M.session and M.session.factions or {}) do
+			if (entry.gained or 0) ~= 0 then
+				moved[#moved + 1] = { name = name, gained = entry.gained }
+			end
 		end
-		if rate then
-			GameTooltip:AddDoubleLine("per hour", big(rate), 0.7, 0.75, 0.73, 1, 1, 1)
+		table.sort(moved, function(a, b) return a.gained > b.gained end)
+		if #moved > 0 then
+			t:Section("This session")
+			for i = 1, math.min(5, #moved) do
+				local m = moved[i]
+				t:Row(m.name, (m.gained > 0 and "+" or "-") .. big(math.abs(m.gained)), m.gained > 0 and "good" or "bad")
+			end
 		end
-	end)
+	end })
 end
 
 function M.Build()
@@ -366,10 +382,10 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the faction ticked \"Show as Experience Bar\" in the reputation panel, and roughly how long the rest of the standing will take")
-	page:Note("with no faction watched there is no line, as with the client's own bar", true)
-	local r = BT.Widgets.SwitchRow(page:Section("The client's own"), "Hide the client's bar",
-		"the client's own reputation bar, while this one is up",
+	page:Note("The faction you watch, and roughly how long the rest of its standing will take. Watch a faction by ticking \"Show as Experience Bar\" in the reputation panel.")
+	page:Note("With no faction watched there is no line, the same as the game's own bar.", true)
+	local r = BT.Widgets.SwitchRow(page:Section("The game's own"), "Hide the game's bar",
+		"Hides the game's reputation bar while this one shows",
 		function() return M.HideClient() and true or false end,
 		function(on) M.SetHideClient(on) end)
 	self.hideSwitch = r.switch
@@ -390,10 +406,10 @@ end
 BT.Command("rep", function()
 	local f = M.Read()
 	if not f then
-		U.Print("no faction watched · tick \"Show as Experience Bar\" in the reputation panel")
+		U.Print("Reputation: no faction watched. Tick \"Show as Experience Bar\" in the reputation panel to watch one.")
 		return
 	end
 	local t = M.session and M.session.factions and M.session.factions[f.name]
 	local left, right = M.Lines(f, M.Rate(t))
-	U.Print(left .. (right ~= "" and ("  ·  " .. right) or ""))
-end, "the watched faction, and time to the next standing", "rep")
+	U.Print("Reputation: " .. left .. (right ~= "" and ("  ·  " .. right) or ""))
+end, "print the faction you watch, and time to the next standing", "rep")

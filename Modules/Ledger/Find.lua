@@ -188,7 +188,7 @@ local function buildEditor(parent, anchor, label, paint)
 	e.newTag:SetHeight(E_ROW)
 	e.newTag.text = editorLine(e.newTag, 10, 0.42, 0.48, 0.45)
 	e.newTag.text:SetPoint("LEFT", 0, 0)
-	e.newTag.text:SetText("+  tag")
+	e.newTag.text:SetText("+  Tag")
 	e.newTag:SetScript("OnEnter", function(self)
 		local c = BT.Widgets.ACCENT
 		self.text:SetTextColor(c[1], c[2], c[3])
@@ -226,7 +226,7 @@ local function buildEditor(parent, anchor, label, paint)
 	e.maker.box:SetScript("OnEnterPressed", function(self)
 		local tag, why = BT.AddTag(self:GetText(), e.maker.colour)
 		if not tag then
-			U.Print(why or "could not make that tag")
+			U.Print("Ledger: " .. (why or "couldn't make that tag."))
 		end
 		self:SetText("")
 		self:ClearFocus()
@@ -274,7 +274,7 @@ local function buildEditor(parent, anchor, label, paint)
 	end)
 	-- what the field is for, in the field, until there is something in it
 	e.ghost = editorLine(e, 11, 0.38, 0.43, 0.41)
-	e.ghost:SetText("write a note")
+	e.ghost:SetText("Write a note")
 	local function ghost()
 		local text = e.note:GetText()
 		e.ghost:SetShown((text == nil or text == "") and not e.note:HasFocus())
@@ -508,7 +508,7 @@ function B.ConfirmTagDelete(tag)
 		return
 	end
 	editor.confirm.text:SetText(
-		("delete %s? · on %d character%s%s")
+		("Delete %s? It's on %d character%s%s.")
 			:format(tag.label, characters, characters == 1 and "" or "s",
 				books > 1 and (" in %d books"):format(books) or ""))
 	editor.confirm.yes:SetScript("OnClick", function()
@@ -1033,16 +1033,16 @@ local function refreshFind()
 	if not asked then
 		local C = census()
 		emptyLine:SetText(C
-			and ("%d characters · %d with something of yours on them"):format(C.Stats(BT.db).total, N.Count())
-			or ("%d with something of yours on them"):format(N.Count()))
+			and ("%d characters · %d you've noted"):format(C.Stats(BT.db).total, N.Count())
+			or ("%d characters you've noted"):format(N.Count()))
 		emptyLine:Show()
 	elseif #results == 0 then
-		emptyLine:SetText("no match")
+		emptyLine:SetText("Nobody matches that.")
 		emptyLine:Show()
 	else
 		emptyLine:Hide()
 	end
-	moreLine:SetText(#results > CARDS and ("more than %d · narrow it"):format(CARDS) or "")
+	moreLine:SetText(#results > CARDS and ("More than %d match. Type more to narrow it."):format(CARDS) or "")
 	moreLine:ClearAllPoints()
 	moreLine:SetPoint("TOPLEFT", 20, -(CARDS_TOP + cardsHeight))
 	BT.Window.UpdateSubtitle()
@@ -1212,13 +1212,13 @@ function B.Build(parent)
 		end)
 	end)
 	searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
-	local prompt = label(findView, "name, guild, or a word you wrote", "small", 0.42, 0.47, 0.45)
+	local prompt = label(findView, "Name, guild, or a word you wrote", "small", 0.42, 0.47, 0.45)
 	prompt:SetPoint("LEFT", searchBox, "RIGHT", 10, 0)
 
 	-- the questions you actually ask: who did I write about, and who did I tag
-	local only = label(findView, "only:", "small", 0.42, 0.47, 0.45)
+	local only = label(findView, "Only:", "small", 0.42, 0.47, 0.45)
 	only:SetPoint("TOPLEFT", 20, -38)
-	local mine = BT.Widgets.Button(findView, "my notes", 86, 20)
+	local mine = BT.Widgets.Button(findView, "My notes", 86, 20)
 	mine:SetPoint("TOPLEFT", 54, -34)
 	mine:SetScript("OnClick", function(self)
 		state.mineOnly = not state.mineOnly

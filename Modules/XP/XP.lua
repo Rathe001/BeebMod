@@ -20,7 +20,7 @@ local M = BT.Module({
 	feature = "dock",
 	onPage = "progress",
 	title = "Experience",
-	blurb = "the bar, and time to level",
+	blurb = "The bar, and time to level",
 	order = 37,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -207,31 +207,38 @@ function M.Update()
 end
 
 function M.Tip()
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not BT.Tip then
 		return
 	end
 	local level, cur, max, rested = M.Read()
 	local s = M.session
 	local rate = M.Rate()
-	BT.Bar.Tip(M.frame, function()
-		GameTooltip:AddLine(("Level %d"):format(level), 1, 1, 1)
-		GameTooltip:AddDoubleLine("experience", ("%d / %d"):format(cur, max),
-			0.7, 0.75, 0.73, 1, 1, 1)
-		GameTooltip:AddDoubleLine("to go", big(math.max(0, max - cur)),
-			0.7, 0.75, 0.73, 1, 1, 1)
-		if (rested or 0) > 0 then
-			GameTooltip:AddDoubleLine("rested", ("%d"):format(rested),
-				0.7, 0.75, 0.73, 1, 1, 1)
+	-- (Josh 2026-09-27, the dock's tooltips redrawn) how far through the
+	-- level, rested drawn on the bar, and how long the rest takes at your pace
+	BT.Tip.Show(M.frame, { build = function(t)
+		local className = UnitClass and select(1, UnitClass("player")) or nil
+		local pct = max > 0 and math.floor(cur / max * 100) or 0
+		t:Header({ name = "Experience", sub = ("Level %d%s"):format(level, className and (" " .. className) or ""),
+			pill = (rested or 0) > 0 and "Rested" or nil, pillState = "rested" })
+		t:Headline(pct .. "%", ("through level %d"):format(level))
+		local done = max > 0 and cur / max or 0
+		t:Bar(done, nil, nil, (rested or 0) > 0 and { (rested or 0) / max, "rested" } or nil)
+		t:Scale(("%s XP to %d"):format(big(math.max(0, max - cur)), level + 1),
+			(rested or 0) > 0 and ("%s rested"):format(big(rested)) or nil, "rested")
+		local secs = M.ToLevel(cur, max, rate)
+		if secs or (s and (s.gained or 0) > 0) then
+			t:Section("At your pace")
+			if secs then
+				t:Row(("Level %d in"):format(level + 1), "about " .. duration(secs))
+			end
+			if s and (s.gained or 0) > 0 then
+				t:Row("This session", ("+%s in %s"):format(big(s.gained), duration(U.Now() - (s.start or U.Now()))))
+			end
+			if rate then
+				t:Row("Per hour", big(math.floor(rate)))
+			end
 		end
-		if s then
-			GameTooltip:AddDoubleLine("this session", ("+%d over %s"):format(s.gained or 0,
-				duration(U.Now() - (s.start or U.Now()))), 0.7, 0.75, 0.73, 1, 1, 1)
-		end
-		if rate then
-			GameTooltip:AddDoubleLine("per hour", ("%d"):format(math.floor(rate)),
-				0.7, 0.75, 0.73, 1, 1, 1)
-		end
-	end)
+	end })
 end
 
 function M.Build()
@@ -356,10 +363,10 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("your level and how far through it, and roughly how long the rest will take at this session's pace")
-	page:Note("the paler stretch on the bar is rested experience · at the level cap the line is not shown", true)
-	local r = BT.Widgets.SwitchRow(page:Section("The client's own"), "Hide the client's bar",
-		"the client's own experience bar, while this one is up",
+	page:Note("Your level, how far through it you are, and roughly how long the rest will take at this session's pace.")
+	page:Note("The paler stretch on the bar is rested XP. At the level cap there is no line.", true)
+	local r = BT.Widgets.SwitchRow(page:Section("The game's own"), "Hide the game's bar",
+		"Hides the game's experience bar while this one shows",
 		function() return M.HideClient() and true or false end,
 		function(on) M.SetHideClient(on) end)
 	self.hideSwitch = r.switch
@@ -380,17 +387,17 @@ end
 BT.Command("xp", function(rest)
 	if (rest or ""):lower() == "reset" then
 		M.Start(true, false)
-		U.Print("a new experience session starts now")
+		U.Print("XP: a new session starts now.")
 		return
 	end
 	local level, cur, max = M.Read()
 	if M.AtCap(level, max) then
-		U.Print(("level %d, the cap"):format(level))
+		U.Print(("XP: level %d, the level cap."):format(level))
 		return
 	end
 	local rate = M.Rate()
 	local secs = M.ToLevel(cur, max, rate)
-	U.Print(("level %d · %d / %d · %s"):format(level, cur, max,
-		secs and ("about %s to %d at %d an hour"):format(duration(secs), level + 1, math.floor(rate))
-			or "too early for a pace"))
-end, "xp [reset] - where you are in the level, or start a new session", "xp")
+	U.Print(("XP: level %d · %d / %d · %s"):format(level, cur, max,
+		secs and ("about %s to %d at %d XP an hour"):format(duration(secs), level + 1, math.floor(rate))
+			or "too early for a rate"))
+end, "xp [reset] - show where you are in the level, or start a new session", "xp")

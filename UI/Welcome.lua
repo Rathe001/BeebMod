@@ -104,14 +104,14 @@ local function start()
 				W.pending = nil
 			end
 		end)
-		U.Print("BeebMod · set up after this fight")
+		U.Print("Your choices take effect when this fight ends.")
 	else
 		W.Apply(picks)
 	end
 	if frame then
 		frame:Hide()
 	end
-	U.Print("BeebMod · change any of it with /bt, or the cog on the dock")
+	U.Print("To change any of it, click the cog on the dock or type /bt.")
 end
 W.Start = start
 
@@ -129,7 +129,7 @@ function W.Build()
 	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
 	frame.title:SetPoint("TOPLEFT", PAD, -PAD)
 	frame.title:SetText("Welcome to |cff74c0fcBeeb|rMod")
-	frame.question = Wd.Label(frame, "Pick what you want · all of it can change later", "small", 0.50, 0.55, 0.53)
+	frame.question = Wd.Label(frame, "Pick what you want. You can change any of it later.", "small", 0.50, 0.55, 0.53)
 	frame.question:SetPoint("LEFT", frame.title, "RIGHT", 10, -1)
 	Wd.Divider(frame, PAD, -PAD - 26)
 	frame.cards = {}
@@ -163,7 +163,7 @@ function W.Build()
 		frame.cards[#frame.cards + 1] = card
 	end
 	local y = top + 2 * CARD_H + GAP + 12
-	frame.foot = Wd.Label(frame, "The dock's logo and cog always stay, so you can find your way back · /bt", "small", 0.50, 0.55, 0.53)
+	frame.foot = Wd.Label(frame, "The dock's logo and cog always stay. Click the cog or type /bt to get back here.", "small", 0.50, 0.55, 0.53)
 	frame.foot:SetPoint("TOPLEFT", PAD, -(y + 5))
 	frame.start = Wd.Button(frame, "Start", 72, 22)
 	frame.start:SetPoint("TOPRIGHT", -PAD, -y)
@@ -240,4 +240,4 @@ end)
 
 BT.Command("setup", function()
 	W.Show()
-end, "choose again which features BeebMod uses")
+end, "choose which features BeebMod uses")

@@ -1,160 +1,177 @@
 # BeebMod
 
-A set of small utilities for WoW: Forever, behind one window and one button.
+Small utilities for WoW: Forever. You set them all in one window, and the cog
+in the dock opens it.
 
-    /bt            the window
+    /bt            open the window
     /bt <name>     find someone
-    /bt help       every command, including the ones each utility adds
+    /bt help       list every command, including each utility's own
 
-## The shape of it
+## Features
 
-One addon, **six features**, each one switch. The first login asks which you
-want - six cards, each with a picture and a line on what it does - and the
-settings window's rail has a block for each, in its own colour, with its switch
-on its heading. A feature switched off takes everything in it with it and keeps
-each part's own switch for when it comes back. No feature needs another.
+BeebMod has six features, and each has one switch. On your first login it
+asks which ones you want. It shows six cards, each with a picture and a line
+on what the feature does. In the settings window each feature has a block of
+tabs in its own colour, with the feature's switch on the block's heading.
+Switch a feature off and everything in it goes off. Each part in it keeps its
+own switch, and the setting stays as you left it while the feature is off. No
+feature needs another.
 
-The **core** is what every feature would otherwise reinvent: the settings
-window, the dock's header, the look of a button and a pill, and **General** (the
-colours of every panel; the typeface is Google Sans). The dock's **logo and cog
-are always there**: with the Dock off, or everything off, they are all of
-BeebMod on the screen, and the way back into the settings.
+The **core** is what every feature would otherwise build for itself: the
+settings window, the dock's header, the look of a button and a pill, and
+**General** (the colours of every panel; the typeface is Google Sans). The
+dock's logo and cog are always on screen. With the Dock off, or every feature
+off, they are all that BeebMod shows. Click the cog to get back to the
+settings.
 
-**Dock** - the panel at the side of the screen, and what is in it:
-
-| tab | what it is |
-|---|---|
-| **Dock** | the panel itself: its size, and the **Clock** in its header (local or server time; click it to switch) |
-| **Minimap** | the client's map, moved into the dock, and **Addon buttons** - other addons' minimap buttons, gathered into a line (a switch each) |
-| **Progress** | **Experience** (the XP bar, and time to level at your current pace) and **Reputation** (the watched faction, and time to the next standing), a switch each |
-| **Metrics** | one grid of readouts, each switched on its own: gold and gold per hour, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency |
-| **Quest tracker** | the client's tracker is hidden and this one draws your quests in the dock, under their zones, lowest level first |
-| **Micro menu** | the game's menu buttons, in the dock |
-
-**Unit frames** - what you watch in a fight:
+**Dock** is the panel at the side of the screen and what is in it.
 
 | tab | what it is |
 |---|---|
-| **Unit frames** | you at the top of the party column (alone too), each member with a pet slot and their target beside them; target, focus, raid, main tank and boss frames, and your own cast bar. Resurrection, summon and master looter icons, your threat on the target, a hunter pet's happiness; one Size setting for them all; shift-drag a block to move it; `/bt frames test` or `raid` previews a group. Switched off (or one kind switched off), the game's own frames come back |
-| **Buffs** | your buffs and debuffs in a tray beside the dock, two lines: the soonest to run out at the left, the permanent ones against the dock, A to Z; weapon enchants too. Switched off, the game's buff bar is back |
-| **Resource display** | your own nameplate, flat, with combo points under it (rogues, cat druids) |
-| **Damage meter** | the client's own meter, flat, with each row's amount a second and the fight's length |
+| **Dock** | The panel itself: its size, and the **Clock** in its header. The clock shows local or server time; click it to switch. |
+| **Minimap** | The client's map, moved into the dock, and **Addon buttons**: other addons' minimap buttons in one line, a switch each. |
+| **Progress** | **Experience** (the XP bar, and time to level at your current pace) and **Reputation** (the watched faction, and time to the next standing), a switch each. |
+| **Metrics** | A grid of readouts, each with its own switch: gold and gold per hour, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
+| **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
+| **Micro menu** | The game's menu buttons, in the dock. |
 
-**Interface** - the game's own windows and menus, in the toolkit's clothes:
+**Unit frames** are what you watch in a fight.
 
 | tab | what it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | the client's own, flat like the rest of the toolkit; every button still does what it did. The bag window drags by its title and stays, and its page has the switch that puts the game's bag bar away |
-| **Character sheet** | item level on every slot, compact stats with sections that fold, and the toolkit's look |
-| **Menus** | the **Game menu** Escape opens (the game keeps some of its buttons from addons, so those stay its own) and every **Dropdown menu**, a switch each |
-| **Tooltips** | unit tooltips rebuilt into two lines, in the toolkit's skin; elites and rares wear a gold or silver border |
+| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. One Size setting covers them all. Shift-drag a block to move it. Type `/bt frames test` or `/bt frames raid` to preview a group. Switch them off, or one kind off, and the game's own frames come back. |
+| **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
+| **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). |
+| **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
 
-**Census** - every character you see, written down: what the realm is made of,
-by class, race, level, guild and zone, in a window of its own (from the dock's
-header, or `/bt census`). It is never shared: it holds only who you saw.
+**Interface** is the game's own windows and menus, drawn to match BeebMod.
 
-**Ledger** - notes, tags and a rating on the people you meet, on their tooltip
-and in the target row at the top of the dock; its page searches the people you
-wrote on (and, with the Census on, everyone it knows). What you write is kept
-in the Ledger's own book (`BeebModDB.ledger`), so it needs no census.
+| tab | what it is |
+|---|---|
+| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Its page has the switch that hides the game's bag bar. |
+| **Character sheet** | Item level on every slot, short stat lists with sections that fold, and BeebMod's look. |
+| **Menus** | The **Game menu** that Escape opens, and every **Dropdown menu**, a switch each. The game keeps some of its menu buttons from addons, so those keep the game's look. |
+| **Tooltips** | Unit tooltips rebuilt into two lines, in BeebMod's look. Elites and rares get a gold or silver border. |
 
-**Menagerie** - every kind of mob you have killed, a card for each with its
-model, its lore from the Warcraft Wiki and its mastery; every kind and every
-achievement is worth points, the points make a rank from Novice to Polymath,
-and a line of the dock shows both - click it for the journal.
+**Census** is a record of every character you see, with charts of the realm
+by class, race, level, guild and zone, in a window of its own. Open it from
+the dock's header, or type `/bt census`. BeebMod never shares it. It holds
+only the people you saw.
 
-**Made-up data**, for screenshots: a switch on the Testing page (or `/bt demo`)
-shows a made-up realm, notes, a journal and a party in every feature at once;
-nothing of it is saved.
+**Ledger** keeps notes, tags and a rating on the people you meet. They show
+on the person's tooltip and in the target row at the top of the dock. Its
+page searches the people you wrote about, and with the Census on, everyone
+the Census knows. The Ledger keeps what you write in its own book
+(`BeebModDB.ledger`), so it doesn't need the Census.
+
+**Nesingwary's Expedition** is a journal of every kind of mob you have
+killed. Each kind has a card with its model, its lore from the Warcraft Wiki
+and its mastery. Every kind and every commendation is worth points. The
+points set your rank, from Greenhorn to Nesingwary's Equal. A line in the
+dock shows your points and rank. Click it to open the journal, or type
+`/bt expedition`. Its files are still in `Modules/Menagerie`.
+
+**Made-up data** is for screenshots. A switch on the Testing page, or
+`/bt demo`, shows a made-up realm, notes, a journal and a party in every
+feature at once. BeebMod saves none of it.
 
 ### Adding a utility
 
-One file, one call, and it has a tab and a place on the bar:
+A utility is one file and one call, which give it a tab and a place on the
+bar.
 
 ```lua
 local M = BT.Module({
     key = "myutility", title = "My Utility", order = 30,
-    feature = "dock",   -- the feature it is part of: its switch covers this too
-    blurb = "one line, shown on the tab and in Settings",
+    feature = "dock",   -- the feature it belongs to; its switch covers this too
+    blurb = "One line, shown on the tab and in Settings",
 })
-function M:BuildTab(parent) ... end    -- built once, the first time it is opened
+function M:BuildTab(parent) ... end    -- built once, the first time it opens
 function M:Cells() return { ... } end  -- what it adds to the dock
-function M:OnBind(db) ... end          -- the settings were bound: migrate, sweep
+function M:OnBind(db) ... end          -- the settings are bound: migrate, sweep
 BT.Command("mycmd", function(rest) ... end, "what it does", "myutility")
 ```
 
-A hook that walks saved data and **removes** anything belongs to the module
-that owns that meaning, never to the core: a utility you have switched off must
-not be tidying away data it is not currently showing you. That is why migrating
-tags lives in `Modules/Ledger`.
+A hook that goes through saved data and removes anything belongs to the
+module that owns that data, never to the core. A utility you have switched
+off must not delete data it isn't showing you. That is why the tag migration
+lives in `Modules/Ledger`.
 
 ## Files
 
-    Core/Init.lua        the module registry, settings, and the book
-    Core/Util.lua        names, keys, staleness, colours
+    Core/Init.lua        the module registry, the settings and the book
+    Core/Util.lua        names, keys, how old a record is, colours
     Core/Session.lua     "this session" for Currency, Experience, Reputation
-                         and Pick Pocket: when one begins, its pace an hour
+                         and Pick Pocket: when one starts, and its pace an hour
     Core/DB.lua          one row per character: read, write, merge, prune
-    Core/Collect/        what the client tells us unasked
-    Core/Slash.lua       /bt, and the toolkit's own commands
+    Core/Collect/        what the client tells BeebMod without being asked
+    Core/Slash.lua       /bt, and BeebMod's own commands
     Core/Boot.lua        the core's own login: the settings, the dock, then BT.OnWorld
     Core/Demo.lua        made-up data for screenshots: one switch, each feature's own
-    UI/Window.lua        the window: a block per feature on the rail, a page per tab
+    UI/Window.lua        the window: a block per feature down the side, a page per tab
     UI/Welcome.lua       the first login's six cards, a switch per feature
     UI/Settings.lua      General: the look, and the panel header's switches
     UI/Bar.lua           the dock: a row of cells, and sections under it
     UI/Pill.lua          the pill, and the one place a measurement is judged
+                         good or bad
+    UI/Tip.lua           the tooltip frame every cell in the dock shares
     UI/Widgets.lua       buttons, switches, panels, and the rows and sections
-                         every page of settings is built from
-    UI/Ornament.lua      the Art Deco border an elite or a rare wears, on its
-                         unit frame and its tooltip alike
-    Core/Tooltip.lua     one hook on the unit tooltip, several participants
-    Core/Furniture.lua   dressing the client's own frames by what each piece is
-    Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab, the notes on a tooltip
+                         every settings page is built from
+    UI/Ornament.lua      the Art Deco border an elite or a rare gets, on its
+                         unit frame and on its tooltip
+    Core/Tooltip.lua     one hook on the unit tooltip, shared by several modules
+    Core/Furniture.lua   restyles the client's own frames by what each one is
+    Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab,
+                         the notes on a tooltip
     Modules/Minimap/     the map in the dock; Modules/Buttons/ the addon buttons
     Modules/XP/, Rep/    the experience and reputation lines of the dock
     Modules/Metrics/     the readout grid; Gold/, Space/, Durability/,
                          ItemLevel/, Pickpocket/, Speed/ and Perf/ are its rows
     Modules/Clock/       the time in the dock's header
-    Modules/Census/      the arithmetic and the charts
+    Modules/Census/      the counting and the charts
     Modules/Tips/        the compact tooltip, and its switches
-    Modules/Tracker/     the quest tracker the dock draws (Quests.lua reads the log)
+    Modules/Tracker/     the quest tracker in the dock (Quests.lua reads the log)
     Modules/Bars/, BagWindow/, Chat/, DamageMeter/, Menus/, Micro/
-                         the client's own furniture, flat
+                         the client's own frames, drawn flat
     Modules/CharSheet/   the character window
     Modules/PRD/         the personal resource display
     Modules/Frames/      the unit frames: one secure button drawn from secret
-                         values it never reads, the groups without snippets, and
-                         auras in the client's own containers (Auras.lua) - an
-                         addon may not read an aura in a fight on this client -
-                         and your buffs' tray beside the dock (Buffs.lua)
+                         values it never reads, the groups without snippets,
+                         and auras in the client's own containers (Auras.lua),
+                         because this client doesn't let an addon read an aura
+                         in a fight. Also your buffs' tray beside the dock
+                         (Buffs.lua)
     Modules/Menu/        the game menu Escape opens, restyled (look only)
     Core/UnitProbe.lua   /bt unitprobe: what the client tells a unit frame
-    Core/Cpu.lua         /bt cpu: times what runs by itself (updates, events,
+    Core/Cpu.lua         /bt cpu: times what runs on its own (updates, events,
                          timers) by the file that made it; every file after it
                          takes CreateFrame and C_Timer from here, one line
-    Core/Fonts.lua       the faces the toolkit can write in (a list: one line
-                         a face), and its own font objects, cut in the chosen one
+    Core/Fonts.lua       the typefaces BeebMod can use (a list, one line a
+                         face), and its own font objects, set in the chosen one
     Art/Fonts/           Google Sans, Google Sans Flex (static cuts), Fira Code,
-                         and the Menagerie card's Josefin Sans, Poiret One and
-                         Alegreya Italic, each under the SIL Open Font License
+                         and the Expedition card's Josefin Sans, Poiret One and
+                         Alegreya Italic, each with the SIL Open Font License
                          beside it
-    Art/Cards/           the Menagerie card's ornaments, white and tinted per
-                         mastery metal (scripts/make-cards.lua, in Lua)
+    Art/Cards/           the Expedition card's ornaments, white and tinted for
+                         each mastery metal (scripts/make-cards.lua, in Lua)
     Modules/Menagerie/LoreData.lua
-                         the cards' lore: the opening lines of Warcraft Wiki
+                         the cards' lore: short descriptions from Warcraft Wiki
                          pages (https://warcraft.wiki.gg) on the races, tribes,
                          clans, animals, beast families and creature types mobs
                          are named after, and on every mob of every Classic
                          zone, dungeon and raid. Text under CC BY-SA 3.0,
-                         credited on each mob's page. Generated by
-                         scripts/fetch-lore.ps1, which keeps what it fetched
-                         and asks only for what is new (-Rebuild: only the
-                         mobs met since). /bt menagerie lore says where each
-                         mob's lore came from
-    Art/Patterns/        a tileable texture a debuff type (magic sparks, curse
-                         smoke, poison bubbles, disease spores, bleed drips), so
-                         a dispel mark is told by shape as well as colour
+                         credited on each mob's page. scripts/fetch-lore.ps1
+                         writes it. The script keeps what it fetched and asks
+                         the wiki only for what is new; -Rebuild writes the
+                         file again from what it kept, asking only for mobs met
+                         since. scripts/lore-curated.json holds the text checked
+                         by hand against docs/lore-rules.md, and the script
+                         uses it in place of the wiki's. /bt expedition lore
+                         says where each mob's lore came from
+    Art/Patterns/        a tiling texture for each debuff type (magic sparks,
+                         curse smoke, poison bubbles, disease spores, bleed
+                         drips), so you can tell a dispel mark by its shape as
+                         well as its colour
     Art/Rank/            the Art Deco corner and crest round an elite or rare
                          mob's frame, gold or silver (scripts/make-rank.py)
     Core/Profile.lua     /bt mem and /bt prof
@@ -165,29 +182,30 @@ tags lives in `Modules/Ledger`.
     lua tests/load.lua    loads every file in TOC order with WoW stubbed, then
                           opens the window, clicks the switches and the bar
 
-Both must be green before anything is installed. `load.lua` answers only real
-widget methods, so a typo fails there rather than in front of you.
+Both must pass before anything is installed. `load.lua` answers only real
+widget methods, so a typo fails there and not in the game.
 
 ## Releasing
 
-A version is `MAJOR.MINOR.PATCH-beta.N` while the client is in beta, and
+A version is `MAJOR.MINOR.PATCH-beta.N` while the client is in beta.
 `CHANGELOG.md` keeps what has changed since the last one under
 `## Unreleased`. To cut one, with everything committed:
 
     powershell -ExecutionPolicy Bypass -File scripts\cut-release.ps1 -Version 0.1.0-beta.2
     git push origin main v0.1.0-beta.2
 
-The script refuses a dirty tree or a red test, writes the version into the
-TOC and `Core/Init.lua`, turns `## Unreleased` into `## 0.1.0-beta.2`, commits
-and tags. Pushing the tag runs `.github/workflows/release.yml`: the tests
-again, a check that the tag and the TOC agree, then the BigWigs packager,
-which zips the addon without its tests, scripts and docs (`.pkgmeta`) and
-publishes it with that version's changelog section as its notes.
+The script refuses a dirty tree or a failing test. It writes the version into
+the TOC and `Core/Init.lua`, turns `## Unreleased` into `## 0.1.0-beta.2`,
+commits and tags. Pushing the tag runs `.github/workflows/release.yml`. That
+runs the tests again, checks that the tag and the TOC agree, then runs the
+BigWigs packager. The packager zips the addon without its tests, scripts and
+docs (`.pkgmeta`) and publishes it with that version's changelog section as
+its notes.
 
-Where it lands:
+It goes to:
 
 - **GitHub Releases**, always.
-- **CurseForge**, once it is set up: create the project, put its id in
+- **CurseForge**, once it is set up. Create the project, put its id in
   `BeebMod.toc` as `## X-Curse-Project-ID: <id>`, and add a CurseForge API
   token as the repository secret `CF_API_KEY`. Until then the packager skips
   it. A tag with `beta` in it goes up as a beta file.
@@ -196,37 +214,42 @@ Where it lands:
 
 ## The unit tooltip has one hook
 
-Two modules want a say in it: **Tooltips** rebuilds it compactly, the **Ledger**
-adds your note and your tags. Left alone they would each hook `GameTooltip` in
-whatever order the files loaded, and the one that rebuilds would wipe the one
-that decorates. So `Core/Tooltip.lua` hooks it once and hands it round in a
-known order - compose at 0, decorate at 20 - skipping any contributor whose
-module is switched off. That is why either can be turned off and the other
-carries on exactly as before.
+Two modules change it. **Tooltips** rebuilds it in a compact form, and the
+**Ledger** adds your note and your tags. If each hooked `GameTooltip` on its
+own, they would run in whatever order the files loaded, and the rebuild would
+wipe out the Ledger's lines. So `Core/Tooltip.lua` hooks it once and calls
+each module in a fixed order (compose at 0, decorate at 20). It skips any
+module that is switched off, so you can switch either one off and the other
+works as before.
 
-Tooltips **rebuilds** rather than hides: `ClearLines` and start again is the
-only way to make a tooltip actually shrink, because blanking a line leaves its
-height behind.
+Tooltips rebuilds the tooltip instead of hiding lines. Calling `ClearLines`
+and starting again is the only way to make a tooltip shrink, because a blank
+line still takes up its height.
 
-It reads as four things rather than four lines: a **header** (the name, biggest,
-in class colour, with the level opposite), a hairline, a **subheader** (what they
-are, small and grey), the **body** (your note, quoted and a shade warmer - there
-is no italic face in this client, so the quotes carry it), and a **footer** (the
-tags, smaller again, under a second hairline). The sizes are set on Blizzard's
-own FontStrings, which are shared with every other tooltip in the game, so
-`Core/Tooltip.lua` hands them all back the moment the tooltip goes away.
+It has four parts:
 
-It also wears the window's skin - the same flat fill and one-pixel rim - with
-the spine down the left in the class or reaction colour of whoever you are
-pointing at, and a hairline under the name. The client's border is a `NineSlice`, a child frame that draws
-over anything put on the tooltip itself, so it is hidden rather than covered,
-and shown again the moment the module is switched off. Every tooltip gets the
-skin, because a border hidden with nothing in its place is a floating block of
-text; only unit tooltips get the accent.
+- a **header**: the name, biggest, in class colour, with the level opposite,
+  and a hairline under it
+- a **subheader**: what they are, small and grey
+- the **body**: your note, in quotes and a shade warmer (this client has no
+  italic face, so the quotes mark it)
+- a **footer**: the tags, smaller again, under a second hairline
+
+BeebMod sets the sizes on Blizzard's own FontStrings, which every other
+tooltip in the game shares, so `Core/Tooltip.lua` puts them all back as soon
+as the tooltip hides.
+
+It also has the window's look: the same flat fill and one-pixel rim, with the
+spine down the left in the class or reaction colour of whoever you are
+pointing at. The client's border is a `NineSlice`, a child frame that draws
+over anything put on the tooltip itself. So BeebMod hides it instead of
+covering it, and shows it again when you switch the module off. Every tooltip
+gets the look, because a hidden border with nothing in its place leaves text
+floating on the screen. Only unit tooltips get the coloured spine.
 
 ## One panel
 
-There is one thing on screen: the **dock**.
+BeebMod puts one thing on screen, the **dock**.
 
     [class] Beeb Magus                  [tags] [cog]
     "held the door while I ran back"
@@ -234,77 +257,82 @@ There is one thing on screen: the **dock**.
     QUESTS  4
     ...
 
-Two lines at the top - who you are pointing at, then their tags and your note -
-and under them whatever **sections** the modules have to show. The quest tracker
-is a section; anything else wanting permanent space on screen is a section too.
+At the top are two lines. The first says who you are pointing at, and the
+second shows their tags and your note. Under them are whatever **sections**
+the modules have to show. The quest tracker is a section. Anything else that
+needs space on screen all the time is a section too.
 
-The second line is the note itself, in words rather than an icon you have to
-hover to read, and it keeps its height whether or not anything is on it. A dock that
-grows a row when you happen to point at somebody you have written about is a
-dock that shoves the quest log down the screen while you are reading it.
+The second line shows the note itself, in words, so you don't have to hover
+over an icon to read it. It keeps its height whether or not it has anything on
+it. If the dock grew a row whenever you pointed at somebody you had written
+about, it would push the quest log down the screen while you were reading it.
 
-The first slot is the toolkit's glyph until you target a player, and then it is
-their **class** - not their spec: nothing reveals a stranger's talents on this
-client, which is the same reason the census has no spec chart. The cog is
-right-aligned, because it is the way out of everything rather than one more
-cell in the queue.
+The first slot is BeebMod's glyph until you target a player. Then it shows
+their **class**. It can't show their spec, because nothing on this client
+shows a stranger's talents; the census has no spec chart for the same reason.
+The cog sits at the right end, apart from the other cells, because it opens
+the settings, and you need to find it with everything else switched off.
 
     BT.Bar.Cell(key, width)      a cell on the row
     BT.Bar.Section(key, order)   a panel of your own underneath it
     BT.Bar.MakeHandle(child)     let something in it drag the whole dock
 
-Everything in the dock takes the mouse - the row is cells you click, the
-tracker is quests you click - so there is no bare panel left to grab. The mark
-and the tracker's QUESTS line are drag handles instead. It opens under the
-minimap and remembers wherever you drag it.
+Everything in the dock takes mouse clicks. The row is cells you click and the
+tracker is quests you click, so no bare part of the panel is left to drag. The
+mark and the tracker's QUESTS line are the drag handles. The dock starts under
+the minimap and stays wherever you drag it.
 
-The dock owns where it sits, how big it is and what it is wearing; a module
-owns what goes in its section and how tall that comes out (`wantHeight`,
-`wantWidth`, then `BT.Bar.Relayout()`). Switching the top row off leaves the
-dock there for the sections; with nothing in it at all, it goes.
+The dock decides where it sits, how big it is and how it looks. A module
+decides what goes in its section and how tall that comes out (`wantHeight`,
+`wantWidth`, then `BT.Bar.Relayout()`). With the top row switched off, the
+dock stays for the sections. With nothing in it at all, it hides.
 
 The dock never runs off the bottom of the screen. It has the room from its top
-edge down, and when its sections want more than that, a section marked
-`shrinks` gives up the difference (never going below its `minHeight`) and is
-told what it got through `Fit(height)`. Only the quest list shrinks: it scrolls
-under a fixed QUESTS line, with a thumb at the right edge.
+edge down. When its sections want more than that, a section marked `shrinks`
+gives up the difference, never going below its `minHeight`, and `Fit(height)`
+tells it the height it got. Only the quest list shrinks. It scrolls under a
+fixed QUESTS line, with a scroll bar at the right edge.
 
 ## The spine
 
-One idea across both tooltips and the quest tracker: a two-pixel edge down the
-left side, coloured by the thing you are actually asking about. On a person it
-is their class, or red when they are hostile. On an item it is its quality -
-grey, white, green, blue, purple. On the tracker it is the toolkit's jade. It
-replaced a lid across the top and two hairlines, which is five pixels of height
-back on every tooltip in the game.
+Tooltips and the quest tracker both have a two-pixel edge down the left side,
+coloured by the thing you are asking about. On a person it is their class, or
+red when they are hostile. On an item it is its quality (grey, white, green,
+blue, purple). On the tracker it is BeebMod's jade. It replaced a bar across
+the top and two hairlines, and saves five pixels of height on every tooltip in
+the game.
 
-## The quest tracker is ours
+## BeebMod draws its own quest tracker
 
-The first version restyled the client's. It came out looking like the client's
-tracker in a dark coat - the orange titles, the round map icons, two collapsing
-headers, and a panel the height of the screen whether it held four quests or
-none. Styling cannot fix a layout.
+The first version restyled the client's tracker. It still looked like the
+client's tracker, only darker. It had orange titles, round map icons, two
+collapsing headers, and a panel the height of the screen whether it held four
+quests or none. Restyling can't fix a layout.
 
-So the client's is hidden and this draws it, one column, in the toolkit's type:
+So BeebMod hides the client's tracker and draws the quests itself, in one
+column, in its own typeface.
 
     * [7] Evershine              the mark, the level, the name
         Get a cask of Evershine
         1/1 Sunhammer's Rifle    done: struck through, still readable
 
-The mark at the start of a quest is the client's own "which one am I doing":
-click it and the map points at that quest. A dot in progress, jade when it is
-the one you are following, a green check when it is ready to hand in. Click the
-quest itself to open the log at it, shift-click to stop following it.
+The mark at the start of a quest is the client's own marker for the quest you
+are following. Click it and the map points at that quest. It is a dot while
+the quest is in progress, jade when it is the one you are following, and a
+green check when it is ready to hand in. Click the quest itself to open the
+log at it. Shift-click it to stop following it.
 
-A quest that hands you something to use gets a secure button for it at the
-right end of its title: picture, charges, cooldown, tooltip, click to use.
-Which item the button holds can only change out of combat, so a row whose item
-changed mid-fight puts the button away and catches up when the fight ends.
-This client's tracker has no progress bars, and the day they arrive that is
-the thing to revisit. `Modules/Tracker/Quests.lua`
-holds the reading half and has no frames in it at all: it tries `C_QuestLog`
-first and the vanilla globals second, so a whole quest log can be read in the
-headless tests.
+A quest that gives you an item to use gets a secure button for it at the
+right end of its title, with the item's picture, charges, cooldown and
+tooltip. Click the button to use the item. The game lets addons change a
+button's item only out of combat. If a row's item changes in a fight, BeebMod
+hides the button and puts it back when the fight ends. This client's tracker
+has no progress bars. If a later build adds them, the tracker needs work to
+show them.
+
+`Modules/Tracker/Quests.lua` reads the quest log and has no frames in it. It
+tries `C_QuestLog` first and the vanilla globals second, so the headless tests
+can read a whole quest log.
 
 ## Where the names come from
 
@@ -312,66 +340,105 @@ headless tests.
 |---|---|
 | Damage meter sessions | updates characters already known, from the fight that just ended |
 | Your target's target, your mouseover's target, your group's targets | full unit data for players you never clicked |
-| `/who` answers **you** ran | level, guild, zone, class and race, up to ~49 at a time |
+| Answers to a `/who` you typed | level, guild, zone, class and race, up to about 49 at a time |
 | Friends list | name, level, class and where, whenever it refreshes |
 | Battleground scoreboard | forty players with class, race and faction in one table |
-| Mail senders, channel lists (after a `/chatlist`) | names you would otherwise never meet |
+| Mail senders, channel lists (after a `/chatlist`) | names you might not see anywhere else |
 | Chat (say, yell, channels, guild, party, whispers) | name and GUID for everyone talking |
-| Nameplates, mouseover, target, party and raid | class, race, level and guild — the full record |
+| Nameplates, mouseover, target, party and raid | class, race, level and guild: the full record |
 | Guild roster | your own guild, including offline members |
 
-**A GUID identifies its owner.** A chat event carries the sender's name and GUID but no class or race — except that `GetPlayerInfoByGUID` will tell you both, which is how the chat frame knows to paint a sender's name in class colour. Every chat sighting is resolved that way as it arrives, and `/bt identify` (also run once at login) walks anyone already in the book who has a GUID but no class. Level is the one thing this cannot give you: only seeing someone, or a `/who` row you run yourself, carries a level.
+A chat event carries the sender's name and GUID, but no class or race.
+`GetPlayerInfoByGUID` gives both from the GUID, which is how the chat frame
+colours a sender's name by class. BeebMod looks up every chat sighting that
+way as it arrives. `/bt identify`, which also runs once at login, looks up
+anyone already in the book who has a GUID but no class. This can't give a
+level. Only seeing someone, or a `/who` row you ran yourself, gives a level.
 
-**There is no combat log source.** This client forbids addons `COMBAT_LOG_EVENT_UNFILTERED`: registering it raises `ADDON_ACTION_FORBIDDEN` and the "blocked from an action only available to the Blizzard UI" popup. `C_DamageMeter`'s combat sessions carry the names and classes instead, read when combat drops — a smaller net (only players the meter counted) but no popup and no taint.
+There is no combat log source. This client doesn't let addons register
+`COMBAT_LOG_EVENT_UNFILTERED`. Registering it raises `ADDON_ACTION_FORBIDDEN`
+and the "blocked from an action only available to the Blizzard UI" popup.
+Instead, BeebMod reads names and classes from `C_DamageMeter`'s combat
+sessions when combat ends. That finds fewer people, only the players the meter
+counted, but it causes no popup and no taint.
 
-`/who` is never **sent** by the addon. It asks the server, it is rate limited, and automating it is the one part of an addon like this that can get you in trouble - and on this client the call is blocked outright (see below). The answer to a `/who` you typed yourself is a list the client is already holding, and that is read like any other.
+BeebMod never sends `/who`. A `/who` goes to the server, which limits how
+often you can ask, and sending it automatically is the one part of an addon
+like this that can get you in trouble. This client blocks the call anyway
+(see below). A `/who` you type yourself fills a list the client already
+holds, and BeebMod reads that like any other.
 
-A player is written down at most once a minute, so a forty-player fight costs one table lookup per meter row rather than one database write.
+BeebMod writes a player down at most once a minute, so a fight with forty
+players costs one table lookup per meter row instead of one write.
 
-## What ages, and how it says so
+## What ages, and how BeebMod shows it
 
-Nothing refreshes an observation but meeting the character again, so every field carries the moment it was observed and the display tells you how stale it is: the zone is dropped after 30 minutes, a level over half a day old shows as a floor ("3+"), and a guild older than a day says "as of 3 days ago". The tooltip never repeats level or guild — the unit in front of you is already telling you those.
+Only meeting a character again updates what BeebMod knows about them. So
+every field keeps the time it was seen, and the display tells you how old it
+is. BeebMod drops the zone after 30 minutes. A level more than half a day old
+shows as a floor ("3+"). A guild more than a day old says "as of 3 days ago".
+The tooltip never repeats level or guild, because the unit in front of you
+already shows those.
 
-There is no spec chart and cannot be: nothing reveals a stranger's talents, and inspecting needs them targeted and in range. Your own tags are the fourth chart instead, and it hides itself when the Ledger is switched off.
+There is no spec chart. Nothing shows a stranger's talents, and inspecting
+needs them targeted and in range. The fourth chart shows your own tags
+instead, and it hides when the Ledger is switched off.
 
-**Unknowns are visible, not hidden.** The class chart carries "Unknown" as its own grey row, so it accounts for every character in the book and shows how much of the realm you have actually identified. The race and level charts leave those characters out — an unknown bar in all three would be the same people counted three times — and each says so: "125 of 195 characters; 70 have no race on file".
+The charts show what BeebMod doesn't know. The class chart has "Unknown" as
+its own grey row, so it counts every character in the book and shows how much
+of the realm you have identified. The race and level charts leave those
+characters out, because an unknown bar in all three would count the same
+people three times. Each of them says so, for example "125 of 195 characters;
+70 have no race on file".
 
 ## No /who
 
-`C_FriendList.SendWho` is protected on this client: calling it raises ADDON_ACTION_BLOCKED ("Interface action failed because of an AddOn") and no query goes out. Nothing in the addon sends one — the book is built from what the client tells us unasked, which includes the answer to a `/who` you ran by hand (`WHO_LIST_UPDATE`, read in `Core/Collect/Rosters.lua`).
+`C_FriendList.SendWho` is protected on this client. Calling it raises
+ADDON_ACTION_BLOCKED ("Interface action failed because of an AddOn") and no
+query goes out. Nothing in BeebMod sends one. The book holds only what the
+client tells BeebMod without being asked, and that includes the answer to a
+`/who` you ran by hand (`WHO_LIST_UPDATE`, read in
+`Core/Collect/Rosters.lua`).
 
-The consequence is that a character heard only in chat stays a name with no class, race or level until you actually see them. That gap is shown rather than hidden: see the census charts.
+So a character heard only in chat stays a name with no class, race or level
+until you see them. The census charts show that gap.
 
 ## Notes on the client
 
-Built against build 1.60.1.70009 (`wow_classic_beta`). The TOC says `## Interface: 16001`, confirmed in-game with `/dump select(4, GetBuildInfo())` on build 1.60.1.69893 (the client packs 1.60.1 as 1-60-01, not 11600). A beta build can move it; if the addon ever shows as out of date, check it again. The tooltip hook works with either the modern `TooltipDataProcessor` or the old `OnTooltipSetUnit`, whichever the build has.
+Built against build 1.60.1.70009 (`wow_classic_beta`). The TOC says
+`## Interface: 16001`, checked in the game with
+`/dump select(4, GetBuildInfo())` on build 1.60.1.69893. The client writes
+1.60.1 as 1-60-01, not 11600. A beta build can change it. If the addon ever
+shows as out of date, check it again. The tooltip hook works with either the
+newer `TooltipDataProcessor` or the old `OnTooltipSetUnit`, whichever the build
+has.
 
 ## Saved variables, and the beta bug that lost them
 
 **Fixed in build 1.60.1.70009 (2026-09-24).** Up to that build the client
-wrote `SavedVariables` correctly on every logout and `/reload` and never read
-them back - for every addon ([forever-bugs #34](https://github.com/ClassicWoWCommunity/forever-bugs/issues/34),
-and `docs/beta-bug-savedvariables.md`). On 70009 a probe addon got its table
-back on a fresh launch and on a `/reload`, so the book now loads the ordinary
-way and nothing of the workaround is left in the addon.
+wrote `SavedVariables` on every logout and `/reload` and never read them back,
+for every addon ([forever-bugs #34](https://github.com/ClassicWoWCommunity/forever-bugs/issues/34),
+and `docs/beta-bug-savedvariables.md`). On 70009 a test addon got its table
+back on a fresh launch and on a `/reload`. So the book now loads the normal
+way, and none of the workaround is left in the addon.
 
-**The workaround, for the record (2026-09-22 to 09-24):** `Data/Live` was a
+**The workaround, for the record (2026-09-22 to 09-24).** `Data/Live` was a
 directory junction to `WTF/Account/<account>/SavedVariables`, and the TOC
 listed `Data\Live\BeebMod.lua` first, so the client ran its own last save as
-an addon file - the technique [ForeverSVFix](https://github.com/nobewayo/ForeverSVFix)
-uses. Before that (09-19 to 09-22) the book rode in a generated
-`Data/Baked.lua`. `BT.Adopt` and `BT.linked` in `Core/Init.lua` are left as a
-net should a later build lose the book again; with the book arriving normally
-they do nothing.
+an addon file. [ForeverSVFix](https://github.com/nobewayo/ForeverSVFix) does
+the same. Before that (09-19 to 09-22) BeebMod kept the book in a generated
+`Data/Baked.lua`. `BT.Adopt` and `BT.linked` in `Core/Init.lua` stay in case a
+later build loses the book again. While the book loads normally they do
+nothing.
 
-`scripts/backup-book.ps1` copies the save into `LedgerBackups`;
-`scripts/restore-book.ps1` puts one back, and refuses while the game is running
-because the next save would overwrite it.
+`scripts/backup-book.ps1` copies the save into `LedgerBackups`.
+`scripts/restore-book.ps1` puts one back. It refuses while the game is running,
+because the game's next save would overwrite it.
 
 ## Later
 
-- Sharing notes with guild members, opt-in, most likely as export/import
+- Sharing notes with guild members, opt-in, most likely as export and import
   strings before anything live.
 - Seen-online history, so the book can answer "when is this person usually on".
-- More utilities: the toolkit exists so the next one is a file and a
-  `BT.Module` call, not another addon to install.
+- More utilities. Each new one is a file and a `BT.Module` call instead of
+  another addon to install.

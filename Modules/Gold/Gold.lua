@@ -24,7 +24,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "gold",
 	title = "Currency",
-	blurb = "your gold, and earned per hour",
+	blurb = "Your gold, and what you earn per hour",
 	order = 39,
 	-- on the right panel, as a row of the Metrics grid (a part has no tab of
 	-- its own: its switch is on the Metrics tab)
@@ -187,23 +187,33 @@ local duration = BT.Session.Duration
 
 function M.Tip()
 	local s = M.session
-	if not (s and GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not (s and BT.Tip) then
 		return
 	end
-	BT.Bar.Tip(M.chip, function()
-		GameTooltip:AddDoubleLine("Currency", M.Coins(money()), 1, 1, 1, 1, 1, 1)
-		local _, rate = M.Lines(money(), M.Rate())
-		GameTooltip:AddDoubleLine("earned an hour", rate, 0.7, 0.75, 0.73, 1, 1, 1)
-		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("This session", 1, 1, 1)
-		GameTooltip:AddDoubleLine("earned", M.Coins(s.earned), 0.7, 0.75, 0.73, 1, 1, 1)
-		GameTooltip:AddDoubleLine("spent", M.Coins(s.spent), 0.7, 0.75, 0.73, 1, 1, 1)
+	-- (Josh 2026-09-27, the dock's tooltips redrawn) what you have, which way
+	-- this session went, and by how much an hour
+	BT.Tip.Show(M.chip, { build = function(t)
 		local net = (s.earned or 0) - (s.spent or 0)
-		GameTooltip:AddDoubleLine(net >= 0 and "up" or "down", M.Coins(math.abs(net)),
-			0.7, 0.75, 0.73, 1, 1, 1)
-		GameTooltip:AddDoubleLine("over", duration(U.Now() - (s.start or U.Now())),
-			0.7, 0.75, 0.73, 1, 1, 1)
-	end)
+		local long = U.Now() - (s.start or U.Now())
+		local moved = (s.earned or 0) > 0 or (s.spent or 0) > 0
+		t:Header({ name = "Money", sub = UnitName and UnitName("player") or nil,
+			pill = moved and (net >= 0 and "Up" or "Down") or nil, pillState = net >= 0 and "good" or "bad" })
+		t:Headline(M.Coins(money()))
+		if not moved then
+			t:Note("No money in or out yet this session.")
+			return
+		end
+		t:Note(("%s%s this session, in %s."):format(net >= 0 and "+" or "-", M.Coins(math.abs(net)), duration(long)),
+			net >= 0 and "good" or "bad")
+		t:Section("This session")
+		t:Row("Earned", M.Coins(s.earned or 0))
+		t:Row("Spent", M.Coins(s.spent or 0))
+		local rate = long >= 60 and net * 3600 / long or nil
+		if rate then
+			t:Row("Net per hour", (rate >= 0 and "+" or "-") .. M.Coins(math.abs(rate), true),
+				rate >= 0 and "good" or "bad")
+		end
+	end })
 end
 
 function M.Build()
@@ -282,14 +292,14 @@ end
 
 function M:BuildTab(panel)
 	local note = BT.Widgets.Label(panel,
-		"your gold, and what this session has earned per hour - point at the line for the totals",
+		"Your gold, and what you earn per hour this session. Point at it for the totals.",
 		"small", 0.55, 0.60, 0.58)
 	note:SetPoint("TOPLEFT", 0, -2)
 	note:SetWidth(520)
 	note:SetJustifyH("LEFT")
 
 	local why = BT.Widgets.Label(panel,
-		"earned counts money coming in; spending is shown on its own rather than taken off the rate",
+		"Earned counts only money coming in. Spent has its own row.",
 		"small", 0.45, 0.50, 0.48)
 	why:SetPoint("TOPLEFT", 0, -22)
 	why:SetWidth(520)
@@ -310,16 +320,16 @@ end
 BT.Command("gold", function(rest)
 	if (rest or ""):lower() == "reset" then
 		M.Start(true, false)
-		U.Print("a new gold session starts now")
+		U.Print("Gold: a new session starts now.")
 		return
 	end
 	local s = M.session
 	if not s then
-		U.Print("no gold session yet")
+		U.Print("Gold: no session yet.")
 		return
 	end
 	local rate = M.Rate()
-	U.Print(("gold: %s · earned %s · spent %s · %s"):format(M.Coins(money()),
+	U.Print(("Gold: %s · earned %s · spent %s · %s"):format(M.Coins(money()),
 		M.Coins(s.earned), M.Coins(s.spent),
 		rate and (M.Coins(rate) .. " an hour") or "too early for a rate"))
-end, "gold [reset] - this session's gold, or start a new one", "gold")
+end, "gold [reset] - show this session's gold, or start a new session", "gold")

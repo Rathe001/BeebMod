@@ -18,7 +18,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "durability",
 	title = "Durability",
-	blurb = "how worn your gear is · the client's armour figure is put away",
+	blurb = "How worn your gear is. Hides the game's armour figure.",
 	order = 39.6,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -158,24 +158,58 @@ function M.Update()
 	end
 end
 
+-- a piece's state: red at a fifth or broken, amber at half
+local function wear(item)
+	if item.cur <= 0 or item.pct <= 20 then
+		return "bad"
+	elseif item.pct <= 50 then
+		return "warn"
+	end
+	return nil
+end
+
+-- WORST FIRST, AND ONLY WHAT NEEDS YOU (Josh 2026-09-27, the dock's tooltips
+-- redrawn): the average, then the pieces under 80%, the worst at the top;
+-- the rest are counted, not listed
+M.FINE = 80
+
 function M.Tip()
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not BT.Tip then
 		return
 	end
 	local d = M.Read()
-	BT.Bar.Tip(M.chip, function()
-		GameTooltip:AddDoubleLine("Durability", d.pct and (d.pct .. "%") or "-", 1, 1, 1, 1, 1, 1)
+	BT.Tip.Show(M.chip, { build = function(t)
+		local worn = {}
 		for _, item in ipairs(d.items) do
-			local red, green, blue = 1, 1, 1
-			if item.cur <= 0 or item.pct <= 20 then
-				red, green, blue = 0.95, 0.40, 0.35
-			elseif item.pct <= 50 then
-				red, green, blue = 0.95, 0.78, 0.35
+			if item.pct < M.FINE then
+				worn[#worn + 1] = item
 			end
-			GameTooltip:AddDoubleLine(item.name, ("%d / %d"):format(item.cur, item.max),
-				0.7, 0.75, 0.73, red, green, blue)
 		end
-	end)
+		table.sort(worn, function(a, b) return a.pct < b.pct end)
+		local worst = worn[1] and wear(worn[1])
+		t:Header({ name = "Durability", sub = "Your worn gear",
+			pill = worst == "bad" and "Repair now" or (worst == "warn" and "Repair soon" or nil),
+			pillState = worst })
+		local avg = d.pct or 100
+		t:Headline(avg .. "%", "on average", avg <= 20 and "bad" or (avg <= 50 and "warn" or nil))
+		t:Bar(avg / 100, avg <= 20 and "bad" or (avg <= 50 and "warn" or "good"), { { 0.2, "bad" }, { 0.5, "warn" } })
+		if #worn == 0 then
+			t:Note(("Every piece is above %d%%."):format(M.FINE))
+			return
+		end
+		t:Section("Worst first")
+		for i = 1, math.min(4, #worn) do
+			local item = worn[i]
+			t:Row(item.name, item.cur <= 0 and "broken" or (item.pct .. "%"), wear(item))
+		end
+		local more, fine = #worn - math.min(4, #worn), #d.items - #worn
+		if more > 0 then
+			t:Note(("%d more below %d%%."):format(more, M.FINE))
+		end
+		if fine > 0 then
+			t:Note(("%d other %s above %d%%."):format(fine, fine == 1 and "piece is" or "pieces are", M.FINE))
+		end
+	end })
 end
 
 function M.Build()
@@ -229,14 +263,14 @@ end
 
 function M:BuildTab(panel)
 	local note = BT.Widgets.Label(panel,
-		"everything you wear as one percentage, and the most worn piece beside it - point at it for each",
+		"Everything you wear as one percentage. Point at it for each piece, worst first.",
 		"small", 0.55, 0.60, 0.58)
 	note:SetPoint("TOPLEFT", 0, -2)
 	note:SetWidth(520)
 	note:SetJustifyH("LEFT")
 
 	local why = BT.Widgets.Label(panel,
-		"while this is on, the client's armour figure is put away · amber from half, red from a fifth",
+		"While this is on, BeebMod hides the game's armour figure. Amber from 50%, red from 20%.",
 		"small", 0.45, 0.50, 0.48)
 	why:SetPoint("TOPLEFT", 0, -22)
 	why:SetWidth(520)
@@ -257,9 +291,9 @@ end
 BT.Command("durability", function()
 	local d = M.Read()
 	if not d.pct then
-		U.Print("nothing you wear has durability")
+		U.Print("Durability: nothing you wear has any.")
 		return
 	end
-	U.Print(("durability %d%%%s"):format(d.pct,
-		d.worst and d.worst.pct < 100 and (" · most worn: %s %d%%"):format(d.worst.name, d.worst.pct) or ""))
-end, "how worn your gear is", "durability")
+	U.Print(("Durability: %d%%%s"):format(d.pct,
+		d.worst and d.worst.pct < 100 and (" · most worn %s %d%%"):format(d.worst.name, d.worst.pct) or ""))
+end, "print how worn your gear is", "durability")

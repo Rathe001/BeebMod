@@ -20,7 +20,7 @@ local M = BT.Module({
 	key = "ledger",
 	feature = "ledger",
 	title = "Ledger",
-	blurb = "notes and tags",
+	blurb = "Notes and tags",
 	order = 10,
 	-- on the right panel, so it has a tab on the rail (Josh 2026-09-22)
 	dock = true,
@@ -33,17 +33,26 @@ local M = BT.Module({
 function M:BuildTab(parent)
 	local stack = BT.Widgets.Stack(parent)
 	local tips = stack:Section("Tooltips")
-	self.notesRow = BT.Widgets.SwitchRow(tips, "Notes on tooltips", "your note above the tooltip · tags and rating under it",
+	self.notesRow = BT.Widgets.SwitchRow(tips, "Notes on tooltips", "Your note above the tooltip, tags and rating below it",
 		function() return BT.settings and BT.settings.tooltip ~= false end,
 		function(on)
 			BT.EnsureBound()
 			BT.settings.tooltip = on and true or false
 		end)
 	self.notesRow.field = "tooltip"
-	-- THE TARGET ROW (Josh 2026-09-24): who you are pointing at, their tags and
-	-- your note, at the top of the dock - the Ledger's, so its switch is here
-	local dock = stack:Section("In the dock")
-	self.rowRow = BT.Widgets.SwitchRow(dock, "Target row", "who you are pointing at, their tags and your note",
+	local find = CreateFrame("Frame", nil, parent)
+	find:SetPoint("TOPLEFT", 0, -(stack:Layout() + 8))
+	find:SetPoint("BOTTOMRIGHT", 0, 0)
+	BT.Find.Build(find)
+end
+
+-- THE TARGET ROW (Josh 2026-09-24): who you are pointing at, their tags and
+-- your note, in the dock. Its switch is on the Ledger's tab in the Dock's
+-- block (Josh 2026-09-27), which is dragged to move the row.
+function M:BuildDockTab(parent)
+	local stack = BT.Widgets.Stack(parent)
+	local dock = stack:Section("The row")
+	self.rowRow = BT.Widgets.SwitchRow(dock, "Target row", "Your target, their tags and your note",
 		function() return BT.settings and BT.settings.bar ~= false end,
 		function(on)
 			BT.EnsureBound()
@@ -53,10 +62,8 @@ function M:BuildTab(parent)
 			end
 		end)
 	self.rowRow.field = "bar"
-	local find = CreateFrame("Frame", nil, parent)
-	find:SetPoint("TOPLEFT", 0, -(stack:Layout() + 8))
-	find:SetPoint("BOTTOMRIGHT", 0, 0)
-	BT.Find.Build(find)
+	stack:Note("Drag this tab on the rail to move the row in the dock.", true)
+	stack:Layout()
 end
 
 function M:ShowTab()
@@ -91,14 +98,12 @@ end
 -- this replaced explained the addon to somebody who already had it installed.
 -- ---------------------------------------------------------------------------
 local DOT, DOT_GAP, MAX_DOTS = 7, 3, 5
--- the unit tooltip's own quotation sizes, because it is the same quotation
-local NOTE_SIZE, CREDIT_SIZE = 15, 10
 local MARK_X = 4 -- the second line starts under the class icon, not inset again
 -- with nobody targeted: a reticle in the first slot, and what targeting is for
 local RETICLE = "Interface\\AddOns\\BeebMod\\Art\\net"
 local RETICLE_COORDS = { 0.5, 0.75, 0, 1 }
 local QUIET = { 0.54, 0.60, 0.58, 1 }
-local EMPTY = "|cff7d8a84target a player to add notes and tags|r"
+local EMPTY = "|cff7d8a84Target a player to add notes and tags.|r"
 -- what the hint claims of the row: a name's worth, never the whole sentence
 local HINT_W = 90
 
@@ -220,54 +225,46 @@ function M:Cells()
 		if not ((self.tags and #self.tags > 0) or self.note.text) then
 			return
 		end
-		-- No name on it: you are pointing at the dots, on the line under the
-		-- name, about the person whose name is right there. One size for every
-		-- line, and the colour as a square rather than as the text - a tag
-		-- colour chosen for a pill is a poor colour for words (Josh
-		-- 2026-09-19).
-		local colours = {}
-		for i, f in ipairs(self.tags) do
-			colours[i] = f.color or { 0.6, 0.65, 0.62 }
-		end
-		-- THE SAME QUOTATION IT IS EVERYWHERE ELSE (Josh 2026-09-20). This
-		-- tooltip wrote the note as one more tooltip line, small and grey with
-		-- the tags, while the unit tooltip set it large, warm and centred with
-		-- its source under it. The same words in two voices read as two
-		-- different things; the note is the note wherever you meet it.
-		BT.Bar.Tip(self, function()
+		-- THE SAME QUOTATION IT IS EVERYWHERE ELSE (Josh 2026-09-20): the note
+		-- in the lore face, its source under it. AND WHO THEY ARE (Josh
+		-- 2026-09-27, the dock's tooltips redrawn): their name, level, class
+		-- and guild, your rating, the tags as coloured chips, and when you last
+		-- saw them - the unit tooltip had the rating, this one did not.
+		local p, info = self.person, self.info
+		local feature = BT.Feature and BT.Feature("ledger")
+		BT.Tip.Show(self, { edge = feature and feature.color, build = function(t)
+			local class = (info and info.class) or (p and p.class)
+			local bits = {}
+			if p and p.level then
+				bits[#bits + 1] = "Level " .. U.LevelText(p)
+			end
+			local className = class and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class]
+			if className then
+				bits[#bits + 1] = className
+			end
+			if p and p.guild and p.guild ~= "" then
+				bits[#bits + 1] = "<" .. p.guild .. ">"
+			end
+			local rating = p and p.rating
+			t:Header({ icon = false, name = U.Colorize(self.name or (p and p.name) or "", class),
+				sub = #bits > 0 and table.concat(bits, " ") or nil,
+				pill = rating and ("Rated %d / 5"):format(rating) or nil })
 			if self.note.text then
-				GameTooltip:AddLine(('"%s"'):format(self.note.text), 0.94, 0.92, 0.84, true)
-				if self.note.credit then
-					-- the right-hand column of a double line, because telling
-					-- a tooltip line to align right does nothing at all
-					GameTooltip:AddDoubleLine(" ", self.note.credit,
-						1, 1, 1, 0.62, 0.66, 0.64)
+				t:Quote(self.note.text, self.note.credit)
+			end
+			if #self.tags > 0 then
+				local chips = {}
+				for i, f in ipairs(self.tags) do
+					chips[i] = { f.label, f.color or { 0.6, 0.65, 0.62 } }
 				end
+				t:Tags(chips)
 			end
-			for _, f in ipairs(self.tags) do
-				GameTooltip:AddLine("    " .. f.label, 0.87, 0.92, 0.89)
+			if p and p.last then
+				t:Note(("Last seen %s."):format(U.Since(p.last)))
 			end
-		end)
-		local first = 1
-		if self.note.text then
-			-- the quote in the text face, as it is on a unit's tooltip: the
-			-- first line is otherwise taken for a name
-			BT.UnitTip.SizeLine(GameTooltip, 1, NOTE_SIZE, nil, "text")
-			BT.UnitTip.Center(GameTooltip, 1)
-			first = 2
-			if self.note.credit then
-				BT.UnitTip.SizeLine(GameTooltip, 2, CREDIT_SIZE)
-				BT.UnitTip.SizeLine(GameTooltip, 2, CREDIT_SIZE, "TextRight")
-				first = 3
-			end
-		end
-		for i = first, first + #self.tags - 1 do
-			BT.UnitTip.SizeLine(GameTooltip, i, 11)
-		end
-		BT.UnitTip.Swatches(GameTooltip, colours, first)
-		GameTooltip:Show()
+		end })
 	end)
-	dots:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+	dots:SetScript("OnLeave", function() BT.Tip.Hide() end)
 
 	-- A MARK MEANING THERE IS ONE, AFTER ALL (Josh 2026-09-20). The words went
 	-- on the second line of the dock for a while, and a second line is a third
@@ -324,6 +321,8 @@ function M:Cells()
 
 		local tags = tagsOn(p)
 		dots.tags = tags
+		-- who they are, for the tooltip's header
+		dots.person, dots.name, dots.info = p, name, info
 		for i, dot in ipairs(dots.list) do
 			local f = tags[i]
 			if f and i <= MAX_DOTS then
@@ -371,7 +370,7 @@ end
 -- ---------------------------------------------------------------------------
 BT.Command("find", function(rest)
 	BT.Find.Search(rest ~= "" and rest or nil)
-end, "find <text> - names, guilds, notes", "ledger")
+end, "find <text> - search names, guilds and notes", "ledger")
 
 -- NOTHING TYPED IS A QUESTION, NOT AN ERASER (Josh 2026-09-23, audit). "/bt
 -- note" on your target, or "/bt note Beeb Bob", cleared the note you had
@@ -380,26 +379,26 @@ end, "find <text> - names, guilds, notes", "ledger")
 BT.Command("note", function(rest)
 	local key, text, name, info = N.WhoAndRest(rest)
 	if not key then
-		U.Print("no such character, and no player targeted")
+		U.Print("Ledger: no character by that name, and no player targeted.")
 		return
 	end
 	text = (text or ""):match("^%s*(.-)%s*$")
 	if text == "" then
 		local p = N.Get(key)
-		U.Print(p and p.note and p.note ~= "" and ("note on %s · \"%s\""):format(name, p.note)
-			or ("no note on %s · /bt note %s <text> writes one"):format(name, name))
+		U.Print(p and p.note and p.note ~= "" and ("Ledger: note on %s · \"%s\""):format(name, p.note)
+			or ("Ledger: no note on %s. Type /bt note %s <text> to write one."):format(name, name))
 		return
 	end
 	if text:lower() == "clear" then
 		N.SetNote(key, "", info)
-		U.Print("note cleared on " .. name)
+		U.Print("Ledger: cleared the note on " .. name .. ".")
 	elseif N.SetNote(key, text, info) then
-		U.Print(("note on %s · \"%s\""):format(name, text))
+		U.Print(("Ledger: note on %s · \"%s\""):format(name, text))
 	else
-		U.Print(("could not write on %s · target them first"):format(name))
+		U.Print(("Ledger: couldn't write a note on %s. Target them first."):format(name))
 	end
 	BT.Find.Refresh()
-end, "note [name] <text|clear> - name defaults to your target; no text reads it back", "ledger")
+end, "note [name] <text|clear> - write or clear a note, on your target if you give no name. With no text it reads the note back.", "ledger")
 
 BT.Command("flag", function(rest)
 	local key, flag, name, info = N.WhoAndRest(rest)
@@ -421,50 +420,50 @@ BT.Command("flag", function(rest)
 		for _, f in ipairs(BT.AllFlags()) do
 			labels[#labels + 1] = f.label
 		end
-		U.Print("usage: /bt flag [name] <" .. table.concat(labels, " | ") .. ">")
+		U.Print("Ledger: type /bt flag [name] <" .. table.concat(labels, " | ") .. ">.")
 		return
 	end
 	local p, on = N.ToggleFlag(key, tag.key, info)
 	if not p and on then
-		U.Print(("could not tag %s · target them first"):format(name))
+		U.Print(("Ledger: couldn't tag %s. Target them first."):format(name))
 		return
 	end
-	U.Print(("%s %s on %s"):format(on and "set" or "cleared", tag.label, name))
+	U.Print(("Ledger: %s %s on %s."):format(on and "set" or "cleared", tag.label, name))
 	BT.Find.Refresh()
-end, "flag [name] <tag> - toggle a tag, by its name", "ledger")
+end, "flag [name] <tag> - put a tag on someone, or take it off, by the tag's name", "ledger")
 
 BT.Command("tag", function(rest)
 	local sub, arg = rest:match("^(%S*)%s*(.-)$")
 	if sub == "new" or sub == "add" then
 		local tag, why = BT.AddTag(arg)
-		U.Print(tag and ("new tag: " .. tag.label) or (why or "could not make that tag"))
+		U.Print(tag and ("Ledger: added the tag " .. tag.label .. ".") or ("Ledger: " .. (why or "couldn't make that tag.")))
 	elseif sub == "delete" or sub == "remove" then
 		if arg == "" then
-			U.Print("usage: /bt tag delete <name>")
+			U.Print("Ledger: type /bt tag delete <name>.")
 			return
 		end
 		local ok, gone = BT.RemoveTag(arg)
-		U.Print(ok and ("deleted " .. gone.label .. " · off every character")
-			or ("no tag of yours called " .. arg))
+		U.Print(ok and ("Ledger: deleted " .. gone.label .. " and took it off every character.")
+			or ("Ledger: you have no tag called " .. arg .. "."))
 	else
 		local built, mine = {}, {}
 		for _, f in ipairs(BT.AllFlags()) do
 			local into = f.builtin and built or mine
 			into[#into + 1] = f.icon .. " " .. f.label
 		end
-		U.Print("built in: " .. table.concat(built, ", "))
-		U.Print("yours: " .. (#mine > 0 and table.concat(mine, ", ") or "none · /bt tag new <name>"))
+		U.Print("Built-in tags: " .. table.concat(built, ", "))
+		U.Print("Your tags: " .. (#mine > 0 and table.concat(mine, ", ") or "none. Type /bt tag new <name> to make one."))
 	end
 	if BT.Find.RebuildFlags then
 		BT.Find.RebuildFlags()
 		BT.Find.Refresh()
 	end
-end, "tag - list them | tag new <name> | tag delete <name>", "ledger")
+end, "tag - list the tags | tag new <name> | tag delete <name>", "ledger")
 
 BT.Command("rate", function(rest)
 	local key, n, name, info = N.WhoAndRest(rest)
 	if not key then
-		U.Print("no such character, and no player targeted")
+		U.Print("Ledger: no character by that name, and no player targeted.")
 		return
 	end
 	-- as with a note: nothing reads the rating back, "clear" clears it, and a
@@ -473,20 +472,20 @@ BT.Command("rate", function(rest)
 	local current = N.Get(key)
 	if n == "" then
 		local r = current and current.rating
-		U.Print(r and ("%s is rated %d/5"):format(name, r) or ("%s is not rated"):format(name))
+		U.Print(r and ("Ledger: %s is rated %d/5."):format(name, r) or ("Ledger: %s is not rated."):format(name))
 		return
 	end
 	local want = tonumber(n)
 	if n:lower() == "clear" then
 		N.SetRating(key, nil, info)
-		U.Print("rating cleared on " .. name)
+		U.Print("Ledger: cleared the rating on " .. name .. ".")
 		return
 	end
 	if not want or want < 1 or want > 5 then
-		U.Print("usage: /bt rate [name] <1-5|clear>")
+		U.Print("Ledger: type /bt rate [name] <1-5|clear>.")
 		return
 	end
 	local p = N.SetRating(key, math.floor(want), info)
 	local rating = p and p.rating
-	U.Print(rating and ("rated %s %d/5"):format(name, rating) or ("could not rate " .. name))
-end, "rate [name] <1-5|clear> - no number reads it back", "ledger")
+	U.Print(rating and ("Ledger: rated %s %d/5."):format(name, rating) or ("Ledger: couldn't rate " .. name .. "."))
+end, "rate [name] <1-5|clear> - rate someone. With no number it reads the rating back.", "ledger")

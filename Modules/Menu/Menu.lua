@@ -27,7 +27,7 @@ local M = BT.Module({
 	feature = "interface",
 	onPage = "allmenus",
 	title = "Game menu",
-	blurb = "the Escape menu, in the toolkit's clothes",
+	blurb = "Redraws the menu that Escape opens",
 	order = 59,
 })
 
@@ -286,7 +286,7 @@ function M.DressNow(frame)
 						n = n + 1
 					elseif not ok and not M.failed then
 						M.failed = tostring(dressed)
-						U.Print("the game menu: a button could not be dressed - " .. M.failed)
+						U.Print("Game menu: could not redraw a button. " .. M.failed)
 					end
 				else
 					walk(child, depth + 1)
@@ -451,10 +451,10 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the menu Escape opens, in an elite's border drawn in your border colour · "
-		.. "buttons in the toolkit's font, lit with the accent under the pointer")
-	page:Note("only the look changes · every button does what the game's did · the game keeps some of its "
-		.. "buttons from addons, so those stay its own · switched off, the game's art is back", true)
+	page:Note("The menu Escape opens gets an elite's border, in your border colour. "
+		.. "Its buttons use BeebMod's font and light up in your accent colour under the pointer.")
+	page:Note("Only the look changes. Every button does what it did before. The game keeps some of its "
+		.. "buttons from addons, so those look the same as ever. Switched off, the menu looks like the game's again.", true)
 	page:Layout()
 end
 
@@ -463,7 +463,7 @@ end
 BT.Command("menudump", function()
 	local frame = M.Frame()
 	if type(frame) ~= "table" then
-		U.Print("no GameMenuFrame on this client")
+		U.Print("Game menu: this client has no GameMenuFrame.")
 		return
 	end
 	local lines = {}
@@ -518,6 +518,6 @@ BT.Command("menudump", function()
 			kept = kept + 1
 		end
 	end
-	U.Print(("game menu: %d lines written down · /reload to save them · %s buttons dressed · %d kept from addons%s")
-		:format(#lines, tostring(M.lastCount), kept, M.failed and (" · failed: " .. M.failed) or ""))
+	U.Print(("Game menu: wrote down %d lines. Type /reload to save them. Redrew %s buttons. The game keeps %d from addons.%s")
+		:format(#lines, tostring(M.lastCount), kept, M.failed and (" Failed: " .. M.failed) or ""))
 end, "menudump - write the game menu's frames into the saved file", "menu")

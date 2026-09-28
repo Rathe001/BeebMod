@@ -23,7 +23,7 @@ function S.Build(parent)
 	-- WHICH FEATURES (Josh 2026-09-27): the question the first login asks -
 	-- six cards, a switch each - asked again
 	local layout = stack:Section("Features")
-	local again = W.Row(layout, "Choose again", "the first login's six cards: the dock, unit frames, interface, census, ledger, menagerie · /bt setup")
+	local again = W.Row(layout, "Choose again", "The six cards from your first login, one for each feature · /bt setup")
 	local ask = again:SetControl(W.Button(again, "Choose", 70, 20))
 	ask:SetScript("OnClick", function()
 		if BT.Welcome then
@@ -41,10 +41,10 @@ function S.Build(parent)
 	-- without anyone setting anything; picking a colour of your own moves it
 	-- to Custom, because otherwise the next login would read the class again
 	-- and quietly throw your colour away.
-	local presets = W.Row(look, "Colours", "follow your class, the toolkit's green, or pick your own")
+	local presets = W.Row(look, "Colours", "Your class colour, BeebMod's green, or one you pick")
 	-- one control, three answers: three loose buttons read as three actions
 	local seg = presets:SetControl(W.Segmented(presets, {
-		{ "class", "Class" }, { "house", "Toolkit" }, { "custom", "Custom" },
+		{ "class", "Class" }, { "house", "BeebMod" }, { "custom", "Custom" },
 	}, function(key)
 		BT.Theme.Set("preset", key)
 		S.Refresh()
@@ -81,8 +81,8 @@ function S.Build(parent)
 		S.appearance[which] = r
 		return r
 	end
-	swatchRow("fill", "Background", "the dark under every panel")
-	swatchRow("rim", "Border", "the line around every panel")
+	swatchRow("fill", "Background", "The dark fill behind every panel")
+	swatchRow("rim", "Border", "The line around every panel")
 
 	-- no border width or corner radius here any more: the toolkit has one
 	-- shape (see Core/Theme.lua)

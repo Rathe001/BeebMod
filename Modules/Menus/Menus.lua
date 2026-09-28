@@ -30,7 +30,7 @@ local M = BT.Module({
 	feature = "interface",
 	onPage = "allmenus",
 	title = "Dropdown menus",
-	blurb = "the game's right-click and dropdown menus, flat like the rest",
+	blurb = "Draws the game's dropdown and right-click menus flat",
 	order = 57.5,
 })
 
@@ -218,10 +218,10 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the game's dropdown and right-click menus: every entry does what it did · "
-		.. "the light under the pointer and the ticks stay the game's")
-	page:Note("switched off, the game's own art is back · /bt menusdump writes the next menu you open "
-		.. "into the saved file", true)
+	page:Note("BeebMod redraws the game's dropdown and right-click menus. Every entry does what it did before. "
+		.. "The highlight under the pointer and the ticks are still the game's.")
+	page:Note("Switched off, the menus look like the game's again. Type /bt menusdump to write the next menu "
+		.. "you open into the saved file.", true)
 	page:Layout()
 end
 
@@ -243,13 +243,13 @@ function M.Dump(menu)
 	table.insert(lines, 1, "hooked: " .. table.concat(M.found or {}, ", "))
 	BT.EnsureBound()
 	BeebModDB.menusDump = { at = U.Now(), lines = lines }
-	U.Print(("menus: %d lines written down · /reload to save them"):format(#lines))
+	U.Print(("Menus: wrote down %d lines. Type /reload to save them."):format(#lines))
 	return #lines
 end
 
 -- /bt menusdump: the next menu opened, written down
 BT.Command("menusdump", function()
 	M.dumpNext = true
-	U.Print("menus: open any menu and it will be written down"
-		.. ((M.found and #M.found > 0) and "" or " · none of the game's menu hooks were found on this build"))
-end, "menusdump - the next menu you open, into the saved file", "menus")
+	U.Print("Menus: open any menu and BeebMod writes it down."
+		.. ((M.found and #M.found > 0) and "" or " BeebMod found none of the game's menu hooks on this build."))
+end, "menusdump - write the next menu you open into the saved file", "menus")

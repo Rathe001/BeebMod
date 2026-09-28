@@ -29,7 +29,7 @@ local M = BT.Module({
 	key = "bars",
 	feature = "interface",
 	title = "Action bars",
-	blurb = "flat, like the rest",
+	blurb = "Draws the action bar buttons flat",
 	order = 50,
 })
 
@@ -442,7 +442,7 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the client's art off, the toolkit's surface on · nothing is moved or resized")
+	page:Note("BeebMod swaps the game's button art for its own flat look. Nothing moves or changes size.")
 
 	self.rows = {}
 	local each = page:Section("On each button")
@@ -453,8 +453,8 @@ function M:BuildTab(panel)
 		r.optName, r.default = name, default
 		self.rows[#self.rows + 1] = r
 	end
-	row("Hotkeys", "the binding in the corner", "hotkeys", true)
-	row("Macro names", "the label across the bottom", "macroNames", false)
+	row("Hotkeys", "Shows the key binding in the corner", "hotkeys", true)
+	row("Macro names", "Shows the macro's name across the bottom", "macroNames", false)
 	page:Layout()
 
 	self.found = BT.Widgets.Label(panel, "", "small", 0.45, 0.50, 0.48)
@@ -466,7 +466,7 @@ function M:RefreshTab()
 		r.switch:SetOn(opt(r.optName, r.default) and true or false)
 	end
 	if self.found then
-		self.found:SetText(("%d buttons dressed"):format(M.lastCount or 0))
+		self.found:SetText(("%d buttons redrawn"):format(M.lastCount or 0))
 	end
 end
 
@@ -481,7 +481,7 @@ end
 
 BT.Command("bars", function()
 	local n = M.StyleAll()
-	U.Print(("%d buttons · hotkeys %s · macro names %s"):format(n,
+	U.Print(("Action bars: redrew %d buttons. Hotkeys are %s. Macro names are %s."):format(n,
 		opt("hotkeys", true) and "on" or "off",
 		opt("macroNames", false) and "on" or "off"))
 end, "restyle the action bars now", "bars")

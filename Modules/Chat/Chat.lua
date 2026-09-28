@@ -26,7 +26,7 @@ local M = BT.Module({
 	key = "chat",
 	feature = "interface",
 	title = "Chat",
-	blurb = "flat, and out of the way",
+	blurb = "Draws the chat windows flat",
 	order = 60,
 })
 
@@ -791,17 +791,17 @@ function M.Controls(frame, plain)
 			if frame.ScrollToBottom then
 				frame:ScrollToBottom()
 			end
-		end, "The newest")
+		end, "Newest line")
 		controlButton(holder, 3, BT.Bar.ChevronCoord, false, function()
 			if frame.ScrollDown then
 				frame:ScrollDown()
 			end
-		end, "Down")
+		end, "Scroll down")
 		controlButton(holder, 4, BT.Bar.ChevronCoord, true, function()
 			if frame.ScrollUp then
 				frame:ScrollUp()
 			end
-		end, "Up")
+		end, "Scroll up")
 
 		-- ONLY WHILE YOU ARE POINTING AT IT. Leaving the frame hides them,
 		-- unless you have moved onto the marks themselves.
@@ -1225,7 +1225,7 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the client's chat, in the toolkit's surface · nothing is filtered or rerouted")
+	page:Note("BeebMod redraws the game's chat windows. It doesn't filter lines or move them to another window.")
 
 	self.rows = {}
 	local layout = page:Section("Layout")
@@ -1236,13 +1236,13 @@ function M:BuildTab(panel)
 		r.optName, r.default = name, default
 		self.rows[#self.rows + 1] = r
 	end
-	row("Side buttons on hover", "the scroll and the menu, only while you point at chat",
+	row("Side buttons on hover", "The scroll and menu buttons show only while you point at chat",
 		"buttons", true)
-	row("Edit box on top", "over the tabs, out of the way of the newest line", "editOnTop", true)
-	row("Into the corner", "hard against the bottom-left of the screen", "flush", true)
+	row("Edit box on top", "The box you type in sits above the tabs, clear of the newest line", "editOnTop", true)
+	row("Into the corner", "The main chat window sits in the bottom-left corner of the screen", "flush", true)
 	row("Short channel names", "[1. General - Dun Morogh] becomes [1.Gen]", "shortChannels", true)
-	row("Timestamps", "the time in front of each new line · not when the game's own are on", "timestamps", false)
-	local size = BT.Widgets.Row(page:Section("Text"), "Text size", "every chat window, the game's own setting")
+	row("Timestamps", "Puts the time in front of each new line. Off while the game's own timestamps are on.", "timestamps", false)
+	local size = BT.Widgets.Row(page:Section("Text"), "Text size", "Sets the game's own text size for every chat window")
 	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir)
 		local now = opt("size", 14) + dir
 		now = math.max(10, math.min(20, now))
@@ -1265,7 +1265,7 @@ function M:RefreshTab()
 		r.switch:SetOn(opt(r.optName, r.default) and true or false)
 	end
 	if self.found then
-		self.found:SetText(("%d chat windows dressed"):format(M.lastCount or 0))
+		self.found:SetText(("%d chat windows redrawn"):format(M.lastCount or 0))
 	end
 end
 
@@ -1307,14 +1307,14 @@ BT.Command("chatdump", function()
 		return tostring(f and f.GetHeight and select(2, pcall(f.GetHeight, f)))
 	end
 	-- the strip a window you made sits in, which is centred on its own height
-	U.Print(("dock height %s, strip height %s, our tab height %s"):format(
+	U.Print(("Chat: dock height %s, strip height %s, BeebMod's tab height %s."):format(
 		tall(_G.GeneralDockManager), tall(_G.GeneralDockManagerScrollFrame),
 		tostring(M.tabHeight)))
 end, "say where every chat tab is", "chat")
 
 BT.Command("chat", function()
 	local n = M.StyleAll()
-	U.Print(("%d windows · side buttons %s · edit box %s"):format(n,
+	U.Print(("Chat: %d windows · side buttons %s · edit box %s"):format(n,
 		opt("buttons", true) and "hidden" or "shown",
-		opt("editOnTop", true) and "on top" or "where the client puts it"))
+		opt("editOnTop", true) and "on top" or "where the game puts it"))
 end, "restyle the chat windows now", "chat")

@@ -539,7 +539,7 @@ function P.Arm()
 		P.armed = nil
 		local function go()
 			local n = P.Run("two seconds into a fight")
-			U.Print(("unit probe: %d lines from the fight · /reload after it to save them"):format(n))
+			U.Print(("Unit probe: %d lines from the fight. Type /reload after it to save them."):format(n))
 		end
 		if C_Timer and C_Timer.After then
 			C_Timer.After(2, go)
@@ -553,10 +553,10 @@ BT.Command("unitprobe", function(rest)
 	if (rest or "") == "clear" then
 		BT.EnsureBound()
 		BeebModDB.unitProbe = nil
-		U.Print("unit probe cleared")
+		U.Print("Unit probe: cleared the saved lines.")
 		return
 	end
 	local n = P.Run("asked")
 	P.Arm()
-	U.Print(("unit probe: %d lines written down · target something and start a fight, it runs again two seconds in · /reload after to save both"):format(n))
-end, "unitprobe [clear] - write down what the client tells a unit frame, now and in the next fight")
+	U.Print(("Unit probe: wrote down %d lines. Target something and start a fight. It runs again two seconds in. Type /reload after that to save both."):format(n))
+end, "unitprobe [clear] - write down what the game tells a unit frame, now and in the next fight")

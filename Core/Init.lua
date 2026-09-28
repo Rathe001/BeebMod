@@ -328,18 +328,22 @@ BT.FEATURES = {
 	-- each with its picture (Art/Features, made by scripts/make-feature-art.ps1
 	-- from screenshots taken with /bt demo on, Josh 2026-09-27)
 	{ key = "dock", title = "Dock", color = { 0.45, 0.75, 0.99 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock",
-		line = "A panel at the side of the screen: minimap, clock, experience and reputation, gold, bags, durability, the quest tracker." },
+		line = "A panel at the side of the screen. It holds the minimap, clock, XP, reputation, gold, bags, durability and quest tracker." },
 	{ key = "frames", title = "Unit frames", color = { 0.49, 0.77, 0.48 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\frames",
-		line = "Your frame, your party and raid, target and focus, buffs, and your heals and damage over time as bars." },
+		line = "Frames for you, your party, raid, target and focus, with buffs. Your heals and damage over time show as bars." },
 	{ key = "interface", title = "Interface", color = { 0.88, 0.64, 0.29 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface",
-		line = "The game's own windows in BeebMod's look: action bars, bags, chat, the character sheet, tooltips and menus." },
+		line = "The game's action bars, bags, chat, character sheet, tooltips and menus, drawn in BeebMod's style." },
 	{ key = "census", title = "Census", color = { 0.69, 0.56, 0.88 }, single = "census", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\census",
-		line = "Every character you see, written down: who is on your realm, by class, race, level, guild and zone." },
+		line = "Writes down every character you see. It shows who is on your realm by class, race, level, guild and zone." },
 	{ key = "ledger", title = "Ledger", color = { 0.90, 0.81, 0.42 }, single = "ledger", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger",
-		line = "Notes, tags and a rating on the people you meet, shown on their tooltip and in the dock when you target them." },
-	{ key = "menagerie", title = "Menagerie", color = { 0.44, 0.64, 0.80 }, single = "menagerie",
-		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\menagerie",
-		line = "A journal of every kind of mob you kill: a card for each, its lore, masteries, ranks and achievements." },
+		line = "Notes, tags and a rating for people you meet. They show on their tooltip, and in the dock when you target them." },
+	-- NESINGWARY'S EXPEDITION (Josh 2026-09-27: "Menagerie ... kind of feels
+	-- like it implies pets", and "make the player feel like they are part of
+	-- the nesingwary expidition"). The name players see; its key, its module
+	-- and its saved journal are still "menagerie". `short` where there is no room.
+	{ key = "menagerie", title = "Nesingwary's Expedition", short = "Expedition", color = { 0.44, 0.64, 0.80 },
+		single = "menagerie", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\menagerie",
+		line = "A journal of every kind of mob you kill, with its lore and masteries. Each kind is worth points. Your points set your rank." },
 }
 local featureByKey = {}
 for _, f in ipairs(BT.FEATURES) do
@@ -580,7 +584,7 @@ function BT.RunCommand(name, rest)
 		return false
 	end
 	if c.module and not BT.Enabled(c.module) then
-		BT.Util.Print(("%s is switched off · /bt to turn it back on"):format(
+		BT.Util.Print(("%s is switched off. Type /bt to switch it back on."):format(
 			(BT.GetModule(c.module) or {}).title or c.module))
 		return true
 	end

@@ -135,7 +135,7 @@ function V.Build()
 
 	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
 	frame.title:SetPoint("TOPLEFT", PAD + 4, -PAD)
-	frame.title:SetText("Menagerie")
+	frame.title:SetText("Nesingwary's Expedition")
 	frame.subtitle = frame:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
 	frame.subtitle:SetPoint("LEFT", frame.title, "RIGHT", 8, -1)
 
@@ -144,7 +144,7 @@ function V.Build()
 	frame.close:SetScript("OnClick", function() V.Hide() end)
 	W.Divider(frame, PAD, -TITLE_H)
 
-	frame.views = W.Segmented(frame, { { "bestiary", "Compendium" }, { "achievements", "Achievements" } },
+	frame.views = W.Segmented(frame, { { "bestiary", "Field Journal" }, { "achievements", "Commendations" } },
 		function(key)
 			ui().view = key
 			V.Refresh()
@@ -381,7 +381,7 @@ function V.BuildBestiary()
 		self:Glide(self:RowOffset(0))
 	end
 	b.cards = {}
-	b.empty = W.Label(box, "Nothing in the Menagerie yet.\nEvery kind of mob you kill is written in here.",
+	b.empty = W.Label(box, "No kills yet.\nEach new kind of mob you kill gets a card here.",
 		"small", DIM[1], DIM[2], DIM[3])
 	b.empty:SetPoint("CENTER", b.grid, "CENTER")
 	-- a search that finds nothing says so, where the cards would be
@@ -419,7 +419,7 @@ local function tile(parent, word)
 	local W = BT.Widgets
 	local t = CreateFrame("Frame", nil, parent)
 	W.Panel(t, W.FILL, W.HAIR)
-	t.label = W.Label(t, word, "small", DIM[1], DIM[2], DIM[3])
+	t.label = W.Label(t, string.upper(word), "small", DIM[1], DIM[2], DIM[3])
 	-- the word and its number, the pair in the middle of the tile
 	t.label:SetPoint("TOP", 0, -math.max(8, math.floor((TILE_H - 34) / 2)))
 	t.value = t:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
@@ -628,7 +628,7 @@ function V.BuildPage(b)
 	end)
 	page.model = model
 
-	page.hint = W.Label(page, WORDS:format("drag to turn · right-drag to move · wheel to zoom"), "small")
+	page.hint = W.Label(page, WORDS:format("Drag: turn · Right-drag: move · Wheel: zoom"), "small")
 	page.hint:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
 	-- at the popup's right edge, under the numbers: the narrower stage has no
 	-- room for the hint and the button side by side
@@ -641,7 +641,7 @@ function V.BuildPage(b)
 	-- three numbers down the stage's right: its kills, what it is worth, the
 	-- metal it has reached
 	page.tiles = {}
-	for i, word in ipairs({ "KILLS", "POINTS", "MASTERY" }) do
+	for i, word in ipairs({ "Kills", "Points", "Mastery" }) do
 		local t = tile(page, word)
 		t:SetSize(STATS_W, TILE_H)
 		t:SetPoint("TOPRIGHT", page, "TOPRIGHT", -MODAL_PAD, -(STAGE_Y + (i - 1) * (TILE_H + TILE_GAP)))
@@ -656,7 +656,7 @@ function V.BuildPage(b)
 	ladder:SetPoint("TOPLEFT", MODAL_PAD, -ladderY)
 	W.Panel(ladder, W.FILL, W.HAIR)
 	page.ladder = ladder
-	ladder.head = W.Label(ladder, "MASTERY", "small", DIM[1], DIM[2], DIM[3])
+	ladder.head = W.Label(ladder, string.upper("Mastery"), "small", DIM[1], DIM[2], DIM[3])
 	ladder.head:SetPoint("TOPLEFT", 12, -9)
 	-- NO "TO GO" (Josh 2026-09-27: "Remove this"): the ticks and the names
 	-- under them say where the next metal is
@@ -1344,7 +1344,7 @@ local function listRow(i)
 	r.points = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
 	pcall(r.points.SetFont, r.points, Card.FONT_NAME, 13, "")
 	r.points:SetPoint("TOPRIGHT", -10, -7)
-	r.pointsLabel = W.Label(r, "PTS", "small", DIM[1], DIM[2], DIM[3])
+	r.pointsLabel = W.Label(r, string.upper("Pts"), "small", DIM[1], DIM[2], DIM[3])
 	r.pointsLabel:SetPoint("TOP", r.points, "BOTTOM", 0, -3)
 	r.kills = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
 	pcall(r.kills.SetFont, r.kills, Card.FONT_NAME, 13, "")
@@ -1400,7 +1400,7 @@ local function bindRow(r, e, w)
 	local tier = J.Mastery(e.n, e.m)
 	local metal = Card.TIERS[tier]
 	local mc = metal.color
-	r.tier:SetText(tier == 0 and "KILLS" or metal.name:upper())
+	r.tier:SetText(string.upper(tier == 0 and "Kills" or metal.name))
 	if tier == 0 then
 		r.tier:SetTextColor(DIM[1], DIM[2], DIM[3])
 	else
@@ -1589,7 +1589,7 @@ function V.DrawBestiary(kills, all)
 	if query then
 		mobs = J.Search(mobs, query)
 	end
-	b.noMatch:SetText(query and ("Nothing in the Menagerie matches \"%s\""):format(query) or "")
+	b.noMatch:SetText(query and ("No mob matches \"%s\"."):format(query) or "")
 	b.noMatch:SetShown(query ~= nil and #mobs == 0 and #pages > 0)
 	-- the popup steps through these
 	V.mobs, V.picked = mobs, picked
@@ -1627,7 +1627,7 @@ function V.DrawPage(npc, kills, all)
 	page.meta:SetText(f.meta)
 
 	page.kills.value:SetText(big(f.n))
-	page.kills.label:SetText(f.allN > f.n and ("KILLS · %s IN ALL"):format(big(f.allN)) or "KILLS")
+	page.kills.label:SetText(string.upper(f.allN > f.n and ("Kills · %s in all"):format(big(f.allN)) or "Kills"))
 	page.points.value:SetText(big(f.points))
 	local here = f.here
 	page.mastery.value:SetText(here and here.name or "None")
@@ -1945,7 +1945,7 @@ function V.MasteryRows(kills)
 		rows[#rows + 1] = {
 			id = "mastery:" .. m.name, title = m.name, color = m.color, points = t.points,
 			need = 1, have = t.mobs > 0 and 1 or 0,
-			text = ("%s kills of one mob, %s of an elite, %s of a rare, %s of a world boss · %d points each")
+			text = ("%s kills of one normal mob, %s of an elite, %s of a rare or %s of a world boss, worth %d points each")
 				:format(big(m.n), big(J.MASTERY_AT.elite[i]), big(J.MASTERY_AT.rare[i]),
 					big(J.MASTERY_AT.worldboss[i]), m.points),
 			right = ("%s %s"):format(big(t.mobs), t.mobs == 1 and "mob" or "mobs"),
@@ -1958,7 +1958,7 @@ function V.MasteryRows(kills)
 		rows[#rows + 1] = {
 			id = ("next:%d"):format(nx.npc), title = ("%s %s"):format(name, WORDS:format("· " .. m.name)),
 			points = m.points, need = nx.need, have = nx.have,
-			text = ("kill it %s times"):format(big(nx.need)),
+			text = ("Kill it %s times"):format(big(nx.need)),
 		}
 	end
 	return rows, total
@@ -2031,7 +2031,7 @@ function V.DrawAchievements(kills, feats)
 			earned, all = earned + g.done, all + #g.list
 		end
 	end
-	a.tally:SetText(("%d of %d achievements earned"):format(earned, all))
+	a.tally:SetText(("%d of %d commendations earned"):format(earned, all))
 	local y, ri, hi = 0, 0, 0
 	for _, g in ipairs(groups) do
 		-- what this view keeps of the group; a group left empty is not headed
@@ -2082,7 +2082,7 @@ function V.DrawAchievements(kills, feats)
 					else
 						r.title:SetTextColor(1, 1, 1)
 					end
-					r.right:SetText(it.right or (it.at and U.ShortDate(it.at)) or "earned")
+					r.right:SetText(it.right or (it.at and U.ShortDate(it.at)) or "Earned")
 					r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
 					r.track:Hide()
 					r.fill:Hide()
@@ -2140,9 +2140,10 @@ function V.Refresh()
 	local all = u.scope == "account" and kills or J.Counts("account")
 	local points, _, st = J.Points(kills, feats)
 	local _, title = J.Rank(points)
-	frame.subtitle:SetText(("%s · %s · %s kinds · %s kills · %s points"):format(
-		u.scope == "account" and "all characters" or ((U.Me and U.Me()) or "this character"),
-		title, big(st.kinds), big(st.total), big(points)))
+	frame.subtitle:SetText(("%s · %s · %s %s · %s %s · %s %s"):format(
+		u.scope == "account" and "All characters" or ((U.Me and U.Me()) or "This character"),
+		title, big(st.kinds), st.kinds == 1 and "kind" or "kinds", big(st.total), st.total == 1 and "kill" or "kills",
+		big(points), points == 1 and "point" or "points"))
 	local bestiary = u.view ~= "achievements"
 	frame.bestiary:SetShown(bestiary)
 	frame.achievements:SetShown(not bestiary)

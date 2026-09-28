@@ -729,9 +729,9 @@ function Card.Dress(c, d)
 	c.fan:SetShown(t >= 3)
 	tint(c.fan, mc)
 	c.kills:SetText(d.kills or "")
-	c.killsLabel:SetText("KILLS")
+	c.killsLabel:SetText(string.upper("Kills"))
 	c.points:SetText(d.points or "")
-	c.pointsLabel:SetText("PTS")
+	c.pointsLabel:SetText(string.upper("Pts"))
 	for _, fs in ipairs({ c.kills, c.points }) do
 		fs:SetTextColor(0.95, 0.90, 0.80)
 	end

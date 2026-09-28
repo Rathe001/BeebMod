@@ -22,7 +22,7 @@ local M = BT.Module({
 	feature = "dock",
 	onPage = "map",
 	title = "Addon buttons",
-	blurb = "other addons' minimap buttons, in a line",
+	blurb = "Other addons' minimap buttons, in a line",
 	order = 6,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -375,8 +375,8 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the buttons other addons put on the minimap, in a line of the panel, at the toolkit's icon size")
-	page:Note("each still does what its addon made it do · with no addon buttons there is no line", true)
+	page:Note("The buttons other addons put on the minimap, set in a line in the dock at BeebMod's icon size.")
+	page:Note("Each button still does what its addon made it do. With no addon buttons there is no line.", true)
 	self.found = page:Note("", true).text
 	page:Layout()
 end
@@ -387,8 +387,8 @@ function M:RefreshTab()
 		for _, b in ipairs(M.list or {}) do
 			names[#names + 1] = ((nameOf(b) or "?"):gsub("^LibDBIcon10_", ""))
 		end
-		self.found:SetText(#names > 0 and ("in the line: " .. table.concat(names, ", "))
-			or "no addon has a minimap button right now")
+		self.found:SetText(#names > 0 and ("In the line: " .. table.concat(names, ", ") .. ".")
+			or "No addon has a minimap button right now.")
 	end
 end
 
@@ -403,5 +403,5 @@ end
 
 BT.Command("buttons", function()
 	local n = M.Layout()
-	U.Print(("%d addon button%s in the line"):format(n, n == 1 and "" or "s"))
+	U.Print(("Addon buttons: %d button%s in the line."):format(n, n == 1 and "" or "s"))
 end, "gather other addons' minimap buttons into their line now", "buttons")

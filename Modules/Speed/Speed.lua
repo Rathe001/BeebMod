@@ -24,7 +24,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "speed",
 	title = "Movement speed",
-	blurb = "how fast you are, as a percentage",
+	blurb = "How fast you are, as a percentage",
 	order = 39.75,
 	dock = true,
 	-- one of the Metrics, switched from its tab (Josh 2026-09-22)
@@ -165,33 +165,42 @@ function M.Update()
 	end
 end
 
+-- (Josh 2026-09-27, the dock's tooltips redrawn) the figure, and where it
+-- came from when the game will not give it
 function M.Tip()
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not BT.Tip then
 		return
 	end
 	local current, run, flight, swim
 	if not M.secret then
 		current, run, flight, swim = M.Read()
 	end
-	BT.Bar.Tip(M.chip, function()
+	BT.Tip.Show(M.chip, { build = function(t)
 		local pct = M.Percent()
-		GameTooltip:AddDoubleLine("Movement speed", pct and (pct .. "%") or "-", 1, 1, 1, 1, 1, 1)
+		t:Header({ name = "Movement speed" })
+		t:Headline(pct and (pct .. "%") or "-", "of walking speed")
+		if M.secret then
+			t:Note("From your character sheet. The game doesn't give addons your live speed.")
+			return
+		end
+		local rows = {}
 		local function line(label, yards)
 			local n = M.Percentage(yards)
 			if n and n > 0 then
-				GameTooltip:AddDoubleLine(label, ("%d%%"):format(n), 0.7, 0.75, 0.73, 1, 1, 1)
+				rows[#rows + 1] = { label, n .. "%" }
 			end
 		end
-		if M.secret then
-			GameTooltip:AddLine("as the character sheet last showed it · the client keeps the live figure to itself",
-				0.55, 0.60, 0.58, true)
-		else
-			line("running", run)
-			line("moving now", current)
-			line("swimming", swim)
-			line("flying", flight)
+		line("Running", run)
+		line("Moving now", current)
+		line("Swimming", swim)
+		line("Flying", flight)
+		if #rows > 0 then
+			t:Section()
+			for _, r in ipairs(rows) do
+				t:Row(r[1], r[2])
+			end
 		end
-	end)
+	end })
 end
 
 function M.Build()
@@ -240,15 +249,14 @@ end
 BT.Command("speed", function()
 	local pct = M.Percent()
 	if not pct then
-		U.Print("the client will not say how fast you are")
+		U.Print("Speed: the game doesn't give addons your speed.")
 		return
 	end
 	if M.secret then
-		U.Print(("movement speed %d%% · read from the character sheet: this client will not let an addon"
-			.. " do arithmetic on your speed"):format(pct))
+		U.Print(("Speed: %d%%, from your character sheet. The game doesn't give addons your live speed."):format(pct))
 		return
 	end
 	local current, run = M.Read()
-	U.Print(("movement speed %d%% · running %s, now %s")
+	U.Print(("Speed: %d%% · running %s · moving now %s")
 		:format(pct, tostring(M.Percentage(run) or "?"), tostring(M.Percentage(current) or "?")))
-end, "how fast you are, as a percentage", "speed")
+end, "print how fast you are, as a percentage", "speed")

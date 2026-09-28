@@ -16,7 +16,7 @@ local M = BT.Module({
 	key = "metrics",
 	feature = "dock",
 	title = "Metrics",
-	blurb = "money, bags, durability, item level, pockets, speed and performance, in one grid",
+	blurb = "Money, bags, durability, item level, pockets, speed and performance in one grid",
 	order = 38,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -62,7 +62,7 @@ function M:BuildTab(panel)
 		self.rows[#self.rows + 1] = row(cells, part)
 	end
 	local layout = self.page:Section("Layout")
-	local cols = BT.Widgets.Row(layout, "Columns", "how many readouts to a line")
+	local cols = BT.Widgets.Row(layout, "Columns", "How many cells to a line")
 	self.colsSeg = cols:SetControl(BT.Widgets.Segmented(cols, { { 3, "Three" }, { 2, "Two" } }, function(n)
 		BT.EnsureBound()
 		BT.settings.metricsCols = (n == 2) and 2 or nil

@@ -402,12 +402,12 @@ BT.Command("pixels", function(arg)
 		P.snapping = want == "on"
 		P.RepaintAll()
 		W.Hairlines()
-		BT.Util.Print("borders snapped to the pixel grid: " .. want .. " (until /reload)")
+		BT.Util.Print(("Pixels: snapping borders to the pixel grid is %s until you reload."):format(want))
 		return
 	end
 	local ok, w, h = pcall(GetPhysicalScreenSize or error)
 	local ui = P.Number(UIParent:GetEffectiveScale(), 0)
-	BT.Util.Print(("screen %s x %s · interface scale %.4f · PixelUtil %s"):format(tostring(ok and w), tostring(ok and h),
+	BT.Util.Print(("Pixels: screen %s x %s · interface scale %.4f · PixelUtil %s"):format(tostring(ok and w), tostring(ok and h),
 		ui, (PixelUtil and PixelUtil.GetNearestPixelSize) and "yes" or "no"))
 	local px = P.PixelOf(UIParent)
 	local pu = "none"
@@ -415,9 +415,9 @@ BT.Command("pixels", function(arg)
 		local okP, v = pcall(PixelUtil.GetNearestPixelSize, 1, ui, 1)
 		pu = okP and tostring(v) or "error"
 	end
-	BT.Util.Print(("one screen pixel is %s units by the screen's height, %s by PixelUtil · a border of 1 is %s"):format(
+	BT.Util.Print(("Pixels: 1 screen pixel is %s units by the screen's height and %s by PixelUtil. A border of 1 is %s."):format(
 		px and ("%.4f"):format(px) or "unknown", pu, tostring(P.Px(UIParent, 1))))
-	BT.Util.Print("snapped to the grid: " .. (P.snapping and "on" or "off"))
+	BT.Util.Print("Pixels: snapping to the grid is " .. (P.snapping and "on" or "off") .. ".")
 	for _, name in ipairs({ "BeebModWindow", "BeebModCensus", "GameTooltip" }) do
 		local f = _G[name]
 		if f and f.IsShown and f:IsShown() then
@@ -431,9 +431,9 @@ BT.Command("pixels", function(arg)
 	end
 	local okC, cx, cy = pcall(GetCursorPosition)
 	if okC then
-		BT.Util.Print(("cursor at %s, %s"):format(tostring(cx), tostring(cy)))
+		BT.Util.Print(("Pixels: cursor at %s, %s"):format(tostring(cx), tostring(cy)))
 	end
-end, "pixels - how the borders are measured on this screen")
+end, "pixels - show how borders are measured on this screen")
 
 function W.Hairlines()
 	for tex in pairs(tinted) do

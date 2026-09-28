@@ -137,8 +137,12 @@ function B.WayIn(key, coord, view, tip)
 		-- next theme change would repaint it lit while nobody was pointing at it
 		local a = BT.Widgets.ACCENT
 		c.icon:SetVertexColor(a[1], a[2], a[3], 1)
-		if tip then
-			B.Tip(c, function() GameTooltip:AddLine(tip, 1, 1, 1) end)
+		-- the dock's own tooltip (Josh 2026-09-27): its name, and its click
+		if tip and BT.Tip then
+			BT.Tip.Show(c, { build = function(t)
+				t:Header({ icon = false, name = tip })
+				t:Foot({ { "Click", ("open the %s"):format(tip:lower()) } })
+			end })
 		end
 	end)
 	c.button:SetScript("OnLeave", function()
@@ -1239,7 +1243,13 @@ function B.Create()
 	bar.census:SetScript("OnEnter", function(self)
 		local a = BT.Widgets.ACCENT
 		self.icon:SetVertexColor(a[1], a[2], a[3], 1)
-		B.Tip(self, function() GameTooltip:AddLine("Census", 1, 1, 1) end)
+		if BT.Tip then
+			local census = BT.Feature and BT.Feature("census")
+			BT.Tip.Show(self, { edge = census and census.color, build = function(t)
+				t:Header({ icon = false, name = "Census", sub = "Everyone you have seen on this realm" })
+				t:Foot({ { "Click", "open the census" } })
+			end })
+		end
 	end)
 	bar.census:SetScript("OnLeave", function(self)
 		self.icon:SetVertexColor(0.55, 0.63, 0.59, 1)

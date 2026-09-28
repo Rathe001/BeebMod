@@ -39,7 +39,7 @@ local M = BT.Module({
 	key = "damagemeter",
 	feature = "frames",
 	title = "Damage meter",
-	blurb = "the client's own meter, flat like the rest",
+	blurb = "Draws the game's own damage meter flat",
 	order = 58,
 })
 
@@ -615,14 +615,14 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the client's own damage meter · every button and every row still does what it did")
-	page:Note("switched off, the meter is back in the client's own art · /bt meterdump writes its frames into the saved file", true)
+	page:Note("This is the game's own damage meter. Every button and every row still does what it did before.")
+	page:Note("Switched off, the meter looks like the game's again. Type /bt meterdump to write its frames into the saved file.", true)
 	-- (Josh 2026-09-24) the two things this adds to the client's meter
-	local more = page:Section("Adds")
-	BT.Widgets.SwitchRow(more, "A second", "each row's amount a second after its total: 8,421 (93.5)",
+	local more = page:Section("Extras")
+	BT.Widgets.SwitchRow(more, "Per second", "Each row's amount per second after its total, as in 8,421 (93.5)",
 		function() return opt("perSecond", true) and true or false end,
 		function(on) setOpt("perSecond", on) end)
-	BT.Widgets.SwitchRow(more, "Fight length", "how long the fight has run, in the header, where there is room",
+	BT.Widgets.SwitchRow(more, "Fight length", "How long the fight has run, in the header when there's room",
 		function() return opt("clock", true) and true or false end,
 		function(on) setOpt("clock", on) end)
 	page:Layout()
@@ -633,9 +633,9 @@ end
 function M:RefreshTab()
 	if self.found then
 		if #roots == 0 then
-			self.found:SetText("no meter window found yet - open it, then /bt meter")
+			self.found:SetText("No meter window found yet. Open it, then type /bt meter.")
 		else
-			self.found:SetText(("%d window%s · %d pieces dressed"):format(
+			self.found:SetText(("%d window%s · %d pieces redrawn"):format(
 				#roots, #roots == 1 and "" or "s", M.lastCount or 0))
 		end
 	end
@@ -661,9 +661,9 @@ BT.Command("meter", function()
 	M.Roots(true)
 	local n = M.StyleAll()
 	if #roots == 0 then
-		U.Print("no damage meter window found · is it open? · /bt meterdump writes what it can find to the saved file")
+		U.Print("Damage meter: no window found. Open it and try again. Type /bt meterdump to write what BeebMod can find into the saved file.")
 	else
-		U.Print(("%d meter window%s · %d pieces dressed"):format(#roots, #roots == 1 and "" or "s", n))
+		U.Print(("Damage meter: %d window%s · %d pieces redrawn"):format(#roots, #roots == 1 and "" or "s", n))
 	end
 end, "restyle the damage meter now", "damagemeter")
 
@@ -727,9 +727,9 @@ BT.Command("meterdump", function(rest)
 	if (rest or "") == "clear" then
 		BT.EnsureBound()
 		BeebModDB.meterDump = nil
-		U.Print("meter dump cleared")
+		U.Print("Damage meter: cleared the dump.")
 		return
 	end
 	local n = M.Dump()
-	U.Print(("damage meter: %d lines written down · /reload to save them"):format(n))
+	U.Print(("Damage meter: wrote down %d lines. Type /reload to save them."):format(n))
 end, "meterdump [clear] - write the damage meter's frames into the saved file", "damagemeter")

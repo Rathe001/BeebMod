@@ -33,7 +33,7 @@ local M = BT.Module({
 	key = "bagwindow",
 	feature = "interface",
 	title = "Bag window",
-	blurb = "your bags, flat like the rest",
+	blurb = "Draws your bag windows flat",
 	order = 57,
 })
 
@@ -661,15 +661,15 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("the client's own bags · every slot still uses, drags and opens as it did · "
-		.. "an item's quality is a ring in its colour")
-	page:Note("drag a bag window by its title and it stays there · /bt bags reset puts them all back")
-	page:Note("switched off, the bags are back in the client's own art · /bt bagdump writes the window "
-		.. "into the saved file", true)
+	page:Note("These are the game's own bags. Every slot works as it did. "
+		.. "An item's quality shows as a ring in its colour.")
+	page:Note("Drag a bag window by its title and it stays there. Type /bt bags reset to put them all back.")
+	page:Note("Switched off, the bags look like the game's again. Type /bt bagdump to write the window "
+		.. "into the saved file.", true)
 	-- the game's bag bar, from Metrics (Josh 2026-09-24): the bag window's page
 	-- is where you look for anything to do with your bags
 	local look = page:Section("Slots")
-	BT.Widgets.SwitchRow(look, "Quality rings", "a crisp ring in an item's colour · off, the game's own glow",
+	BT.Widgets.SwitchRow(look, "Quality rings", "A ring in the item's quality colour. Off, the game's own glow.",
 		function() return M.Rings() end,
 		function(on)
 			BT.EnsureBound()
@@ -688,7 +688,7 @@ function M:BuildTab(panel)
 	local bar = page:Section("The game's own")
 	local space = BT.GetModule("bagspace")
 	self.hideBags = BT.Widgets.SwitchRow(bar, "Hide the bag bar",
-		"the backpack and bag slots by the action bars · your bag keys still open them",
+		"The backpack and bag slots by the action bars. Your bag keys still open your bags.",
 		function() return space and space.HideClient() and true or false end,
 		function(on)
 			if space then
@@ -718,11 +718,11 @@ end
 BT.Command("bags", function(rest)
 	if (rest or ""):lower() == "reset" then
 		M.ResetPosition()
-		U.Print("bags: back where the game puts them")
+		U.Print("Bags: every bag window is back where the game puts it.")
 	else
-		U.Print("/bt bags reset · every bag window back where the game puts it")
+		U.Print("Bags: type /bt bags reset to put every bag window back where the game puts it.")
 	end
-end, "bags reset - every bag window back where the game puts it", "bagwindow")
+end, "bags reset - put every bag window back where the game puts it", "bagwindow")
 
 -- /bt bagdump: the windows as the client built them, into the saved file
 BT.Command("bagdump", function()
@@ -733,5 +733,5 @@ BT.Command("bagdump", function()
 		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
 		lines = lines,
 	}
-	U.Print(("bag window: %d lines written down · /reload to save them"):format(#lines))
-end, "bagdump - the bag windows' frames, into the saved file", "bagwindow")
+	U.Print(("Bag window: wrote down %d lines. Type /reload to save them."):format(#lines))
+end, "bagdump - write the bag windows' frames into the saved file", "bagwindow")

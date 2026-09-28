@@ -12,7 +12,7 @@ local M = BT.Module({
 	feature = "census",
 	onPage = "censusset",
 	title = "Census",
-	blurb = "who is on the realm",
+	blurb = "Who is on the realm",
 	order = 20,
 	-- its own window, opened from the panel header: no tab on the rail
 	standalone = true,
@@ -40,11 +40,12 @@ end
 
 BT.Command("census", function()
 	BT.CensusWindow.Toggle()
-end, "the charts, in their own window", "census")
+end, "open the charts in their own window", "census")
 
 BT.Command("age", function()
-	BT.Util.Print(BT.Stats.AgeLine(BT.Stats.Census(BT.db)))
-end, "how old this book is", "census")
+	local line = BT.Stats.AgeLine(BT.Stats.Census(BT.db))
+	BT.Util.Print("Census: " .. line:sub(1, 1):lower() .. line:sub(2))
+end, "print how old this book is", "census")
 
 -- WAS IN A GUILD (moved from the Ledger's tooltip, Josh 2026-09-26): a guild
 -- change is the census's to know, so it says so itself, for anyone in the

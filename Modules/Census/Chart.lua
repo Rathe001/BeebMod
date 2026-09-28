@@ -83,7 +83,7 @@ function C.Build(parent)
 	view.bands = {}
 	view.bandButtons = {}
 	local bx = 0
-	local bandLabel = label(view, "LEVELS", "small", 0.42, 0.47, 0.45)
+	local bandLabel = label(view, string.upper("Levels"), "small", 0.42, 0.47, 0.45)
 	bandLabel:SetPoint("TOPLEFT", 0, -3)
 	bx = 52
 	for _, band in ipairs(BT.Stats.BANDS) do
@@ -102,7 +102,7 @@ function C.Build(parent)
 	-- of them is always on, and All is the whole book.
 	view.seen = "all"
 	view.seenButtons = {}
-	local seenLabel = label(view, "SEEN", "small", 0.42, 0.47, 0.45)
+	local seenLabel = label(view, string.upper("Seen"), "small", 0.42, 0.47, 0.45)
 	seenLabel:SetPoint("TOPLEFT", 0, SEEN_Y - 3)
 	local sx = 52
 	for _, s in ipairs(BT.Stats.SEEN) do
@@ -129,7 +129,7 @@ function C.Build(parent)
 	view.clear.label:SetWidth(178)
 	view.clear.label:SetWordWrap(false)
 	view.clear:Hide()
-	view.hint = label(view, "click a bar to count only them", "small", 0.42, 0.47, 0.45)
+	view.hint = label(view, "Click a bar to count only those", "small", 0.42, 0.47, 0.45)
 	view.hint:SetPoint("TOPRIGHT", -6, SEEN_Y - 3)
 	view.hint:SetJustifyH("RIGHT")
 
@@ -284,7 +284,7 @@ function C.Refresh(view, census)
 	end
 	local pick = view.pick
 	if pick then
-		view.clear:SetLabel(("only %s · clear"):format(rowLabel(pick.mode, pick.key)))
+		view.clear:SetLabel(("Only %s · clear"):format(rowLabel(pick.mode, pick.key)))
 		view.clear:Show()
 		view.hint:Hide()
 	else

@@ -149,32 +149,32 @@ end
 
 BT.Command("mem", function()
 	local before, after = P.Memory()
-	U.Print(("memory: %.1f MB before a full collection, %.1f MB alive after it"):format(before, after))
-	U.Print("  run this again later: if the second number climbs, that is a leak")
-end, "how much memory is really in use")
+	U.Print(("Memory · %.1f MB before clearing out garbage · %.1f MB still in use after"):format(before, after))
+	U.Print("  Run this again later. If the second number keeps climbing, that is a leak.")
+end, "show how much memory is in use")
 
 BT.Command("prof", function(rest)
 	rest = (rest or ""):lower()
 	if rest == "start" then
-		U.Print(("profiling %d functions and handlers · /bt prof to see, /bt prof stop to end")
+		U.Print(("Profiling %d functions and handlers. Type /bt prof to see the results, or /bt prof stop to end.")
 			:format(P.Start()))
 		return
 	elseif rest == "stop" then
 		P.Stop()
-		U.Print("profiling stopped, everything unwrapped")
+		U.Print("Profiling stopped. Everything is back as it was.")
 		return
 	end
 	if not P.since then
-		U.Print("/bt prof start first, play for a few minutes, then /bt prof")
+		U.Print("Nothing profiled yet. Type /bt prof start, play for a few minutes, then type /bt prof.")
 		return
 	end
 	local secs = math.max(1, (clock() - P.since) / 1000)
-	U.Print(("over %d seconds · by time (inclusive):"):format(secs))
+	U.Print(("Over %d seconds, by time (each includes the calls it makes):"):format(secs))
 	for _, r in ipairs(P.Top("ms", 10)) do
 		U.Print(("  %7.1f ms  %6d calls  %s"):format(r.ms, r.calls, r.name))
 	end
-	U.Print("by memory made:")
+	U.Print("By memory made:")
 	for _, r in ipairs(P.Top("kb", 10)) do
 		U.Print(("  %7.0f KB  %6d calls  %s"):format(r.kb, r.calls, r.name))
 	end
-end, "prof start|stop - where the time and memory go")
+end, "prof start|stop - measure where the time and memory go")

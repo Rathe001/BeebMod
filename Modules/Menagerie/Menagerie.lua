@@ -20,8 +20,9 @@ local J, K, T = BT.Menagerie, BT.MenagerieKills, BT.MenagerieToast
 local M = BT.Module({
 	key = "menagerie",
 	feature = "menagerie",
-	title = "Menagerie",
-	blurb = "every kind of mob you have killed, and achievements for it",
+	-- (Nesingwary's Expedition to players, Josh 2026-09-27; see BT.FEATURES)
+	title = "Nesingwary's Expedition",
+	blurb = "Every kind of mob you kill, and commendations for it",
 	order = 38,
 	-- A TAB OF ITS OWN (Josh 2026-09-25): on the right panel, so it goes where
 	-- its tab is dragged, and its settings have a page to grow into
@@ -110,7 +111,7 @@ function M.Kill(info, how)
 	if new and on("menagerieDiscover", true) then
 		local _, worth = J.Worth(J.Store().mobs[info.npc])
 		-- minor: it gives way in a full queue (T.Push)
-		T.Push({ head = "New to the Menagerie", text = name, points = worth, icon = icon,
+		T.Push({ head = "New in the Field Journal", text = name, points = worth, icon = icon,
 			onClick = openOn(info.npc), minor = true })
 	end
 	for _, a in ipairs(news or {}) do
@@ -121,7 +122,7 @@ function M.Kill(info, how)
 			})
 		else
 			T.Push({
-				head = "Menagerie achievement", text = a.title, points = a.points,
+				head = "Expedition commendation", text = a.title, points = a.points,
 				icon = a.kind and T.Icon(a.kind) or icon,
 				onClick = function() BT.MenagerieWindow.Show(nil, "achievements") end,
 			})
@@ -131,7 +132,7 @@ function M.Kill(info, how)
 	local rank, title = J.Rank((J.Score("char")))
 	if rank > rankBefore then
 		T.Push({
-			head = "Menagerie rank", text = ("%s %s"):format(title, WORDS:format(("· rank %d of %d")
+			head = "Expedition rank", text = ("%s %s"):format(title, WORDS:format(("· rank %d of %d")
 				:format(rank, #J.RANKS))),
 			icon = T.RANK_ICON, onClick = function() BT.MenagerieWindow.Show(nil, "achievements") end,
 		})
@@ -152,7 +153,7 @@ K.onKill = M.Kill
 -- has an idea how far up it is)
 function M.Lines(points, st)
 	local rank, title = J.Rank(points)
-	local left = ("Menagerie %s"):format(WORDS:format(("· %s (%d/%d)"):format(title, rank, #J.RANKS)))
+	local left = ("Expedition %s"):format(WORDS:format(("· %s (%d/%d)"):format(title, rank, #J.RANKS)))
 	local right
 	if M.Shows() == "kills" then
 		right = ("%s %s"):format(big(st.total), WORDS:format("kills"))
@@ -190,40 +191,59 @@ function M.Update()
 	M.fill:SetWidth(math.max(1, w * math.min(1, share)))
 end
 
+-- (Josh 2026-09-27, the dock's tooltips redrawn, and "Much better" of the
+-- plainer words) your rank and how far to the next, the masteries you are
+-- closest to, and this session's hunting; a new character is told how to
+-- start instead of shown rows of zeros
 function M.Tip()
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip and J.Store()) then
+	if not (BT.Tip and J.Store()) then
 		return
 	end
-	local points, count, st, kindPoints, masteryPoints = J.Score("char")
-	local allPoints, _, all = J.Score("account")
+	local points, _, st = J.Score("char")
 	local s = M.session
-	BT.Bar.Tip(M.frame, function()
-		local grey = { 0.7, 0.75, 0.73 }
-		local function pair(l, r)
-			GameTooltip:AddDoubleLine(l, r, grey[1], grey[2], grey[3], 1, 1, 1)
+	local feature = BT.Feature and BT.Feature("menagerie")
+	BT.Tip.Show(M.frame, { edge = feature and feature.color, build = function(t)
+		local rank, title, at, nextAt, nextTitle = J.Rank(points)
+		local me = UnitName and UnitName("player") or nil
+		t:Header({ name = "Nesingwary's Expedition", sub = me and ("%s's journal"):format(me) or nil,
+			pill = ("Rank %d / %d"):format(rank, #J.RANKS) })
+		t:Title(title, (st.kinds or 0) > 0 and ("%s points"):format(big(points)) or nil)
+		if (st.kinds or 0) == 0 then
+			t:Note("No kills yet. Each new kind of mob you kill is worth 1 point.")
+			if nextAt then
+				t:Section()
+				t:Row("Next rank", ("%s at %s"):format(nextTitle, big(nextAt)))
+			end
+			t:Foot({ { "Click", "open the journal" } })
+			return
 		end
-		local rank, title, _, nextAt, nextTitle = J.Rank(points)
-		GameTooltip:AddDoubleLine("Menagerie", ("%s · rank %d of %d"):format(title, rank, #J.RANKS),
-			1, 1, 1, 1, 1, 1)
 		if nextAt then
-			pair("next rank", ("%s at %s · %s to go"):format(nextTitle, big(nextAt), big(nextAt - points)))
+			local span = math.max(1, nextAt - at)
+			t:Bar((points - at) / span, feature and feature.color)
+			t:Scale(("%s to %s"):format(big(nextAt - points), nextTitle), big(nextAt))
 		end
-		pair("points", big(points))
-		kindPoints, masteryPoints = kindPoints or 0, masteryPoints or 0
-		pair("    from every kind", big(kindPoints))
-		pair("    from masteries", big(masteryPoints))
-		pair("    from achievements", ("%s · %d earned"):format(big(points - kindPoints - masteryPoints), count))
-		pair("kinds of mob", big(st.kinds))
-		pair("kills", big(st.total))
+		local near = J.NextMasteries(J.Mine() and J.Mine().kills or {}, 3)
+		if #near > 0 then
+			t:Section("Closest masteries")
+			local mobs = J.Store().mobs
+			for _, nx in ipairs(near) do
+				local mob = mobs[nx.npc]
+				local metal = J.Ladder(mob)[nx.tier]
+				t:Row(("%s · %s"):format((mob and mob.name) or ("#" .. nx.npc), metal.name),
+					("%d / %d"):format(nx.have, nx.need), nil, { nx.have / math.max(1, nx.need), metal.color })
+			end
+		end
 		if s and (s.kills or 0) > 0 then
-			pair("this session", ("%s kills · %d new"):format(big(s.kills), s.new or 0))
+			t:Section("This session")
+			local hours = math.max(1 / 60, (U.Now() - (s.start or U.Now())) / 3600)
+			t:Stats({
+				{ big(s.kills), s.kills == 1 and "kill" or "kills" },
+				{ "+" .. (s.new or 0), s.new == 1 and "new kind" or "new kinds", (s.new or 0) > 0 and "good" or nil },
+				{ big(math.floor(s.kills / hours + 0.5)), "an hour" },
+			})
 		end
-		if all.kinds ~= st.kinds or allPoints ~= points then
-			local _, allTitle = J.Rank(allPoints)
-			pair("all characters", ("%s · %s points · %s kinds"):format(allTitle, big(allPoints), big(all.kinds)))
-		end
-		GameTooltip:AddLine("click for the journal", 0.5, 0.55, 0.53)
-	end)
+		t:Foot({ { "Click", "open the journal" } })
+	end })
 end
 
 function M.Build()
@@ -505,44 +525,59 @@ end
 function M:BuildTab(panel)
 	local W = BT.Widgets
 	local page = W.Stack(panel)
-	page:Note("every kind of mob you kill, with a count and a model of each, filed by creature type - "
-		.. "and achievements for it, whose points are the score")
-	page:Note("counted when a mob you tagged and fought dies in view, or when the game gives you "
-		.. "experience or loot for it · click the Menagerie line in the dock for the journal", true)
+	page:Note("Every kind of mob you kill goes in the journal, with its kill count and a model of it. "
+		.. "Kinds, masteries and commendations are worth points. Your points set your Expedition rank.")
+	page:Note("A kill counts when a mob you tagged and fought dies in view, or when the game gives you "
+		.. "experience or loot for it. Click the Expedition line in the dock to open the journal.", true)
 
-	local journal = page:Section("The journal")
-	local open = W.Row(journal, "Open the Menagerie", "the compendium and the achievements · /bt menagerie")
+	local journal = page:Section("The field journal")
+	local open = W.Row(journal, "Open the Expedition", "The Field Journal and Commendations, or type /bt expedition")
 	open:SetControl(W.Button(open, "Open", 80, 20)):SetScript("OnClick", function()
 		BT.MenagerieWindow.Show()
 	end)
-	local shows = W.Row(journal, "The dock line shows", "your achievement points, or every kill")
-	self.shows = shows:SetControl(W.Segmented(shows, { { "points", "Points" }, { "kills", "Kills" } },
-		function(key)
-			BT.EnsureBound()
-			BT.settings.menagerieShows = key
-			M.Update()
-		end, 62))
 
 	local toasts = page:Section("Toasts")
-	W.SwitchRow(toasts, "Achievements, masteries and ranks", "a toast at the top of the screen when you earn one",
+	W.SwitchRow(toasts, "Commendations, masteries and ranks", "Shows a toast at the top of the screen when you earn one",
 		function() return on("menagerieToasts", true) end,
 		function(v)
 			BT.EnsureBound()
 			BT.settings.menagerieToasts = v and true or false
 		end)
-	W.SwitchRow(toasts, "Every new kind of mob", "a toast for each new page in the journal, too",
+	W.SwitchRow(toasts, "Every new kind of mob", "Shows a toast when a new kind of mob goes in the journal",
 		function() return on("menagerieDiscover", true) end,
 		function(v)
 			BT.EnsureBound()
 			BT.settings.menagerieDiscover = v and true or false
 		end)
-	W.SwitchRow(toasts, "Sound", "the game's achievement chime with each toast",
+	W.SwitchRow(toasts, "Sound", "Plays the game's achievement sound with each toast",
 		function() return on("menagerieSound", true) end,
 		function(v)
 			BT.EnsureBound()
 			BT.settings.menagerieSound = v and true or false
 		end)
 	page:Layout()
+end
+
+-- ITS LINE IN THE DOCK (Josh 2026-09-27): what the line shows is on the
+-- Menagerie's tab in the Dock's block, which is dragged to move the line
+function M:BuildDockTab(panel)
+	local W = BT.Widgets
+	local page = W.Stack(panel)
+	local line = page:Section("The line")
+	local shows = W.Row(line, "It shows", "Your Expedition points, or how many mobs you have killed")
+	self.shows = shows:SetControl(W.Segmented(shows, { { "points", "Points" }, { "kills", "Kills" } },
+		function(key)
+			BT.EnsureBound()
+			BT.settings.menagerieShows = key
+			M.Update()
+		end, 62))
+	page:Note("Click the line to open the journal. Drag this tab on the rail to move the line in the dock.", true)
+	page:Layout()
+	self:RefreshTab()
+end
+
+function M:RefreshDockTab()
+	self:RefreshTab()
 end
 
 function M:RefreshTab()
@@ -563,22 +598,22 @@ end
 -- Commands
 -- ---------------------------------------------------------------------------
 
-BT.Command("menagerie", function(rest)
+local function command(rest)
 	local cmd = (rest or ""):lower():match("^(%S*)")
 	if cmd == "debug" then
 		local st = K.stats
-		U.Print(("menagerie: watched %d · counted by death %d, xp %d, loot %d · xp lines that were "
-			.. "receipts %d, unmatched %d · deaths not ours %d"):format(st.watched or 0, st.dead or 0,
+		U.Print(("Expedition: watched %d · counted by death %d, by XP %d, by loot %d · XP lines for kills "
+			.. "already counted %d, unmatched %d · deaths that weren't yours %d"):format(st.watched or 0, st.dead or 0,
 			st.xp or 0, st.loot or 0, st.confirmed or 0, st.xpUnmatched or 0, st.notOurs or 0))
 		for i = 1, math.min(10, #M.recent) do
 			U.Print("  " .. M.recent[i])
 		end
 		-- whether the card portraits could be held still, and how
 		local how = BT.MenagerieWindow.freezeWith
-		U.Print(("menagerie portraits: %s · effects %s"):format(how == nil and "none drawn yet - open the journal"
-			or how == false and "this client has no way to stop them moving"
+		U.Print(("Expedition: portraits %s · effects %s"):format(how == nil and "not drawn yet (open the journal first)"
+			or how == false and "keep moving, since the game gives no way to hold them still"
 			or ("held still by %s"):format(how),
-			BT.MenagerieWindow.canHideEffects and "could be switched off (SetParticlesEnabled)"
+			BT.MenagerieWindow.canHideEffects and "can be switched off (SetParticlesEnabled)"
 				or "cannot be switched off"))
 		return
 	elseif cmd == "edge" then
@@ -591,8 +626,8 @@ BT.Command("menagerie", function(rest)
 		if BT.MenagerieWindow.IsShown and BT.MenagerieWindow.IsShown() then
 			BT.MenagerieWindow.Deal()
 		end
-		U.Print(show and "menagerie portraits at the grid's edge: drawn whole - if one spills past the grid, "
-			.. "/bt menagerie edge again" or "menagerie portraits at the grid's edge: held back until wholly in view")
+		U.Print(show and "Expedition: portraits at the grid's edge now show in full. If one spills past the grid, "
+			.. "type /bt expedition edge again." or "Expedition: portraits at the grid's edge now show only when fully in view.")
 		return
 	elseif cmd == "lore" then
 		-- WHERE EACH MOB'S LORE CAME FROM (Josh 2026-09-26: "Is there a way we
@@ -614,7 +649,7 @@ BT.Command("menagerie", function(rest)
 			local e = J.WikiLore(m)[1]
 			local line
 			if not e then
-				line = ("%s: nothing"):format(m.name or "?")
+				line = ("%s: no page"):format(m.name or "?")
 				vague = vague + 1
 			else
 				line = ("%s: %s (%s, %s)"):format(m.name or "?", e.title, e.kind, HOW[e.how] or e.how or "?")
@@ -625,8 +660,8 @@ BT.Command("menagerie", function(rest)
 			lines[#lines + 1] = line
 			U.Print("  " .. line)
 		end
-		U.Print(("menagerie lore: %d mobs, %d with nothing nearer than their family or type · "
-			.. "written down, /reload to save it"):format(#list, vague))
+		U.Print(("Expedition: lore for %d mobs, %d with nothing nearer than their family or type. "
+			.. "Type /reload to save the list."):format(#list, vague))
 		BT.settings.menagerieLoreReport = lines
 		return
 	elseif cmd == "model" then
@@ -634,7 +669,7 @@ BT.Command("menagerie", function(rest)
 		-- into the saved file as well, since it is a wall of numbers
 		local lines = BT.MenagerieWindow.ModelReport()
 		if not lines then
-			U.Print("menagerie model: open a mob's page in the journal first")
+			U.Print("Expedition: open a mob's page in the journal first.")
 			return
 		end
 		for _, line in ipairs(lines) do
@@ -642,7 +677,7 @@ BT.Command("menagerie", function(rest)
 		end
 		BT.EnsureBound()
 		BT.settings.menagerieModelReport = lines
-		U.Print("menagerie model: written down · /reload to save it")
+		U.Print("Expedition: model report written. Type /reload to save it.")
 		return
 	elseif cmd == "map" then
 		-- what the client says about maps, for the cards' backgrounds
@@ -739,7 +774,7 @@ BT.Command("menagerie", function(rest)
 		end
 		BT.EnsureBound()
 		BT.settings.menagerieSceneReport = lines
-		U.Print("menagerie scene: written down · /reload to save it")
+		U.Print("Expedition: scene report written. Type /reload to save it.")
 		return
 	elseif cmd == "toast" then
 		local c = J.Mine()
@@ -751,4 +786,11 @@ BT.Command("menagerie", function(rest)
 		return
 	end
 	BT.MenagerieWindow.Toggle()
-end, "menagerie [debug|edge|map|model|scene|toast] - the journal of every mob you have killed", "menagerie")
+end
+
+-- /bt expedition, and the old name still (Josh 2026-09-27): only the new one
+-- is in /bt's list
+BT.Command("expedition", command,
+	"expedition [debug|edge|map|model|scene|toast] - open the journal of every kind of mob you have killed",
+	"menagerie")
+BT.Command("menagerie", command, nil, "menagerie")

@@ -17,14 +17,14 @@ local U = BT.Util
 -- ---------------------------------------------------------------------------
 
 BT.Command("bar", function()
-	U.Print("target row " .. (BT.Bar.Toggle() and "on" or "off"))
+	U.Print("The target row is " .. (BT.Bar.Toggle() and "on" or "off") .. ".")
 end, "show or hide the target row at the top of the dock")
 
 BT.Command("debug", function()
 	U.Print(("%s %s (%s)"):format(BT.TITLE, tostring(BT.VERSION), tostring(BT.BUILD)))
-	U.Print(("book: %s | settings: %s | characters: %s"):format(
-		BT.scope and BT.scope.key or "|cffff6b6bNONE|r",
-		BT.settings and "yes" or "|cffff6b6bnil|r",
+	U.Print(("book: %s · settings: %s · characters: %s"):format(
+		BT.scope and BT.scope.key or "|cffff6b6bnone|r",
+		BT.settings and "yes" or "|cffff6b6bnone|r",
 		(BT.DB and BT.db) and tostring(BT.DB.Stats(BT.db).total) or "-"))
 	local on = {}
 	for _, m in ipairs(BT.Modules()) do
@@ -50,10 +50,10 @@ BT.Command("debug", function()
 	if refused then
 		U.Print("|cffff6b6bflash refused|r " .. refused:sub(1, 120))
 	end
-end, "what loaded, what the client refused")
+end, "list what loaded and what the game refused")
 
 BT.Command("help", function()
-	U.Print(("%s · /bt opens the window"):format(BT.TITLE))
+	U.Print(("%s commands. Type /bt on its own to open the window."):format(BT.TITLE))
 	local names = {}
 	for name in pairs(BT.Commands()) do
 		names[#names + 1] = name
@@ -74,7 +74,7 @@ BT.Command("help", function()
 			U.Print(line)
 		end
 	end
-end, "this list")
+end, "list these commands")
 
 SLASH_BEEBSTOOLKIT1, SLASH_BEEBSTOOLKIT2 = "/bt", "/beeb"
 SlashCmdList.BEEBSTOOLKIT = function(msg)

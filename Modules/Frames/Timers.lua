@@ -644,7 +644,7 @@ end
 -- the blink, as a row, for heals or for damage
 function T.BlinkRow(section, which, changed)
 	return BT.Widgets.SwitchRow(section, "Blink as it runs out",
-		"the last five seconds, the empty part of the lane flashes red",
+		"In the last 5 seconds, the empty part of the lane flashes red",
 		function() return T.Blinks(which) end,
 		function(on)
 			T.SetBlinks(on, which)
@@ -736,7 +736,7 @@ function T.DotSection(page, changed)
 	end
 	orderRows(dots, nil)
 	W.Row(dots, "Nearest the bars at the bottom",
-		"a lane is there only while its spell is · keep the ones you always use low")
+		"A lane shows only while its spell is up. Keep the ones you always use at the bottom.")
 	return dots
 end
 
@@ -747,7 +747,7 @@ end
 
 function T.Report()
 	local class = myClass()
-	say(("over time · %s · blink: heals %s, damage %s"):format(tostring(class),
+	say(("Over-time bars: %s · blink: heals %s, damage %s"):format(tostring(class),
 		T.Blinks("hot") and "on" or "off", T.Blinks("dot") and "on" or "off"))
 	for _, which in ipairs({ "hot", "dot" }) do
 		for _, name in ipairs(T.Spells(which, class)) do
@@ -773,7 +773,7 @@ function T.Report()
 		end
 	end
 	local s = T.seen
-	say(("  frames with lanes %d · buttons dressed %d · duration bars taken %d · flashes taken %d")
+	say(("  frames with lanes %d · buttons redrawn %d · duration bars taken %d · flashes taken %d")
 		:format(frames, s.inits, s.bars, s.texts))
 	if s.barRefused then
 		say("  |cffff6b6bduration bar refused|r " .. s.barRefused:sub(1, 120))
@@ -782,7 +782,7 @@ function T.Report()
 		say("  |cffff6b6bflash refused|r " .. s.textRefused:sub(1, 120))
 	end
 	if (T.Blinks("hot") or T.Blinks("dot")) and not T.BlinkCurve() then
-		say("  |cffff6b6bno colour curve|r - the flash cannot be drawn")
+		say("  |cffff6b6bno colour curve|r, so BeebMod can't draw the flash")
 	end
 end
 

@@ -46,7 +46,9 @@ local GROUP_H, GROUP_GAP, FOOT_H = 20, 8, 16
 -- (640 tall, Josh 2026-09-24: the rail's five groups want the room; 660
 -- the same day, for the Testing tab under General; 682, a tab's stride more,
 -- for the Menagerie's, Josh 2026-09-25)
-local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 682
+-- (taller by two tabs, Josh 2026-09-27: the Ledger's row and the Menagerie's
+-- line have tabs in the Dock's block too, and the rail has to hold them)
+local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 728
 -- the page's own header: its name, a line under it, and its switch
 local HEADER_H = 54
 
@@ -118,6 +120,9 @@ local function makeTab(i)
 	tab.label:SetJustifyH("LEFT")
 	-- A GRIP ON HOVER (Josh 2026-09-22): an up and a down chevron at the right
 	-- of a tab that can be moved, only while you point at it.
+	-- AND FAINTLY WITHOUT (Josh 2026-09-27: "make it more apparent that the
+	-- dock can be rearranged before hovering over it"): always there on a tab
+	-- that moves, quiet, and bright under the pointer (W.ShowGrip).
 	tab.grip = {}
 	for n, up in ipairs({ true, false }) do
 		local g = tab:CreateTexture(nil, "OVERLAY")
@@ -130,7 +135,7 @@ local function makeTab(i)
 		tab.grip[n] = g
 	end
 	tab:SetScript("OnEnter", function(self)
-		W.ShowGrip(self, self.group == "dock" and self.key ~= "dock")
+		W.ShowGrip(self, true)
 		tabTint(self, W.LitTab() == self.key, true)
 	end)
 	tab:SetScript("OnLeave", function(self)
@@ -203,10 +208,18 @@ function W.DropIndex(y, others)
 	return above + 1
 end
 
--- the chevrons on a tab, up or away
-function W.ShowGrip(tab, on)
+-- whether a tab can be dragged: the Dock's, but for its own page
+function W.Movable(tab)
+	return tab.group == "dock" and tab.key ~= nil and tab.key ~= "dock"
+end
+
+-- the chevrons on a tab: on every tab that moves, quiet, and bright while
+-- `hot` (pointed at, or dragged)
+function W.ShowGrip(tab, hot)
+	local movable = W.Movable(tab)
 	for _, g in ipairs(tab.grip or {}) do
-		g:SetShown(on and true or false)
+		g:SetShown(movable)
+		g:SetVertexColor(0.55, 0.63, 0.59, hot and 0.95 or 0.3)
 	end
 end
 
@@ -330,22 +343,22 @@ end
 
 W.PAGES = {
 	dock = { title = "Dock", group = "dock", fixed = true,
-		blurb = "the panel at the side of the screen: its size, and what sits in its header" },
+		blurb = "The panel at the side of the screen, its size and its header" },
 	map = { title = "Minimap", group = "dock", members = { "minimap", "buttons" },
-		blurb = "the map in the dock, and the line of other addons' buttons" },
+		blurb = "The map in the dock, and the line of other addons' buttons" },
 	progress = { title = "Progress", group = "dock", members = { "xp", "rep" },
-		blurb = "your level and your standing, and roughly how long the rest will take" },
+		blurb = "Your level and standing, and about how long the rest will take" },
 	allmenus = { title = "Menus", group = "interface", members = { "menu", "menus" },
-		blurb = "the menu Escape opens, and every dropdown and right-click menu" },
+		blurb = "The menu Escape opens, and every dropdown and right-click menu" },
 	censusset = { title = "Census", group = "census", members = { "census" },
-		blurb = "the realm's charts, in a window of their own" },
+		blurb = "The realm's charts, in their own window" },
 	-- TESTING (Josh 2026-09-24: "let's add a testing or debug section to
 	-- the options panel, and move the options like this to it"): the
 	-- made-up people and auras that let you see a frame while you are alone,
 	-- and the addon's own reports - none of it a setting, all of it a look.
 	-- Not one module's: under General, above the rail's line.
 	testing = { title = "Testing", group = "general", fixed = true,
-		blurb = "made-up people and auras to look at while you are alone, and the addon's own reports" },
+		blurb = "Made-up people and auras to look at when you are alone, and BeebMod's own reports" },
 }
 
 -- A FEATURE'S OWN PAGE (Josh 2026-09-27): what it is, its switch, and a
@@ -356,6 +369,28 @@ for _, f in ipairs(BT.FEATURES) do
 	if not f.single then
 		W.PAGES["feature:" .. f.key] = { title = f.title, group = f.key, overview = f.key, blurb = f.line }
 	end
+end
+
+-- ANOTHER FEATURE'S ROW IN THE DOCK (Josh 2026-09-27: "We are not able to
+-- rearrange the menagerie or ledger... I guess the dock settings can be what
+-- the widget displays? Those entries should disappear if the module is
+-- disabled"). The Menagerie's line and the Ledger's target row stand in the
+-- dock, but their tabs are in their own features' blocks, where nothing is
+-- dragged. So each has a second tab in the Dock's block, at its place in the
+-- dock's order: dragged, it moves the row, and its page is what the row
+-- shows (the module's BuildDockTab). It is there only while its module is.
+W.DOCK_PAGES = { menagerie = "dock:menagerie", ledger = "dock:ledger" }
+W.PAGES["dock:menagerie"] = { title = "Expedition", group = "dock", members = { "menagerie" },
+	dockOf = "menagerie", blurb = "Nesingwary's Expedition's line in the dock. Drag this tab to move it." }
+W.PAGES["dock:ledger"] = { title = "Ledger", group = "dock", members = { "ledger" },
+	dockOf = "ledger", blurb = "The Ledger's target row in the dock. Drag this tab to move it." }
+
+-- whether a module's row has its tab in the Dock's block now: its feature
+-- on, and the module itself
+function W.DockPageLive(key)
+	local m = BT.GetModule(key)
+	local fkey = m and BT.FeatureOf(m)
+	return m ~= nil and (not fkey or BT.FeatureOn(fkey)) and BT.Enabled(key) and BT.ClassFits(m)
 end
 
 function W.Page(key)
@@ -477,6 +512,12 @@ function W.GroupKeys(group)
 			seen[tab] = true
 			out[#out + 1] = tab
 		end
+		-- another feature's row, at its place in the dock
+		local dockTab = group == "dock" and W.DOCK_PAGES[m.key]
+		if dockTab and not seen[dockTab] and W.DockPageLive(m.key) then
+			seen[dockTab] = true
+			out[#out + 1] = dockTab
+		end
 	end
 	if group ~= "dock" then
 		table.sort(out, function(a, b)
@@ -510,7 +551,7 @@ local function generalPage()
 	panel:SetAllPoints()
 	panel:Hide()
 	panels.settings = panel
-	header(panel, "General", "the look of every panel in the toolkit")
+	header(panel, "General", "The look of every BeebMod panel")
 	-- the name the tests and older code know it by
 	panel.toolkit = panel.body
 	BT.Settings.Build(panel.body)
@@ -571,8 +612,10 @@ end
 local function dockPage(body)
 	local st = BT.Widgets.Stack(body)
 	body.stack = st
+	-- (Josh 2026-09-27) the one thing about the dock the rail cannot say
+	st:Note("Drag the tabs under Dock, on the left, to put the dock in that order from top to bottom.", true)
 	local sizeSec = st:Section("Size")
-	local size = BT.Widgets.Row(sizeSec, "Dock size", "the whole panel, from the header to the quests")
+	local size = BT.Widgets.Row(sizeSec, "Dock size", "The whole panel, from the header to the quests")
 	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir)
 		local now = math.floor((BT.Bar.Scale() + dir * 0.05) * 100 + 0.5) / 100
 		BT.Bar.SetScale(math.max(0.7, math.min(1.3, now)))
@@ -580,7 +623,7 @@ local function dockPage(body)
 	end))
 	body.sizeText = step.value
 	-- ONE WIDTH, WHATEVER IS IN IT (Josh 2026-09-24)
-	local wide = BT.Widgets.Row(sizeSec, "Dock width", "the same with the quests or without them")
+	local wide = BT.Widgets.Row(sizeSec, "Dock width", "The same with or without the quests")
 	local wstep = wide:SetControl(BT.Widgets.Stepper(wide, function(dir)
 		BT.Bar.SetWidth(BT.Bar.Width() + dir * BT.Bar.WIDTH_STEP)
 		W.RefreshDock()
@@ -588,20 +631,20 @@ local function dockPage(body)
 	body.widthText = wstep.value
 	-- (Josh 2026-09-24) where it stays, and how loud it is in a fight
 	local feel = st:Section("Behaviour")
-	BT.Widgets.SwitchRow(feel, "Lock in place", "no drag moves it · off, drag it by anything in it",
+	BT.Widgets.SwitchRow(feel, "Lock in place", "Drag it by anything in it when it's unlocked",
 		function() return BT.Bar.Locked() end,
 		function(on)
 			BT.EnsureBound()
 			BT.settings.dockLocked = on and true or nil
 		end)
-	local fade = BT.Widgets.Row(feel, "Fade in combat", "quieter while you fight · whole again under the pointer")
+	local fade = BT.Widgets.Row(feel, "Fade in combat", "Fades while you fight, and comes back when you point at it")
 	body.fadeSeg = fade:SetControl(BT.Widgets.Segmented(fade, {
 		{ "off", "Off" }, { "soft", "70%" }, { "strong", "40%" },
 	}, function(key)
 		BT.Bar.SetFade(key)
 	end))
 	local head = st:Section("Header")
-	local clock = BT.Widgets.SwitchRow(head, "Clock", "the time in the header · click it for local or server",
+	local clock = BT.Widgets.SwitchRow(head, "Clock", "The time in the header. Click it for local or server time.",
 		function() return BT.Enabled("clock") end,
 		function(on)
 			BT.EnsureBound()
@@ -629,9 +672,9 @@ end
 -- the Census's page: its switch and the way into its window
 local function censusPage(body)
 	local st = BT.Widgets.Stack(body)
-	st:Note("the realm's characters by class, race, level, tag and age, from everyone the book has seen")
+	st:Note("Charts of everyone you have seen on this realm, by class, race, level, tag and age.")
 	local sec = st:Section("Census")
-	local on = BT.Widgets.SwitchRow(sec, "Census", "the charts, and their button in the dock's header",
+	local on = BT.Widgets.SwitchRow(sec, "Census", "The charts, and their button in the dock's header",
 		function() return BT.Enabled("census") end,
 		function(v)
 			BT.EnsureBound()
@@ -645,7 +688,7 @@ local function censusPage(body)
 			W.SyncTab("census")
 		end)
 	on.module = "census"
-	BT.Widgets.SwitchRow(sec, "Button in the header", "the chart glyph beside the cog",
+	BT.Widgets.SwitchRow(sec, "Button in the header", "The chart icon beside the cog",
 		function() return not (BT.settings and BT.settings.censusButton == false) end,
 		function(v)
 			BT.EnsureBound()
@@ -660,7 +703,7 @@ local function censusPage(body)
 				BT.Bar.Relayout()
 			end
 		end)
-	BT.Widgets.SwitchRow(sec, "Up to date while open", "the charts redrawn as the book fills · off, as they were when opened",
+	BT.Widgets.SwitchRow(sec, "Up to date while open", "Redraws the open charts as you see new people",
 		function() return not (BT.settings and BT.settings.censusLive == false) end,
 		function(v)
 			BT.EnsureBound()
@@ -672,7 +715,7 @@ local function censusPage(body)
 				BT.settings.censusLive = false
 			end
 		end)
-	local open = BT.Widgets.Row(sec, "Open the charts", "the same as the chart button in the header · /bt census")
+	local open = BT.Widgets.Row(sec, "Open the charts", "Same as the chart button in the header · /bt census")
 	local b = open:SetControl(BT.Widgets.Button(open, "Open", 62, 20))
 	b:SetScript("OnClick", function()
 		if BT.CensusWindow then
@@ -691,7 +734,7 @@ local function testingPage(body)
 	-- MADE-UP DATA (Josh 2026-09-27: "mock some data for me so we can show off
 	-- all the features/designs"): every feature at once, for screenshots -
 	-- nothing saved, and off again after a reload (Core/Demo.lua)
-	body.demoRow = Wd.SwitchRow(look, "Made-up data", "a made-up realm in the census, notes in the ledger, a journal in the menagerie and a party · nothing is saved · /bt demo",
+	body.demoRow = Wd.SwitchRow(look, "Made-up data", "A made-up realm, notes, journal and party, none of it saved · /bt demo",
 		function() return BT.Demo and BT.Demo.IsOn() or false end,
 		function(on)
 			if BT.Demo then
@@ -699,7 +742,7 @@ local function testingPage(body)
 			end
 		end)
 	-- the unit frames' made-up group (Modules/Frames/Frames.lua)
-	local people = Wd.Row(look, "Made-up people", "see the frames in a group while you are alone · needs Unit frames on")
+	local people = Wd.Row(look, "Made-up people", "The unit frames as a group when you are alone. Needs Unit frames on.")
 	body.peopleSeg = people:SetControl(Wd.Segmented(people, {
 		{ "off", "Off" }, { "party", "Party" }, { "raid", "Raid" },
 	}, function(key)
@@ -709,7 +752,7 @@ local function testingPage(body)
 		end
 	end))
 	-- the buff tray full (Modules/Frames/Buffs.lua)
-	body.aurasRow = Wd.SwitchRow(look, "Made-up auras", "see the tray full: buffs, a weapon poison, debuffs · needs Buffs on",
+	body.aurasRow = Wd.SwitchRow(look, "Made-up auras", "Fills the tray with buffs, a weapon poison and debuffs. Needs Buffs on.",
 		function()
 			local B = BT.UnitFrames and BT.UnitFrames.Buffs
 			return B and B.previewing or false
@@ -724,7 +767,7 @@ local function testingPage(body)
 		end)
 	-- THE FIRST LOGIN (Josh 2026-09-25; six cards since 2026-09-27): the
 	-- question a fresh install is asked, to see again
-	local first = Wd.Row(look, "First login", "the question a fresh install is asked: six cards, a switch for each feature")
+	local first = Wd.Row(look, "First login", "The six cards a new install shows, one switch for each feature")
 	body.firstButton = first:SetControl(Wd.Button(first, "Show", 62, 20))
 	body.firstButton:SetScript("OnClick", function()
 		if BT.Welcome then
@@ -732,11 +775,11 @@ local function testingPage(body)
 		end
 	end)
 	-- the reports /bt already writes, a click away; they go to your chat
-	local ask = st:Section("Ask the addon")
+	local ask = st:Section("Ask BeebMod")
 	for _, c in ipairs({
-		{ "debug", "What loaded", "the build, the book, every module, what the client refused" },
-		{ "timers", "Over-time bars", "where the heal and damage bars got to, spell by spell" },
-		{ "stats", "The book", "how many characters, how many packed, and the other books" },
+		{ "debug", "What loaded", "The build, the book, each module, and what the game refused" },
+		{ "timers", "Over-time bars", "Where each heal and damage bar is, spell by spell" },
+		{ "stats", "The book", "How many characters, how many are packed, and the other books" },
 	}) do
 		local row = Wd.Row(ask, c[2], c[3] .. " · /bt " .. c[1])
 		local run = row:SetControl(Wd.Button(row, "Show", 62, 20))
@@ -802,10 +845,10 @@ local function featurePage(panel, fkey)
 	panel.off:SetPoint("TOPLEFT", 0, -HEADER_H - 12)
 	panel.off:SetPoint("TOPRIGHT", 0, -HEADER_H - 12)
 	panel.off:SetHeight(40)
-	panel.off.title = BT.Widgets.Label(panel.off, fkey == "dock" and "The Dock is off: its logo and cog stay"
+	panel.off.title = BT.Widgets.Label(panel.off, fkey == "dock" and "The Dock is off, and its logo and cog stay"
 		or ("%s is off"):format(f.title), nil, 0.72, 0.77, 0.75)
 	panel.off.title:SetPoint("TOPLEFT", 2, 0)
-	panel.off.blurb = BT.Widgets.Label(panel.off, "everything in it is off · what you chose inside it comes back with it",
+	panel.off.blurb = BT.Widgets.Label(panel.off, "Everything in it is off. What you set inside it comes back when it does.",
 		"small", 0.50, 0.55, 0.53)
 	panel.off.blurb:SetPoint("TOPLEFT", 2, -18)
 	local st = BT.Widgets.Stack(panel.body)
@@ -858,6 +901,12 @@ local function pagePanel(key, page)
 	header(panel, page.title, page.blurb)
 	if page.overview then
 		featurePage(panel, page.overview)
+	elseif page.dockOf then
+		-- what the row shows, the module's to say
+		local m = BT.GetModule(page.dockOf)
+		if m and m.BuildDockTab then
+			BT.CallHook(m, "BuildDockTab", panel.body)
+		end
 	elseif key == "dock" then
 		dockPage(panel.body)
 	elseif key == "censusset" then
@@ -921,7 +970,7 @@ local function panelFor(key)
 	panel.off:SetHeight(40)
 	panel.off.title = BT.Widgets.Label(panel.off, ("%s is off"):format(m.title), nil, 0.72, 0.77, 0.75)
 	panel.off.title:SetPoint("TOPLEFT", 2, 0)
-	panel.off.blurb = BT.Widgets.Label(panel.off, "its settings are kept for when it is back on",
+	panel.off.blurb = BT.Widgets.Label(panel.off, "Its settings come back when you switch it on",
 		"small", 0.50, 0.55, 0.53)
 	panel.off.blurb:SetPoint("TOPLEFT", 2, -18)
 
@@ -1013,6 +1062,13 @@ function W.SetView(key)
 		W.RefreshDock()
 	elseif W.PAGES[key] and W.PAGES[key].overview then
 		W.SyncFeature(W.PAGES[key].overview)
+	elseif W.PAGES[key] and W.PAGES[key].dockOf then
+		-- a row's page: its choices shown as they are, and nothing of the
+		-- module's own page asked to refresh (the Ledger's list is not here)
+		local m = BT.GetModule(W.PAGES[key].dockOf)
+		if m and m.RefreshDockTab then
+			BT.CallHook(m, "RefreshDockTab")
+		end
 	else
 		W.SyncTab(key)
 		for _, k in ipairs(W.MembersOf(key)) do
@@ -1216,7 +1272,8 @@ function W.Rebuild()
 			b:SetPoint("TOPLEFT", area, "TOPLEFT", 6, y)
 			b:SetWidth(RAIL - 12)
 			b:SetFrameLevel((area:GetFrameLevel() or 1) + 1)
-			b.head.label:SetText(f.title)
+			-- a long name its short one: the heading shares the rail with a switch
+			b.head.label:SetText(f.short or f.title)
 			local top = y
 			y = y - BLOCK_HEAD
 			if BT.FeatureOn(f.key) and not f.single then

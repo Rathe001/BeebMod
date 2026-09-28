@@ -22,7 +22,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "ilevel",
 	title = "Item level",
-	blurb = "the average level of what you wear",
+	blurb = "The average item level of what you wear",
 	order = 39.65,
 	dock = true,
 	-- one of the Metrics, switched from its tab
@@ -139,33 +139,68 @@ function M.Update()
 	end
 end
 
+-- an item's name and its quality's colour, or the slot's name
+local function named(item)
+	local l = link(item.slot)
+	if l and type(GetItemInfo) == "function" then
+		local ok, name, _, quality = pcall(GetItemInfo, l)
+		if ok and type(name) == "string" then
+			local colour
+			if type(quality) == "number" and type(GetItemQualityColor) == "function" then
+				local okC, r, g, b = pcall(GetItemQualityColor, quality)
+				if okC and type(r) == "number" then
+					colour = { r, g, b }
+				end
+			end
+			return name, colour
+		end
+	end
+	return item.name, nil
+end
+
+-- UPGRADES, NOT SEVENTEEN SLOTS (Josh 2026-09-27, the dock's tooltips
+-- redrawn): the average, then the three lowest - an empty slot lowest of all
+-- - and the best piece
 function M.Tip()
-	if not (GameTooltip and BT.Bar and BT.Bar.Tip) then
+	if not BT.Tip then
 		return
 	end
 	local d = M.Read()
-	BT.Bar.Tip(M.chip, function()
-		GameTooltip:AddDoubleLine("Item level", d.avg and ("%.1f"):format(d.avg) or "-", 1, 1, 1, 1, 1, 1)
-		-- every slot, the empty ones included: they are why the number is low
+	BT.Tip.Show(M.chip, { build = function(t)
+		t:Header({ name = "Item level", sub = "All 17 slots, a two-hander counted twice" })
+		t:Headline(d.avg and ("%.1f"):format(d.avg) or "-", "average")
 		local worn = {}
 		for _, item in ipairs(d.items) do
 			worn[item.slot] = item
 		end
+		local low = {}
 		for _, slot in ipairs(M.SLOTS) do
 			local item = worn[slot[1]]
-			if item then
-				GameTooltip:AddDoubleLine(slot[2], tostring(item.level), 0.7, 0.75, 0.73, 1, 1, 1)
+			low[#low + 1] = item and { item = item, level = item.level } or { empty = slot[2], level = -1 }
+		end
+		table.sort(low, function(a, b) return a.level < b.level end)
+		t:Section("Lowest")
+		for i = 1, math.min(3, #low) do
+			local e = low[i]
+			if e.empty then
+				t:Row(e.empty, "empty", "bad")
 			else
-				GameTooltip:AddDoubleLine(slot[2], "empty", 0.45, 0.50, 0.48, 0.45, 0.50, 0.48)
+				local name, colour = named(e.item)
+				t:Row(name, e.level, nil, nil, colour)
 			end
 		end
-		GameTooltip:AddLine(" ")
-		if #d.items > 0 then
-			GameTooltip:AddDoubleLine("worn pieces only", ("%.1f"):format(d.sum / #d.items),
-				0.7, 0.75, 0.73, 1, 1, 1)
+		local best
+		for _, item in ipairs(d.items) do
+			if not best or item.level > best.level then
+				best = item
+			end
 		end
-		GameTooltip:AddDoubleLine("empty slots count as nothing", "", 0.45, 0.50, 0.48)
-	end)
+		if best then
+			t:Section("Highest")
+			local name, colour = named(best)
+			t:Row(name, best.level, nil, nil, colour)
+		end
+	end })
 end
 
 function M.Build()
@@ -260,9 +295,9 @@ BT.Command("ilvl", function()
 	local d = M.Read()
 	local v = M.Value(d)
 	if not v then
-		U.Print("nothing you wear has an item level")
+		U.Print("Item level: nothing you wear has one.")
 		return
 	end
-	U.Print(("item level %.1f: %d pieces over %d slots%s"):format(d.avg, #d.items, d.slots,
-		d.client and (" · the client says %.1f"):format(d.client) or ""))
-end, "the average item level of what you wear", "ilevel")
+	U.Print(("Item level: %.1f · %d pieces in %d slots%s"):format(d.avg, #d.items, d.slots,
+		d.client and (" · the game says %.1f"):format(d.client) or ""))
+end, "print the average item level of what you wear", "ilevel")

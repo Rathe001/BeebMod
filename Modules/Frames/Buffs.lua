@@ -51,7 +51,7 @@ local M = BT.Module({
 	key = "buffs",
 	feature = "frames",
 	title = "Buffs",
-	blurb = "yours, in a tray beside the dock: buffs over debuffs",
+	blurb = "Your buffs and debuffs, in a tray beside the dock",
 	order = 46,
 })
 B.module = M
@@ -675,7 +675,7 @@ function M:OnEnable()
 	if not ok then
 		if not M.failed then
 			M.failed = tostring(err)
-			U.Print("the buff tray could not be made: " .. M.failed)
+			U.Print("Buffs: BeebMod couldn't make the buff tray. " .. M.failed)
 		end
 		return
 	end
@@ -699,11 +699,11 @@ end
 function M:BuildTab(panel)
 	local W = BT.Widgets
 	local page = W.Stack(panel)
-	page:Note("your buffs on the top line, your debuffs under them · left to right: the soonest to run out, "
-		.. "then each a little longer, your weapon enchants, and the ones that never run out, A to Z")
-	page:Note("right-click a buff to cancel it, out of combat · switched off, the game's own buff bar is back", true)
+	page:Note("Your buffs are on the top line and your debuffs are under them. From left to right come the ones "
+		.. "that run out soonest, then longer ones, then your weapon enchants, then the ones that never run out, A to Z.")
+	page:Note("Right-click a buff to cancel it, out of combat. Switched off, the game's own buff bar comes back.", true)
 	local tray = page:Section("Tray")
-	local size = W.Row(tray, "Size", "the whole tray, icons and times")
+	local size = W.Row(tray, "Size", "The whole tray, icons and times")
 	local step = size:SetControl(W.Stepper(size, function(dir)
 		BT.EnsureBound()
 		BT.settings.buffs = BT.settings.buffs or {}
@@ -715,7 +715,7 @@ function M:BuildTab(panel)
 	M.sizeText = step.value
 	M.sizeText:SetText(("%d%%"):format(math.floor(((BT.settings and BT.settings.buffs
 		and BT.settings.buffs.scale) or 1) * 100 + 0.5)))
-	W.SwitchRow(tray, "Time left in words", "under each icon · takes a /reload",
+	W.SwitchRow(tray, "Time left in words", "Under each icon. Needs a /reload to change.",
 		function() return not (BT.settings and BT.settings.buffs and BT.settings.buffs.timeText == false) end,
 		function(on)
 			BT.EnsureBound()

@@ -10,3 +10,7 @@ Data/Live
 # again; it is built from the wiki, not part of the addon
 scripts/lore-cache.json
 scripts/lore-missing.json
+
+# the lore rewrite's working files (scripts/export-lore.lua and the agents);
+# only scripts/lore-curated.json is kept
+scripts/lore-work/

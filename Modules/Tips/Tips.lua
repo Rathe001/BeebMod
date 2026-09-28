@@ -28,7 +28,7 @@ local M = BT.Module({
 	key = "tips",
 	group = "windows",
 	title = "Tooltips",
-	blurb = "compact unit tooltips",
+	blurb = "Shorter tooltips on players and mobs",
 	order = 30,
 })
 
@@ -2075,7 +2075,7 @@ function M:BuildTab(panel)
 	local top = CreateFrame("Frame", nil, panel)
 	top:SetHeight(94)
 	self.preview = preview(top, 0)
-	local caption = BT.Widgets.Label(top, "two lines, not seven", "small", 0.50, 0.55, 0.53)
+	local caption = BT.Widgets.Label(top, "A player's tooltip with these settings", "small", 0.50, 0.55, 0.53)
 	caption:SetPoint("TOPLEFT", 2, -80)
 	page:Add(top)
 
@@ -2092,22 +2092,22 @@ function M:BuildTab(panel)
 		r.optName, r.default = name, default
 		self.rows[#self.rows + 1] = r
 	end
-	row("Guild", "in angle brackets", "guild", true)
-	row("Other faction", "only when it is not yours", "faction", true)
-	row("Health bar", "the client's bar under a unit's tooltip", "healthBar", false)
-	row("Quiet item footers", "an item's sell price and the lines under it, smaller and grey", "footer", true)
-	row("Item level", "beside the name, on anything you can wear", "itemLevel", true)
-	row("Who it targets", "a line saying who a unit is pointing at", "targetLine", false)
+	row("Guild", "The guild name, in angle brackets", "guild", true)
+	row("Other faction", "Only when it isn't your faction", "faction", true)
+	row("Health bar", "The game's health bar under the tooltip", "healthBar", false)
+	row("Small item footers", "An item's sell price and the lines under it, in small grey text", "footer", true)
+	row("Item level", "Beside the name, on anything you can wear", "itemLevel", true)
+	row("Who it targets", "A line saying who a player or mob is targeting", "targetLine", false)
 
 	-- WHERE AND WHEN (Josh 2026-09-24)
 	local place = page:Section("Place")
-	local where = BT.Widgets.Row(place, "Position", "a tooltip with no place of its own: in the corner, or at the pointer")
+	local where = BT.Widgets.Row(place, "Position", "For tooltips with no place of their own, the corner or the pointer")
 	self.anchorSeg = where:SetControl(BT.Widgets.Segmented(where, {
 		{ "dock", "Corner" }, { "cursor", "Pointer" },
 	}, function(key)
 		setOpt("anchor", key)
 	end, 70))
-	local quiet = BT.Widgets.SwitchRow(place, "Hide in combat", "a unit's tooltip, while you fight · items and spells still show",
+	local quiet = BT.Widgets.SwitchRow(place, "Hide in combat", "Hides tooltips on players and mobs while you fight",
 		function() return opt("combatHide", false) and true or false end,
 		function(on) setOpt("combatHide", on) end)
 	quiet.optName, quiet.default = "combatHide", false
@@ -2161,7 +2161,8 @@ BT.Command("tips", function(rest)
 	-- reasoned my way to. This prints what the tooltip actually is.
 	if rest == "pad on" or rest == "pad off" then
 		M.measuring = (rest == "pad on")
-		U.Print("tooltip measuring " .. (M.measuring and "on - hover a unit, then /bt tips pad" or "off"))
+		U.Print(M.measuring and "Tooltips: measuring on. Point at a player or mob, then type /bt tips pad."
+			or "Tooltips: measuring off.")
 		return
 	end
 	if rest == "skin" then
@@ -2169,7 +2170,7 @@ BT.Command("tips", function(rest)
 		-- frame IS rather than reason about what it should be (Josh 2026-09-19)
 		local tip = _G.ShoppingTooltip1
 		if not tip then
-			U.Print("no compare tooltip on this client")
+			U.Print("Tooltips: this game has no compare tooltip.")
 			return
 		end
 		local N = BT.Pill.Number
@@ -2197,7 +2198,7 @@ BT.Command("tips", function(rest)
 	end
 	if rest == "pad" then
 		if not M.measuring then
-			U.Print("nothing measured · /bt tips pad on, then hover a unit")
+			U.Print("Tooltips: nothing measured. Type /bt tips pad on, then point at a player or mob.")
 			return
 		end
 		for _, when in ipairs({ "after the rebuild", "one frame later" }) do
@@ -2218,7 +2219,7 @@ BT.Command("tips", function(rest)
 		setOpt("scale", math.max(0.7, math.min(1.2, n)))
 		BT.UnitTip.Restack()
 	end
-	U.Print(("tooltips %d%% · guild %s · faction %s · health bar %s")
+	U.Print(("Tooltips: %d%% · guild %s · faction %s · health bar %s")
 		:format(math.floor(opt("scale", 0.95) * 100 + 0.5),
 			opt("guild", true) and "on" or "off",
 			opt("faction", true) and "on" or "off",
@@ -2227,4 +2228,4 @@ BT.Command("tips", function(rest)
 	local T = BT.UnitTip
 	U.Print(("hooks · unit %s (%d fired) · item %s (%d fired)")
 		:format(tostring(T.path), T.fills or 0, tostring(T.itemPath), T.itemFills or 0))
-end, "tips [0.7-1.2] | tips pad on|off|pad | tips skin", "tips")
+end, "tips [0.7-1.2] - set the tooltip size · /bt tips pad on|off|pad, /bt tips skin - measure the tooltip", "tips")
