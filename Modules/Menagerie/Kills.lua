@@ -367,6 +367,43 @@ end
 local PICK_POCKET = 921
 local pickName
 
+-- A SKINNED CORPSE IS NOT A KILL (Josh 2026-09-28: "skinning is counting as
+-- killing a mob for the expedition"). Skinning opens the corpse's loot window,
+-- and anyone may skin a corpse once its killer has looted it - so a mob
+-- somebody else killed went in your journal when you skinned it. The window
+-- after a gathering cast is the gathering's, as the one after Pick Pocket is
+-- the pocket's. Herb Gathering and Mining are here for the same reason, for
+-- any mob they can be used on. Every rank of each, and each by its name.
+local GATHER = {
+	8613, 8617, 8618, 10768, -- Skinning
+	2366, 2368, 3570, 11993, -- Herb Gathering
+	2575, 2576, 3564, 10248, -- Mining
+}
+local gatherIDs, gatherNames = {}, nil
+for _, id in ipairs(GATHER) do
+	gatherIDs[id] = true
+end
+
+local function isGathering(spellID)
+	if gatherIDs[spellID] then
+		return true
+	end
+	if type(GetSpellInfo) ~= "function" then
+		return false
+	end
+	if not gatherNames then
+		gatherNames = {}
+		for _, id in ipairs({ 8613, 2366, 2575 }) do
+			local ok, name = pcall(GetSpellInfo, id)
+			if ok and type(name) == "string" then
+				gatherNames[name] = true
+			end
+		end
+	end
+	local ok, name = pcall(GetSpellInfo, spellID)
+	return ok and type(name) == "string" and gatherNames[name] == true
+end
+
 -- a spell you cast (UNIT_SPELLCAST_SUCCEEDED): Pick Pocket, by its id or by
 -- its name in any rank
 function K.Cast(spellID, t)
@@ -381,6 +418,8 @@ function K.Cast(spellID, t)
 	end
 	if isPick then
 		K.pickedAt = t or now()
+	elseif isGathering(spellID) then
+		K.gatheredAt = t or now()
 	end
 	return isPick
 end
@@ -390,6 +429,11 @@ local function pickpocketing(t)
 	return K.pickedAt ~= nil and t - K.pickedAt <= 3
 end
 
+-- did you just skin, pick or mine something? (then the loot is not a kill's)
+local function gathering(t)
+	return K.gatheredAt ~= nil and t - K.gatheredAt <= 3
+end
+
 -- Every corpse in the loot window. Loot you may take is loot from a kill
 -- that was yours or your group's.
 function K.Loot(t)
@@ -397,7 +441,7 @@ function K.Loot(t)
 		return 0
 	end
 	t = t or now()
-	if pickpocketing(t) then
+	if pickpocketing(t) or gathering(t) then
 		return 0
 	end
 	local n = 0

@@ -2389,6 +2389,32 @@ if ok then
 			assert(not (easy[1] > 0.9 and easy[2] > 0.8 and easy[3] < 0.4),
 				"a finished quest is not painted gold instead")
 
+			-- A TIMED QUEST'S CLOCK (Josh 2026-09-28: "timed quests don't have a
+			-- timer"): a line under its title, ticking, red under a minute
+			local hadTime, hadTitle = _G.GetTime, _G.GetQuestLogTitle
+			local clock = 500
+			_G.GetTime = function() return clock end
+			_G.GetQuestLogTitle = function(i)
+				if i == 2 then return "Bitter Rivals", 6, nil, false, nil, nil, nil, 11 end
+				return hadTitle(i)
+			end
+			_G.GetQuestTimers = function() return 125 end
+			_G.GetQuestIndexForTimer = function(n) return n == 1 and 2 or nil end
+			mod.Update()
+			local clockRow
+			for idx, r in ipairs(mod.Rows()) do
+				if (r.text._text or ""):find("Bitter Rivals", 1, true) then clockRow = mod.Rows()[idx + 1] end
+			end
+			assert(clockRow and clockRow.text._text == "2:05 left" and clockRow.endsAt == 625,
+				"the clock is the line under the title: " .. tostring(clockRow and clockRow.text._text))
+			clock = 570
+			assert(mod.TickClocks() and clockRow.text._text == "0:55 left" and clockRow.text._textColor[1] > 0.8,
+				"it counts down on its own, and turns red under a minute: " .. tostring(clockRow.text._text))
+			_G.GetQuestTimers, _G.GetQuestIndexForTimer = nil, nil
+			_G.GetTime, _G.GetQuestLogTitle = hadTime, hadTitle
+			mod.Update()
+			assert(not mod.TickClocks(), "and with no timed quest, nothing ticks")
+
 			-- the whole scale, since the client cannot be asked for it
 			local mod2 = BT.GetModule("tracker")
 			local red = mod2.LevelColour(15)     -- +5

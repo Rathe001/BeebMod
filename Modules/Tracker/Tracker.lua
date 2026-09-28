@@ -530,6 +530,7 @@ end
 
 local function setRow(i, y, kind, text, mark, colour, quest)
 	local row = rowFrame(i)
+	row.endsAt = nil
 	-- EVERY ROW IS PLACED, NOT EVERY ROW IS SEEN (Josh 2026-09-20). What is
 	-- past the height the dock gave the list is scrolled to rather than drawn
 	-- off the bottom of the screen. The rows sit where they always sat; M.Fit
@@ -743,6 +744,42 @@ end
 -- A QUEST'S OWN TOOLTIP (Josh 2026-09-27, the dock's tooltips redrawn; the
 -- rows had none): its zone and level, how many objectives are done, each one
 -- with its count and a bar, and the clicks a row already answers to
+-- "4:32 left", "1:02:09 left": a quest's clock, as it stands at `now`
+function M.TimeLeft(endsAt, now)
+	local secs = math.max(0, math.floor((endsAt or 0) - (now or ((type(GetTime) == "function" and GetTime()) or 0))))
+	local h, m, s = math.floor(secs / 3600), math.floor(secs % 3600 / 60), secs % 60
+	if h > 0 then
+		return ("%d:%02d:%02d left"):format(h, m, s)
+	end
+	return ("%d:%02d left"):format(m, s)
+end
+
+-- under a minute, the clock is red
+local function clockColour(endsAt, now)
+	return (endsAt - now) < 60 and FAILED or DIM
+end
+
+-- THE CLOCK TICKS ON ITS OWN (the list is not drawn again every second): the
+-- rows that hold a clock have their words set again, once a second, while
+-- any is shown
+function M.TickClocks()
+	local now = (type(GetTime) == "function" and GetTime()) or 0
+	local any = false
+	for _, row in ipairs(rows or {}) do
+		if row.endsAt and row:IsShown() then
+			any = true
+			row.text:SetText(M.TimeLeft(row.endsAt, now))
+			local c = clockColour(row.endsAt, now)
+			row.text:SetTextColor(c[1], c[2], c[3])
+		end
+	end
+	if not any and M.clockTicker then
+		M.clockTicker:Cancel()
+		M.clockTicker = nil
+	end
+	return any
+end
+
 function M.QuestTip(owner, q)
 	if not (BT.Tip and q) then
 		return
@@ -772,6 +809,9 @@ function M.QuestTip(owner, q)
 		end
 		t:Header({ icon = false, name = q.title or "Quest", sub = #sub > 0 and table.concat(sub, " · ") or nil,
 			pill = pill, pillState = pillState })
+		if q.endsAt and not q.failed and not q.complete then
+			t:Row("Time", M.TimeLeft(q.endsAt), (q.endsAt - ((type(GetTime) == "function" and GetTime()) or 0)) < 60 and "bad" or nil)
+		end
 		if #objectives > 0 then
 			t:Section()
 			for _, o in ipairs(objectives) do
@@ -858,6 +898,16 @@ function M.Update()
 		-- useful fact. Failed still overrides everything.
 		local titleColour = quest.failed and FAILED or levelColour(quest.level)
 		y = setRow(i, y, "title", level .. quest.title, mark, titleColour, quest)
+		-- its clock, first under the title while it runs (Q.Timers)
+		if quest.endsAt and not quest.failed and not quest.complete then
+			i = i + 1
+			local now = (type(GetTime) == "function" and GetTime()) or 0
+			y = setRow(i, y, "line", M.TimeLeft(quest.endsAt, now), nil, clockColour(quest.endsAt, now), quest)
+			rows[i].endsAt = quest.endsAt
+			if not M.clockTicker and C_Timer and C_Timer.NewTicker then
+				M.clockTicker = C_Timer.NewTicker(1, M.TickClocks)
+			end
+		end
 		-- a failed quest's objectives are no longer worth reading
 		if not quest.failed and not folded(quest)
 			and not (quest.complete and opt("hideDone", false)) then

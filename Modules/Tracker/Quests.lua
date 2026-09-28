@@ -203,14 +203,57 @@ end
 
 -- Every quest you are following, in the order the client keeps them. (The
 -- zone each sits under is read too; the tracker does not group by it.)
+-- A TIMED QUEST'S CLOCK (Josh 2026-09-28: "timed quests don't have a timer on
+-- the quest log"). The client counts down an escort or a delivery, and its
+-- own tracker showed the time; ours never asked. GetQuestTimers gives the
+-- seconds left on each running timer, GetQuestIndexForTimer the quest each
+-- belongs to. { [log index] = seconds left }, as of now.
+function Q.Timers()
+	local out = {}
+	if type(GetQuestTimers) ~= "function" or type(GetQuestIndexForTimer) ~= "function" then
+		return out
+	end
+	local times = { pcall(GetQuestTimers) }
+	if not times[1] then
+		return out
+	end
+	for n = 2, #times do
+		local secs = tonumber(times[n])
+		local ok, index = pcall(GetQuestIndexForTimer, n - 1)
+		if secs and ok and tonumber(index) then
+			out[tonumber(index)] = secs
+		end
+	end
+	return out
+end
+
+-- the seconds left on one quest's clock, by its timer or, where the client
+-- has it, by the time it allows and the time gone
+local function timeLeft(index, questID, timers)
+	if timers[index] then
+		return timers[index]
+	end
+	if questID and C_QuestLog and type(C_QuestLog.GetTimeAllowed) == "function" then
+		local ok, total, elapsed = pcall(C_QuestLog.GetTimeAllowed, questID)
+		total, elapsed = tonumber(total), tonumber(elapsed)
+		if ok and total and elapsed and total > 0 then
+			return math.max(0, total - elapsed)
+		end
+	end
+	return nil
+end
+
 function Q.Watched()
 	local out, zone = {}, nil
+	local timers = Q.Timers()
+	local clock = (type(GetTime) == "function" and GetTime()) or 0
 	for i = 1, numEntries() do
 		local title, level, isHeader, questID = entry(i)
 		if isHeader then
 			zone = title
 		elseif title and watched(i, questID) then
 			local done = complete(i, questID)
+			local left = timeLeft(i, questID, timers)
 			out[#out + 1] = {
 				index = i,
 				questID = questID,
@@ -221,6 +264,8 @@ function Q.Watched()
 				failed = failed(i, questID),
 				objectives = objectives(i, questID),
 				item = Q.Item(i, done),
+				-- when its clock runs out, on GetTime's clock
+				endsAt = left and (clock + left) or nil,
 			}
 		end
 	end

@@ -5,6 +5,16 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Skinning a corpse no longer counts as a kill.** Skinning opens the
+  corpse's loot window, and the Expedition took any corpse you looted as
+  yours, even one somebody else killed. The loot window right after a
+  Skinning, Herb Gathering or Mining cast is not counted.
+- **Timed quests show their clock in the quest tracker.** A line under the
+  quest's title counts down, "4:32 left", and turns red in the last minute.
+  The quest's tooltip shows it too.
+
 ## 0.1.0-beta.10
 
 - **A tooltip's pill sits in its chip.** The Expedition's "RANK 1 / 10"

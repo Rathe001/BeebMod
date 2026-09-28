@@ -1100,6 +1100,18 @@ do
 	check(BT.Quests.Watched()[1].item ~= nil, "and handed over once it is complete")
 	_G.GetQuestLogSpecialItemInfo = nil
 	check(BT.Quests.Watched()[1].item == nil, "a client without the call has no items")
+	-- A TIMED QUEST'S CLOCK (Josh 2026-09-28: "timed quests don't have a timer")
+	local hadTime = _G.GetTime
+	_G.GetTime = function() return 1000 end
+	_G.GetQuestTimers = function() return 272 end
+	_G.GetQuestIndexForTimer = function(n) return n == 1 and 2 or nil end
+	check(BT.Quests.Watched()[1].endsAt == 1272, "a timed quest knows when its clock runs out")
+	local tracker = BT.GetModule("tracker")
+	check(tracker.TimeLeft(1272, 1000) == "4:32 left" and tracker.TimeLeft(1000 + 3729, 1000) == "1:02:09 left"
+		and tracker.TimeLeft(900, 1000) == "0:00 left", "and says how long is left: " .. tracker.TimeLeft(1272, 1000))
+	_G.GetQuestTimers, _G.GetQuestIndexForTimer = nil, nil
+	check(BT.Quests.Watched()[1].endsAt == nil, "a quest with no timer has no clock")
+	_G.GetTime = hadTime
 	_G.GetNumQuestLogEntries, _G.GetQuestLogTitle = nil, nil
 	_G.IsQuestWatched, _G.GetNumQuestLeaderBoards = nil, nil
 	_G.IsQuestWatched, _G.GetNumQuestLeaderBoards, _G.GetQuestLogLeaderBoard = nil, nil, nil
@@ -1854,6 +1866,17 @@ do
 	check(#got == 3, "the loot window right after it is a pocket, not a kill")
 	K.Loot(T + 9)
 	check(got[4] == sources[1] .. ":loot", "and a loot window later on is a corpse again")
+	-- A SKINNED CORPSE IS NOT A KILL (Josh 2026-09-28): the window after a
+	-- Skinning cast, any rank, is the skinning's, even on a corpse not yet counted
+	sources[1] = "Creature-0-1-2-3-3098-J"
+	check(not K.Cast(8617, T + 10), "a Skinning cast is not Pick Pocket")
+	K.Loot(T + 11)
+	check(#got == 4, "a corpse you skin is not counted as your kill")
+	K.Cast(2575, T + 20)
+	K.Loot(T + 21)
+	check(#got == 4, "nor one you mine")
+	K.Loot(T + 30)
+	check(got[5] == sources[1] .. ":loot", "a loot window long after the skinning is a corpse's again")
 	-- a reload: what was counted stays counted
 	local set = { [B] = true }
 	K.Reset(set)
@@ -1861,7 +1884,7 @@ do
 	units.nameplate1 = mob(B, "Highlands Bandit", { dead = true })
 	K.plates.nameplate1 = true
 	K.Scan(T + 4)
-	check(#got == 4, "a corpse counted before a reload is not counted again")
+	check(#got == 5, "a corpse counted before a reload is not counted again")
 	check(K.XPName("Vuldren dies, you gain 50 experience. (25 exp Rested bonus)") == "Vuldren",
 		"the rested form of the XP line names the mob too")
 	K.plates.nameplate1 = nil
