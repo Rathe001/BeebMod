@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.10
 
 - **A tooltip's pill sits in its chip.** The Expedition's "RANK 1 / 10"
   started at the chip's left edge and ran into the title. Text in a tooltip
