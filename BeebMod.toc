@@ -5,7 +5,7 @@
 ## Title: BeebMod
 ## Notes: Small utilities for WoW: Forever, set from one window and one button.
 ## Author: Josh
-## Version: 0.1.0-beta.8
+## Version: 0.1.0-beta.9
 ## X-Curse-Project-ID: 1711982
 # TWO VARIABLES, NOT ONE (Josh 2026-09-20). BeebModDB is the whole book -
 # every character ever seen, a megabyte and a half of it. BeebModKeep is
