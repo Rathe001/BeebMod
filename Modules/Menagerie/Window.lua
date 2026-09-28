@@ -426,8 +426,7 @@ local function tile(parent, word)
 	return t
 end
 
--- THE LORE, SET OUT (Josh 2026-09-26: "The Warcraft Wiki credit can be
--- placed once, at the very end. We should have sub headings for the
+-- THE LORE, SET OUT (Josh 2026-09-26: "We should have sub headings for the
 -- additional subtype lores, and we should have an ornate divider between
 -- sections"). The mob's best page first, bare; then each page it borrows
 -- from - its race, its family, its type - and any quest under a heading of
@@ -691,12 +690,13 @@ function V.BuildPage(b)
 	page.loreBox:SetPoint("TOPLEFT", MODAL_PAD, -loreY)
 	page.loreBox:SetPoint("BOTTOMRIGHT", -MODAL_PAD, FOOT_H + 6)
 	page.loreBox.step = 48
-	-- its pieces are made as a mob needs them (V.LorePiece); the credit,
-	-- once, under them all
+	-- its pieces are made as a mob needs them (V.LorePiece)
+	-- THE CREDIT ON THE SETTINGS PAGE (Josh 2026-09-28: "Let's move the credit
+	-- line to the expedition's setting page. Should clean things up a bit").
+	-- The Warcraft Wiki is credited once, on the Expedition's page
+	-- (Modules/Menagerie/Menagerie.lua), not under every mob.
 	page.loreBody = page.loreBox.content
 	page.lorePieces = {}
-	page.loreFrom = W.Label(page.loreBody, "", "small", DIM[1], DIM[2], DIM[3])
-	page.loreFrom:SetJustifyH("LEFT")
 
 	-- the foot: when it was first killed, and where this mob is in the grid's
 	W.Divider(page, MODAL_PAD, -(MODAL_H - FOOT_H))
@@ -722,22 +722,19 @@ function V.Facts(npc, kills, all)
 	-- THE LORE IN FULL (Josh 2026-09-26: "include the full text on the
 	-- details"): every wiki page that speaks of the mob, most specific first,
 	-- the first bare and the rest under their titles; then what a quest said
-	-- of it, under the quest's; and the pages credited once, at the end.
+	-- of it, under the quest's.
 	-- The wiki's item links come through as "[Fel Moss]": the brackets go.
 	f.loreLine = J.LoreLine(m)
 	f.lore = {}
-	local titles = {}
 	for _, e in ipairs(J.WikiLore(m)) do
 		-- a page borrowed from a mob with the same body is taken as fact
 		-- (Josh 2026-09-26: "We should just assume it is a harpy if the
 		-- model is the same"), headed like any other
 		-- A HEADING WITHOUT THE WIKI'S TAG (Josh 2026-09-28, on "Timber Wolf
 		-- (mob)"): the wiki tells its pages apart with "(mob)" or
-		-- "(Darkshore)"; the heading is the name, and the credit keeps the
-		-- page's full title
+		-- "(Darkshore)"; the heading is the name
 		local head = #f.lore > 0 and (e.title:gsub("%s*%b()$", "")) or nil
 		f.lore[#f.lore + 1] = { head = head, text = (e.text:gsub("%[(.-)%]", "%1")) }
-		titles[#titles + 1] = e.title
 	end
 	local q = type(m.lore) == "table" and m.lore or nil
 	if q and q.text then
@@ -746,8 +743,6 @@ function V.Facts(npc, kills, all)
 	if #f.lore == 0 then
 		f.lore[1] = { text = f.loreLine }
 	end
-	f.loreFrom = #titles > 0
-		and ("Warcraft Wiki: %s · CC BY-SA 3.0"):format(table.concat(titles, ", ")) or nil
 	-- EVERY PART, NOT UP TO THE FIRST GAP (Josh 2026-09-27: "The details dont
 	-- have any indicator if the mob is rare or elite"). The parts were walked
 	-- with ipairs, which stops at the first nil: a mob with no beast family -
@@ -1686,11 +1681,6 @@ function V.DrawPage(npc, kills, all)
 		p.rule:Hide()
 		p.head:Hide()
 		p.text:Hide()
-	end
-	page.loreFrom:SetShown(f.loreFrom ~= nil)
-	if f.loreFrom then
-		page.loreFrom:SetText(f.loreFrom)
-		put(page.loreFrom, 14)
 	end
 	page.loreBox:SetContentHeight(tall + 6)
 	if page.loreFor ~= npc then

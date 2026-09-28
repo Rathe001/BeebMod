@@ -178,7 +178,7 @@ lives in `Modules/Ledger`.
                          A card shows the page titled with the mob's whole
                          name, then its model's page, its family's and its
                          type's. Text under CC BY-SA 3.0,
-                         credited on each mob's page. scripts/fetch-lore.ps1
+                         credited on the Expedition's settings page. scripts/fetch-lore.ps1
                          writes it. The script keeps what it fetched and asks
                          the wiki only for what is new; -Rebuild writes the
                          file again from what it kept, asking only for mobs met

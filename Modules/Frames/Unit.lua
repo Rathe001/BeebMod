@@ -668,11 +668,14 @@ function F.Dress(b, kind)
 	-- NO RIM (Josh 2026-09-23, second look in game). The theme's border went
 	-- round every frame, and aggro, your target's outline and (to come) a
 	-- dispel border all need to BE the frame's edge: a rim in the theme's
-	-- colour beside a red aggro line reads as two edges arguing. The fill
-	-- stays, and the two units of it round the bars are the frame's edge.
+	-- colour beside a red aggro line reads as two edges arguing.
+	-- NO DARK EDGE EITHER (Josh 2026-09-28: "all of our unit frames acquired
+	-- a black border. Can you remove it?"). The fill showed two units deep
+	-- round the bars; the bars reach the frame's edge now, and the fill shows
+	-- only in the line between health and power.
 	BT.Pill.Panel(b, W.FILL, NO_EDGE)
 
-	local inset = 2
+	local inset = 0
 	local powerH = k.power or 0
 	b.health = bar(b, 1)
 	b.health:SetPoint("TOPLEFT", inset, -inset)

@@ -4149,10 +4149,13 @@ if ok then
 			-- PAST THE END, A LITTLE (Josh 2026-09-24): the heal on the frames
 			-- you heal from has its own clip, a little wider than the health
 			local room = target.healRoom
-			local over = math.floor((F.KINDS.target.w - 4) * F.OVERHEAL + 0.5)
+			-- the health runs the frame's whole width (no dark edge, 2026-09-28)
+			local over = math.floor(F.KINDS.target.w * F.OVERHEAL + 0.5)
 			assert(room and target.heals:GetParent() == room and room._points.BOTTOMRIGHT
 				and room._points.BOTTOMRIGHT.x == over and room._points.BOTTOMRIGHT.rel == target.health,
 				"the target's heal may run past the end of its health, by " .. over)
+			assert(target.health._points.TOPLEFT.x == 0 and target.health._points.TOPLEFT.y == 0,
+				"the health bar reaches the frame's edge: no dark border round it")
 			assert(F.Build(_G.UIParent, "party", nil, true).healRoom, "so may a party cell's, which is yours too")
 			local raidCell = F.Build(_G.UIParent, "raid", nil, true)
 			assert(raidCell.healRoom == nil and raidCell.heals:GetParent() == raidCell.health,
@@ -9177,6 +9180,19 @@ if ok then
 			local J, V = BT.Menagerie, BT.MenagerieWindow
 			BT.SetEnabled("menagerie", true)
 			local m = BT.GetModule("menagerie")
+			-- THE WIKI'S CREDIT, ONCE (Josh 2026-09-28): on the settings page
+			local notes, note = {}, BT.Widgets.Note
+			BT.Widgets.Note = function(p, text, quiet)
+				notes[#notes + 1] = text
+				return note(p, text, quiet)
+			end
+			m:BuildTab(_G.CreateFrame("Frame"))
+			BT.Widgets.Note = note
+			local credited = false
+			for _, t in ipairs(notes) do
+				credited = credited or (t:find("Warcraft Wiki", 1, true) and t:find("CC BY-SA 3.0", 1, true)) ~= nil
+			end
+			assert(credited, "the Expedition's settings page credits the Warcraft Wiki and its licence")
 			for npc = 1, 12 do
 				m.Kill({ npc = 250000 + npc, name = "Mob " .. npc, kind = npc % 2 == 0 and "Beast" or "Undead",
 					family = "Cat", rank = (npc == 3 and "rare") or ((npc == 5 or npc == 7) and "rareelite") or "normal", level = 5, zone = "Zephras Isle",
@@ -9469,8 +9485,8 @@ if ok then
 				and lp[1].text:GetText() == "Bog beasts, Fel Moss and all.", "the best page first, bare, its links plain")
 			assert(lp[2].rule:IsShown() and lp[2].head:GetText() == "ELEMENTAL", "the next under its title, an ornament over it")
 			assert(lp[3].head:GetText() == "TIMBER WOLF", "a heading leaves off the wiki's \"(mob)\": " .. tostring(lp[3].head:GetText()))
-			assert(b.page.loreFrom:GetText() == "Warcraft Wiki: Timberling, Elemental, Timber Wolf (mob) · CC BY-SA 3.0",
-				"and the pages credited once, at the end")
+			assert(b.page.loreFrom == nil,
+				"and no credit under the mob: it is on the Expedition's settings page")
 			MJ.WikiLore = wiki
 			V.Refresh()
 			b.page.next:GetScript("OnClick")(b.page.next)

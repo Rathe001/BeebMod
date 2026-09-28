@@ -5,6 +5,13 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Unit frames have no dark border.** The health and power bars reach the
+  frame's edge. The dark background used to show round them.
+- **The Warcraft Wiki is credited once, on the Expedition's settings page.**
+  A mob's card no longer ends with a credit line.
+
 ## 0.1.0-beta.8
 
 - **Debug tools are buttons on the Testing page, not commands.** BeebMod had

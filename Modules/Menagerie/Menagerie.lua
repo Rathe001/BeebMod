@@ -549,6 +549,13 @@ function M:BuildTab(panel)
 			BT.EnsureBound()
 			BT.settings.menagerieSound = v and true or false
 		end)
+	-- THE WIKI'S CREDIT, ONCE (Josh 2026-09-28: "Let's move the credit line to
+	-- the expedition's setting page"). Most descriptions are the Warcraft
+	-- Wiki's own sentences, and the rest are rewritten from them, so CC BY-SA
+	-- 3.0 asks for the source and the licence to be named. Here, not under
+	-- every mob.
+	page:Note("The journal's descriptions come from the Warcraft Wiki (warcraft.wiki.gg), "
+		.. "some of them rewritten, under the CC BY-SA 3.0 licence.", true)
 	page:Layout()
 end
 
