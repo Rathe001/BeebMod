@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.11
 
 - **Skinning a corpse no longer counts as a kill.** Skinning opens the
   corpse's loot window, and the Expedition took any corpse you looted as
