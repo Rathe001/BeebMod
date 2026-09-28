@@ -18,17 +18,28 @@ the mobs met since are looked up too: it reads the saved file.
 
 Writes Modules/Menagerie/LoreData.lua. The text is the wiki's, under CC BY-SA
 3.0: each entry keeps the title of the page it came from, the addon credits
-it where it is shown, and the file says so at its top.
+it where it is shown, and the file says so at its top. What is written is
+the vanilla part of it (the filter near the end): -Rebuild writes it again
+from the cache, asking the wiki for nothing but new mobs; -Rebuild -Refetch
+asks again for pages kept with fewer sentences than are fetched now.
 #>
 param(
 	[string]$Saved = "",
 	# build the file again from what was fetched last time, asking the wiki
 	# for nothing but the journal's new mobs
-	[switch]$Rebuild
+	[switch]$Rebuild,
+	# with -Rebuild: ask again for the pages fetched with fewer opening
+	# sentences than are asked for now (a full run always does)
+	[switch]$Refetch
 )
 
 $ErrorActionPreference = "Stop"
 $Api = "https://warcraft.wiki.gg/api.php"
+# MORE TO CUT FROM (Josh 2026-09-27): a page's first six sentences are
+# fetched and kept, and the file takes the first three the vanilla filter
+# (below) lets through - so a page that loses a sentence to Outland still
+# has something to say
+$Sentences = 6
 $UA = "BeebMod-Menagerie-lore/1.0 (WoW addon; josh@tummel.io)"
 $Root = Split-Path -Parent $PSScriptRoot
 $Out = Join-Path $Root "Modules\Menagerie\LoreData.lua"
@@ -179,7 +190,10 @@ if (Test-Path $Cache) {
 	# it back a layer worse: a pronunciation, a dash, an accent grew into it.
 	$json = Get-Content -Raw -Encoding UTF8 -LiteralPath $Cache | ConvertFrom-Json
 	foreach ($p in $json.PSObject.Properties) {
-		$lore[$p.Name] = @{ title = $p.Value.title; text = $p.Value.text; kind = $p.Value.kind }
+		# how many sentences it was fetched with: none written means three,
+		# from before there was a choice
+		$n = if ($p.Value.sentences) { [int]$p.Value.sentences } else { 3 }
+		$lore[$p.Name] = @{ title = $p.Value.title; text = $p.Value.text; kind = $p.Value.kind; sentences = $n }
 	}
 }
 # the pages asked for that the wiki had nothing for, so they are not asked again
@@ -268,6 +282,18 @@ if ($Saved -and (Test-Path $Saved)) {
 	}
 }
 
+# A GROUP IS A GROUP (Josh 2026-09-26: "Living Lightning" was "a gryphon
+# located at the sea base of Highbank"). The organization categories hold
+# their MEMBERS as well - people, mounts, ships - so a page from them is kept
+# only when its title reads as a group: a tribe, a clan, a brotherhood...
+# or "Bloodfeather harpies", a people of a race.
+$OrgWord = '\b(tribe|tribes|clan|clans|pack|brood|brotherhood|syndicate|cult|order|legion|expedition|company|crusade|covenant|gang|kingdom|horde|league|society|council|circle|conclave|cartel|dragonflight|flight|remnant|remnants|army|band|coven|family|guild|faction|alliance|dynasty|empire)$'
+$RacePlural = '^(\S+) (harpies|harpy|trolls|troll|troggs|trogg|gnolls|gnoll|kobolds|kobold|murlocs|murloc|ogres|ogre|quilboar|centaurs|centaur|satyrs|satyr|furbolgs|furbolg|naga|dwarves|dwarf|goblins|goblin|orcs|orc|humans|human|elves|elf|tauren|draenei|arakkoa|ethereals|ethereal|nerubians|nerubian|trogs|wolvar|gorlocs|gorloc|jinyu|hozen|mogu|saurok|sethrak|vulpera|tortollans|tortollan|kobalds)$'
+function IsGroupTitle([string]$Title) {
+	$t = ($Title -replace '\s*\([^)]*\)\s*$', '').ToLowerInvariant().Trim()
+	return ($t -match $OrgWord) -or ($t -match $RacePlural)
+}
+
 function Save-Cache {
 	$keep = @{}
 	foreach ($k in $lore.Keys) { $keep[$k] = $lore[$k] }
@@ -284,10 +310,20 @@ $titles = @($want.Keys | Where-Object { -not $lore.ContainsKey($_) -and -not $no
 foreach ($t in $want.Keys) {
 	if ($lore.ContainsKey($t) -and $Rank[$want[$t]] -gt $Rank[$lore[$t].kind]) { $lore[$t].kind = $want[$t] }
 }
-Write-Host ("{0} pages to read" -f $titles.Count)
+# and a page fetched with fewer sentences than are asked for now, asked
+# again - only the ones the file would use: a group's members never are
+$short = @()
+if (-not $Rebuild -or $Refetch) {
+	$short = @($lore.Keys | Where-Object {
+		$e = $lore[$_]
+		(-not $e.sentences -or $e.sentences -lt $Sentences) -and ($e.kind -ne "group" -or (IsGroupTitle $e.title))
+	})
+}
+if ($short.Count -gt 0) { $titles = @($titles) + @($short) }
+Write-Host ("{0} pages to read ({1} of them again, for more sentences)" -f $titles.Count, $short.Count)
 for ($i = 0; $i -lt $titles.Count; $i += 20) {
 	$batch = $titles[$i..([Math]::Min($i + 19, $titles.Count - 1))]
-	$r = Invoke-Wiki @{ action = "query"; prop = "extracts"; exintro = "1"; explaintext = "1"; exsentences = "3";
+	$r = Invoke-Wiki @{ action = "query"; prop = "extracts"; exintro = "1"; explaintext = "1"; exsentences = [string]$Sentences;
 		exlimit = "20"; redirects = "1"; titles = ($batch -join "|") }
 	$from = @{}
 	foreach ($t in $batch) { $from[$t] = $t }
@@ -298,27 +334,18 @@ for ($i = 0; $i -lt $titles.Count; $i += 20) {
 		$page = $p.Value
 		if ($page.missing -ne $null -or -not $page.extract) { continue }
 		$asked = if ($from[$page.title]) { $from[$page.title] } else { $page.title }
-		$lore[$asked] = @{ title = $page.title; text = ($page.extract -replace '\s+', ' ').Trim(); kind = $want[$asked] }
+		# asked again, a page keeps the kind it had when nothing wants it now
+		$kind = if ($want[$asked]) { $want[$asked] } elseif ($lore.ContainsKey($asked)) { $lore[$asked].kind } else { $null }
+		$lore[$asked] = @{ title = $page.title; text = ($page.extract -replace '\s+', ' ').Trim(); kind = $kind; sentences = $Sentences }
 		$got[$asked] = $true
 	}
-	foreach ($t in $batch) { if (-not $got.ContainsKey($t)) { $nothing[$t] = $true } }
+	# a page asked again that says nothing this time keeps what it said before
+	foreach ($t in $batch) { if (-not $got.ContainsKey($t) -and -not $lore.ContainsKey($t)) { $nothing[$t] = $true } }
 	Write-Host ("  {0} of {1}" -f [Math]::Min($i + 20, $titles.Count), $titles.Count)
 	# kept as it goes: a run stopped half way keeps what it had
 	if (($i / 20) % 25 -eq 24) { Save-Cache }
 }
 Save-Cache
-
-# A GROUP IS A GROUP (Josh 2026-09-26: "Living Lightning" was "a gryphon
-# located at the sea base of Highbank"). The organization categories hold
-# their MEMBERS as well - people, mounts, ships - so a page from them is kept
-# only when its title reads as a group: a tribe, a clan, a brotherhood...
-# or "Bloodfeather harpies", a people of a race.
-$OrgWord = '\b(tribe|tribes|clan|clans|pack|brood|brotherhood|syndicate|cult|order|legion|expedition|company|crusade|covenant|gang|kingdom|horde|league|society|council|circle|conclave|cartel|dragonflight|flight|remnant|remnants|army|band|coven|family|guild|faction|alliance|dynasty|empire)$'
-$RacePlural = '^(\S+) (harpies|harpy|trolls|troll|troggs|trogg|gnolls|gnoll|kobolds|kobold|murlocs|murloc|ogres|ogre|quilboar|centaurs|centaur|satyrs|satyr|furbolgs|furbolg|naga|dwarves|dwarf|goblins|goblin|orcs|orc|humans|human|elves|elf|tauren|draenei|arakkoa|ethereals|ethereal|nerubians|nerubian|trogs|wolvar|gorlocs|gorloc|jinyu|hozen|mogu|saurok|sethrak|vulpera|tortollans|tortollan|kobalds)$'
-function IsGroupTitle([string]$Title) {
-	$t = ($Title -replace '\s*\([^)]*\)\s*$', '').ToLowerInvariant().Trim()
-	return ($t -match $OrgWord) -or ($t -match $RacePlural)
-}
 
 # the key a page is found by: its title in lower case, without "(pet family)"
 # and the like; a tribe or clan also by its name alone ("frostmane"), and a
@@ -366,11 +393,172 @@ foreach ($k in @($lore.Keys)) {
 }
 Save-Cache
 
-function LuaString([string]$s) {
-	return '"' + ($s -replace '\\', '\\' -replace '"', '\"' -replace "`r", '' -replace "`n", '\n') + '"'
+# VANILLA, NOT SINCE (Josh 2026-09-27: "We are in vanilla WoW, so we
+# shouldn't have lore content for outland or any other expansion"). The wiki
+# writes about Azeroth as it is now: tallstriders "in Terokkar Forest on
+# Outland", Cookie's extra boss "in Heroic mode". The places, peoples and
+# things of the game that came after vanilla are listed here, and a sentence
+# that reaches one is cut at the comma or "and" before it - "found in the
+# Swamp of Sorrows, on Darkmoon Island, and in Terokkar Forest" keeps the
+# Swamp - or, with nothing before it worth keeping, dropped. A page whose
+# first sentence goes is about something vanilla never had, and goes with it.
+# The cache keeps the wiki's words whole; this is done to what is written out,
+# so a word added here takes effect on the next -Rebuild.
+#
+# Only words vanilla does not use for something of its own: the Burning
+# Legion, the black dragonflight, Dalaran, Draenor (the orcs' home), the
+# Emerald Dream, the earthen of Uldaman and the Zandalar tribe all stay.
+$LaterWords = @(
+	# the expansions, by name
+	"Burning Crusade", "Wrath of the Lich King", "Cataclysm", "Mists of Pandaria", "Warlords of Draenor",
+	"Battle for Azeroth", "Shadowlands", "War Within", "Legion invasion", "Legion expansion",
+	"(?<!(?i:black|red|blue|green|bronze|infinite|twilight|chromatic|nether|netherwing) )Dragonflight",
+	# Outland, and the Draenor of the past
+	"Outland", "alternate Draenor", "alternate universe", "Terokkar", "Nagrand", "Shattrath", "Netherstorm",
+	"Hellfire (?:Peninsula|Citadel|Ramparts)", "Zangarmarsh", "Blade's Edge", "Shadowmoon Valley", "Tanaan",
+	"Frostfire Ridge", "Gorgrond", "Spires of Arak", "Talador", "Ashran",
+	# the lands added to the old continents
+	"Quel'Danas", "Eversong", "Ghostlands", "Silvermoon", "Azuremyst", "Bloodmyst", "Exodar", "Gilneas City",
+	"invasion of Gilneas", "Kezan", "Lost Isles", "Vashj'ir", "Kelp'thar", "Abyssal Depths", "Shimmering Expanse",
+	"Deepholm", "Uldum", "Twilight Highlands", "Tol Barad", "Firelands", "Molten Front", "Darkmoon Island",
+	"Wandering Isle", "Broken Isles", "Broken Shore",
+	# Northrend
+	"Northrend", "Icecrown", "Dragonblight", "Howling Fjord", "Borean Tundra", "Grizzly Hills", "Sholazar",
+	"Storm Peaks", "Zul'Drak", "Wintergrasp", "Crystalsong", "Violet Citadel", "Underbelly",
+	# Pandaria and everything after it
+	"Pandaria", "Jade Forest", "Kun-Lai", "Townlong", "Vale of Eternal Blossoms", "Krasarang",
+	"Valley of the Four Winds", "Dread Wastes", "Timeless Isle", "Isle of Thunder", "Suramar", "Stormheim",
+	"Highmountain", "Val'sharah", "Azsuna", "Argus", "Zandalar(?! [Tt]ribe)", "Zuldazar", "Nazmir", "Vol'dun",
+	"Kul Tiras", "Kul Tiran", "Tiragarde", "Drustvar", "Stormsong", "Nazjatar", "Mechagon", "Ardenweald",
+	"Revendreth", "Maldraxxus", "Kyrian", "Oribos", "the Maw", "Zereth Mortis", "Korthia", "Dragon Isles",
+	"Ohn'ahran", "Waking Shores", "Azure Span", "Thaldraszus", "Zaralek", "Khaz Algar", "Isle of Dorn",
+	"Ringing Deeps", "Hallowfall", "Azj-Kahet", "Undermine", "Siren Isle", "K'aresh",
+	# peoples, and people, who came later
+	"draenei", "Draenei", "blood elf", "blood elves", "Blood elf", "Blood elves", "Sin'dorei", "Illidari",
+	"Allied race", "void elf", "void elves", "Void elf", "Void elves", "Nightborne", "Lightforged", "Mag'har",
+	"Vulpera", "vulpera", "Mechagnome", "mechagnomes?", "vrykul", "Vrykul", "Curse of Flesh", "Dracthyr", "Garrosh", "Fourth War", "War of Thorns",
+	"Maruuk", "Exile's Reach", "(?i:haranir)", "Bastion", "Sunstrider Isle", "Strand of the Ancients",
+	"Isle of Conquest", "Eye of the Storm", "Twin Peaks", "Battle for Gilneas", "Silvershard", "Temple of Kotmogu",
+	"Deepwind", "Seething Shore", "Bilgewater", "Kor'kron",
+	# Draenor the orcs' home stays; Draenor the place to find a beast, beside
+	# Azeroth, is Outland's
+	"(?<=\b(?:Azeroth|Kalimdor|Kingdoms|Outland)(?:,| and| or| as well as) )Draenor"
+)
+# THE GAME SINCE: not a place a sentence can be cut short of - "captured by
+# engaging it in a pet battle" cut is "captured by engaging it" - so a
+# sentence that reaches one of these goes whole
+$ThingWords = @(
+	"Heroic", "(?i:heroic (?:mode|difficulty|dungeon))", "Mythic", "Timewalking", "(?i:pet battles?|battle pets?)",
+	"(?i:garrisons?)", "Order Hall", "(?i:world quests?)", "Warfront", "Island Expedition", "Torghast",
+	"Warcraft Rumble", "Hearthstone", "Heroes of the Storm", "(?i:arena (?:battlemaster|organizer|team|vendor|master))",
+	"\[\d+-\d+\]", "(?i:patch (?:[2-9]|1\d)\.\d)", "Plunderstorm", "Remix", "Dungeon Journal", "Adventure Guide",
+	"Raid Finder", "Trading Post", "(?i:scenario)", "Warcraft: Legion",
+	# THE SEASONS ARE NOT VANILLA (Josh 2026-09-27: Ragnaros was "the final
+	# boss in the Season of Discovery Molten Core raid")
+	"Season of Discovery", "(?i:Season of Mastery)", "(?i:Hardcore realms?)"
+)
+# a page written for one of them, by the qualifier on its title
+$SeasonTitle = '\((?:Season of Discovery|Season of Mastery|Plunderstorm|Hardcore|Remix)\)'
+# each word a whole word, where it starts or ends with a letter
+function WordsRegex($words) {
+	return [regex]::new((($words | ForEach-Object {
+		$w = $_
+		if ($w -match '^[A-Za-z]') { $w = '\b' + $w }
+		if ($w -match '[A-Za-z]$') { $w = $w + '\b' }
+		$w
+	}) -join '|'))
+}
+$Later = WordsRegex (@($LaterWords) + @($ThingWords))
+$Thing = WordsRegex $ThingWords
+
+# where a sentence ends: not after "St." or "Mr."
+$SentenceEnd = [regex]::new('(?<=[.!?]["''\u201D)]?)(?<!\b(?:St|Mr|Mrs|Ms|Dr|Lt|Sgt|Jr|Sr|vs|Mt|Capt|Gen|Col|Cpl|Pvt|No|Ft|Co|Inc|Ltd|Bros)\.)\s+(?=["''(\[\u201C]?[A-Z0-9])')
+# where a sentence can be cut: a comma, a semicolon, a joining word
+$ClauseBreak = [regex]::new('(?:,|;|\s(?:and|or|but|though|although|while|whereas|including|as well as|such as))\s')
+# a later place's own word, "in", "on" or "at" - not "of": "the continent
+# of Northrend" is not a place with the name taken off
+$Near = [regex]::new('\s+(?:in|on|at)(?:\s+(?:the|a|an))?$')
+# a place's verb, left without its place
+$Where = [regex]::new('\s+(?:(?:that|which|who) (?:are |is )?)?(?:found|located|seen|situated|living|residing|dwelling|native|that live|who live|which live|available|available only|only)$')
+# a sentence that starts on a clause of another
+$Subordinate = [regex]::new('^(?:After|When|While|Although|Though|Because|Since|Before|Following|During|Like|Unlike|As|If|Once|Upon|Until|Whereas|With)\b')
+# what a cut leaves hanging at its end
+$Dangling = [regex]::new('(?:\s*[,;:\-]|\s+(?:and|or|but|though|although|while|whereas|including|as well as|such as|in|on|at|of|from|to|with|by|the|a|an|as|also|both|either|mainly|mostly|primarily|especially))+$')
+
+# the zones Cataclysm split, by their vanilla names
+function Vanilla-Places([string]$s) {
+	$s = [regex]::Replace($s, '\b([Tt]he )?(?:Northern|Southern) Barrens\b', { param($m) $(if ($m.Groups[1].Success) { $m.Groups[1].Value } else { "the " }) + "Barrens" })
+	$s = [regex]::Replace($s, '\b(?:[Tt]he )?(?:Northern Stranglethorn|Cape of Stranglethorn)\b', 'Stranglethorn Vale')
+	return $s
 }
 
-$entries = @{}
+# one sentence as vanilla would have it, or nothing
+function Vanilla-Sentence([string]$s) {
+	# an aside about later things goes whole: "(also found in Northrend)"
+	$s = [regex]::Replace($s, '\s*\([^()]*\)', { param($m) $(if ($Later.IsMatch($m.Value)) { "" } else { $m.Value }) })
+	$m = $Later.Match($s)
+	if (-not $m.Success) { return $s }
+	if ($Thing.Match($s).Index -eq $m.Index -and $Thing.IsMatch($s)) { return $null }
+	# the breaks are looked for before the trim: "Azeroth and " ends on one
+	$whole = $s.Substring(0, $m.Index)
+	$head = $whole.TrimEnd()
+	# "Azjol-Nerub in Northrend": the later place is only where it is, and
+	# goes with the word that leads to it. Otherwise the cut is at the last
+	# comma or "and" before it - "appears to be from Helheim and have also
+	# leaked into Stormheim" is not cut at "into"
+	if ($Near.IsMatch($head)) {
+		$kept = $Near.Replace($head, "")
+	} else {
+		$breaks = $ClauseBreak.Matches($whole)
+		if ($breaks.Count -eq 0) { return $null }
+		$kept = $whole.Substring(0, $breaks[$breaks.Count - 1].Index)
+	}
+	for ($i = 0; $i -lt 4; $i++) { $kept = $Dangling.Replace($kept.TrimEnd(), "") }
+	# "creatures found in Bastion" is "creatures", not "creatures found"
+	$kept = $Where.Replace($kept, "").Trim()
+	# a clause cut from the sentence it hung on says nothing: "After meeting
+	# his demise at the hands of adventurers"
+	if ($Subordinate.IsMatch($kept) -and $kept -notmatch ',') { return $null }
+	# what is left of a list is joined again: "the Eastern Kingdoms, Kalimdor"
+	# is "the Eastern Kingdoms and Kalimdor" - only a list, cut at one of its
+	# commas or its "and" ("mushan beasts, are reptilian beasts" is not one)
+	if ($head -match '(?:,|\s(?:and|or|as well as))(?:\s+(?:in|on|at))?(?:\s+(?:the|a|an))?$') {
+		$kept = [regex]::Replace($kept, ', ((?:[^,\s]+ ){0,3}[^,\s]+)$', ' and $1')
+	}
+	# "both in Azeroth" is "in Azeroth"
+	$kept = [regex]::Replace($kept, '\bboth ((?:(?:in|on|to) )?[^,]*)$', { param($x) $(if ($x.Groups[1].Value -match '\band\b') { $x.Value } else { $x.Groups[1].Value }) })
+	# long enough to say something, and no bracket or quote left open
+	if ($kept.Length -lt 40) { return $null }
+	if (([regex]::Matches($kept, '\(')).Count -ne ([regex]::Matches($kept, '\)')).Count) { return $null }
+	if ((([regex]::Matches($kept, '"')).Count % 2) -ne 0) { return $null }
+	return $kept + "."
+}
+
+# the note a page opens with about other pages: "This page is about trolls
+# in general. For the playable races, see..."
+$Hatnote = [regex]::new('^(?:This (?:page|article) is about|For [^.]*\bsee\b|For other uses|Not to be confused|See also)')
+
+# a page's text as vanilla would have it: its first three sentences that
+# survive, or nothing when its first does not
+function Vanilla-Text([string]$s) {
+	$out = @()
+	$first = $true
+	foreach ($sentence in $SentenceEnd.Split((Vanilla-Places $s))) {
+		$sentence = $sentence.Trim()
+		if (-not $sentence -or $Hatnote.IsMatch($sentence)) { continue }
+		$v = Vanilla-Sentence $sentence
+		if ($first -and -not $v) { return "" }
+		$first = $false
+		if ($v) { $out += $v }
+		if ($out.Count -ge 3) { break }
+	}
+	return (($out -join " ") -replace '\s{2,}', ' ' -replace '\s+([,.;:])', '$1').Trim()
+}
+
+# every page as it is written out: the vanilla part of it, and the pages with
+# nothing vanilla to say left out
+$shown = @{}
+$wentLater = 0
 $dropped = 0
 foreach ($asked in $lore.Keys) {
 	$e = $lore[$asked]
@@ -378,6 +566,28 @@ foreach ($asked in $lore.Keys) {
 		$dropped++
 		continue
 	}
+	# A SEASON'S OWN PAGE (Josh 2026-09-27): "Ragnaros (Season of Discovery)"
+	# is that season's Ragnaros, whatever its words say, and it filled the key
+	# the Molten Core's own page should have
+	if ($asked -match $SeasonTitle -or $e.title -match $SeasonTitle) {
+		$wentLater++
+		continue
+	}
+	$text = Vanilla-Text $e.text
+	if ($text) {
+		$shown[$asked] = @{ title = $e.title; kind = $e.kind; text = $text }
+	} else {
+		$wentLater++
+	}
+}
+
+function LuaString([string]$s) {
+	return '"' + ($s -replace '\\', '\\' -replace '"', '\"' -replace "`r", '' -replace "`n", '\n') + '"'
+}
+
+$entries = @{}
+foreach ($asked in $shown.Keys) {
+	$e = $shown[$asked]
 	# A TITLE WITH A QUALIFIER IS A SECOND CHOICE (Josh 2026-09-27): "Beast
 	# (Rumble)" is Warcraft Rumble's beast, and read as "beast" it outranked
 	# the creature type's own page. Written "Name (something)", a page only
@@ -392,9 +602,8 @@ foreach ($asked in $lore.Keys) {
 # and by the page the wiki led to, or a title with a qualifier, where nothing
 # has that name already: "threshadons" was asked, "Threshadon" is the page,
 # and a mob's page says "threshadon" as often as "threshadons"
-foreach ($asked in $lore.Keys) {
-	$e = $lore[$asked]
-	if ($e.kind -eq "group" -and -not (IsGroupTitle $e.title)) { continue }
+foreach ($asked in $shown.Keys) {
+	$e = $shown[$asked]
 	# two loops, not one list: joining two of these with + nests them (the
 	# memory note on pipeline flattening), and a list became a key
 	foreach ($k in (Keys $asked $e.kind)) {
@@ -439,4 +648,4 @@ foreach ($k in ($entries.Keys | Sort-Object)) {
 }
 [void]$sb.AppendLine("}")
 [IO.File]::WriteAllText($Out, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host ("wrote {0}: {1} keys to {2} pages, from {3} fetched ({4} members of groups left out)" -f $Out, $entries.Count, $n, $lore.Count, $dropped)
+Write-Host ("wrote {0}: {1} keys to {2} pages, from {3} fetched ({4} members of groups left out, {5} pages with nothing vanilla to say)" -f $Out, $entries.Count, $n, $lore.Count, $dropped, $wentLater)

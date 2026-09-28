@@ -105,10 +105,13 @@ function M.Kill(info, how)
 
 	local icon = T.Icon(info.kind)
 	local name = info.name or ("#" .. info.npc)
-	if new and on("menagerieDiscover", false) then
+	-- ON UNLESS SWITCHED OFF (Josh 2026-09-27: "this should be enabled by
+	-- default for new players"): a new page in the journal says so
+	if new and on("menagerieDiscover", true) then
 		local _, worth = J.Worth(J.Store().mobs[info.npc])
+		-- minor: it gives way in a full queue (T.Push)
 		T.Push({ head = "New to the Menagerie", text = name, points = worth, icon = icon,
-			onClick = openOn(info.npc) })
+			onClick = openOn(info.npc), minor = true })
 	end
 	for _, a in ipairs(news or {}) do
 		if a.mastery then
@@ -406,7 +409,7 @@ end
 M.events = CreateFrame("Frame")
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "UNIT_FLAGS",
 	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "CHAT_MSG_COMBAT_XP_GAIN", "LOOT_READY", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE",
-	"PLAYER_ENTERING_WORLD" }) do
+	"PLAYER_ENTERING_WORLD", "ENCOUNTER_END" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
 -- your own casts, for Pick Pocket (Modules/Menagerie/Kills.lua, K.Cast)
@@ -417,7 +420,7 @@ do
 		pcall(M.events.RegisterEvent, M.events, "UNIT_SPELLCAST_SUCCEEDED")
 	end
 end
-M.events:SetScript("OnEvent", function(_, event, a, b, c)
+M.events:SetScript("OnEvent", function(_, event, a, b, c, d, e)
 	if not BT.Enabled("menagerie") then
 		return
 	end
@@ -446,6 +449,12 @@ M.events:SetScript("OnEvent", function(_, event, a, b, c)
 		M.QuestsChanged()
 	elseif event == "QUEST_ACCEPTED" or event == "QUEST_LOG_UPDATE" then
 		M.QuestsChanged()
+	elseif event == "ENCOUNTER_END" then
+		-- id, name, difficulty, group size, success: a boss beaten is a boss
+		-- (J.Category), its kill counted by its death as any other
+		if e == 1 or e == true then
+			J.EncounterWon(b)
+		end
 	end
 end)
 
@@ -522,7 +531,7 @@ function M:BuildTab(panel)
 			BT.settings.menagerieToasts = v and true or false
 		end)
 	W.SwitchRow(toasts, "Every new kind of mob", "a toast for each new page in the journal, too",
-		function() return on("menagerieDiscover", false) end,
+		function() return on("menagerieDiscover", true) end,
 		function(v)
 			BT.EnsureBound()
 			BT.settings.menagerieDiscover = v and true or false
@@ -571,6 +580,19 @@ BT.Command("menagerie", function(rest)
 			or ("held still by %s"):format(how),
 			BT.MenagerieWindow.canHideEffects and "could be switched off (SetParticlesEnabled)"
 				or "cannot be switched off"))
+		return
+	elseif cmd == "edge" then
+		-- A FACE AT THE GRID'S EDGE (Josh 2026-09-27): held back until wholly
+		-- in view, or drawn whole for the grid to clip - which only the game
+		-- can show works. Each asking changes it.
+		BT.EnsureBound()
+		local show = BT.settings.menagerieEdge ~= "show"
+		BT.settings.menagerieEdge = show and "show" or nil
+		if BT.MenagerieWindow.IsShown and BT.MenagerieWindow.IsShown() then
+			BT.MenagerieWindow.Deal()
+		end
+		U.Print(show and "menagerie portraits at the grid's edge: drawn whole - if one spills past the grid, "
+			.. "/bt menagerie edge again" or "menagerie portraits at the grid's edge: held back until wholly in view")
 		return
 	elseif cmd == "lore" then
 		-- WHERE EACH MOB'S LORE CAME FROM (Josh 2026-09-26: "Is there a way we
@@ -729,4 +751,4 @@ BT.Command("menagerie", function(rest)
 		return
 	end
 	BT.MenagerieWindow.Toggle()
-end, "menagerie [debug|map|model|scene|toast] - the journal of every mob you have killed", "menagerie")
+end, "menagerie [debug|edge|map|model|scene|toast] - the journal of every mob you have killed", "menagerie")

@@ -36,10 +36,94 @@ BT.Menagerie = J
 -- rarer one more. A rank not read yet is worth what an ordinary mob is - a
 -- kind we could not rank is still a kind - and it is worked out again every
 -- time, so the day the rank is read the points follow.
-J.KIND_POINTS = { elite = 3, rare = 5, rareelite = 8, worldboss = 15 }
-J.KIND_ORDER = { "worldboss", "rareelite", "rare", "elite", "normal" }
-J.KIND_WORDS = { worldboss = "World bosses", rareelite = "Rare elites", rare = "Rares", elite = "Elites",
-	normal = "Everything else" }
+--
+-- BY HOW HARD IT IS AND HOW OFTEN YOU MEET ONE (Josh 2026-09-27: "It should be
+-- based on how difficult the mob is and also the rarity that it will be
+-- encountered in the world"). The client's rank alone put a rabbit with a
+-- wolf, a dungeon's trash with Hogger, and Van Cleef with a Defias Pirate, so
+-- a mob is put in one of nine categories (J.Category), from its rank, its
+-- creature type, whether it was met in a dungeon or a raid, and whether it
+-- was a boss there. A first kill is worth what meeting and beating one is;
+-- each mastery's kills are set so a metal takes about as long to earn
+-- whatever the mob - about forty an hour of an ordinary mob, fifteen of a
+-- dungeon's trash a run, a rare an hour or two of waiting, a boss a run, a
+-- raid a lockout - so the metals are worth the same 2, 3, 5 and 10 for every
+-- one. A grey kill counts like any other (Josh: "Level 60s should be able to
+-- run old content if they want to try to get platinum for missed mobs").
+J.CATEGORIES = {
+	worldboss = { word = "World Boss", many = "World bosses", points = 20, at = { 1, 2, 3, 5 } },
+	raidboss = { word = "Raid Boss", many = "Raid bosses", points = 15, at = { 1, 3, 6, 12 } },
+	dungeonboss = { word = "Dungeon Boss", many = "Dungeon bosses", points = 6, at = { 2, 5, 10, 25 } },
+	rareelite = { word = "Rare Elite", many = "Rare elites", points = 8, at = { 2, 4, 8, 15 } },
+	rare = { word = "Rare", many = "Rares", points = 5, at = { 2, 4, 8, 15 } },
+	elite = { word = "Elite", many = "Elites", points = 3, at = { 3, 10, 30, 100 } },
+	dungeonelite = { word = "Dungeon Elite", many = "Dungeon elites", points = 2, at = { 5, 25, 75, 250 } },
+	normal = { word = "Normal", many = "Normal mobs", points = 1, at = { 10, 50, 150, 500 } },
+	critter = { word = "Critter", many = "Critters", points = 1, at = { 20, 100, 300, 1000 } },
+}
+J.KIND_ORDER = { "worldboss", "raidboss", "dungeonboss", "rareelite", "rare", "elite", "dungeonelite", "normal",
+	"critter" }
+J.KIND_POINTS, J.KIND_WORDS, J.MASTERY_AT = {}, {}, {}
+for key, cat in pairs(J.CATEGORIES) do
+	J.KIND_POINTS[key], J.KIND_WORDS[key], J.MASTERY_AT[key] = cat.points, cat.many, cat.at
+end
+
+-- WHERE A MOB WAS MET, FOR A MOB MET BEFORE IT WAS NOTED (Josh 2026-09-27).
+-- A kill now notes whether it was in a dungeon or a raid; a kind already in
+-- the journal is placed by its zone, as the client names Classic's
+-- instances, until its next kill says.
+J.INSTANCE_ZONES = {
+	["Ragefire Chasm"] = "party", ["Wailing Caverns"] = "party", ["The Deadmines"] = "party",
+	["Deadmines"] = "party", ["Shadowfang Keep"] = "party", ["Blackfathom Deeps"] = "party",
+	["The Stockade"] = "party", ["Stormwind Stockade"] = "party", ["Gnomeregan"] = "party",
+	["Razorfen Kraul"] = "party", ["Scarlet Monastery"] = "party", ["Razorfen Downs"] = "party",
+	["Uldaman"] = "party", ["Zul'Farrak"] = "party", ["Maraudon"] = "party",
+	["The Temple of Atal'Hakkar"] = "party", ["Sunken Temple"] = "party", ["Blackrock Depths"] = "party",
+	["Blackrock Spire"] = "party", ["Lower Blackrock Spire"] = "party", ["Upper Blackrock Spire"] = "party",
+	["Dire Maul"] = "party", ["Stratholme"] = "party", ["Scholomance"] = "party",
+	["Molten Core"] = "raid", ["Onyxia's Lair"] = "raid", ["Blackwing Lair"] = "raid", ["Zul'Gurub"] = "raid",
+	["Ruins of Ahn'Qiraj"] = "raid", ["Ahn'Qiraj"] = "raid", ["Temple of Ahn'Qiraj"] = "raid",
+	["Naxxramas"] = "raid",
+}
+
+-- "party", "raid" or nil (the open world, or not known)
+function J.InstanceOf(m)
+	if not m then
+		return nil
+	end
+	if m.instance == "party" or m.instance == "raid" then
+		return m.instance
+	end
+	return J.INSTANCE_ZONES[m.zone]
+end
+
+-- The category mob `m` (its record) is scored and shown as - a key of
+-- J.CATEGORIES. A raid's bosses are "world bosses" to the client (a skull, a
+-- ?? level), so one met in a raid is a raid boss; a boss the client or a won
+-- encounter named (m.boss) is a dungeon's or a raid's by where it was. A rank
+-- this client has not been seen to give ("trivial", "minus") is ordinary.
+function J.Category(m)
+	if not m then
+		return "normal"
+	end
+	local rank, inst = m.rank, J.InstanceOf(m)
+	if rank == "worldboss" then
+		return inst == "raid" and "raidboss" or (inst == "party" and "dungeonboss") or "worldboss"
+	end
+	if m.boss and inst then
+		return inst == "raid" and "raidboss" or "dungeonboss"
+	end
+	if rank == "rareelite" or rank == "rare" then
+		return rank
+	end
+	if rank == "elite" then
+		return inst and "dungeonelite" or "elite"
+	end
+	if m.kind == "Critter" then
+		return "critter"
+	end
+	return "normal"
+end
 
 -- WHAT THE POINTS MAKE YOU (Josh 2026-09-25: "10 ranks which are titles based
 -- on how many points the character has", from a knowledge theme - "novice to
@@ -483,14 +567,10 @@ function J.FindLore(m)
 	return false
 end
 
--- the rank a kind is scored as, and what it is worth
+-- the category a kind is scored as (J.Category), and what it is worth
 function J.Worth(m)
-	local rank = m and m.rank
-	local p = J.KIND_POINTS[rank]
-	if p then
-		return rank, p
-	end
-	return "normal", 1
+	local cat = J.Category(m)
+	return cat, J.CATEGORIES[cat].points
 end
 
 -- MASTERY OF ONE MOB (Josh 2026-09-25: "masteries for killing a specific
@@ -507,16 +587,8 @@ J.MASTERY = {
 
 -- FEWER KILLS FOR THE RARER KINDS (Josh 2026-09-26: "Killing 500 of the same
 -- rare mob would be insane... same with elites"). The kills each mastery
--- takes, by rank; the metals and their points are the same for every mob. An
--- elite takes half (a dungeon's are farmed), a rare waits on its spawn, and a
--- world boss is a raid's evening. J.MASTERY's own `n` is an ordinary mob's.
-J.MASTERY_AT = {
-	normal = { 10, 50, 150, 500 },
-	elite = { 5, 25, 75, 250 },
-	rare = { 2, 5, 10, 20 },
-	rareelite = { 2, 5, 10, 20 },
-	worldboss = { 1, 2, 3, 5 },
-}
+-- takes are the category's (J.CATEGORIES, J.MASTERY_AT); the metals and their
+-- points are the same for every mob. J.MASTERY's own `n` is an ordinary mob's.
 local ladders = {}
 -- the four masteries for mob `m` (its record, or nil for an ordinary one):
 -- J.MASTERY's entries, with `n` the kills each takes at its rank
@@ -641,6 +713,14 @@ function J.Learn(info, now)
 			m[field] = v
 		end
 	end
+	-- met in a dungeon or a raid, and a boss there (J.Category): kept once
+	-- known - one kill in the open world does not make a dungeon's mob less
+	if info.instance == "party" or info.instance == "raid" then
+		m.instance = info.instance
+	end
+	if info.boss == true then
+		m.boss = true
+	end
 	local lvl = tonumber(info.level)
 	if lvl then
 		-- -1 is the skull: above anything, and kept apart from the numbers
@@ -686,6 +766,23 @@ function J.GuessSpots(zone, map)
 		end
 	end
 	return n
+end
+
+-- A BOSS FIGHT WON (ENCOUNTER_END): the mob of that name in the journal is a
+-- boss, where the client would not say so of the unit. An encounter named for
+-- no one mob ("The Seven") names nothing. Whether one was marked.
+function J.EncounterWon(name)
+	local s = J.Store()
+	if not (s and type(name) == "string" and name ~= "") then
+		return false
+	end
+	for _, m in pairs(s.mobs) do
+		if m.name == name then
+			m.boss = true
+			return true
+		end
+	end
+	return false
 end
 
 -- a GUID counted, remembered past a reload; the oldest goes first
@@ -1081,6 +1178,176 @@ local SORTS = {
 		return byName(a, b)
 	end,
 }
+
+-- ---------------------------------------------------------------------------
+-- Search
+-- ---------------------------------------------------------------------------
+--
+-- LAZY MATCHING (Josh 2026-09-27: "a search box that ... does a search
+-- through all data. We should use lazy matching here"). Every word typed has
+-- to be found somewhere in the mob, but loosely: without capitals or
+-- apostrophes ("morladim"), as the start of a word or inside one, one letter
+-- wrong, missing, extra or swapped ("ragnoros"), or its letters in order
+-- ("rgnrs"). The loose ways are tried on the short fields only - the name,
+-- the category, the type, the family, the zone - since a page of lore holds
+-- nearly any letters in order; the lore is matched as it is written.
+
+-- lower case, apostrophes gone, anything else not a letter or a digit a space
+local function fold(s)
+	return ((tostring(s or "")):lower():gsub("'", ""):gsub("[^%w]+", " "))
+end
+J.Fold = fold
+
+local function words(s)
+	local out = {}
+	for w in s:gmatch("%S+") do
+		out[#out + 1] = w
+	end
+	return out
+end
+
+-- one letter wrong, missing, extra or swapped - or none
+local function within1(a, b)
+	local la, lb = #a, #b
+	if math.abs(la - lb) > 1 then
+		return false
+	end
+	if a == b then
+		return true
+	end
+	local i = 1
+	while i <= la and i <= lb and a:sub(i, i) == b:sub(i, i) do
+		i = i + 1
+	end
+	if la == lb then
+		if a:sub(i + 1) == b:sub(i + 1) then
+			return true
+		end
+		return a:sub(i, i) == b:sub(i + 1, i + 1) and a:sub(i + 1, i + 1) == b:sub(i, i)
+			and a:sub(i + 2) == b:sub(i + 2)
+	elseif la > lb then
+		return a:sub(i + 1) == b:sub(i)
+	end
+	return a:sub(i) == b:sub(i + 1)
+end
+J.Within1 = within1
+
+-- `q`'s letters in `w`, in order, from the same first letter
+local function inOrder(q, w)
+	if q:sub(1, 1) ~= w:sub(1, 1) then
+		return false
+	end
+	local at = 1
+	for i = 1, #q do
+		at = w:find(q:sub(i, i), at, true)
+		if not at then
+			return false
+		end
+		at = at + 1
+	end
+	return true
+end
+
+-- how well one typed word `q` matches one field's folded `text` (with its
+-- words `ws`), 0 for not at all; `loose` for the short fields
+local function wordScore(q, text, ws, loose)
+	local at = text:find(q, 1, true)
+	if at then
+		-- the start of a word beats the middle of one
+		return (at == 1 or text:sub(at - 1, at - 1) == " ") and 3 or 2
+	end
+	if not loose then
+		return 0
+	end
+	local best = 0
+	for _, w in ipairs(ws) do
+		if #q >= 4 and (within1(q, w) or within1(q, w:sub(1, #q))) then
+			best = math.max(best, 1.5)
+		elseif #q >= 3 and inOrder(q, w) then
+			best = math.max(best, 1)
+		end
+	end
+	return best
+end
+
+-- what a mob is searched by: { text, weight, loose }, the name first
+function J.SearchFields(m)
+	local fields = {}
+	local function add(text, weight, loose)
+		if type(text) == "string" and text ~= "" then
+			local f = fold(text)
+			fields[#fields + 1] = { f, weight, loose, words(f) }
+		end
+	end
+	add(m.name, 3, true)
+	add(J.CATEGORIES[J.Category(m)].word, 2, true)
+	add(J.KindOf(m), 2, true)
+	add(m.family, 2, true)
+	add(m.zone, 2, true)
+	if m.skull then
+		add("level ?? boss skull", 1)
+	elseif m.lo then
+		local lv = m.hi and m.hi ~= m.lo and (m.lo .. " " .. m.hi) or tostring(m.lo)
+		add("level " .. lv .. " lv " .. lv, 1)
+	end
+	-- the lore it would show: its pages' titles and words, and a quest's
+	for _, e in ipairs(J.WikiLore(m)) do
+		add(e.title, 1.5)
+		add(e.text, 1)
+	end
+	if type(m.lore) == "table" then
+		add(m.lore.quest, 1)
+		add(m.lore.text, 1)
+	end
+	return fields
+end
+
+-- How well `query` matches mob `m`: a score, or nil when some word typed is
+-- found nowhere. An empty query matches everything, at nothing.
+function J.Match(query, m)
+	local qs = words(fold(query))
+	if #qs == 0 then
+		return 0
+	end
+	local fields = J.SearchFields(m or {})
+	local total = 0
+	for _, q in ipairs(qs) do
+		local best = 0
+		for _, f in ipairs(fields) do
+			local s = wordScore(q, f[1], f[4], f[3]) * f[2]
+			if s > best then
+				best = s
+			end
+		end
+		if best == 0 then
+			return nil
+		end
+		total = total + best
+	end
+	return total
+end
+
+-- the mobs of `list` ({ npc, n, m }) that `query` matches, the best first and
+-- the rest in the order they came
+function J.Search(list, query)
+	local out = {}
+	for i, e in ipairs(list) do
+		local score = J.Match(query, e.m)
+		if score then
+			out[#out + 1] = { e = e, score = score, i = i }
+		end
+	end
+	table.sort(out, function(a, b)
+		if a.score ~= b.score then
+			return a.score > b.score
+		end
+		return a.i < b.i
+	end)
+	for i, r in ipairs(out) do
+		out[i] = r.e
+	end
+	return out
+end
 
 -- Every mob the counts have, in sections: { { kind, mobs = { { npc, n, m } } } }.
 -- VIEWS (Josh 2026-09-25: "by type like we currently have, by zone. Then

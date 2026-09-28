@@ -5,6 +5,58 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Nine kinds of mob, scored by how hard they are and how often you meet
+  one.** The Menagerie no longer goes by the client's rank alone: a mob is a
+  **Critter**, **Normal**, **Elite**, **Dungeon Elite**, **Rare**, **Rare
+  Elite**, **Dungeon Boss**, **Raid Boss** or **World Boss**. A kill now notes
+  whether it was in a dungeon or a raid, and a boss is known by the client or
+  by the boss fight won; a kind already in your journal is placed by its zone
+  until its next kill. A first kill is worth 1 (critters and ordinary mobs) to
+  20 (world bosses), and each metal's kills are set so it takes about as long
+  whatever the mob - Platinum is 1,000 critters, 500 ordinary mobs, 250 of a
+  dungeon's trash, 100 of an open-world elite, 15 rares, 25 of a dungeon boss,
+  12 of a raid boss or 5 of a world boss. Grey kills count, so a level 60 can
+  go back for the mobs they missed.
+- **Every mob says what it is**: its category under its type on the card
+  (a line taller for it), leading the line in the list, and in the popup - in
+  the tooltips' gold and silver, orange for a dungeon's boss, purple for a
+  raid's, red for a world boss. The popup's line had also been losing the
+  level, rank and zone of any mob without a beast family.
+- **Search the Menagerie.** A box at the right of the toolbar looks through
+  every mob - its name, category, type, family, zone, level and lore - and
+  switches the rail to All while it does. It is forgiving: capitals and
+  apostrophes don't matter, a word can be the start of one, one letter can be
+  wrong ("ragnoros"), and letters in order will do ("rgnrs").
+- **Larger cards, four across**, far enough apart that the borders, crests
+  and pendants are never cut off. A world boss's rays break through the top
+  of the frame instead of hiding under it, and the platinum sheen no longer
+  sweeps every card at once.
+- **Scrolling glides and comes to rest on a row**, so there are always two
+  whole rows of portraits in view; a row part in view is drawn, its portrait
+  waiting until it is whole (`/bt menagerie edge` tries drawing it whole).
+  **Scroll bars can be dragged** - here and in the settings - and a click in
+  the gutter goes a page.
+- **Portraits**: each is framed again once its model has settled, so late
+  models no longer come up empty, and a card handed a new mob never shows the
+  one before while the new one loads.
+- **The mob's popup**: kills, points and mastery stand beside a narrower
+  model; the mastery bar runs under all four metals with a tick at each and
+  fills to the ones earned (a mob just at Gold used to show an empty bar); and
+  "Bronze at 10 · 4 to go" is gone.
+- **Achievements you have earned stand out** - lit, edged and ticked - and
+  **Show: All, Earned or In progress** filters them, with how many are earned.
+- **A toast for every new kind of mob, on by default.** A new mob gives way
+  to an achievement or a rank when the toasts back up.
+- **The lore is Classic's.** Opening lines that went on to Outland, Northrend
+  and everything after are cut back to the part that is true in 1.12, or left
+  out - Tallstriders are birds of Kalimdor and the Swamp of Sorrows, not of
+  Darkmoon Island and the Dragon Isles - and pages written for Season of
+  Discovery are not used.
+- **The minimap stays drawn when the dock fades in a fight.** At anything
+  under full the client stops drawing the terrain, and the map went black.
+
 ## 0.1.0-beta.5
 
 - **Six features, each one switch.** Everything BeebMod does is now one of

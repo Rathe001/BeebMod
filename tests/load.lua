@@ -3594,6 +3594,15 @@ if ok then
 			assert(tagged >= 5, "on people the made-up census knows too: " .. tagged)
 			local s = J.Store()
 			assert(s.demo and J.Mine().kills[6] == 612, "the menagerie has a made-up journal")
+			-- every category in it (Josh 2026-09-27)
+			local seen, missing = {}, {}
+			for _, m in pairs(s.mobs) do
+				seen[J.Category(m)] = true
+			end
+			for _, key in ipairs(J.KIND_ORDER) do
+				if not seen[key] then missing[#missing + 1] = key end
+			end
+			assert(#missing == 0, "the made-up journal has a mob of every category, missing: " .. table.concat(missing, ", "))
 			local tiers = {}
 			for npc, n in pairs(J.Mine().kills) do tiers[J.Mastery(n, s.mobs[npc])] = true end
 			assert(tiers[0] and tiers[1] and tiers[2] and tiers[3] and tiers[4], "at every mastery")
@@ -5279,6 +5288,21 @@ if ok then
 			assert(view.offset == 300, "and no further than the end")
 			view:ScrollTo(-50)
 			assert(view.offset == 0, "nor above the top")
+			-- A THUMB TO TAKE HOLD OF (Josh 2026-09-27): dragged down, the strip
+			-- follows by the thumb's travel; a click in the gutter below pages
+			assert(view.grip:IsShown(), "the thumb can be taken hold of")
+			local wasCursor = _G.GetCursorPosition
+			local cy = 300
+			_G.GetCursorPosition = function() return 400, cy end
+			view.grip:GetScript("OnMouseDown")(view.grip)
+			cy = 250
+			view.grip:GetScript("OnUpdate")(view.grip)
+			view.grip:GetScript("OnMouseUp")(view.grip)
+			local travel = 200 - view.thumb._height
+			assert(math.abs(view.offset - math.floor(50 * 300 / travel + 0.5)) <= 1,
+				("fifty down on the thumb is its share of the strip (%d)"):format(view.offset))
+			_G.GetCursorPosition = wasCursor
+			view:ScrollTo(0)
 			view:SetContentHeight(120)
 			assert(view:Max() == 0 and not view.thumb:IsShown() and view.content._height == 200,
 				"a short page is the window's height, with no thumb")
@@ -7797,6 +7821,8 @@ if ok then
 			map.GetMaskTexture = function(self) return self._mask end
 			map.SetMaskTexture = function(self, m) self._mask = m end
 			map:SetMaskTexture("Interface\\Round")
+			map.IsIgnoringParentAlpha = function(self) return self._ignoresParent == true end
+			map.SetIgnoreParentAlpha = function(self, on) self._ignoresParent = on end
 			_G.Minimap = map
 			local ring = _G.CreateFrame("Frame", "MinimapBorder", _G.UIParent)
 			local zoom = _G.CreateFrame("Frame", "MinimapZoomIn", _G.UIParent)
@@ -7817,6 +7843,9 @@ if ok then
 			-- is drawn solid whatever an earlier version saved.
 			mod.SetOpt("alpha", 0.6)
 			assert((map._alpha or 1) == 1, "the map is solid, whatever was saved: " .. tostring(map._alpha))
+			-- NOR THE DOCK'S FADE (Josh 2026-09-27): a dock faded in a fight
+			-- would take the terrain with it, so the map keeps its own alpha
+			assert(map._ignoresParent == true, "the map does not fade with the dock")
 			local tab = _G.CreateFrame("Frame", nil, _G.UIParent)
 			mod:BuildTab(tab)
 			assert(mod.alphaPlus == nil and mod.alphaText == nil, "and there is no opacity on its tab")
@@ -8266,6 +8295,7 @@ if ok then
 			mod:OnDisable()
 			assert(map._parent == _G.UIParent, "back where the client had it")
 			assert(map._mask == "Interface\\Round", "round again")
+			assert(map._ignoresParent == false, "and faded with its parent again, as the client had it")
 
 			-- AND ROUND EVEN WHEN THE CLIENT WOULD NOT SAY WHAT IT HAD (Josh
 			-- 2026-09-21). SetMaskTexture exists on this build; GetMaskTexture
@@ -8999,6 +9029,13 @@ if ok then
 				ranked = ranked or (spec.head == "Menagerie rank" and spec.text:find(title))
 			end
 			assert(ranked, "and the new rank is toasted after the achievements that earned it")
+			-- NEW PAGES ON BY DEFAULT (Josh 2026-09-27), and they give way
+			local pages = 0
+			for _, spec in ipairs(BT.MenagerieToast.queue) do
+				if spec.minor then pages = pages + 1 end
+			end
+			assert(BT.settings.menagerieDiscover == nil and pages > 0,
+				"a new kind of mob is toasted without being switched on")
 			SlashCmdList.BEEBSTOOLKIT("menagerie")
 			assert(V.IsShown(), "/bt menagerie opens the journal")
 			local f = V.Frame()
@@ -9024,7 +9061,7 @@ if ok then
 			local Card = BT.MenagerieCard
 			local tc = Card.New(_G.UIParent)
 			Card.Layout(tc, 140)
-			assert(tc:GetHeight() == Card.Height(140) and Card.Height(140) == 130, "a card is as tall as what is on it")
+			assert(tc:GetHeight() == Card.Height(140) and Card.Height(140) == 141, "a card is as tall as what is on it, its category line too")
 			local function dressed(tier)
 				Card.Dress(tc, { name = "Test", kind = "Beast", lore = "", kills = "1", points = "1", tier = tier })
 				return {
@@ -9053,11 +9090,22 @@ if ok then
 			assert(tc.brackets[1]:IsShown() and not tc.rays[1]:IsShown(), "an elite's has brackets at its foot")
 			Card.Dress(tc, { name = "Boss", tier = 0, rank = "worldboss" })
 			assert(tc.rays[1]:IsShown(), "and a world boss's has rays over the keystone")
+			-- NOT ALL AT ONCE (Josh 2026-09-27): each mob's sheen starts at its
+			-- own point in the cycle, the same one each time
+			local d1, d2, d3 = Card.SweepDelay(6), Card.SweepDelay(7319), Card.SweepDelay(6109)
+			assert(d1 ~= d2 and d2 ~= d3 and d1 ~= d3 and math.max(d1, d2, d3) < 5.6 and math.min(d1, d2, d3) >= 0
+				and Card.SweepDelay(6) == d1, ("the platinum sheens are staggered (%.2f, %.2f, %.2f)"):format(d1, d2, d3))
+			-- THE RAYS BREAK THE BORDER (Josh 2026-09-27)
+			assert(tc.rayGround:IsShown() and tc.rayGround._height > 0,
+				"in a notch of the card's dark, clear of the border's inner lines")
+			Card.Dress(tc, { name = "Boss", tier = 3, rank = "worldboss" })
+			assert(not tc.rays[1]:IsShown() and not tc.rayGround:IsShown() and tc.crest:IsShown(),
+				"and give way to gold's crest over the keystone")
 			-- SMALLER, WITHOUT THE LORE (Josh 2026-09-26): the card is as tall as
 			-- what is on it, and the lore is the mob's page's
 			Card.Layout(tc, 179)
 			Card.Dress(tc, { name = "Lore", tier = 0, lore = "words" })
-			assert(not tc.lore:IsShown() and Card.Height(179) == 166,
+			assert(not tc.lore:IsShown() and Card.Height(179) == 180,
 				"no lore on the card, and the card no taller than it needs: " .. tostring(Card.Height(179)))
 			-- KILLS AND POINTS IN THE SHOULDERS (Josh 2026-09-26): up beside the
 			-- arch's top, not in a foot; the border says the mastery
@@ -9096,8 +9144,66 @@ if ok then
 			end
 			-- FOUR ACROSS AT THE MOCKUP'S SIZE, ONLY WHAT IS IN VIEW: two rows of
 			-- all twelve, then the third once the strip scrolls to it
-			assert(b.layout.w == 179, "five across, near the mockup's size: " .. tostring(b.layout.w))
-			assert(shown() == 12, ("three rows in view: all twelve are dealt (%d)"):format(shown()))
+			-- FOUR ACROSS, WITH ROOM FOR THE BORDERS (Josh 2026-09-27): larger,
+			-- and far enough apart that no crest, corner or pendant is cut off
+			assert(b.layout.w == 204, "four across, a little larger: " .. tostring(b.layout.w))
+			local reachTop, reachSide, reachFoot = BT.MenagerieCard.Reach(b.layout.w)
+			assert(b.layout.gap >= 2 * reachSide and b.layout.left > reachSide and b.layout.top > reachTop
+				and b.layout.rowGap >= reachFoot + reachTop / 2 and b.layout.foot > reachFoot,
+				"the gaps and margins hold what the border reaches past a card")
+			-- A STRIP THAT SCROLLS (Josh 2026-09-27): the third row, part in
+			-- view, is drawn too - its faces put away until they are wholly in
+			assert(shown() == 12, ("every row with any of itself in view is dealt (%d)"):format(shown()))
+			assert(not b.cards[1].portrait.covered and b.cards[9].portrait.covered,
+				"a face wholly in view is up, one half out of view is put away")
+			local firstMob = b.cards[5].npc
+			b.grid:ScrollTo(b.layout.rows[3].y - b.layout.top)
+			assert(not b.cards[9].portrait.covered, "and it comes up once the strip scrolls to it")
+			assert(b.cards[5].npc == firstMob, "a row in view keeps its cards as the strip moves")
+			-- GLIDING, AND AT REST ON A ROW (Josh 2026-09-27): a notch glides a
+			-- row; stopped between rows, the strip settles on the nearest
+			b.grid:ScrollTo(0)
+			local pitch = b.layout.h + b.layout.rowGap
+			b.grid:GetScript("OnMouseWheel")(b.grid, -1)
+			local glide = b.grid:GetScript("OnUpdate")
+			assert(glide, "the wheel starts a glide")
+			glide(b.grid, 0.05)
+			assert(b.grid.offset > 0 and b.grid.offset < pitch, "part of the way after a moment: " .. b.grid.offset)
+			glide(b.grid, 1)
+			assert(b.grid.offset == pitch and not b.grid:GetScript("OnUpdate"),
+				("and a row on when it stops (%d of %d)"):format(b.grid.offset, pitch))
+			b.grid:ScrollTo(pitch * 0.4)
+			b.grid:Settle()
+			b.grid:GetScript("OnUpdate")(b.grid, 1)
+			assert(b.grid.offset == 0, "let go short of half a row, it goes back to the row: " .. b.grid.offset)
+			b.grid:ScrollTo(0)
+			-- THE MOB ASKED FOR (Josh 2026-09-27: Ragnaros wore the spider):
+			-- the old model is cleared first, and asked again while none comes
+			do
+				local calls, laters = {}, {}
+				local m = { ClearModel = function() calls[#calls + 1] = "clear" end,
+					SetCreature = function(_, id) calls[#calls + 1] = "set " .. id end,
+					GetModelFileID = function() return nil end }
+				local wasAfter = _G.C_Timer.After
+				_G.C_Timer.After = function(_, fn) laters[#laters + 1] = fn end
+				V.Creature(m, 11502)
+				_G.C_Timer.After = wasAfter
+				assert(calls[1] == "clear" and calls[2] == "set 11502", "cleared, then asked: " .. table.concat(calls, ", "))
+				laters[1]()
+				assert(calls[3] == "set 11502", "and asked again while nothing has come")
+				m.GetModelFileID = function() return 123 end
+				laters[2]()
+				assert(#calls == 3, "but not once it has")
+			end
+			-- A FACE AT THE GRID'S EDGE (Josh 2026-09-27): held back, unless the
+			-- setting says to draw it whole for the grid to clip
+			local p9 = b.cards[9].portrait
+			BT.settings.menagerieEdge = "show"
+			V.Deal()
+			assert(not p9.covered, "drawn whole at the foot of the view when the setting says so")
+			BT.settings.menagerieEdge = nil
+			V.Deal()
+			assert(p9.covered, "and held back again by default")
 			local rare
 			for _, card in ipairs(b.cards) do
 				if card:IsShown() and card.keystone:IsShown() then rare = card end
@@ -9136,8 +9242,28 @@ if ok then
 				and b.page.name:GetText():upper() == c.name:GetText(), "a click opens a mob's popup over the grid")
 			assert(b.page.kills.value:GetText() == "1" and b.page.mastery.value:GetText() == "None"
 				and b.page.ladder.rungs[1].name:GetText() == "Bronze"
-				and b.page.ladder.togo:GetText():find("to go"), "with its kills and the way to its first mastery")
+				and b.page.ladder.togo == nil and b.page.ladder.rungs[4].tick:IsShown(),
+				"with its kills, and a tick on the bar for each metal (no \"to go\")")
 			assert(b.page.count:GetText():find("^1 of 12") and b.page.next:IsShown(), "and where it is among the grid's")
+			-- THE WHOLE LADDER (Josh 2026-09-27): Mor'Ladim at exactly Gold
+			-- (10 of 2/5/10/20) showed an empty bar; it runs under the names now
+			local share = V.LadderShare
+			assert(share(3, 10, 10, 20, 4) == 0.625, "just at Gold, the bar reaches Gold's name")
+			assert(share(3, 15, 10, 20, 4) == 0.75, "half way on to Platinum, half way between the names")
+			assert(share(0, 1, nil, 2, 4) == 0.0625 and share(4, 30, 20, nil, 4) == 1,
+				"a first kill a little way toward Bronze, every mastery the whole bar")
+			assert(b.page.ladder.fill:IsShown(), "a mob with a kill shows some of the bar")
+			-- EVERY PART OF THE LINE UNDER THE NAME (Josh 2026-09-27): a rare
+			-- elite with no beast family kept only its type
+			local rareElite = BT.Menagerie.Store().mobs[250005]
+			local family = rareElite.family
+			rareElite.family = nil
+			V.Open(250005)
+			local meta = b.page.meta:GetText() or ""
+			assert(meta:find("Rare Elite", 1, true) and meta:find("Zephras Isle", 1, true) and meta:find("Level 5", 1, true),
+				"a mob with no family still says its level, rank and zone: " .. meta)
+			rareElite.family = family
+			V.Open(c.npc)
 			-- WHEN A MODEL ARRIVES (22:05, "Window.lua:486: attempt to call a
 			-- nil value"): the stub never loads one, so its handlers are run
 			-- here, as the client runs them - with a model file to learn
@@ -9262,6 +9388,25 @@ if ok then
 				("picked on the rail, the undead alone (%d)"):format(shown()))
 			rail[1]:GetScript("OnClick")(rail[1])
 			assert(rail[1].chosen and shown() == 12, "and All is all of them again")
+			-- SEARCH (Josh 2026-09-27): typing goes to All and keeps the matches
+			rail[3]:GetScript("OnClick")(rail[3])
+			local edit = b.search.edit
+			local wasAfter = _G.C_Timer.After
+			_G.C_Timer.After = function(_, fn) fn() end
+			edit:SetText("mob 7")
+			edit:GetScript("OnTextChanged")(edit)
+			assert(rail[1].chosen and shown() == 1 and b.cards[1].name:GetText() == "MOB 7",
+				("a search is of All, and shows what matches (%d)"):format(shown()))
+			assert(not b.search.hint:IsShown() and b.search.clear:IsShown(), "with a cross to empty it")
+			edit:SetText("zzzz")
+			edit:GetScript("OnTextChanged")(edit)
+			assert(shown() == 0 and b.noMatch:IsShown(), "nothing found says so")
+			rail[3]:GetScript("OnClick")(rail[3])
+			edit:GetScript("OnTextChanged")(edit)
+			assert(V.query == nil and edit:GetText() == "" and rail[3].chosen and shown() == 6,
+				"a section picked ends the search")
+			_G.C_Timer.After = wasAfter
+			rail[1]:GetScript("OnClick")(rail[1])
 			-- VIEWS (Josh 2026-09-25): by zone, then by mastery
 			b.groups.buttons[2]:GetScript("OnClick")(b.groups.buttons[2])
 			assert(rail[2].text:GetText():find("Zephras Isle") and rail[2].text:GetText():find("12")
@@ -9286,6 +9431,34 @@ if ok then
 				"what the kinds are worth comes first: 9 at a point, a rare at 5, two rare elites at 8 - "
 					.. tostring(f.achievements.heads[1].count:GetText()))
 			assert(f.achievements.heads[2].text:GetText() == "MASTERIES", "then the masteries")
+			-- EARNED, AT A GLANCE (Josh 2026-09-27): lit, edged and ticked;
+			-- and a view of the earned alone, or of what is still to do
+			local ach = f.achievements
+			local kindRow = ach.rows[1]
+			assert(kindRow.lit:IsShown() and kindRow.edge:IsShown() and kindRow.check:IsShown(),
+				"an earned row is lit, with an edge and a tick")
+			assert(ach.tally:GetText():find("^%d+ of %d+ achievements earned$"), "and the page says how many")
+			local function drawnRows()
+				local out = {}
+				for _, r in ipairs(ach.rows) do
+					if r:IsShown() then out[#out + 1] = r end
+				end
+				return out
+			end
+			local everything = #drawnRows()
+			ach.shows.buttons[2]:GetScript("OnClick")(ach.shows.buttons[2])
+			local earnedRows = drawnRows()
+			for _, r in ipairs(earnedRows) do
+				assert(r.check:IsShown(), "Earned shows only what is earned: " .. tostring(r.title:GetText()))
+			end
+			ach.shows.buttons[3]:GetScript("OnClick")(ach.shows.buttons[3])
+			local todoRows = drawnRows()
+			for _, r in ipairs(todoRows) do
+				assert(not r.check:IsShown(), "In progress shows only what is not: " .. tostring(r.title:GetText()))
+			end
+			assert(#earnedRows > 0 and #todoRows > 0 and #earnedRows + #todoRows == everything,
+				("the two views are All between them (%d + %d of %d)"):format(#earnedRows, #todoRows, everything))
+			ach.shows.buttons[1]:GetScript("OnClick")(ach.shows.buttons[1])
 			f.scopes.buttons[2]:GetScript("OnClick")(f.scopes.buttons[2])
 			assert(f.subtitle:GetText():find("all characters"), "and all characters' counts")
 			f.scopes.buttons[1]:GetScript("OnClick")(f.scopes.buttons[1])

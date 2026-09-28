@@ -355,6 +355,10 @@ local function remember(map)
 	end
 	was.mask = was.mask or ROUND
 	was.alpha = BT.Pill.Number(map.GetAlpha and map:GetAlpha(), 1)
+	if map.IsIgnoringParentAlpha then
+		local ok, ignoring = pcall(map.IsIgnoringParentAlpha, map)
+		was.ignoresParent = ok and ignoring == true
+	end
 end
 
 -- Moving something of the client's, and being able to give it back. Each one
@@ -1243,6 +1247,9 @@ function M.Apply(plain)
 		if map.SetAlpha then
 			pcall(map.SetAlpha, map, was.alpha or 1)
 		end
+		if map.SetIgnoreParentAlpha then
+			pcall(map.SetIgnoreParentAlpha, map, was.ignoresParent or false)
+		end
 		if M.skin then
 			BT.Pill.ShowSurface(M.skin, false)
 		end
@@ -1274,6 +1281,14 @@ function M.Apply(plain)
 	-- layer below the panel is drawn under the panel's fill.
 	if map.SetAlpha then
 		pcall(map.SetAlpha, map, M.Opacity())
+	end
+	-- NOT THE DOCK'S FADE EITHER (Josh 2026-09-27: a minimap all black, the
+	-- cause not seen). The client reads the alpha a frame is drawn at - its
+	-- own times every parent's - so the dock faded in a fight took the
+	-- terrain with it just as the setting had. The map keeps its own alpha,
+	-- solid, whatever the dock is at.
+	if map.SetIgnoreParentAlpha then
+		pcall(map.SetIgnoreParentAlpha, map, true)
 	end
 	if type(frame.GetFrameStrata) == "function" and map.SetFrameStrata then
 		local ok, strata = pcall(frame.GetFrameStrata, frame)

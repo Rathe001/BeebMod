@@ -159,10 +159,26 @@ function T.Next()
 	end
 end
 
--- spec = { head, text, points, icon, onClick }
+-- spec = { head, text, points, icon, onClick, minor }
 function T.Push(spec)
 	if BT.settings and BT.settings.menagerieToasts == false then
 		return false
+	end
+	-- A NEW PAGE GIVES WAY (Josh 2026-09-27, new-mob toasts on by default):
+	-- a fresh journal's first dozen kills are a dozen new pages, and they
+	-- filled the queue ahead of the achievement and rank those kills earned.
+	-- A full queue lets its last new page go - to chat, as ever - for anything
+	-- that is not one.
+	if #queue >= QUEUE_MAX and not spec.minor then
+		for i = #queue, 1, -1 do
+			if queue[i].minor then
+				local gone = table.remove(queue, i)
+				if BT.Util and BT.Util.Print then
+					BT.Util.Print(("Menagerie: %s · %s"):format(gone.head or "", gone.text or ""))
+				end
+				break
+			end
+		end
 	end
 	if #queue >= QUEUE_MAX then
 		if BT.Util and BT.Util.Print then

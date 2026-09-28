@@ -898,6 +898,77 @@ function W.Scroller(parent, gutter)
 	view.thumb:SetWidth(2)
 	view.thumb:Hide()
 	W.Lit(view.thumb, 0.55)
+	-- A THUMB TO TAKE HOLD OF (Josh 2026-09-27: "not able to drag the scroll
+	-- bar"). The hairline stays a hairline; over it, a strip wider than it
+	-- takes the pointer: drag it and the strip follows, and it brightens and
+	-- thickens while the pointer is on it. A click in the gutter above or below
+	-- it goes a window's height that way.
+	local grip = CreateFrame("Button", nil, view)
+	grip:SetPoint("TOPRIGHT", view.thumb, "TOPRIGHT", 0, 0)
+	grip:SetPoint("BOTTOMRIGHT", view.thumb, "BOTTOMRIGHT", 0, 0)
+	grip:SetWidth(math.max(8, gutter or 0))
+	grip:SetFrameLevel(view:GetFrameLevel() + 20)
+	grip:Hide()
+	view.grip = grip
+	local function cursorY()
+		local ok, _, y = pcall(GetCursorPosition)
+		local scale = BT.Pill.Number(view.GetEffectiveScale and view:GetEffectiveScale(), 1)
+		return (ok and BT.Pill.Number(y, 0) or 0) / (scale > 0 and scale or 1)
+	end
+	local function lit(on)
+		view.thumb:SetWidth(on and 4 or 2)
+		W.Lit(view.thumb, on and 0.85 or 0.55)
+	end
+	grip:SetScript("OnEnter", function() lit(true) end)
+	grip:SetScript("OnLeave", function(self)
+		if not self.dragging then
+			lit(false)
+		end
+	end)
+	grip:SetScript("OnMouseDown", function(self)
+		self.dragging = { y = cursorY(), offset = view.offset }
+	end)
+	grip:SetScript("OnMouseUp", function(self)
+		self.dragging = nil
+		lit(self.IsMouseOver and self:IsMouseOver() or false)
+		-- a strip that rests only in certain places goes to the nearest
+		if view.Settle then
+			view:Settle()
+		end
+	end)
+	grip:SetScript("OnUpdate", function(self)
+		local d = self.dragging
+		if not d then
+			return
+		end
+		-- the thumb's travel is the strip's: a pixel of one is this much of the other
+		local room, max = view:Room(), view:Max()
+		local travel = room - BT.Pill.Number(view.thumb:GetHeight(), 0)
+		if max <= 0 or travel <= 0 then
+			return
+		end
+		view:ScrollTo(d.offset + (d.y - cursorY()) * max / travel)
+	end)
+	-- the gutter: a click above the thumb goes up a window, below it down one
+	local track = CreateFrame("Button", nil, view)
+	track:SetPoint("TOPRIGHT", view, "TOPRIGHT", 0, 0)
+	track:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", 0, 0)
+	track:SetWidth(math.max(8, gutter or 0))
+	track:SetFrameLevel(view:GetFrameLevel() + 19)
+	track:Hide()
+	view.track = track
+	track:SetScript("OnMouseDown", function()
+		local top = BT.Pill.Number(view.thumb:GetTop(), nil)
+		local y = cursorY()
+		if not top then
+			return
+		end
+		local page = math.max(view.step or 40, view:Room() - (view.step or 40))
+		view:ScrollBy(y > top and -page or page)
+		if view.Settle then
+			view:Settle()
+		end
+	end)
 
 	function view:Room()
 		return BT.Pill.Number(self:GetHeight(), 0)
@@ -920,8 +991,12 @@ function W.Scroller(parent, gutter)
 			self.thumb:ClearAllPoints()
 			self.thumb:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, -math.floor((room - h) * (y / max)))
 			self.thumb:Show()
+			self.grip:Show()
+			self.track:Show()
 		else
 			self.thumb:Hide()
+			self.grip:Hide()
+			self.track:Hide()
 		end
 		return y
 	end

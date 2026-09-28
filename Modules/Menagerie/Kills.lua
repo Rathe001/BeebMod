@@ -93,6 +93,8 @@ local FACTS = {
 	{ "family", function(u) return UnitCreatureFamily and UnitCreatureFamily(u) end },
 	{ "rank", function(u) return UnitClassification and UnitClassification(u) end },
 	{ "level", function(u) return UnitLevel and UnitLevel(u) end },
+	-- a dungeon's or a raid's boss, where the client will say (J.Category)
+	{ "boss", function(u) return UnitIsBossMob and UnitIsBossMob(u) end },
 }
 
 local function learn(w, unit)
@@ -103,6 +105,11 @@ local function learn(w, unit)
 	end
 	if w.zone == nil then
 		w.zone = ask(GetRealZoneText) or ask(GetZoneText)
+	end
+	-- "party", "raid", or the open world's "none"
+	if w.instance == nil and IsInInstance then
+		local ok, _, kind = pcall(IsInInstance)
+		w.instance = ok and type(kind) == "string" and kind or nil
 	end
 end
 
@@ -135,7 +142,7 @@ local function info(guid, w)
 	local map, x, y = K.Where()
 	return {
 		guid = guid, npc = w.npc, name = w.name, kind = w.kind, family = w.family,
-		rank = w.rank, level = w.level, zone = w.zone,
+		rank = w.rank, level = w.level, zone = w.zone, instance = w.instance, boss = w.boss == true,
 		myLevel = ask(UnitLevel, "player"),
 		map = map, mx = x, my = y,
 	}

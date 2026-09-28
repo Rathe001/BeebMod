@@ -9,7 +9,7 @@ local _, BT = ...
 local J = BT.Menagerie
 local unpack = unpack or table.unpack
 
--- npc, name, type, family, rank, level (-1 a skull), zone, map, kills
+-- npc, name, type, family, rank, level (-1 a skull), zone, map, kills, boss
 local MOBS = {
 	{ 6, "Kobold Vermin", "Humanoid", nil, "normal", 2, "Elwynn Forest", 1429, 612 },
 	{ 299, "Young Wolf", "Beast", "Wolf", "normal", 2, "Elwynn Forest", 1429, 188 },
@@ -38,6 +38,11 @@ local MOBS = {
 	{ 7431, "Frostsaber", "Beast", "Cat", "normal", 55, "Winterspring", 1452, 3 },
 	{ 6109, "Azuregos", "Dragonkin", nil, "worldboss", -1, "Azshara", 1447, 5 },
 	{ 12397, "Lord Kazzak", "Demon", nil, "worldboss", -1, "Blasted Lands", 1419, 2 },
+	-- a dungeon's trash and its boss, and a raid's (Josh 2026-09-27: every
+	-- category shown); the tenth column marks a boss
+	{ 657, "Defias Pirate", "Humanoid", nil, "elite", 18, "The Deadmines", nil, 42 },
+	{ 639, "Edwin VanCleef", "Humanoid", nil, "elite", 21, "The Deadmines", nil, 4, true },
+	{ 11502, "Ragnaros", "Elemental", nil, "worldboss", -1, "Molten Core", nil, 3 },
 }
 
 local store
@@ -49,9 +54,9 @@ local function build()
 	local s = { mobs = {}, chars = {}, sessions = {}, demo = true }
 	local kills, first, altKills = {}, {}, {}
 	for i, row in ipairs(MOBS) do
-		local npc, name, kind, family, rank, level, zone, map, n = unpack(row)
+		local npc, name, kind, family, rank, level, zone, map, n, boss = unpack(row)
 		s.mobs[npc] = {
-			name = name, kind = kind, family = family, rank = rank,
+			name = name, kind = kind, family = family, rank = rank, boss = boss,
 			lo = level > 0 and level or nil, hi = level > 0 and level or nil, skull = level < 0 or nil,
 			zone = zone, map = map, mx = 0.2 + rand() * 0.6, my = 0.2 + rand() * 0.6,
 			seen = now - i * 3600,

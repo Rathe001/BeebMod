@@ -37,7 +37,34 @@ local RANK = {
 	rareelite = { 0.85, 0.92, 1 },
 	worldboss = { 1, 0.42, 0.32 },
 }
-local RANK_WORD = { elite = "Elite", rare = "Rare", rareelite = "Rare Elite", worldboss = "World Boss" }
+-- EVERY MOB'S CATEGORY, SHOWN (Josh 2026-09-27: "Make sure we are labeling
+-- every mob with the correct new category"): the word is the journal's
+-- (J.CATEGORIES), the colour the tooltips' for the ranks the client draws, a
+-- boss's its own, and the everyday ones quiet
+V.CATEGORY = {
+	worldboss = { 1, 0.42, 0.32 },
+	raidboss = { 0.80, 0.52, 1 },
+	dungeonboss = { 1, 0.58, 0.26 },
+	rareelite = { 0.85, 0.92, 1 },
+	rare = { 0.78, 0.84, 0.90 },
+	elite = { 1, 0.82, 0.30 },
+	dungeonelite = { 0.90, 0.72, 0.40 },
+	normal = { 0.58, 0.55, 0.48 },
+	critter = { 0.50, 0.55, 0.53 },
+}
+
+-- a mob's category: its key, its word and its colour
+function V.CategoryOf(m)
+	local J = BT.Menagerie
+	local key = J.Category(m)
+	return key, J.CATEGORIES[key].word, V.CATEGORY[key]
+end
+
+-- the word in its colour, for a line of text
+local function inColour(word, c)
+	return ("|cff%02x%02x%02x%s|r"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5),
+		math.floor(c[3] * 255 + 0.5), word)
+end
 
 local frame
 
@@ -150,10 +177,9 @@ end
 --
 -- ONLY THE CARDS IN VIEW EXIST: the grid is arithmetic, and scrolling hands
 -- the same few cards new mobs - a book of five hundred kinds costs what one
--- screenful does. Whole rows only: whether this client clips a model to the
--- frame it scrolls in is not known, so a row half out of view is not drawn
--- rather than drawn over the window's edge, and the wheel moves a row at a
--- time.
+-- screenful does. The strip scrolls smoothly and a row part in view is drawn,
+-- clipped at the grid's edge; only its model waits until it is wholly in view,
+-- since whether this client clips a model is not known (V.Deal).
 
 -- A RAIL, NOT HEADINGS (Josh 2026-09-26: "a rail on the left rather than sub
 -- headings and accordions. We will have a ton of zones"). The types or zones
@@ -167,7 +193,13 @@ end
 -- taller - the game's screen is 768 units high at a scale of one, and the
 -- window is near that already - so five across are 179 wide, near the
 -- mockup's 184, and two rows of them are in view.
-local COLS, GAP = 5, 8
+-- FOUR ACROSS, WITH ROOM FOR THE BORDERS (Josh 2026-09-27: "The borders we
+-- built are being cut off. I think we could do 4 per row, increase the
+-- spacing between them a bit, and increase the size a bit"). The crest, the
+-- corners and the pendant reach past the card (Card.Reach); the gaps and the
+-- grid's margins are wide enough to hold them, so a card neither runs into
+-- its neighbour nor is clipped at the grid's edge.
+local COLS, GAP, ROW_GAP = 4, 30, 56
 local RAIL_W, RAIL_ROW_H = 180, 34
 local Card = BT.MenagerieCard
 -- the Group and Sort bar over the cards
@@ -184,6 +216,8 @@ local LIST_COLS, LIST_H, LIST_GAP = 3, 46, 6
 -- lifted without the grid's edge clipping it (Josh 2026-09-26: "the hover
 -- zoom seems to cut off the top of the cards")
 local EDGE = 6
+-- how far a card under the cursor rises (V.Zoom)
+local LIFT = 4
 V.ALL = "__all"
 
 function V.BuildBestiary()
@@ -225,6 +259,58 @@ function V.BuildBestiary()
 		V.Refresh()
 	end, 60)
 	b.layouts:SetPoint("LEFT", viewLabel, "RIGHT", 8, 0)
+	-- SEARCH (Josh 2026-09-27: "a search box that switches the filter to 'All'
+	-- and does a search through all data. We should use lazy matching"): at
+	-- the toolbar's right end; what it matches is J.Match's. A word is one
+	-- search, not one a letter (the Ledger's lesson), and Escape or the cross
+	-- empties it. Kept for the session, not saved.
+	local search = CreateFrame("Frame", nil, box)
+	search:SetSize(230, 22)
+	search:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -6)
+	W.Panel(search, W.FILL, W.HAIR)
+	b.search = search
+	local edit = CreateFrame("EditBox", nil, search)
+	edit:SetPoint("TOPLEFT", 8, 0)
+	edit:SetPoint("BOTTOMRIGHT", -22, 0)
+	edit:SetAutoFocus(false)
+	pcall(edit.SetFontObject, edit, "BeebModFontHighlightSmall")
+	search.edit = edit
+	search.hint = W.Label(search, "Search every mob", "small", DIM[1], DIM[2], DIM[3])
+	search.hint:SetPoint("LEFT", 8, 0)
+	search.clear = W.Close(search, 14)
+	search.clear:SetPoint("RIGHT", -4, 0)
+	search.clear:Hide()
+	local pending = false
+	local function apply()
+		pending = false
+		local text = edit:GetText() or ""
+		V.query = text:find("%S") and text or nil
+		search.hint:SetShown(text == "")
+		search.clear:SetShown(text ~= "")
+		b.grid:ScrollTo(0)
+		V.Refresh()
+	end
+	edit:SetScript("OnTextChanged", function()
+		if not (C_Timer and C_Timer.After) then
+			apply()
+			return
+		end
+		if not pending then
+			pending = true
+			C_Timer.After(0.12, apply)
+		end
+	end)
+	edit:SetScript("OnEscapePressed", function(self)
+		self:SetText("")
+		self:ClearFocus()
+	end)
+	edit:SetScript("OnEnterPressed", function(self)
+		self:ClearFocus()
+	end)
+	search.clear:SetScript("OnClick", function()
+		edit:SetText("")
+		edit:ClearFocus()
+	end)
 	W.Divider(box, 8, -TOOLBAR_H)
 
 	-- the rail
@@ -243,7 +329,7 @@ function V.BuildBestiary()
 	b.grid = W.Scroller(box, 6)
 	b.grid:SetPoint("TOPLEFT", railBox, "TOPRIGHT", 10, 0)
 	b.grid:SetPoint("BOTTOMRIGHT", -8, 8)
-	b.grid.step = Card.Height(math.floor((GRID_W - GAP * (COLS - 1)) / COLS)) + GAP
+	b.grid.step = Card.Height(math.floor((GRID_W - GAP * (COLS - 1)) / COLS)) + ROW_GAP
 	-- every move of the strip deals the cards again
 	local scrollTo = b.grid.ScrollTo
 	b.grid.ScrollTo = function(self, y)
@@ -251,10 +337,57 @@ function V.BuildBestiary()
 		V.Deal()
 		return at
 	end
+	-- GLIDING, AND AT REST ON A ROW (Josh 2026-09-27: "Scrolling gets into a
+	-- state where only 1 row renders portraits"). A face part out of view is
+	-- held back (V.Crop), and a strip stopped anywhere had one whole row of
+	-- faces between two half ones. So the strip moves smoothly but comes to
+	-- rest with a row at its top: the wheel glides a row a notch, and a drag
+	-- or a click in the gutter glides to the nearest row when it lets go.
+	local GLIDE = 0.18
+	function b.grid:Pitch()
+		local L = b.layout
+		return L and (L.h + L.rowGap) or self.step
+	end
+	function b.grid:Glide(to)
+		to = math.max(0, math.min(self:Max(), to))
+		local from, t = self.offset, 0
+		self.gliding = to
+		if not self.SetScript or math.abs(to - from) < 1 then
+			self.gliding = nil
+			self:ScrollTo(to)
+			return
+		end
+		self:SetScript("OnUpdate", function(s, elapsed)
+			t = t + (elapsed or 0)
+			local k = math.min(1, t / GLIDE)
+			k = 1 - (1 - k) ^ 3
+			s:ScrollTo(from + (to - from) * k)
+			if k >= 1 then
+				s.gliding = nil
+				s:SetScript("OnUpdate", nil)
+			end
+		end)
+	end
+	-- the row the strip is nearest, or would be after `rows` more
+	function b.grid:RowOffset(rows)
+		local p = math.max(1, self:Pitch())
+		local at = self.gliding or self.offset
+		return (math.floor(at / p + 0.5) + (rows or 0)) * p
+	end
+	b.grid:SetScript("OnMouseWheel", function(self, delta)
+		self:Glide(self:RowOffset(-(delta or 0)))
+	end)
+	function b.grid:Settle()
+		self:Glide(self:RowOffset(0))
+	end
 	b.cards = {}
 	b.empty = W.Label(box, "Nothing in the Menagerie yet.\nEvery kind of mob you kill is written in here.",
 		"small", DIM[1], DIM[2], DIM[3])
 	b.empty:SetPoint("CENTER", b.grid, "CENTER")
+	-- a search that finds nothing says so, where the cards would be
+	b.noMatch = W.Label(box, "", "small", DIM[1], DIM[2], DIM[3])
+	b.noMatch:SetPoint("CENTER", b.grid, "CENTER")
+	b.noMatch:Hide()
 	V.BuildPage(b)
 end
 
@@ -266,13 +399,19 @@ end
 -- and the grid stays where it was; a click outside it closes it, Escape closes
 -- it (the popup first, the window after), and the arrows - or the arrow keys
 -- - step through the mobs the grid is showing. Top to bottom: the name and
--- what it is, the whole model in a plain box, three numbers, the
--- mastery ladder at this mob's rank, and the lore, every page of it, in a box
--- of its own that scrolls.
+-- what it is, the whole model in a plain box with three numbers stacked
+-- beside it, the mastery ladder at this mob's rank, and the lore, every page
+-- of it, in a box of its own that scrolls.
 -- ---------------------------------------------------------------------------
 local MODAL_W, MODAL_H, MODAL_PAD = 480, 700, 16
 local STAGE_Y, STAGE_H = 62, 220
-local TILE_H, LADDER_H, FOOT_H = 50, 76, 34
+-- THE NUMBERS BESIDE THE MOB (Josh 2026-09-27: "make the model area less
+-- wide, and place the kills, points, and mastery vertically to the right of
+-- it"): a column of three tiles as tall as the stage, and the row they took
+-- under it goes to the lore
+local STATS_W, TILE_GAP = 128, 8
+local TILE_H = (STAGE_H - 2 * TILE_GAP) / 3
+local LADDER_H, FOOT_H = 76, 34
 -- the popup's own ground
 local MODAL_BG = { 0.05, 0.07, 0.06 }
 
@@ -281,7 +420,8 @@ local function tile(parent, word)
 	local t = CreateFrame("Frame", nil, parent)
 	W.Panel(t, W.FILL, W.HAIR)
 	t.label = W.Label(t, word, "small", DIM[1], DIM[2], DIM[3])
-	t.label:SetPoint("TOP", 0, -8)
+	-- the word and its number, the pair in the middle of the tile
+	t.label:SetPoint("TOP", 0, -math.max(8, math.floor((TILE_H - 34) / 2)))
 	t.value = t:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
 	t.value:SetPoint("TOP", t.label, "BOTTOM", 0, -4)
 	return t
@@ -416,7 +556,7 @@ function V.BuildPage(b)
 	-- use a regular rectangle box"). The card's arch cut the whole model's
 	-- head and shoulders away; the rank is in the name's colour
 	local stage = CreateFrame("Frame", nil, page)
-	stage:SetSize(inner, STAGE_H)
+	stage:SetSize(inner - STATS_W - TILE_GAP, STAGE_H)
 	stage:SetPoint("TOPLEFT", MODAL_PAD, -STAGE_Y)
 	W.Panel(stage, { 0.02, 0.03, 0.03, 1 }, W.HAIR)
 	page.stage = stage
@@ -490,35 +630,36 @@ function V.BuildPage(b)
 
 	page.hint = W.Label(page, WORDS:format("drag to turn · right-drag to move · wheel to zoom"), "small")
 	page.hint:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
+	-- at the popup's right edge, under the numbers: the narrower stage has no
+	-- room for the hint and the button side by side
 	page.reset = W.Button(page, "Reset view", 84, 18)
-	page.reset:SetPoint("TOPRIGHT", stage, "BOTTOMRIGHT", 0, -5)
+	page.reset:SetPoint("TOPRIGHT", page, "TOPRIGHT", -MODAL_PAD, -(STAGE_Y + STAGE_H + 5))
 	page.reset:SetScript("OnClick", function()
 		V.ResetView(page.model)
 	end)
 
-	-- three numbers: its kills, what it is worth, the metal it has reached
-	local tileW = math.floor((inner - 16) / 3)
-	local tileY = STAGE_Y + STAGE_H + 34
+	-- three numbers down the stage's right: its kills, what it is worth, the
+	-- metal it has reached
 	page.tiles = {}
 	for i, word in ipairs({ "KILLS", "POINTS", "MASTERY" }) do
 		local t = tile(page, word)
-		t:SetSize(i == 3 and inner - 2 * (tileW + 8) or tileW, TILE_H)
-		t:SetPoint("TOPLEFT", MODAL_PAD + (i - 1) * (tileW + 8), -tileY)
+		t:SetSize(STATS_W, TILE_H)
+		t:SetPoint("TOPRIGHT", page, "TOPRIGHT", -MODAL_PAD, -(STAGE_Y + (i - 1) * (TILE_H + TILE_GAP)))
 		page.tiles[i] = t
 	end
 	page.kills, page.points, page.mastery = page.tiles[1], page.tiles[2], page.tiles[3]
 
 	-- the ladder: the four metals at this mob's rank, the way to the next
+	local ladderY = STAGE_Y + STAGE_H + 34
 	local ladder = CreateFrame("Frame", nil, page)
 	ladder:SetSize(inner, LADDER_H)
-	ladder:SetPoint("TOPLEFT", MODAL_PAD, -(tileY + TILE_H + 10))
+	ladder:SetPoint("TOPLEFT", MODAL_PAD, -ladderY)
 	W.Panel(ladder, W.FILL, W.HAIR)
 	page.ladder = ladder
 	ladder.head = W.Label(ladder, "MASTERY", "small", DIM[1], DIM[2], DIM[3])
 	ladder.head:SetPoint("TOPLEFT", 12, -9)
-	ladder.togo = W.Label(ladder, "", "small", DIM[1], DIM[2], DIM[3])
-	ladder.togo:SetPoint("TOPRIGHT", -12, -9)
-	ladder.togo:SetJustifyH("RIGHT")
+	-- NO "TO GO" (Josh 2026-09-27: "Remove this"): the ticks and the names
+	-- under them say where the next metal is
 	ladder.track = ladder:CreateTexture(nil, "ARTWORK")
 	ladder.track:SetPoint("TOPLEFT", 12, -28)
 	ladder.track:SetSize(inner - 24, 5)
@@ -529,17 +670,24 @@ function V.BuildPage(b)
 	ladder.rungs = {}
 	local rungW = (inner - 24) / 4
 	for i = 1, 4 do
+		local x = 12 + rungW * (i - 0.5)
 		local name = W.Label(ladder, "", "small")
-		name:SetPoint("TOP", ladder, "TOPLEFT", 12 + rungW * (i - 0.5), -42)
+		name:SetPoint("TOP", ladder, "TOPLEFT", x, -42)
 		local need = W.Label(ladder, "", "small", DIM[1], DIM[2], DIM[3])
 		need:SetPoint("TOP", name, "BOTTOM", 0, -2)
-		ladder.rungs[i] = { name = name, need = need }
+		-- A TICK WHERE EACH METAL IS (Josh 2026-09-27: "put ticks on the
+		-- mastery bar where the different ranks are"): over the name, standing
+		-- a little proud of the track on both sides, in the metal's colour
+		local tick = ladder:CreateTexture(nil, "OVERLAY", nil, 2)
+		tick:SetSize(2, 11)
+		tick:SetPoint("CENTER", ladder.track, "LEFT", x - 12, 0)
+		ladder.rungs[i] = { name = name, need = need, tick = tick }
 	end
 
 	-- the lore in full, in a place that scrolls: its own page, a tribe, a
 	-- race and a type can run well past the popup's foot between them. No
 	-- heading over it (Josh 2026-09-26: "Let's remove the "Lore" heading")
-	local loreY = tileY + TILE_H + 10 + LADDER_H + 12
+	local loreY = ladderY + LADDER_H + 12
 	page.loreBox = W.Scroller(page, 6)
 	page.loreBox:SetPoint("TOPLEFT", MODAL_PAD, -loreY)
 	page.loreBox:SetPoint("BOTTOMRIGHT", -MODAL_PAD, FOOT_H + 6)
@@ -596,10 +744,18 @@ function V.Facts(npc, kills, all)
 	end
 	f.loreFrom = #titles > 0
 		and ("Warcraft Wiki: %s · CC BY-SA 3.0"):format(table.concat(titles, ", ")) or nil
+	-- EVERY PART, NOT UP TO THE FIRST GAP (Josh 2026-09-27: "The details dont
+	-- have any indicator if the mob is rare or elite"). The parts were walked
+	-- with ipairs, which stops at the first nil: a mob with no beast family -
+	-- Mor'Ladim, any humanoid - lost its level, its rank and its zone. The rank
+	-- wears the tooltips' colour, as it does in the list.
+	-- the category now (J.Category), which says the rank and more
+	local _, catWord, catColor = V.CategoryOf(m)
 	local meta = {}
-	for _, part in ipairs({ J.KindOf(m), m.family, level(m), RANK_WORD[m.rank], m.zone }) do
-		if part then
-			meta[#meta + 1] = part
+	local parts = { J.KindOf(m), m.family, level(m), inColour(catWord, catColor), m.zone }
+	for i = 1, 5 do
+		if parts[i] then
+			meta[#meta + 1] = parts[i]
 		end
 	end
 	f.meta = table.concat(meta, " · ")
@@ -672,21 +828,35 @@ end
 -- The grid as rows of cards, each row knowing how far down the strip it
 -- starts.
 -- `list` lays the mobs out as the list's rows rather than as cards
+-- `width` is the grid's whole width; the margins are the layout's own: the
+-- list's plain EDGE, the cards' as far as their borders reach (and the lift
+-- over the top)
 function V.Layout(mobs, width, list)
 	local cols = list and LIST_COLS or COLS
 	local gap = list and LIST_GAP or GAP
-	local w = math.floor((width - gap * (cols - 1)) / cols)
+	local rowGap = list and LIST_GAP or ROW_GAP
+	local left, top, foot = EDGE, EDGE, EDGE
+	if not list then
+		-- the reach of a card as wide as the plain margin allows, which is no
+		-- narrower than the one the wider margin leaves
+		local reachTop, reachSide, reachFoot = Card.Reach(math.floor((width - 2 * EDGE - gap * (cols - 1)) / cols))
+		left = math.max(EDGE, reachSide + 2)
+		top = math.max(EDGE, reachTop + LIFT)
+		foot = math.max(EDGE, reachFoot + 2)
+	end
+	local w = math.floor((width - 2 * left - gap * (cols - 1)) / cols)
 	local ch = list and LIST_H or Card.Height(w)
-	local rows, y = {}, EDGE
+	local rows, y = {}, top
 	for i = 1, #mobs, cols do
 		local items = {}
 		for j = i, math.min(i + cols - 1, #mobs) do
 			items[#items + 1] = mobs[j]
 		end
 		rows[#rows + 1] = { items = items, y = y, h = ch }
-		y = y + ch + gap
+		y = y + ch + rowGap
 	end
-	return { rows = rows, w = w, h = ch, gap = gap, list = list, height = math.max(0, y - gap + EDGE) }
+	return { rows = rows, w = w, h = ch, gap = gap, rowGap = rowGap, list = list, left = left, top = top,
+		foot = foot, height = math.max(0, y - rowGap + foot) }
 end
 
 local function railRow(i)
@@ -713,6 +883,12 @@ local function railRow(i)
 		local u = ui()
 		u.pick = u.pick or {}
 		u.pick[u.group] = self.key
+		-- a section picked is the end of a search, which is of All
+		V.query = nil
+		if b.search then
+			b.search.edit:SetText("")
+			b.search.edit:ClearFocus()
+		end
 		b.grid:ScrollTo(0)
 		V.Refresh()
 	end)
@@ -832,6 +1008,66 @@ local function frameFace(model)
 	freeze(model)
 end
 
+-- FRAMED AGAIN ONCE IT HAS SETTLED (Josh 2026-09-27: "With the demo enabled,
+-- most of the portraits are not loading"). The popup drew the same mobs whole,
+-- so the models came; the faces were empty. The ones drawn were mobs met
+-- lately, whose models the client already had and framed at once. A model
+-- that arrives later is framed as it arrives, and on this client that does
+-- not hold - so it is framed again a frame later and a moment after that,
+-- while it is still the same mob.
+local SETTLE = { 0, 0.3 }
+
+-- THE MOB ASKED FOR, NOT THE ONE BEFORE (Josh 2026-09-27: "Some appear to be
+-- using the wrong model" - Ragnaros's card wore the spider it had held). A
+-- card is handed another mob as the strip scrolls, and a creature the client
+-- has not loaded yet leaves the frame showing whatever it had. So the old
+-- model is cleared first, and the mob asked for again a little later while
+-- nothing has come - a creature the client had to send for arrives on a
+-- later asking. `after` is run each time it is asked (the framing).
+local ASK_AGAIN = { 0.5, 1.5, 4 }
+
+local function loaded(model)
+	if type(model.GetModelFileID) ~= "function" then
+		return true
+	end
+	local ok, id = pcall(model.GetModelFileID, model)
+	return ok and type(id) == "number" and id > 0
+end
+
+function V.Creature(model, npc, after)
+	model.npc = npc
+	pcall(model.ClearModel, model)
+	pcall(model.SetCreature, model, npc)
+	if not (C_Timer and C_Timer.After) then
+		return
+	end
+	for _, t in ipairs(ASK_AGAIN) do
+		C_Timer.After(t, function()
+			if model.npc == npc and not loaded(model) then
+				pcall(model.SetCreature, model, npc)
+				if after then
+					after(model)
+				end
+			end
+		end)
+	end
+end
+
+local function settle(model)
+	frameFace(model)
+	if not (C_Timer and C_Timer.After) then
+		return
+	end
+	local npc = model.npc
+	for _, t in ipairs(SETTLE) do
+		C_Timer.After(t, function()
+			if model.npc == npc and model:IsShown() then
+				frameFace(model)
+			end
+		end)
+	end
+end
+
 -- NO PORTRAITS UNDER THE POPUP'S MODEL (Josh 2026-09-26: "Seeing a black
 -- silhouette of the harpy portrait on top of the details"). A model in a
 -- lower strata still wins the depth test against the popup's model where
@@ -870,8 +1106,27 @@ local function cover(model, covered)
 	elseif model.covered then
 		model.covered = nil
 		model:Show()
-		frameFace(model)
+		settle(model)
 	end
+end
+
+-- A FACE AT THE GRID'S EDGE (Josh 2026-09-27: "Can we render 3 rows instead
+-- of 2 so the models don't flash in?"). Cut to the view with SetViewInsets,
+-- a face did not lose its outside part: the client fitted the whole face into
+-- what was left ("Scrolling causes the bottom row to resize strangely"). So
+-- a face part out of view is held back until it is wholly in, unless the
+-- setting says to draw it whole and trust the grid to clip it
+-- (menagerieEdge "show", /bt menagerie edge) - which only this client can
+-- say it does. `over` and `under` are how much of a face `tall` high is above
+-- and below the view. Whether it is to be shown.
+function V.Crop(model, over, under, tall)
+	if over + under >= tall then
+		return false
+	end
+	if over > 0 or under > 0 then
+		return (BT.settings and BT.settings.menagerieEdge) == "show"
+	end
+	return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -997,7 +1252,7 @@ local function card(i)
 	-- the client loads a model a beat after it is asked for, and forgets the
 	-- zoom when it does: framed again when it arrives
 	pcall(c.portrait.SetScript, c.portrait, "OnModelLoaded", function(self)
-		frameFace(self)
+		settle(self)
 		V.LearnBody(self)
 	end)
 	c:SetScript("OnClick", function(self)
@@ -1022,9 +1277,8 @@ local function bind(c, e, w)
 	Card.Layout(c, w)
 	if c.npc ~= e.npc then
 		c.npc = e.npc
-		c.portrait.npc = e.npc
-		pcall(c.portrait.SetCreature, c.portrait, e.npc)
-		frameFace(c.portrait)
+		V.Creature(c.portrait, e.npc, settle)
+		settle(c.portrait)
 		-- a model the client already had loads at once, with no event
 		learnBody(c.portrait)
 	end
@@ -1035,9 +1289,10 @@ local function bind(c, e, w)
 		V.PaintArt(c, e.m)
 	end
 	local tier = J.Mastery(e.n, e.m)
+	local _, catWord, catColor = V.CategoryOf(e.m)
 	Card.Dress(c, {
 		npc = e.npc, name = e.m.name or ("#" .. e.npc), rank = e.m.rank,
-		kind = V.TypeLine(e.m), lore = J.LoreLine(e.m),
+		kind = V.TypeLine(e.m), category = catWord, categoryColor = catColor, lore = J.LoreLine(e.m),
 		kills = big(e.n), points = big(J.MobPoints(e.m, e.n)), tier = tier,
 	})
 end
@@ -1071,7 +1326,7 @@ local function listRow(i)
 	r.face:SetSize(LIST_FACE, LIST_FACE)
 	r.face:SetPoint("LEFT", 6, 0)
 	pcall(r.face.SetScript, r.face, "OnModelLoaded", function(self)
-		frameFace(self)
+		settle(self)
 		V.LearnBody(self)
 	end)
 	r.name = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
@@ -1124,20 +1379,22 @@ local function bindRow(r, e, w)
 	r:SetWidth(w)
 	if r.npc ~= e.npc then
 		r.npc = e.npc
-		r.face.npc = e.npc
-		pcall(r.face.SetCreature, r.face, e.npc)
-		frameFace(r.face)
+		V.Creature(r.face, e.npc, settle)
+		settle(r.face)
 		learnBody(r.face)
 	end
 	r.name:SetText(e.m.name or ("#" .. e.npc))
 	-- the rank in words as well as the edge (Josh 2026-09-26: "List view
 	-- doesn't show rare/elite mob indicators"), in the tooltip's colour
-	local line, word, rc = V.TypeLine(e.m), RANK_WORD[e.m.rank], RANK[e.m.rank]
-	if word and rc then
-		line = ("%s · |cff%02x%02x%02x%s|r"):format(line, math.floor(rc[1] * 255 + 0.5),
-			math.floor(rc[2] * 255 + 0.5), math.floor(rc[3] * 255 + 0.5), word)
+	-- THE CATEGORY FIRST (Josh 2026-09-27): a long type line is cut at the
+	-- row's end, and the category is what matters most, so it leads - and a
+	-- critter is not said to be a critter twice
+	local line = V.TypeLine(e.m)
+	local catKey, catWord, catColor = V.CategoryOf(e.m)
+	if catKey == "critter" then
+		line = line:gsub("^Critter · ", "")
 	end
-	r.kind:SetText(line)
+	r.kind:SetText(("%s · %s"):format(inColour(catWord, catColor), line))
 	r.kills:SetText(big(e.n))
 	r.points:SetText(big(J.MobPoints(e.m, e.n)))
 	local tier = J.Mastery(e.n, e.m)
@@ -1185,7 +1442,6 @@ end
 -- client a model's portrait framing turns on its frame's size in ways the
 -- addon cannot see. A card lifted keeps its model exactly as it was. The
 -- cards themselves were made larger instead, for the words.
-local LIFT = 4
 
 function V.PlaceCard(c)
 	local y = c.slotY - (c.lifted and LIFT or 0)
@@ -1206,7 +1462,7 @@ function V.Deal()
 	local b = frame and frame.bestiary
 	local L = b and b.layout
 	-- whatever was lifted is someone else's card now
-	for _, c in ipairs(b and b.cards or {}) do
+	for _, c in pairs(b and b.cards or {}) do
 		if c.lifted then
 			V.Zoom(c, false)
 		end
@@ -1222,12 +1478,39 @@ function V.Deal()
 	end
 	local bottom = top + room
 	local open = V.open ~= nil
-	local ci = 0
-	for _, row in ipairs(L.rows) do
-		if row.y >= top - 1 and row.y + row.h <= bottom + 1 then
+	-- A STRIP THAT SCROLLS (Josh 2026-09-27: "Rather than actually scrolling a
+	-- rendered list of items, it seems to only ever show 2 rows at a time").
+	-- Every row with any of itself in view is drawn, and the grid's edge clips
+	-- the card. A model is not known to be clipped with it, so a face part out
+	-- of view is cropped to the view (V.Crop), or put away until it is wholly
+	-- in where the client will not crop one (and framed again when it comes
+	-- back).
+	-- Each row of the strip keeps the same cards for as long as it is in view
+	-- - a card is its row's place in a ring of rows, not its place on the
+	-- screen - so scrolling moves models rather than loading them afresh.
+	local ring = math.floor(room / math.max(1, L.h + L.rowGap)) + 2
+	local cols = L.list and LIST_COLS or COLS
+	local faceTop, faceH
+	if L.list then
+		faceTop, faceH = (LIST_H - LIST_FACE) / 2, LIST_FACE
+	else
+		local _, wy, _, wh = Card.Window(L.w)
+		faceTop, faceH = wy, wh
+	end
+	local used, n = {}, 0
+	for ri, row in ipairs(L.rows) do
+		if row.y + row.h + L.foot > top and row.y - L.top < bottom then
+			-- how much of the face is above the view and below it
+			local over = math.max(0, math.floor(top - (row.y + faceTop) + 0.5))
+			local under = math.max(0, math.floor(row.y + faceTop + faceH - bottom + 0.5))
+			local function place(model)
+				return V.Crop(model, over, under, faceH)
+			end
 			for col, e in ipairs(row.items) do
-				ci = ci + 1
-				local x = EDGE + (col - 1) * (L.w + L.gap)
+				local ci = ((ri - 1) % ring) * cols + col
+				used[ci] = true
+				n = n + 1
+				local x = L.left + (col - 1) * (L.w + L.gap)
 				if L.list then
 					local r = listRow(ci)
 					bindRow(r, e, L.w)
@@ -1235,7 +1518,7 @@ function V.Deal()
 					r:SetPoint("TOPLEFT", grid.content, "TOPLEFT", x, -row.y)
 					r:Show()
 					-- where it is decides whether it is behind the popup
-					cover(r.face, open and V.UnderStage(r.face))
+					cover(r.face, not place(r.face) or (open and V.UnderStage(r.face)))
 				else
 					local c = card(ci)
 					bind(c, e, L.w)
@@ -1244,19 +1527,24 @@ function V.Deal()
 					c.slotY = row.y + L.h / 2
 					V.PlaceCard(c)
 					c:Show()
-					cover(c.portrait, open and V.UnderStage(c.portrait))
+					cover(c.portrait, not place(c.portrait) or (open and V.UnderStage(c.portrait)))
 				end
 			end
 		end
 	end
-	-- the other kind put away entirely, and what is left of this one
-	for i = (L.list and 1 or ci + 1), #b.cards do
-		b.cards[i]:Hide()
+	-- the other kind put away entirely, and what is left of this one (the
+	-- ring can leave gaps in the pools, so every one is walked)
+	for i, c in pairs(b.cards) do
+		if L.list or not used[i] then
+			c:Hide()
+		end
 	end
-	for i = (L.list and ci + 1 or 1), #(b.rows or {}) do
-		b.rows[i]:Hide()
+	for i, r in pairs(b.rows or {}) do
+		if not L.list or not used[i] then
+			r:Hide()
+		end
 	end
-	return ci
+	return n
 end
 
 function V.DrawBestiary(kills, all)
@@ -1277,6 +1565,12 @@ function V.DrawBestiary(kills, all)
 		V.open = nil
 	end
 	b.empty:SetShown(#pages == 0)
+	-- a search is of every mob: the rail goes to All while there is one
+	local query = V.query
+	if query then
+		u.pick = u.pick or {}
+		u.pick[u.group] = V.ALL
+	end
 	local picked = V.Picked(pages)
 	V.DrawRail(pages, picked)
 	-- the cards of the section picked, or of all of them in one order
@@ -1291,11 +1585,18 @@ function V.DrawBestiary(kills, all)
 	if picked == V.ALL then
 		J.SortMobs(mobs, u.sort)
 	end
+	-- the matches, the best first
+	if query then
+		mobs = J.Search(mobs, query)
+	end
+	b.noMatch:SetText(query and ("Nothing in the Menagerie matches \"%s\""):format(query) or "")
+	b.noMatch:SetShown(query ~= nil and #mobs == 0 and #pages > 0)
 	-- the popup steps through these
 	V.mobs, V.picked = mobs, picked
-	b.layout = V.Layout(mobs, GRID_W - 2 * EDGE, u.layout == "list")
-	-- the wheel moves a row of whichever it is: three list rows, one row of cards
-	b.grid.step = b.layout.list and (b.layout.h + b.layout.gap) * 3 or (b.layout.h + b.layout.gap)
+	b.layout = V.Layout(mobs, GRID_W, u.layout == "list")
+	-- a row of whichever it is: the wheel glides a row a notch (b.grid.Glide),
+	-- and a click in the gutter goes a window's height less this
+	b.grid.step = b.layout.h + b.layout.rowGap
 	b.grid:SetContentHeight(b.layout.height)
 	-- the open mob's popup, over the grid: shown before its model is set,
 	-- since a model loaded in a hidden frame is framed wrongly, and before
@@ -1315,8 +1616,7 @@ function V.DrawPage(npc, kills, all)
 		return
 	end
 	if page.model.npc ~= npc then
-		page.model.npc = npc
-		pcall(page.model.SetCreature, page.model, npc)
+		V.Creature(page.model, npc, V.Stand)
 		learnBody(page.model)
 		-- a new mob opens on the client's own framing
 		V.ResetView(page.model)
@@ -1342,22 +1642,17 @@ function V.DrawPage(npc, kills, all)
 		rung.name:SetTextColor(m.color[1], m.color[2], m.color[3])
 		rung.name:SetAlpha(i <= f.tier and 1 or 0.45)
 		rung.need:SetText(("%s %s"):format(big(m.n), m.n == 1 and "kill" or "kills"))
+		-- a metal reached is a bright tick, one ahead a dim one
+		rung.tick:SetColorTexture(m.color[1], m.color[2], m.color[3], i <= f.tier and 1 or 0.45)
+		rung.tick:Show()
 	end
 	local track = MODAL_W - 2 * MODAL_PAD - 24
 	local nxt = f.nxt
-	if nxt then
-		L.togo:SetText(("%s at %s · %s to go"):format(nxt.name, big(nxt.n), big(nxt.n - f.n)))
-		local from = here and here.n or 0
-		local k = (f.n - from) / math.max(1, nxt.n - from)
-		L.fill:SetWidth(math.max(1, math.floor(track * k + 0.5)))
-		L.fill:SetColorTexture(nxt.color[1], nxt.color[2], nxt.color[3], 1)
-		L.fill:SetShown(k > 0)
-	else
-		L.togo:SetText("every mastery earned")
-		L.fill:SetWidth(track)
-		L.fill:SetColorTexture(here.color[1], here.color[2], here.color[3], 1)
-		L.fill:Show()
-	end
+	local k = V.LadderShare(f.tier, f.n, here and here.n, nxt and nxt.n, #L.rungs)
+	local fc = (here or nxt).color
+	L.fill:SetWidth(math.max(1, math.floor(track * k + 0.5)))
+	L.fill:SetColorTexture(fc[1], fc[2], fc[3], 1)
+	L.fill:SetShown(k > 0)
 
 	-- the lore, piece under piece, as tall as it measures
 	local body, prev, tall = page.loreBody, nil, 0
@@ -1488,12 +1783,31 @@ function V.ModelReport()
 	return out
 end
 
+-- THE WHOLE LADDER, NOT THE NEXT RUNG (Josh 2026-09-27: "The mastery progress
+-- bar doesn't seem to be working"). It measured from the metal reached to the
+-- next, so a mob that had just reached Gold showed an empty bar under a lit
+-- Gold. Now it runs under the four names: filled to the middle of each metal
+-- earned, and on toward the next by the share of the kills between them.
+-- `tier` metals reached of `rungs`, `n` kills, `from` the kills the last
+-- reached took (nil for none), `to` the next one's (nil when all are earned).
+-- A share of the track, 0 to 1.
+function V.LadderShare(tier, n, from, to, rungs)
+	rungs = rungs or 4
+	if not to then
+		return 1
+	end
+	local at = tier > 0 and (tier - 0.5) / rungs or 0
+	local nextAt = (tier + 0.5) / rungs
+	local k = (n - (from or 0)) / math.max(1, to - (from or 0))
+	return at + math.max(0, math.min(1, k)) * (nextAt - at)
+end
+
 -- a mob's popup, from its card (or a toast); a card lifted under the
 -- cursor is set down first, or it would stand over the dimming
 function V.Open(npc)
 	V.open = npc
 	ui().view = "bestiary"
-	for _, c in ipairs(frame and frame.bestiary.cards or {}) do
+	for _, c in pairs(frame and frame.bestiary.cards or {}) do
 		if c.lifted then
 			V.Zoom(c, false)
 		end
@@ -1511,8 +1825,21 @@ function V.BuildAchievements()
 	a:SetPoint("TOPLEFT", PAD, -BODY_Y)
 	a:SetPoint("BOTTOMRIGHT", -PAD, PAD)
 	W.Panel(a, W.RAISED, W.HAIR)
+	-- ALL, EARNED OR STILL TO DO (Josh 2026-09-27: "We might actually need a
+	-- 'Complete' and 'Incomplete' and 'All' tab"), and how many are earned
+	local showLabel = W.Label(a, "Show", "small", DIM[1], DIM[2], DIM[3])
+	showLabel:SetPoint("TOPLEFT", 10, -TOOLBAR_Y - 4)
+	a.shows = W.Segmented(a, { { "all", "All" }, { "done", "Earned" }, { "todo", "In progress" } }, function(key)
+		ui().achShow = key
+		a.list:ScrollTo(0)
+		V.Refresh()
+	end, 80)
+	a.shows:SetPoint("LEFT", showLabel, "RIGHT", 8, 0)
+	a.tally = W.Label(a, "", "small", DIM[1], DIM[2], DIM[3])
+	a.tally:SetPoint("LEFT", a.shows, "RIGHT", 18, 0)
+	W.Divider(a, 8, -TOOLBAR_H)
 	a.list = W.Scroller(a, 6)
-	a.list:SetPoint("TOPLEFT", 6, -6)
+	a.list:SetPoint("TOPLEFT", 6, -TOOLBAR_H - 6)
 	a.list:SetPoint("BOTTOMRIGHT", -6, 6)
 	a.list.step = ACH_H * 2
 	a.rows, a.heads = {}, {}
@@ -1529,6 +1856,15 @@ local function achRow(i)
 	local W = BT.Widgets
 	r = CreateFrame("Frame", nil, a.list.content)
 	r:SetHeight(ACH_H)
+	-- EARNED, AT A GLANCE (Josh 2026-09-27: "make the achievements I already
+	-- earned more apparent"): an earned row is lit, with the accent down its
+	-- left edge and a tick by its points
+	r.lit = r:CreateTexture(nil, "BACKGROUND")
+	r.lit:SetAllPoints()
+	r.edge = r:CreateTexture(nil, "ARTWORK")
+	r.edge:SetPoint("TOPLEFT", 0, -1)
+	r.edge:SetPoint("BOTTOMLEFT", 0, 0)
+	r.edge:SetWidth(3)
 	r.points = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
 	r.points:SetPoint("LEFT", 6, 0)
 	r.points:SetWidth(34)
@@ -1542,6 +1878,11 @@ local function achRow(i)
 	r.right = W.Label(r, "", "small")
 	r.right:SetPoint("TOPRIGHT", -8, -8)
 	r.right:SetJustifyH("RIGHT")
+	-- the tick, before the date it was earned
+	r.check = r:CreateTexture(nil, "OVERLAY")
+	r.check:SetSize(14, 14)
+	r.check:SetPoint("RIGHT", r.right, "LEFT", -5, 0)
+	pcall(r.check.SetTexture, r.check, "Interface\\RaidFrame\\ReadyCheck-Ready")
 	r.track = r:CreateTexture(nil, "BORDER")
 	r.track:SetSize(90, 3)
 	r.track:SetPoint("TOPRIGHT", r.right, "BOTTOMRIGHT", 0, -6)
@@ -1679,68 +2020,96 @@ function V.DrawAchievements(kills, feats)
 	local account = ui().scope == "account"
 	local accent = BT.Widgets.ACCENT
 	local width = BT.Pill.Number(a.list.content:GetWidth(), WIDTH - PAD * 2 - 20)
-	local y, ri, hi = 0, 0, 0
-	for _, g in ipairs(V.Groups(kills, feats, account)) do
-		hi = hi + 1
-		local h = achHead(hi)
-		h:ClearAllPoints()
-		h:SetPoint("TOPLEFT", a.list.content, "TOPLEFT", 0, -y)
-		h:SetWidth(width)
-		h.text:SetText(g.title:upper())
-		-- the kinds and the masteries have no end to them: they say their points
-		if g.count then
-			h.count:SetText(g.count)
-		else
-			h.count:SetText(("%d / %d"):format(g.done, #g.list))
+	local show = ui().achShow or "all"
+	a.shows:Select(show)
+	local groups = V.Groups(kills, feats, account)
+	-- the milestones earned of all there are (the kinds and the masteries'
+	-- summaries are tallies, not things to earn)
+	local earned, all = 0, 0
+	for _, g in ipairs(groups) do
+		if not g.count then
+			earned, all = earned + g.done, all + #g.list
 		end
-		h:Show()
-		y = y + HEAD_ROW_H
+	end
+	a.tally:SetText(("%d of %d achievements earned"):format(earned, all))
+	local y, ri, hi = 0, 0, 0
+	for _, g in ipairs(groups) do
+		-- what this view keeps of the group; a group left empty is not headed
+		local list = {}
 		for _, it in ipairs(g.list) do
-			ri = ri + 1
-			local r = achRow(ri)
-			r:ClearAllPoints()
-			r:SetPoint("TOPLEFT", a.list.content, "TOPLEFT", 0, -y)
-			r:SetWidth(width)
 			local done = it.have >= it.need
-			r.points:SetText(tostring(it.points))
-			r.title:SetText(it.title)
-			r.text:SetText(it.text)
-			-- a mastery's name wears its metal
-			local c = it.color
-			if done then
-				r.points:SetTextColor(accent[1], accent[2], accent[3])
-				if c then
-					r.title:SetTextColor(c[1], c[2], c[3])
-				else
-					r.title:SetTextColor(1, 1, 1)
-				end
-				r.right:SetText(it.right or (it.at and U.ShortDate(it.at)) or "earned")
-				r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
-				r.track:Hide()
-				r.fill:Hide()
-			elseif it.right then
-				-- a tier nobody has reached yet: a count, not a bar
-				r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
-				r.title:SetTextColor(0.62, 0.66, 0.64)
-				r.right:SetText(it.right)
-				r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
-				r.track:Hide()
-				r.fill:Hide()
-			else
-				r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
-				r.title:SetTextColor(0.62, 0.66, 0.64)
-				r.right:SetText(("%s / %s"):format(big(it.have), big(it.need)))
-				r.right:SetTextColor(0.75, 0.78, 0.77)
-				r.track:SetColorTexture(1, 1, 1, 0.07)
-				r.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
-				local share = math.min(1, it.have / it.need)
-				r.track:Show()
-				-- a texture of no width is drawn whole: an empty bar is no bar
-				r.fill:SetShown(share > 0)
-				r.fill:SetWidth(math.max(1, 90 * share))
+			if show == "all" or (show == "done") == done then
+				list[#list + 1] = it
 			end
-			r:Show()
-			y = y + ACH_H
+		end
+		if #list > 0 then
+			hi = hi + 1
+			local h = achHead(hi)
+			h:ClearAllPoints()
+			h:SetPoint("TOPLEFT", a.list.content, "TOPLEFT", 0, -y)
+			h:SetWidth(width)
+			h.text:SetText(g.title:upper())
+			-- the kinds and the masteries have no end to them: they say their points
+			if g.count then
+				h.count:SetText(g.count)
+			else
+				h.count:SetText(("%d / %d"):format(g.done, #g.list))
+			end
+			h:Show()
+			y = y + HEAD_ROW_H
+			for _, it in ipairs(list) do
+				ri = ri + 1
+				local r = achRow(ri)
+				r:ClearAllPoints()
+				r:SetPoint("TOPLEFT", a.list.content, "TOPLEFT", 0, -y)
+				r:SetWidth(width)
+				local done = it.have >= it.need
+				r.points:SetText(tostring(it.points))
+				r.title:SetText(it.title)
+				r.text:SetText(it.text)
+				-- earned: lit, edged and ticked
+				r.lit:SetColorTexture(accent[1], accent[2], accent[3], 0.07)
+				r.lit:SetShown(done)
+				r.edge:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
+				r.edge:SetShown(done)
+				r.check:SetShown(done)
+				-- a mastery's name wears its metal
+				local c = it.color
+				if done then
+					r.points:SetTextColor(accent[1], accent[2], accent[3])
+					if c then
+						r.title:SetTextColor(c[1], c[2], c[3])
+					else
+						r.title:SetTextColor(1, 1, 1)
+					end
+					r.right:SetText(it.right or (it.at and U.ShortDate(it.at)) or "earned")
+					r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
+					r.track:Hide()
+					r.fill:Hide()
+				elseif it.right then
+					-- a tier nobody has reached yet: a count, not a bar
+					r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
+					r.title:SetTextColor(0.62, 0.66, 0.64)
+					r.right:SetText(it.right)
+					r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
+					r.track:Hide()
+					r.fill:Hide()
+				else
+					r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
+					r.title:SetTextColor(0.62, 0.66, 0.64)
+					r.right:SetText(("%s / %s"):format(big(it.have), big(it.need)))
+					r.right:SetTextColor(0.75, 0.78, 0.77)
+					r.track:SetColorTexture(1, 1, 1, 0.07)
+					r.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
+					local share = math.min(1, it.have / it.need)
+					r.track:Show()
+					-- a texture of no width is drawn whole: an empty bar is no bar
+					r.fill:SetShown(share > 0)
+					r.fill:SetWidth(math.max(1, 90 * share))
+				end
+				r:Show()
+				y = y + ACH_H
+			end
 		end
 	end
 	for i = ri + 1, #a.rows do

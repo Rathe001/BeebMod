@@ -95,6 +95,9 @@ Card.RANK_STYLE = {
 -- room for gold's fan - and the lore is on the mob's page
 local PAD_X, PAD_TOP, PAD_FOOT = 10, 10, 8
 local NAME_GAP, NAME_H, TYPE_H, FAN_ROOM = 5, 16.5, 15.5, 8
+-- the category's line under the type (Josh 2026-09-27: "make the cards slightly
+-- taller, and put the category under the mob type and level")
+local CAT_H = 14
 local WIN_PAD = 3
 local OUTER, INNER, THIRD = 0, 4.5, 6.4        -- the border's lines, in from the edge
 local OUTER_RUN, INNER_RUN, THIRD_RUN = 11, 13, 15 -- where they leave the corner art
@@ -191,9 +194,17 @@ function Card.New(parent)
 		c.arch[i] = rule(o, 1)
 		c.archIn[i] = rule(o, 1)
 	end
+	-- THE RAYS BREAK THE BORDER (Josh 2026-09-27: "World boss portrait frame
+	-- is getting cut off"). Between the keystone and the card's top there is
+	-- no room clear of the border's inner lines, and the rays were drawn under
+	-- them. A patch of the card's own dark takes the two inner lines away over
+	-- the keystone, the outer line capping it, and the rays stand in it.
+	c.rayGround = tex(o, "ARTWORK", 3)
+	c.rayGround:SetColorTexture(GROUND[1], GROUND[2], GROUND[3], 1)
 	c.rays = {}
 	for i = 1, 3 do
-		c.rays[i] = rule(o, 1)
+		c.rays[i] = tex(o, "OVERLAY", 5)
+		c.rays[i]:SetColorTexture(1, 1, 1, 1)
 	end
 	-- the rank's ornaments on the arch: a diamond at each of its four steps,
 	-- and a bracket on each of the window's bottom corners
@@ -237,6 +248,8 @@ function Card.New(parent)
 	c.name:SetJustifyH("CENTER")
 	c.kind = text(o, Card.FONT_TYPE)
 	c.kind:SetJustifyH("CENTER")
+	c.cat = text(o, Card.FONT_TYPE)
+	c.cat:SetJustifyH("CENTER")
 	c.lore = text(o, Card.FONT_LORE)
 	c.lore:SetJustifyH("CENTER")
 	c.lore:SetJustifyV("TOP")
@@ -280,8 +293,17 @@ function Card.Height(w)
 		return math.floor(v * k + 0.5)
 	end
 	local _, wy, _, wh = Card.Window(w)
-	return wy + wh + D(NAME_GAP) + math.max(12, D(NAME_H)) + math.max(12, D(TYPE_H)) + D(FAN_ROOM)
-		+ D(PAD_FOOT)
+	return wy + wh + D(NAME_GAP) + math.max(12, D(NAME_H)) + math.max(12, D(TYPE_H)) + math.max(11, D(CAT_H))
+		+ D(FAN_ROOM) + D(PAD_FOOT)
+end
+
+-- HOW FAR THE BORDER REACHES PAST THE CARD (Josh 2026-09-27: "The borders
+-- we built are being cut off"): platinum's crest stands 32 over the top edge,
+-- the corners 12 past each side, the pendant 21 under the foot. In pixels at
+-- this width, for the grid to leave room: top, side, foot.
+function Card.Reach(w)
+	local k = w / Card.DESIGN_W
+	return math.ceil(32 * k), math.ceil(12 * k), math.ceil(21 * k)
 end
 
 -- where the mob's window is, in the card: left, top, width, height
@@ -394,6 +416,11 @@ function Card.Layout(c, w)
 	c.keystone:ClearAllPoints()
 	c.keystone:SetPoint("CENTER", c, "TOPLEFT", w / 2, -(wy + 1))
 	c.keystone:SetSize(g, g)
+	-- the notch they stand in: from under the outer line to the keystone
+	local notchTop = D(OUTER) + 1
+	c.rayGround:ClearAllPoints()
+	c.rayGround:SetPoint("TOPLEFT", c, "TOPLEFT", math.floor(w / 2 - D(13) + 0.5), -notchTop)
+	c.rayGround:SetSize(D(26), math.max(1, wy - D(4) - notchTop))
 	for i, ray in ipairs(c.rays) do
 		ray:ClearAllPoints()
 		ray:SetSize(1, D(7))
@@ -478,7 +505,12 @@ function Card.Layout(c, w)
 	c.kind:SetPoint("TOPLEFT", c, "TOPLEFT", inset, -y)
 	c.kind:SetPoint("TOPRIGHT", c, "TOPRIGHT", -inset, -y)
 	y = y + math.max(12, D(TYPE_H))
-	-- gold's fan, in the room left for it between the type and the foot
+	setFont(c.cat, math.max(9, D(11.5)))
+	c.cat:ClearAllPoints()
+	c.cat:SetPoint("TOPLEFT", c, "TOPLEFT", inset, -y)
+	c.cat:SetPoint("TOPRIGHT", c, "TOPRIGHT", -inset, -y)
+	y = y + math.max(11, D(CAT_H))
+	-- gold's fan, in the room left for it between the category and the foot
 	c.fanY = y
 	c.fan:ClearAllPoints()
 	c.fan:SetSize(D(128), D(16))
@@ -521,11 +553,24 @@ end
 -- The sheen sweeps across once every few seconds, by the client's own
 -- animation, so it costs nothing a frame; where the client will not animate,
 -- there is no sheen rather than a stuck one.
+local SWEEP, SWEEP_REST = 3.2, 2.4
+
+-- NOT ALL AT ONCE (Josh 2026-09-27: "stagger the platinum shine effect so it
+-- isn't in sync on all platinum cards"). Each card's loop starts at its own
+-- point in the cycle - the mob's, by its number, so a mob keeps its moment
+-- from one opening to the next. The sheen waits off the card's left edge,
+-- clipped from view, until then.
+function Card.SweepDelay(npc)
+	local seed = tonumber(npc) or 0
+	return ((seed * 0.6180339887) % 1) * (SWEEP + SWEEP_REST)
+end
+
 local function sweep(c, on)
 	if not on then
 		if c.sweep then
 			c.sweep:Stop()
 		end
+		c.sweepAt = nil
 		c.sheen:Hide()
 		return
 	end
@@ -537,16 +582,33 @@ local function sweep(c, on)
 		end
 		local move = group:CreateAnimation("Translation")
 		move:SetOffset(math.floor((c.laidW or 140) * 1.9), 0)
-		move:SetDuration(3.2)
+		move:SetDuration(SWEEP)
 		pcall(move.SetSmoothing, move, "IN_OUT")
-		pcall(move.SetEndDelay, move, 2.4)
+		pcall(move.SetEndDelay, move, SWEEP_REST)
 		group:SetLooping("REPEAT")
 		c.sweep = group
 	end
 	c.sheen:Show()
-	if not c.sweep:IsPlaying() then
-		c.sweep:Play()
+	if c.sweep:IsPlaying() or c.sweepAt then
+		return
 	end
+	local delay = Card.SweepDelay(c.npc)
+	if delay < 0.05 or not (C_Timer and C_Timer.After) then
+		c.sweep:Play()
+		return
+	end
+	-- a token for this wait: stopped and started again meanwhile, it is
+	-- the later start's
+	local token = {}
+	c.sweepAt = token
+	C_Timer.After(delay, function()
+		if c.sweepAt == token then
+			c.sweepAt = nil
+			if c.sheen:IsShown() and not c.sweep:IsPlaying() then
+				c.sweep:Play()
+			end
+		end
+	end)
 end
 Card.Sweep = sweep
 
@@ -609,12 +671,16 @@ function Card.Dress(c, d)
 		tint(b, orn)
 		b:SetShown(rs.level >= 2)
 	end
-	for _, ray in ipairs(c.rays) do
-		ray:SetColorTexture(orn[1], orn[2], orn[3], 1)
-		ray:SetShown(rs.level >= 3)
-	end
 	-- the crest, the sides, the pendant
 	local cs = c.crestSizes and c.crestSizes[t]
+	-- the rays, in their notch - unless gold's or platinum's crest stands
+	-- over the keystone, where they would only be lines through it
+	local rays = rs.level >= 3 and not cs
+	for _, ray in ipairs(c.rays) do
+		ray:SetColorTexture(orn[1], orn[2], orn[3], 1)
+		ray:SetShown(rays)
+	end
+	c.rayGround:SetShown(rays)
 	if cs then
 		c.crest:SetTexture(TEX.crest[t])
 		c.crest:ClearAllPoints()
@@ -655,6 +721,11 @@ function Card.Dress(c, d)
 	c.name:SetTextColor(nc[1], nc[2], nc[3])
 	c.kind:SetText(d.kind or "")
 	c.kind:SetTextColor(0.79, 0.72, 0.58)
+	-- its category, in the category's colour (the window's V.CATEGORY)
+	c.cat:SetText((d.category or ""):upper())
+	local cc = d.categoryColor or { 0.62, 0.58, 0.50 }
+	c.cat:SetTextColor(cc[1], cc[2], cc[3])
+	c.cat:SetShown(d.category ~= nil)
 	c.fan:SetShown(t >= 3)
 	tint(c.fan, mc)
 	c.kills:SetText(d.kills or "")
@@ -680,7 +751,7 @@ end
 -- text is set - the page, drawing the same lore in the same face, was fine,
 -- because it was not the first. So a card's words are set again a frame
 -- after it is dressed, once the face is there.
-local TEXTS = { "name", "kind", "kills", "killsLabel", "tier", "points", "pointsLabel" }
+local TEXTS = { "name", "kind", "cat", "kills", "killsLabel", "tier", "points", "pointsLabel" }
 function Card.Rewrite(c)
 	if c.rewriting or not (C_Timer and C_Timer.After) then
 		return

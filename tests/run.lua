@@ -1699,11 +1699,64 @@ do
 		"the nearest masteries come first")
 	-- FEWER KILLS FOR THE RARER KINDS (Josh 2026-09-26): an elite's Platinum
 	-- is 250, a rare's 20 and a world boss's 5; the metals pay the same
-	check(J.Mastery(250, { rank = "elite" }) == 4 and J.Mastery(249, { rank = "elite" }) == 3
-		and J.Mastery(20, { rank = "rare" }) == 4 and J.Mastery(2, { rank = "rareelite" }) == 1
+	check(J.Mastery(100, { rank = "elite" }) == 4 and J.Mastery(99, { rank = "elite" }) == 3
+		and J.Mastery(15, { rank = "rare" }) == 4 and J.Mastery(2, { rank = "rareelite" }) == 1
 		and J.Mastery(1, { rank = "worldboss" }) == 1 and J.Mastery(499) == 3,
 		"elites, rares and world bosses reach each mastery in fewer kills")
-	check(J.MobPoints({ rank = "worldboss" }, 5) == 15 + 20, "a Platinum world boss is 15 + 20")
+	check(J.MobPoints({ rank = "worldboss" }, 5) == 20 + 20, "a Platinum world boss is 20 + 20")
+	-- BY HOW HARD IT IS AND HOW OFTEN YOU MEET ONE (Josh 2026-09-27): nine
+	-- categories, from the rank, the type, where it was met and whether it
+	-- was a boss there
+	local cats = {
+		{ { rank = "normal", kind = "Critter" }, "critter" },
+		{ { rank = "normal", kind = "Beast" }, "normal" },
+		{ { rank = "trivial" }, "normal" },
+		{ { rank = "elite", zone = "Elwynn Forest" }, "elite" },
+		{ { rank = "elite", zone = "The Deadmines" }, "dungeonelite" },
+		{ { rank = "elite", instance = "raid", zone = "?" }, "dungeonelite" },
+		{ { rank = "elite", instance = "party", boss = true }, "dungeonboss" },
+		{ { rank = "elite", zone = "Molten Core", boss = true }, "raidboss" },
+		{ { rank = "worldboss", zone = "Molten Core" }, "raidboss" },
+		{ { rank = "worldboss", zone = "Azshara" }, "worldboss" },
+		{ { rank = "elite", boss = true, zone = "Elwynn Forest" }, "elite" },
+		{ { rank = "rare" }, "rare" },
+		{ { rank = "rareelite", zone = "Stratholme" }, "rareelite" },
+	}
+	for _, t in ipairs(cats) do
+		check(J.Category(t[1]) == t[2], ("%s: %s, not %s"):format(tostring(t[1].rank), t[2], J.Category(t[1])))
+	end
+	check(J.Mastery(1000, { rank = "normal", kind = "Critter" }) == 4 and J.Mastery(500, { kind = "Critter" }) == 3,
+		"a critter takes twice an ordinary mob's kills")
+	check(J.MobPoints({ rank = "elite", zone = "The Deadmines" }, 0) == 2
+		and J.MobPoints({ rank = "elite", instance = "party", boss = true }, 0) == 6,
+		"a dungeon's trash is worth less than an elite met alone, its boss more")
+	-- a boss fight won marks the mob of that name; a kill notes where it was
+	J.Learn({ npc = 90090, name = "Edwin VanCleef", rank = "elite", instance = "party" })
+	check(J.Category(J.Store().mobs[90090]) == "dungeonelite" and J.EncounterWon("Edwin VanCleef")
+		and J.Category(J.Store().mobs[90090]) == "dungeonboss" and not J.EncounterWon("The Seven"),
+		"a won encounter makes its mob a dungeon boss")
+	-- LAZY MATCHING (Josh 2026-09-27): every word found somewhere, loosely
+	do
+		local rag = { name = "Ragnaros", rank = "worldboss", kind = "Elemental", zone = "Molten Core", skull = true }
+		local mor = { name = "Mor'Ladim", rank = "rareelite", kind = "Undead", zone = "Duskwood", lo = 35, hi = 35 }
+		local wolf = { name = "Young Wolf", rank = "normal", kind = "Beast", family = "Wolf", zone = "Elwynn Forest", lo = 2 }
+		local function hits(q, m) return J.Match(q, m) ~= nil end
+		check(hits("ragnaros", rag) and hits("RAGNAROS", rag) and hits("rag", rag), "a name, in any case, or its start")
+		check(hits("ragnoros", rag) and hits("ragnarso", rag) and hits("rgnrs", rag), "one letter wrong or swapped, or letters in order")
+		check(hits("morladim", mor) and hits("mor'ladim", mor) and hits("ladim", mor), "apostrophes do not matter")
+		check(hits("raid boss", rag) and hits("rare elite", mor) and hits("molten", rag) and hits("wolf elwynn", wolf),
+			"the category, the zone and the family, any words together")
+		check(hits("lv 35", mor) and not hits("lv 36", mor), "a level")
+		check(not hits("ragnaros wolf", rag) and not hits("zzz", wolf) and not hits("xy", rag),
+			"every word has to be found, and short nonsense finds nothing")
+		check(J.Match("", wolf) == 0, "an empty search is everything")
+		local found = J.Search({ { npc = 1, m = wolf }, { npc = 2, m = rag }, { npc = 3, m = mor } }, "ragnaros")
+		check(#found == 1 and found[1].npc == 2, "a search keeps what matches")
+		local ranked = J.Search({ { npc = 1, m = { name = "Duskwood Stalker" } }, { npc = 2, m = mor } }, "mor")
+		check(ranked[1].npc == 2, "the start of the name before a letter in order elsewhere")
+	end
+	J.Learn({ npc = 90090, name = "Edwin VanCleef", rank = "elite", instance = "none" })
+	check(J.Store().mobs[90090].instance == "party", "and a kill in the open world does not undo where it was met")
 	J.Learn({ npc = 90004, name = "Old Rare", rank = "rare" })
 	local _, rareNews = J.Kill({ npc = 90004, name = "Old Rare", guid = "r1" }, T + 350)
 	local _, rareNews2 = J.Kill({ npc = 90004, name = "Old Rare", guid = "r2" }, T + 351)
