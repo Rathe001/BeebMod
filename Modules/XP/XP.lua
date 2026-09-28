@@ -6,10 +6,11 @@
 -- pace of this session; the bar shows the same, with rested experience as a
 -- paler stretch ahead of it. Point at it for the numbers.
 --
--- THE PACE IS THIS SESSION'S, like the gold per hour: a login starts it, a
--- /reload carries it on, and a level gained along the way is counted whole
--- rather than read as the bar going backwards. At the level cap there is
--- nothing to say, so the line is not there.
+-- WHAT THIS SESSION GAINED is kept as the gold per hour is: a login starts
+-- it, a /reload carries it on, and a level gained along the way is counted
+-- whole rather than read as the bar going backwards. The PACE is not the
+-- session's any more (M.Pace). At the level cap there is nothing to say, so
+-- the line is not there.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/XP/XP.lua")
 
@@ -110,19 +111,96 @@ function M.Gain()
 	end
 	if gained > 0 then
 		s.gained = (s.gained or 0) + gained
+		M.Note(gained, U.Now())
 	end
 	M.level, M.cur, M.max = level, cur, max
 	s.last = U.Now()
 	M.Update()
 end
 
--- experience per hour this session, or nil while there is too little time
-function M.Rate(s, now)
-	s = s or M.session
-	if not s then
+-- THE PACE WHILE YOU PLAY (Josh 2026-09-28: "Anything we can do to make the
+-- time to level estimate more accurate and not dependent on when the addon
+-- was installed, and how far into a level the player is already?"). It was
+-- the session's experience over the time since login, so an hour spent
+-- installing and setting up counted as an hour of levelling, and each login
+-- began again from nothing: after a few kills, 81 hours to level.
+--
+-- Now it is experience over the time between one gain and the next. The
+-- time before the first and after the last is not levelling. A gap longer
+-- than M.BREAK counts as M.BREAK: a flight or a trip to a vendor is still
+-- levelling, an hour away from the keyboard is not. The last M.WINDOW of
+-- that time is kept for each character across logins, so a login starts
+-- from the last hour's pace rather than from nothing. Before M.MIN_GAINS
+-- gains and M.MIN_TIME of counted time there is no pace to give.
+M.BREAK = 300
+M.WINDOW = 3600
+M.MIN_GAINS = 3
+M.MIN_TIME = 120
+-- however quick the gains, a list no longer than this
+local KEEP = 400
+
+-- this character's gains, oldest first: { { t = when, xp = how much } }
+function M.PaceList()
+	if not BT.settings then
 		return nil
 	end
-	return BT.Session.Rate(s.gained, s.start, now)
+	BT.settings.xpPace = BT.settings.xpPace or {}
+	local who = (U.MeKey and U.MeKey()) or (U.Me and U.Me()) or "?"
+	BT.settings.xpPace[who] = BT.settings.xpPace[who] or {}
+	return BT.settings.xpPace[who]
+end
+
+-- the time between gain i - 1 and gain i, as it counts
+local function counts(list, i)
+	return math.min(math.max((list[i].t or 0) - (list[i - 1].t or 0), 0), M.BREAK)
+end
+
+-- a gain, and the list cut back to the window (with the gain it starts from)
+function M.Note(xp, now)
+	local list = M.PaceList()
+	if not list then
+		return
+	end
+	list[#list + 1] = { t = now, xp = xp }
+	local counted, first = 0, 1
+	for i = #list, 2, -1 do
+		counted = counted + counts(list, i)
+		if counted >= M.WINDOW then
+			first = i - 1
+			break
+		end
+	end
+	first = math.max(first, #list - KEEP + 1)
+	if first > 1 then
+		for _ = 1, first - 1 do
+			table.remove(list, 1)
+		end
+	end
+end
+
+-- experience an hour over the last M.WINDOW of counted time, or nil
+function M.Pace(list)
+	list = list or M.PaceList()
+	if not list or #list < M.MIN_GAINS then
+		return nil
+	end
+	local counted, gained = 0, 0
+	for i = #list, 2, -1 do
+		counted = counted + counts(list, i)
+		gained = gained + (list[i].xp or 0)
+		if counted >= M.WINDOW then
+			break
+		end
+	end
+	if counted < M.MIN_TIME then
+		return nil
+	end
+	return gained * 3600 / counted
+end
+
+-- experience per hour at your pace, or nil while there is too little to go on
+function M.Rate()
+	return M.Pace()
 end
 
 -- seconds to the next level at that pace, or nil if there is no pace yet
@@ -160,7 +238,7 @@ function M.Lines(level, cur, max, rate)
 	local left = ("Level %d %s"):format(level, WORDS:format(("· %d%%"):format(pct)))
 	local secs = M.ToLevel(cur, max, rate)
 	-- ONE GRAMMAR WITH REPUTATION (Josh 2026-09-22, the panel redesign): the
-	-- right side is a time, and only once the session has a pace. What is
+	-- right side is a time, and only once there is a pace. What is
 	-- left in experience is on the hover.
 	local right = ""
 	if secs then
@@ -238,6 +316,7 @@ function M.Tip()
 				t:Row("Per hour", big(math.floor(rate)))
 			end
 		end
+		t:Foot({ { "Right-click", "start the pace and the session again" } })
 	end })
 end
 
@@ -283,6 +362,16 @@ function M.Build()
 	M.frame:SetScript("OnLeave", function()
 		if GameTooltip then
 			GameTooltip:Hide()
+		end
+	end)
+	-- RIGHT-CLICK TO START AGAIN (Josh 2026-09-28: "Maybe we should add a
+	-- 'right click to reset'"), as the Reset on the Progress page does
+	M.frame:SetScript("OnMouseUp", function(_, button)
+		if button == "RightButton" then
+			M.Reset()
+			if BT.Tip and BT.Tip.IsShown() then
+				M.Tip()
+			end
 		end
 	end)
 	return M.frame
@@ -363,7 +452,9 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("Your level, how far through it you are, and roughly how long the rest will take at this session's pace.")
+	page:Note("Your level, how far through it you are, and roughly how long the rest will take.")
+	page:Note("The time to level comes from the XP you gained in your last hour of play. "
+		.. "Only the time between one gain and the next counts, and a gap longer than 5 minutes counts as 5.", true)
 	page:Note("The paler stretch on the bar is rested XP. At the level cap there is no line.", true)
 	local r = BT.Widgets.SwitchRow(page:Section("The game's own"), "Hide the game's bar",
 		"Hides the game's experience bar while this one shows",
@@ -392,6 +483,12 @@ end
 -- A NEW SESSION FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
 -- slash commands"): what /bt xp reset did, as the Reset row on this page
 function M.Reset()
+	local list = M.PaceList()
+	if list then
+		for i = #list, 1, -1 do
+			list[i] = nil
+		end
+	end
 	M.Start(true, false)
-	U.Print("XP: a new session starts now.")
+	U.Print("XP: the session and the pace start again now.")
 end

@@ -96,12 +96,8 @@ end
 
 -- the vendor's price for one of an item, or 0 while the client has not said
 local function price(itemID)
-	local get = (C_Item and C_Item.GetItemInfo) or _G.GetItemInfo
-	if type(get) ~= "function" then
-		return 0
-	end
-	local ok, _, _, _, _, _, _, _, _, _, _, sell = pcall(get, itemID)
-	return ok and tonumber(sell) or 0
+	local sell = select(11, U.ItemInfo(itemID))
+	return tonumber(sell) or 0
 end
 M.Price = price
 
@@ -283,12 +279,10 @@ function M.Best(r)
 	if not bestID then
 		return nil
 	end
-	local name = "item " .. tostring(bestID)
-	if type(GetItemInfo) == "function" then
-		local ok, n = pcall(GetItemInfo, bestID)
-		if ok and type(n) == "string" then
-			name = n
-		end
+	-- no name until the client has loaded the item: the row waits for it
+	local name = U.ItemInfo(bestID)
+	if type(name) ~= "string" then
+		return nil
 	end
 	return name, bestCount
 end
@@ -377,6 +371,10 @@ M.events:SetScript("OnEvent", function(_, event, a, b, c)
 		local id = tonumber(a)
 		if r and r.items and id and r.items[id] then
 			M.Update()
+			-- and the tooltip, if it is up and was waiting for this name
+			if M.chip and BT.Tip and BT.Tip.IsShown() and BT.Tip.Frame().owner == M.chip then
+				M.Tip()
+			end
 		end
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		BT.Session.OnWorld(M, a, b)

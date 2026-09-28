@@ -9,7 +9,7 @@
 --
 --   Journal.lua   the book, the achievements and the arithmetic
 --   Kills.lua     what counts as a kill, with no combat log to ask
---   Toast.lua     "Gold mastery! 150 kills on Barn Owl"
+--   Toast.lua     "Gold mastery · 150 kills", then "Barn Owl"
 --   Window.lua    the journal
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Menagerie/Menagerie.lua")
@@ -111,7 +111,9 @@ function M.Kill(info, how)
 	for _, a in ipairs(news or {}) do
 		if a.mastery then
 			T.Push({
-				head = ("%s mastery!"):format(a.name), text = ("%s %s on %s"):format(big(a.need), a.need == 1 and "kill" or "kills", name),
+				-- the milestone above, the mob's name on a line of its own (Josh
+				-- 2026-09-28: "10 kills on Blackwood Pathfin..." was cut off)
+				head = ("%s mastery · %s %s"):format(a.name, big(a.need), a.need == 1 and "kill" or "kills"), text = name,
 				points = a.points, icon = icon, onClick = openOn(info.npc),
 			})
 		else
@@ -607,7 +609,7 @@ function M.SampleToast()
 	local c = J.Mine()
 	local last = c and c.last and J.Store().mobs[c.last.npc]
 	T.Push({
-		head = "Platinum mastery!", text = ("500 kills on %s"):format(last and last.name or "Barn Owl"),
+		head = "Platinum mastery · 500 kills", text = last and last.name or "Barn Owl",
 		points = 10, icon = T.Icon(last and last.kind),
 	})
 end

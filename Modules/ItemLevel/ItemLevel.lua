@@ -134,9 +134,9 @@ end
 -- an item's name and its quality's colour, or the slot's name
 local function named(item)
 	local l = link(item.slot)
-	if l and type(GetItemInfo) == "function" then
-		local ok, name, _, quality = pcall(GetItemInfo, l)
-		if ok and type(name) == "string" then
+	if l then
+		local name, _, quality = U.ItemInfo(l)
+		if type(name) == "string" then
 			local colour
 			if type(quality) == "number" and type(GetItemQualityColor) == "function" then
 				local okC, r, g, b = pcall(GetItemQualityColor, quality)

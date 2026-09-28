@@ -82,8 +82,14 @@ local function take(kind, make)
 	return p
 end
 
+-- A PIECE COMES BACK PLAIN (Josh 2026-09-28, the Expedition's header: "Do we
+-- have a layout issue in the header here?"). Pieces are kept from one tooltip
+-- to the next, and one that was a session cell's label kept that cell's
+-- width: as the rank pill it was wider than its chip, and "RANK 1 / 10" sat
+-- at the chip's left. Width, alignment and wrapping go back to a single
+-- line's, sized to its words, every time a piece is taken.
 local function text(size, face, layer)
-	return take("text:" .. (face or "ui") .. ":" .. size, function()
+	local fs = take("text:" .. (face or "ui") .. ":" .. size, function()
 		local fs = frame.body:CreateFontString(nil, layer or "OVERLAY", "BeebModFontHighlight")
 		if face then
 			pcall(fs.SetFont, fs, face, size, "")
@@ -91,10 +97,12 @@ local function text(size, face, layer)
 			-- the face the player chose; a name in its heavier weight
 			BT.Fonts.Set(fs, size >= 13 and "name" or "text", size)
 		end
-		fs:SetWordWrap(false)
-		fs:SetJustifyH("LEFT")
 		return fs
 	end)
+	fs:SetWidth(0)
+	fs:SetWordWrap(false)
+	fs:SetJustifyH("LEFT")
+	return fs
 end
 
 local function rect(layer, sub)
@@ -233,7 +241,7 @@ function Builder:Header(h)
 		chip:SetPoint("TOPRIGHT", frame.body, "TOPRIGHT", -PAD, -(y + 3))
 		chip:SetColorTexture(pc[1], pc[2], pc[3], 0.15)
 		label:SetPoint("CENTER", chip, "CENTER", 0, 0)
-		right = right - lw - 18
+		right = right - lw - 22
 	end
 	local name = text(13)
 	name:SetText(h.name or "")

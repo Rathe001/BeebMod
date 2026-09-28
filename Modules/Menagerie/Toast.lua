@@ -1,4 +1,4 @@
--- The Menagerie's toast: "Gold mastery! 150 kills on Barn Owl" (Josh 2026-09-25).
+-- The Menagerie's toast: "Gold mastery · 150 kills", then "Barn Owl" (Josh 2026-09-25).
 --
 -- In the game's own achievement art, which this client still ships - the
 -- MobProbe drew it on 70009 from these very files and coordinates. One at a
@@ -72,6 +72,40 @@ local frame
 local queue = {}
 T.queue = queue
 
+-- THE WHOLE NAME (Josh 2026-09-28: "Anything we can do to make the text fit
+-- better on the achievements?" - "10 kills on Blackwood Pathfin..."). The
+-- line between the icon and the shield is this wide. A line too long for it
+-- steps down a size at a time to T.SMALLEST, and one too long even then goes
+-- onto a second line rather than being cut off.
+T.TEXT_W = 190
+T.LARGEST, T.SMALLEST = 12, 10
+
+function T.Fit(fs, words)
+	fs:SetWordWrap(false)
+	if fs.SetMaxLines then
+		pcall(fs.SetMaxLines, fs, 1)
+	end
+	fs:SetText(words or "")
+	local fits = false
+	for size = T.LARGEST, T.SMALLEST, -1 do
+		if BT.Fonts and BT.Fonts.Set then
+			BT.Fonts.Set(fs, "text", size)
+		end
+		local ok, w = pcall(fs.GetStringWidth, fs)
+		if not (ok and type(w) == "number") or w <= T.TEXT_W then
+			fits = true
+			break
+		end
+	end
+	if not fits then
+		fs:SetWordWrap(true)
+		if fs.SetMaxLines then
+			pcall(fs.SetMaxLines, fs, 2)
+		end
+	end
+	return fits
+end
+
 function T.Build()
 	if frame then
 		return frame
@@ -100,7 +134,7 @@ function T.Build()
 	frame.head:SetTextColor(1, 0.82, 0.3)
 	frame.text = frame:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
 	frame.text:SetPoint("TOP", frame.head, "BOTTOM", 0, -5)
-	frame.text:SetWidth(190)
+	frame.text:SetWidth(T.TEXT_W)
 	frame.text:SetWordWrap(false)
 	-- a click puts it away, and opens the journal on what it was about
 	frame:SetScript("OnClick", function(self)
@@ -141,7 +175,7 @@ local function show(spec)
 	end
 	frame.icon:SetTexture(icon)
 	frame.head:SetText(spec.head or "")
-	frame.text:SetText(spec.text or "")
+	T.Fit(frame.text, spec.text)
 	frame.points:SetText(spec.points and tostring(spec.points) or "")
 	frame:SetAlpha(0)
 	frame:Show()

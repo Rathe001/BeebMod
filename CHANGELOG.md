@@ -5,6 +5,29 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **A tooltip's pill sits in its chip.** The Expedition's "RANK 1 / 10"
+  started at the chip's left edge and ran into the title. Text in a tooltip
+  no longer keeps the width it had in the tooltip shown before.
+- **Time to level comes from how fast you level while you play.** It used to
+  be the XP gained since login over the time since login, so time spent
+  installing, setting up or standing in town counted as levelling. After a
+  few kills it could say 81 hours. Now only the time between one XP gain and
+  the next counts, and a gap longer than 5 minutes counts as 5. BeebMod keeps
+  your last hour of play for each character, so the estimate is there as
+  soon as you log in.
+- **Right-click the XP line to start again.** It clears the pace and the
+  session, as the Reset button on the Progress page does.
+- **Pick Pocket's best find shows the item's name.** It read "item 5364".
+  The name now comes the same way the price does, and an item the game
+  hasn't loaded yet is loaded and named a moment later. The average item
+  level's worst piece and the tooltips' item colours read items the same way.
+- **A mastery toast shows the mob's whole name.** The heading says the
+  mastery and the kills, "Bronze mastery · 10 kills", and the line under it
+  is the mob's name alone. A name too long for the line is drawn smaller,
+  and one still too long goes onto a second line instead of being cut off.
+
 ## 0.1.0-beta.9
 
 - **Unit frames have no dark border.** The health and power bars reach the

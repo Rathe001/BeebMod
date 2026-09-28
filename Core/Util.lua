@@ -190,6 +190,35 @@ function U.LevelText(p, now)
 	return tostring(p.level)
 end
 
+-- WHAT AN ITEM IS (Josh 2026-09-28: Pick Pocket's best find read "item 5364").
+-- This client answers C_Item.GetItemInfo; the old global may not be there.
+-- The same answers either way - name, link, quality, level, and on to the
+-- vendor price, eleventh - or nothing while the client has not loaded the
+-- item. Then it is asked to, and GET_ITEM_INFO_RECEIVED says when it has.
+-- (the answers passed on as they came: a table of them would lose any after
+-- a nil in the middle, and the price is eleventh)
+local function answered(item, ok, ...)
+	if ok and (...) ~= nil then
+		return ...
+	end
+	local id = tonumber(item)
+	if id and C_Item and C_Item.RequestLoadItemDataByID then
+		pcall(C_Item.RequestLoadItemDataByID, id)
+	end
+	return nil
+end
+
+function U.ItemInfo(item)
+	if item == nil then
+		return nil
+	end
+	local get = (C_Item and C_Item.GetItemInfo) or _G.GetItemInfo
+	if type(get) ~= "function" then
+		return nil
+	end
+	return answered(item, pcall(get, item))
+end
+
 function U.ClassColor(class)
 	local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
 	if c then

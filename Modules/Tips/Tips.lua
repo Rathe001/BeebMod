@@ -1214,8 +1214,8 @@ local function itemQuality(tip)
 		local ok, q = pcall(C_Item.GetItemQualityByID, link)
 		quality = ok and q or nil
 	end
-	if quality == nil and GetItemInfo then
-		quality = select(3, GetItemInfo(link))
+	if quality == nil then
+		quality = select(3, BT.Util.ItemInfo(link))
 	end
 	if quality == nil then
 		return nil

@@ -1319,7 +1319,21 @@ if ok then
 			click(tbody.toastButton)
 			local toastFrame = BT.MenagerieToast.Frame()
 			assert(toastFrame and toastFrame:IsShown() and toastFrame.spec
-				and toastFrame.spec.head == "Platinum mastery!", "and the toast is up")
+				and toastFrame.spec.head == "Platinum mastery · 500 kills", "and the toast is up")
+			-- THE WHOLE NAME (Josh 2026-09-28): the milestone above, the name
+			-- below, made smaller to fit, and on two lines past the smallest
+			local TT = BT.MenagerieToast
+			assert(TT.Fit(toastFrame.text, "Blackwood Pathfinder"), "a mob's name fits the line")
+			local sizes = {}
+			local set = BT.Fonts.Set
+			BT.Fonts.Set = function(fs, weight, size, ...)
+				if fs == toastFrame.text then sizes[#sizes + 1] = size end
+				return set(fs, weight, size, ...)
+			end
+			local long = ("A Name Far Too Long For One Line Of Toast"):rep(2)
+			assert(not TT.Fit(toastFrame.text, long) and sizes[1] == TT.LARGEST and sizes[#sizes] == TT.SMALLEST,
+				"one too long steps down to the smallest size, then wraps: " .. table.concat(sizes, ","))
+			BT.Fonts.Set = set
 			BT.MenagerieToast.Next()
 			BT.SetEnabled("menagerie", hadMenagerie)
 			-- the three reports, called straight rather than through /bt
@@ -5443,6 +5457,27 @@ if ok then
 			assert(BT.Tip.Says("Settings") and BT.Tip.Says("open the settings"),
 				"hovering the cog says Settings, and what a click does: " .. table.concat(BT.Tip.Texts(), " | "))
 			BT.Tip.Hide()
+		end },		{ "a tooltip's pieces come back plain", function()
+			-- A PIECE COMES BACK PLAIN (Josh 2026-09-28): a session cell's label,
+			-- kept for the next tooltip, made the rank pill as wide as the cell
+			local owner = _G.CreateFrame("Frame", nil, _G.UIParent)
+			BT.Tip.Show(owner, { build = function(t)
+				t:Stats({ { 13, "kills" }, { 2, "new kinds" }, { 22, "an hour" } })
+				t:Note("A sentence long enough to wrap in a note.")
+			end })
+			local t = BT.Tip.Show(owner, { build = function(t)
+				t:Header({ name = "Nesingwary's Expedition", sub = "Beeb's journal", pill = "Rank 1 / 10" })
+				t:Headline(43, "points")
+			end })
+			assert(t and not BT.Tip.lastError, "the tooltip builds: " .. tostring(BT.Tip.lastError))
+			local pill
+			for _, fs in ipairs({ _G.BeebModTip.body:GetRegions() }) do
+				if fs.GetText and fs:GetText() == "RANK 1 / 10" then pill = fs end
+			end
+			assert(pill, "the pill says its rank")
+			assert((pill._width or 0) == 0 and pill._justifyH ~= "RIGHT" and not pill._wordWrap,
+				"and is sized to its words, not to what the piece was last time: width " .. tostring(pill._width))
+			BT.Tip.Hide()
 		end },
 		{ "shared pages: a switch each, and each one's settings under it while it is on", function()
 			-- (Josh 2026-09-24) Experience and Reputation on one page, the Dock's
@@ -6651,20 +6686,65 @@ if ok then
 				"and rested is a paler stretch ahead of it: " .. tostring(mod.rested._width))
 
 			-- a session: 1500 into this level, then a level-up carrying 500 over
-			mod.Start(true, false)
+			mod.Reset()
 			cur = 2500
 			mod.Gain()
 			level, cur, max = 9, 500, 5000
 			mod.Gain()
 			assert(mod.session.gained == 1500 + 1500 + 500,
 				"a level gained is the rest of the old one plus the new: " .. tostring(mod.session.gained))
-			assert(mod.Rate() == nil, "and no pace before a minute")
+			assert(mod.Rate() == nil, "and no pace from two gains in one moment")
 
-			-- an hour in, 3500 an hour, and 4500 to go is about an hour and seventeen
+			-- THE PACE WHILE YOU PLAY (Josh 2026-09-28): an hour in town before
+			-- the first kill is not levelling, and neither is the time since
+			-- the last
+			mod.Reset()
+			level, cur, max = 9, 0, 5000
+			mod.Start(true, false)
 			clock = clock + 3600
-			assert(math.abs(mod.Rate() - 3500) < 0.01, "experience per hour: " .. tostring(mod.Rate()))
+			for _ = 1, 10 do
+				clock = clock + 60
+				cur = cur + 100
+				mod.Gain()
+			end
+			assert(math.abs(mod.Rate() - 6000) < 0.01, "ten kills a minute apart: 100 a minute, whatever came before: "
+				.. tostring(mod.Rate()))
 			local _, eta = mod.Lines(level, cur, max, mod.Rate())
-			assert(eta:find("^1h 17m") and not eta:find("~", 1, true) and eta:find("to 10", 1, true), "and time to level: " .. eta)
+			assert(eta:find("^40m") and eta:find("to 10", 1, true), "and 4,000 to go is 40 minutes: " .. eta)
+			clock = clock + 3600
+			assert(math.abs(mod.Rate() - 6000) < 0.01, "an hour standing still since changes nothing")
+			-- a break of two hours counts as five minutes
+			clock = clock + 7200
+			cur = cur + 100
+			mod.Gain()
+			assert(math.abs(mod.Rate() - 1000 * 3600 / (540 + mod.BREAK)) < 0.01,
+				"a long gap counts as a short one: " .. tostring(mod.Rate()))
+			-- a login keeps the pace; the session starts again
+			local pace = mod.Rate()
+			mod.Start(true, false)
+			assert(mod.session.gained == 0 and math.abs(mod.Rate() - pace) < 0.01, "a new login keeps the pace")
+			-- only the last hour of it
+			max = 1000000
+			mod.Gain()
+			for _ = 1, 150 do
+				clock = clock + 30
+				cur = cur + 50
+				mod.Gain()
+			end
+			max = 5000
+			assert(math.abs(mod.Rate() - 6000) < 1 and #mod.PaceList() <= 125,
+				"the last hour's pace, the rest let go: " .. tostring(mod.Rate()) .. " from " .. #mod.PaceList())
+			-- RIGHT-CLICK TO START AGAIN (Josh 2026-09-28): the tooltip says so,
+			-- and a right-click on the line does it
+			section:GetScript("OnEnter")(section)
+			assert(BT.Tip.Says("RIGHT-CLICK") and BT.Tip.Says("start the pace and the session again"),
+				"the tooltip names the right-click: " .. table.concat(BT.Tip.Texts(), " | "))
+			section:GetScript("OnMouseUp")(section, "LeftButton")
+			assert(mod.Rate() ~= nil, "a left-click resets nothing")
+			section:GetScript("OnMouseUp")(section, "RightButton")
+			assert(mod.Rate() == nil and mod.session.gained == 0 and #mod.PaceList() == 0,
+				"a right-click starts the pace and the session again")
+			BT.Tip.Hide()
 
 			-- a reload carries it on; a login does not
 			local session = mod.session
@@ -6682,7 +6762,7 @@ if ok then
 			assert(mod.resetButton, "the XP block on the Progress page has a Reset row")
 			mod.session.gained = 500
 			mod.resetButton:GetScript("OnClick")(mod.resetButton)
-			assert(mod.session.gained == 0, "and its Reset starts a new session")
+			assert(mod.session.gained == 0 and mod.Rate() == nil, "and its Reset starts a new session, and a new pace")
 
 			_G.UnitLevel, _G.UnitXP, _G.UnitXPMax = realLevel, nil, nil
 			_G.GetXPExhaustion, _G.GetMaxPlayerLevel = nil, nil
@@ -6873,6 +6953,27 @@ if ok then
 			assert(select(2, mod.Worth(r)) == 0, "unpriced for now")
 			prices[5374] = 120
 			assert(select(2, mod.Worth(r)) == 120, "and priced when the client knows")
+
+			-- WHAT AN ITEM IS (Josh 2026-09-28: the best find read "item 5364").
+			-- This client answers C_Item.GetItemInfo and may have no global one;
+			-- an item not loaded yet is asked for, and has no name until it is
+			local global, hadC = _G.GetItemInfo, _G.C_Item
+			local asked = {}
+			local names = { [5374] = "Small Pocket Watch" }
+			_G.GetItemInfo = nil
+			_G.C_Item = {
+				GetItemInfo = function(id)
+					if not names[id] then return nil end
+					return names[id], nil, 1, 1, 1, "", "", 20, "", nil, prices[id]
+				end,
+				RequestLoadItemDataByID = function(id) asked[#asked + 1] = id end,
+			}
+			local name, count = mod.Best(r)
+			assert(name == "Small Pocket Watch" and count == 1, "the best find by its name: " .. tostring(name))
+			assert(select(2, mod.Worth(r)) == 120, "and priced the same way")
+			names[5374] = nil
+			assert(mod.Best(r) == nil and asked[1] == 5374, "an item not loaded yet has no name, and is asked for")
+			_G.GetItemInfo, _G.C_Item = global, hadC
 
 			-- its Reset on the Metrics page (Josh 2026-09-28: in place of the
 			-- command's reset)
