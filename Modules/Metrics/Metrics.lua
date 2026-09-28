@@ -61,6 +61,22 @@ function M:BuildTab(panel)
 	for _, part in ipairs(M.Parts()) do
 		self.rows[#self.rows + 1] = row(cells, part)
 	end
+	-- START AGAIN (Josh 2026-09-28: "We don't need hundreds of slash
+	-- commands"): a part that keeps a session or a record has its Reset here,
+	-- where /bt gold reset and /bt pockets reset were (the part's resetRow)
+	local again = self.page:Section("Start again")
+	self.resets = {}
+	for _, part in ipairs(M.Parts()) do
+		if part.resetRow and part.Reset then
+			local r = BT.Widgets.Row(again, part.resetRow[1], part.resetRow[2])
+			r.part = part
+			r.button = r:SetControl(BT.Widgets.Button(r, "Reset", 62, 20))
+			r.button:SetScript("OnClick", function()
+				part.Reset()
+			end)
+			self.resets[#self.resets + 1] = r
+		end
+	end
 	local layout = self.page:Section("Layout")
 	local cols = BT.Widgets.Row(layout, "Columns", "How many cells to a line")
 	self.colsSeg = cols:SetControl(BT.Widgets.Segmented(cols, { { 3, "Three" }, { 2, "Two" } }, function(n)
@@ -85,6 +101,10 @@ function M:RefreshTab()
 		if fits then
 			r.switch:SetOn(BT.Switched(r.part.key))
 		end
+	end
+	-- a part's Reset only while it is on
+	for _, r in ipairs(self.resets or {}) do
+		r:SetShown(BT.ClassFits(r.part) and BT.Enabled(r.part.key))
 	end
 	self.page:Layout()
 end

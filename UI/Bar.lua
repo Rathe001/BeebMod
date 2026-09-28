@@ -39,7 +39,6 @@ local ICONS = "Interface\\AddOns\\BeebMod\\Art\\icons"
 -- unpacked from a table: `unpack` is a global in the game's Lua and a member of
 -- `table` in the one the headless tests run (Josh 2026-09-19).
 function B.NoteCoord(tex) tex:SetTexCoord(0, 0.125, 0, 1) end
-function B.GlassCoord(tex) tex:SetTexCoord(0.125, 0.25, 0, 1) end
 function B.ChartCoord(tex) tex:SetTexCoord(0.25, 0.375, 0, 1) end
 function B.CheckCoord(tex) tex:SetTexCoord(0.375, 0.5, 0, 1) end
 function B.CogCoord(tex) tex:SetTexCoord(0.5, 0.625, 0, 1) end
@@ -89,13 +88,6 @@ local MIN_W = 34
 -- all fit.
 B.WIDTH, B.WIDTH_MIN, B.WIDTH_MAX, B.WIDTH_STEP = 230, 200, 320, 10
 local bar, cells, row, sections, ordered, rowWidth
-
--- the layout adds widths up, so it keeps its own number rather than asking the
--- widget: GetWidth is a measurement, and a measurement is not arithmetic until
--- the frame has been drawn
-function B.RowHeight()
-	return BAR_H + MARKS_H
-end
 
 function B.SetCellWidth(c, w)
 	c.cellWidth = w
@@ -237,12 +229,6 @@ function B.MakeHandle(child)
 		B.EndDrag()
 	end)
 	return child
-end
-
--- Where the name on the row starts, so a module can line something up under
--- it rather than guess. The note does exactly that.
-function B.NameX()
-	return INSET + ((bar and bar.mark and bar.mark.cellWidth) or 20) + PAD
 end
 
 -- WHOEVER YOU ARE POINTING AT, IN THE FIRST SLOT (Josh 2026-09-19). The mark
@@ -582,10 +568,6 @@ function B.Chip(owner, id, order)
 	-- the whole panel drags by anything in it, the cells included
 	B.MakeHandle(c)
 	return c
-end
-
-function B.Chips()
-	return chips
 end
 
 -- where the cells go, three across; returns the rank the group sits at
@@ -1343,12 +1325,6 @@ end
 
 function B.Scale()
 	return (BT.settings and BT.settings.dockScale) or 1
-end
-
-function B.Toggle()
-	local show = not (BT.settings and BT.settings.bar)
-	B.SetShown(show)
-	return show
 end
 
 function B.Frame() return bar end

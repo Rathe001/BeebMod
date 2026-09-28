@@ -44,7 +44,8 @@ handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
 	for _, fn in ipairs(listeners) do
 		local ok, err = pcall(fn, initial, reloading)
 		if not ok then
-			-- remembered, not announced: /bt debug lists these
+			-- remembered, not announced: What loaded, on the Testing page,
+			-- lists these
 			Boot.failed = Boot.failed or {}
 			Boot.failed[#Boot.failed + 1] = tostring(err)
 		end

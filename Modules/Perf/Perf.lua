@@ -211,9 +211,3 @@ end
 function M:Refresh()
 	self:RefreshTab()
 end
-
-BT.Command("perf", function()
-	local fps, home, world = M.Read()
-	U.Print(("Performance: %s fps · home %s ms · world %s ms"):format(
-		fps and math.floor(fps + 0.5) or "?", tostring(home or "?"), tostring(world or "?")))
-end, "print the frame rate and latency", "perf")

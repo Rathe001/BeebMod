@@ -370,6 +370,11 @@ function M:BuildTab(panel)
 		function() return M.HideClient() and true or false end,
 		function(on) M.SetHideClient(on) end)
 	self.hideSwitch = r.switch
+	local session = BT.Widgets.Row(page:Section("Session"), "New session", "Starts XP an hour and the time to level again from now")
+	self.resetButton = session:SetControl(BT.Widgets.Button(session, "Reset", 62, 20))
+	self.resetButton:SetScript("OnClick", function()
+		M.Reset()
+	end)
 	page:Layout()
 end
 
@@ -384,20 +389,9 @@ function M:Refresh()
 	self:RefreshTab()
 end
 
-BT.Command("xp", function(rest)
-	if (rest or ""):lower() == "reset" then
-		M.Start(true, false)
-		U.Print("XP: a new session starts now.")
-		return
-	end
-	local level, cur, max = M.Read()
-	if M.AtCap(level, max) then
-		U.Print(("XP: level %d, the level cap."):format(level))
-		return
-	end
-	local rate = M.Rate()
-	local secs = M.ToLevel(cur, max, rate)
-	U.Print(("XP: level %d · %d / %d · %s"):format(level, cur, max,
-		secs and ("about %s to %d at %d XP an hour"):format(duration(secs), level + 1, math.floor(rate))
-			or "too early for a rate"))
-end, "xp [reset] - show where you are in the level, or start a new session", "xp")
+-- A NEW SESSION FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
+-- slash commands"): what /bt xp reset did, as the Reset row on this page
+function M.Reset()
+	M.Start(true, false)
+	U.Print("XP: a new session starts now.")
+end

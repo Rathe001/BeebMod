@@ -402,14 +402,3 @@ end
 function M:Refresh()
 	self:RefreshTab()
 end
-
-BT.Command("rep", function()
-	local f = M.Read()
-	if not f then
-		U.Print("Reputation: no faction watched. Tick \"Show as Experience Bar\" in the reputation panel to watch one.")
-		return
-	end
-	local t = M.session and M.session.factions and M.session.factions[f.name]
-	local left, right = M.Lines(f, M.Rate(t))
-	U.Print("Reputation: " .. left .. (right ~= "" and ("  ·  " .. right) or ""))
-end, "print the faction you watch, and time to the next standing", "rep")

@@ -440,25 +440,23 @@ function M:Refresh()
 	self:RefreshTab()
 end
 
-BT.Command("pockets", function(rest)
-	local r = M.Record()
-	if not r then
+-- CLEARED FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of slash
+-- commands"). What /bt pockets reset did, as a Reset row on the Metrics page
+-- (see Gold's M.Reset).
+M.resetRow = { "Pick Pocket record", "Clears what pickpocketing has been worth, all time and this session" }
+
+function M.Reset()
+	if not M.Record() then
 		return
 	end
-	if (rest or ""):lower() == "reset" then
-		-- under the name and realm, where M.Record keeps it (the name alone,
-		-- which this cleared, is always empty - Josh 2026-09-23, audit)
-		for _, who in ipairs({ U.MeKey and U.MeKey(), U.Me and U.Me() }) do
-			if who then
-				BT.settings.pickpocket[who] = nil
-			end
+	-- under the name and realm, where M.Record keeps it (the name alone,
+	-- which this cleared, is always empty - Josh 2026-09-23, audit)
+	for _, who in ipairs({ U.MeKey and U.MeKey(), U.Me and U.Me() }) do
+		if who then
+			BT.settings.pickpocket[who] = nil
 		end
-		M.session = nil
-		M.Start(true, false)
-		U.Print("Pick Pocket: record cleared.")
-		return
 	end
-	local c, i = M.Worth(r)
-	U.Print(("Pick Pocket: %s · coin %s · items %s · %d pockets"):format(
-		coins(c + i), coins(c), coins(i), r.picks or 0))
-end, "pockets [reset] - show what pickpocketing has been worth, or clear the record", "pickpocket")
+	M.session = nil
+	M.Start(true, false)
+	U.Print("Pick Pocket: record cleared.")
+end

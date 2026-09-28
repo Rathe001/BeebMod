@@ -474,7 +474,6 @@ local function park(mb, frame, hide)
 		parked = nil
 	end
 end
-M.Parked = function() return parked end
 
 local function styleButtons(frame, plain)
 	local name = frame.GetName and frame:GetName()
@@ -1282,8 +1281,10 @@ end
 -- with the others has been guessed at twice. This says, per window, whether it
 -- is docked, whether it is shown, and where its tab is anchored and how tall -
 -- which is the difference between "it is a floating window, behaving normally"
--- and "our styling did not reach it".
-BT.Command("chatdump", function()
+-- and "our styling did not reach it". Into the saved file since 2026-09-28,
+-- from the Testing page's Record button, like the other records.
+function M.Dump()
+	local lines = {}
 	for _, frame in ipairs(M.Frames()) do
 		local name = frame:GetName()
 		local tab = _G[name .. "Tab"]
@@ -1297,24 +1298,22 @@ BT.Command("chatdump", function()
 				x, y = tostring(px), tostring(py)
 			end
 		end
-		U.Print(("%s: %s, %s · tab %s (%s,%s) h=%s"):format(name,
+		lines[#lines + 1] = ("%s: %s, %s · tab %s (%s,%s) h=%s"):format(name,
 			docked and "docked" or "FLOATING",
 			frame:IsShown() and "shown" or "hidden",
 			at, x, y,
-			tostring(tab and tab.GetHeight and select(2, pcall(tab.GetHeight, tab)))))
+			tostring(tab and tab.GetHeight and select(2, pcall(tab.GetHeight, tab))))
 	end
 	local function tall(f)
 		return tostring(f and f.GetHeight and select(2, pcall(f.GetHeight, f)))
 	end
 	-- the strip a window you made sits in, which is centred on its own height
-	U.Print(("Chat: dock height %s, strip height %s, BeebMod's tab height %s."):format(
+	lines[#lines + 1] = ("dock height %s, strip height %s, BeebMod's tab height %s"):format(
 		tall(_G.GeneralDockManager), tall(_G.GeneralDockManagerScrollFrame),
-		tostring(M.tabHeight)))
-end, "say where every chat tab is", "chat")
+		tostring(M.tabHeight))
+	BT.EnsureBound()
+	BeebModDB.chatDump = { at = U.Now(), lines = lines }
+	return #lines
+end
 
-BT.Command("chat", function()
-	local n = M.StyleAll()
-	U.Print(("Chat: %d windows · side buttons %s · edit box %s"):format(n,
-		opt("buttons", true) and "hidden" or "shown",
-		opt("editOnTop", true) and "on top" or "where the game puts it"))
-end, "restyle the chat windows now", "chat")
+BT.Record("chatDump", M.Dump, "chat")

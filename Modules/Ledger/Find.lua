@@ -97,21 +97,6 @@ local function paint(f, r, g, b, a)
 	return t
 end
 
--- A ONE-PIXEL RIM, NOT A WASH (Josh 2026-09-19). "Edge" textures here were
--- full-size rectangles sitting ON TOP of the background, so a jade edge at
--- two-thirds alpha painted the whole panel green. The rim goes UNDER and the
--- fill sits a pixel inside it, which is what leaves a line rather than a tint.
-local function rimmed(f, fill, edge)
-	local rim = f:CreateTexture(nil, "BACKGROUND")
-	rim:SetAllPoints()
-	rim:SetColorTexture(edge[1], edge[2], edge[3], edge[4] or 1)
-	local bg = f:CreateTexture(nil, "BORDER")
-	bg:SetPoint("TOPLEFT", 1, -1)
-	bg:SetPoint("BOTTOMRIGHT", -1, 1)
-	bg:SetColorTexture(fill[1], fill[2], fill[3], fill[4] or 1)
-	return bg, rim
-end
-
 local function label(parent, text, size, r, g, b)
 	local fs = parent:CreateFontString(nil, "OVERLAY", size == "small" and "BeebModFontHighlightSmall" or "BeebModFontNormal")
 	fs:SetText(text or "")
@@ -767,14 +752,6 @@ function B.CloseEditor()
 	B.Refresh()
 end
 
-function B.ToggleEditor()
-	if editor and editor:IsShown() then
-		B.CloseEditor()
-	else
-		B.OpenEditor()
-	end
-end
-
 function B.EditorShown()
 	return editor ~= nil and editor:IsShown()
 end
@@ -1348,13 +1325,7 @@ function B.FlagFilter()
 	return state.flagFilter
 end
 
--- what the panel is parented to: the window when docked, the screen when it
--- floats above the bar
-function B.EditorParent()
-	return editor and editor:GetParent()
-end
-
--- who the panel is open on, for /bt debug
+-- who the panel is open on
 function B.Selected()
 	return selected
 end

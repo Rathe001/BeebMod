@@ -7,10 +7,9 @@
 -- design (a health percentage we cannot compute is a percentage we cannot
 -- print). Nobody documents this client, so it is asked.
 --
---   /bt unitprobe        write down what is here now, and again two seconds
---                        into the next fight - /reload after the fight to
---                        save both into the file
---   /bt unitprobe clear  forget both
+-- Record, on the Testing page, writes down what is here now, and again two
+-- seconds into the next fight; /reload after the fight saves both into the
+-- file. Clear, beside it, forgets both.
 --
 -- It writes into BeebModDB.unitProbe, where the book is, and reads nothing
 -- back. It never prints a secret value: a secret put into a string makes the
@@ -549,14 +548,9 @@ function P.Arm()
 	end)
 end
 
-BT.Command("unitprobe", function(rest)
-	if (rest or "") == "clear" then
-		BT.EnsureBound()
-		BeebModDB.unitProbe = nil
-		U.Print("Unit probe: cleared the saved lines.")
-		return
-	end
+-- now, and armed for the next fight
+BT.Record("unitProbe", function()
 	local n = P.Run("asked")
 	P.Arm()
-	U.Print(("Unit probe: wrote down %d lines. Target something and start a fight. It runs again two seconds in. Type /reload after that to save both."):format(n))
-end, "unitprobe [clear] - write down what the game tells a unit frame, now and in the next fight")
+	return n
+end, nil, "your next fight")

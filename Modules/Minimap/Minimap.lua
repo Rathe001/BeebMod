@@ -405,7 +405,7 @@ local function move(thing, parent, spot, rel, relSpot, x, y, size)
 	-- WHAT ACTUALLY HAPPENED, NOT WHAT WAS ASKED (Josh 2026-09-21). Every one
 	-- of these is a pcall, so a frame the client will not let us move fails
 	-- silently and the piece stays in the corner looking untouched. The
-	-- outcome is recorded and /bt minimap reports it.
+	-- outcome is recorded and the minimap's record reports it.
 	local okParent = pcall(thing.SetParent, thing, parent)
 	pcall(thing.ClearAllPoints, thing)
 	local okPoint = pcall(thing.SetPoint, thing, spot, rel, relSpot, x, y)
@@ -800,7 +800,8 @@ function M.Snap(f, map, w)
 		return map:GetLeft(), map:GetRight(), map:GetTop(), map:GetBottom()
 	end)
 	if not (l and ok and type(ml) == "number" and type(mb) == "number") then
-		-- /bt minimap says so, rather than the icon silently staying put
+		-- the minimap's record says so, rather than the icon silently staying
+		-- put
 		f.beebsSnap = l and "the map has no position yet" or "nothing measurable drawn"
 		return false
 	end
@@ -1059,7 +1060,7 @@ function M.Keepers(frame, map, plain)
 		local first = cornerTaken and (3 + ICON + 2) or 3
 		local room = wide - PAD * 2 - (ICON + 2) - (first - 3)
 		local perRow = math.max(1, math.floor(room / (ICON + 2)))
-		-- kept for /bt minimap, which says what each one draws
+		-- kept for the minimap's record, which says what each one draws
 		M.rowIcons = icons
 		for i, f in ipairs(icons) do
 			local col = (i - 1) % perRow
@@ -1543,10 +1544,12 @@ end
 -- module were spent guessing which frame was which and whether a move had
 -- taken. Measuring beats guessing: this says what was found, under what name,
 -- and whether it is actually sitting in the panel now.
-BT.Command("minimap", function()
+-- Written into the saved file since 2026-09-28, with what hangs off the
+-- minimap below, from the Testing page's Record button.
+local function whereItWent(say)
 	M.Apply()
 	local frame = M.frame
-	U.Print(("Minimap: panel %s, map %s"):format(
+	say(("panel %s, map %s"):format(
 		frame and frame:IsShown() and "up" or "down",
 		(_G.Minimap and _G.Minimap.GetParent and _G.Minimap:GetParent() == frame)
 			and "in it" or "NOT in it"))
@@ -1564,15 +1567,15 @@ BT.Command("minimap", function()
 			end
 		end
 		local m = moved[f]
-		U.Print(("  %s: %s - %s%s"):format(kind,
+		say(("  %s: %s - %s%s"):format(kind,
 			(f.GetName and f:GetName()) or "(no name)", where,
 			(m and m.took == false) and " (the game refused the move)" or ""))
 		if f.beebsSnap then
-			U.Print("    corner: " .. f.beebsSnap)
+			say("    corner: " .. f.beebsSnap)
 		end
 	end
 	if not any then
-		U.Print("  Nothing found. This build keeps them somewhere else.")
+		say("  Nothing found. This build keeps them somewhere else.")
 	end
 	-- THE ROW ALONG THE BOTTOM, PIECE BY PIECE (Josh 2026-09-22). The
 	-- day/night dial is in it and has been placed wrong twice, so this says
@@ -1583,7 +1586,7 @@ BT.Command("minimap", function()
 	for i, f in ipairs(M.rowIcons or {}) do
 		local name = (f.GetName and f:GetName()) or "(no name)"
 		local fl, fb = f.GetLeft and f:GetLeft(), f.GetBottom and f:GetBottom()
-		U.Print(("  row %d: %s, frame at %s,%s size %sx%s%s"):format(i, name,
+		say(("  row %d: %s, frame at %s,%s size %sx%s%s"):format(i, name,
 			fl and ml and ("%.0f"):format(fl - ml) or "?", fb and mb and ("%.0f"):format(fb - mb) or "?",
 			("%.0f"):format(BT.Pill.Number(f.GetWidth and f:GetWidth(), 0)),
 			("%.0f"):format(BT.Pill.Number(f.GetHeight and f:GetHeight(), 0)),
@@ -1595,7 +1598,7 @@ BT.Command("minimap", function()
 				if okKind and kind == "Texture" then
 					local what = (r.GetAtlas and r:GetAtlas()) or (r.GetTexture and tostring(r:GetTexture())) or "?"
 					local rl, rb = r.GetLeft and r:GetLeft(), r.GetBottom and r:GetBottom()
-					U.Print(("    %s%s: %s at %s,%s size %.0fx%.0f alpha %.2f%s"):format(
+					say(("    %s%s: %s at %s,%s size %.0fx%.0f alpha %.2f%s"):format(
 						string.rep("  ", depth), (function()
 							local okN, dn = pcall(r.GetDebugName, r)
 							return (okN and type(dn) == "string" and dn:match("[^%.]+$")) or "tex"
@@ -1615,28 +1618,29 @@ BT.Command("minimap", function()
 		end
 		regions(f, 0)
 	end
-end, "put the minimap back in the dock, and say what it found", "minimap")
+end
 
 -- STOP GUESSING WHAT THEY ARE CALLED (Josh 2026-09-21). Four rounds of this
 -- module were spent naming frames that turned out to be called something else
 -- on this build. This prints what is ACTUALLY hanging off the minimap - every
 -- child and every key that holds a frame - so the next change is made against
--- what is there rather than against what usually is.
-BT.Command("minimapdump", function()
+-- what is there rather than against what usually is. Into the saved file
+-- since 2026-09-28, where it had only ever gone to chat.
+local function hanging(add)
 	local function say(label, f, key)
 		local name = (type(f) == "table" and type(f.GetName) == "function")
 			and select(2, pcall(f.GetName, f)) or nil
 		local kind = (type(f) == "table" and type(f.GetObjectType) == "function")
 			and select(2, pcall(f.GetObjectType, f)) or "?"
 		local shown = (type(f) == "table" and f.IsShown and f:IsShown()) and "shown" or "hidden"
-		U.Print(("  %s %s = %s <%s, %s>"):format(label, tostring(key),
+		add(("  %s %s = %s <%s, %s>"):format(label, tostring(key),
 			tostring(name or "(no name)"), tostring(kind), shown))
 	end
 
 	for _, owner in ipairs({ "MinimapCluster", "Minimap", "MinimapBackdrop" }) do
 		local o = _G[owner]
 		if type(o) == "table" then
-			U.Print(owner .. ":")
+			add(owner .. ":")
 			if o.GetChildren then
 				local ok, list = pcall(function()
 					return { o:GetChildren() }
@@ -1654,7 +1658,21 @@ BT.Command("minimapdump", function()
 				end
 			end
 		else
-			U.Print(owner .. ": not here")
+			add(owner .. ": not here")
 		end
 	end
-end, "list what is hanging off the minimap", "minimap")
+end
+
+function M.Dump()
+	local lines = {}
+	local function add(line)
+		lines[#lines + 1] = line
+	end
+	whereItWent(add)
+	hanging(add)
+	BT.EnsureBound()
+	BeebModDB.minimapDump = { at = U.Now(), lines = lines }
+	return #lines
+end
+
+BT.Record("minimapDump", M.Dump, "minimap")

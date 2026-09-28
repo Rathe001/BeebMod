@@ -96,6 +96,7 @@ Modules\Rep\Rep.lua
 # every kind of mob you have killed: the book, what counts as a kill, the
 # toast and the journal window before the module that drives them
 Modules\Menagerie\LoreData.lua
+Modules\Menagerie\BodyData.lua
 Modules\Menagerie\Journal.lua
 Modules\Menagerie\Kills.lua
 Modules\Menagerie\Toast.lua
@@ -116,7 +117,5 @@ Modules\Frames\Frames.lua
 Modules\Frames\Demo.lua
 
 Core\Slash.lua
-# where the time and the memory go: /bt mem, /bt prof
-Core\Profile.lua
-# what the client will tell a unit frame: /bt unitprobe
+# what the client will tell a unit frame: a record on the Testing page
 Core\UnitProbe.lua

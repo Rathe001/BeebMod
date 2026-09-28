@@ -195,7 +195,5 @@ function Fo.Choose(key)
 	return true
 end
 
-function Fo.Faces() return Fo.FACES end
-
 Fo.Apply()
 

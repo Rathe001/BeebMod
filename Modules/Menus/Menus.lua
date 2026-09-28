@@ -18,8 +18,8 @@
 --   * a menu made at all - a submenu included - is dressed as its look is
 --     built (every global *Menu*Style*Mixin with a Generate), before anything
 --     of it is drawn
--- /bt menusdump writes the next menu you open into the saved file, for when
--- one comes out wrong.
+-- Record, on the Testing page, writes the next menu you open into the saved
+-- file, for when one comes out wrong.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Menus/Menus.lua")
 
@@ -110,10 +110,10 @@ function M.DressMenu(menu)
 		return false
 	end
 	dressed[menu] = true
-	-- the next one opened, written down (see /bt menusdump)
+	-- the next one opened, written down (see M.DumpNext)
 	if M.dumpNext then
 		M.dumpNext = false
-		M.Dump(menu)
+		U.Print(("Menus: wrote down %d lines. Type /reload to save them."):format(M.Dump(menu)))
 	end
 	return true
 end
@@ -220,8 +220,7 @@ function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
 	page:Note("BeebMod redraws the game's dropdown and right-click menus. Every entry does what it did before. "
 		.. "The highlight under the pointer and the ticks are still the game's.")
-	page:Note("Switched off, the menus look like the game's again. Type /bt menusdump to write the next menu "
-		.. "you open into the saved file.", true)
+	page:Note("Switched off, the menus look like the game's again.", true)
 	page:Layout()
 end
 
@@ -243,13 +242,13 @@ function M.Dump(menu)
 	table.insert(lines, 1, "hooked: " .. table.concat(M.found or {}, ", "))
 	BT.EnsureBound()
 	BeebModDB.menusDump = { at = U.Now(), lines = lines }
-	U.Print(("Menus: wrote down %d lines. Type /reload to save them."):format(#lines))
 	return #lines
 end
 
--- /bt menusdump: the next menu opened, written down
-BT.Command("menusdump", function()
+-- the next menu opened, written down: a record that waits (the Testing
+-- page's Record button). Nothing is written now, so it returns nothing.
+function M.DumpNext()
 	M.dumpNext = true
-	U.Print("Menus: open any menu and BeebMod writes it down."
-		.. ((M.found and #M.found > 0) and "" or " BeebMod found none of the game's menu hooks on this build."))
-end, "menusdump - write the next menu you open into the saved file", "menus")
+end
+
+BT.Record("menusDump", M.DumpNext, "menus", "the next menu you open")

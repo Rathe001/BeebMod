@@ -13,7 +13,7 @@
 -- one kind - moves them back and they are there as they were (M.STANDS_FOR).
 --
 -- THE GROUPS USE NO SNIPPETS. The client's secure snippets do not compile on
--- this build (forever-bugs #74, and /bt unitprobe says so), and a group
+-- this build (forever-bugs #74, and the unit probe says so), and a group
 -- header that is handed one fails. So each header is given attributes only,
 -- makes its buttons from SecureUnitButtonTemplate, and they are dressed from
 -- here - all of them at once while out of combat, so a player who joins in
@@ -754,39 +754,6 @@ local PLAYER_ONLY = {
 
 local ENEMY_FRAMES = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 
--- WHO IS MARKED, AS THE CLIENT SAYS IT (Josh 2026-09-27): for you and your
--- target, whether the client answers with the mark, with nothing, or with a
--- secret; which of its calls drew a secret one; and whether the frame shows it
-BT.Command("marker", function()
-	local U = BT.Util
-	for _, unit in ipairs({ "player", "target" }) do
-		if UnitExists and UnitExists(unit) then
-			local v = F.Source(unit):Marker()
-			local said = F.Secret(v) and "a secret" or (v == nil and "nothing" or tostring(v))
-			local frame
-			if unit == "target" then
-				frame = M.singles and M.singles.target
-			else
-				for _, child in ipairs(M.Cells()) do
-					if child.bmUnit == "player" then
-						frame = child
-					end
-				end
-			end
-			local shows = frame and frame.marker and frame.marker:IsShown()
-			U.Print(("Marker: %s. The game says %s. The frame %s."):format(unit, said,
-				frame and (shows and "shows it" or "shows none") or "is not there"))
-		end
-	end
-	if F.markerWith == nil then
-		U.Print("Marker: no secret mark has come up yet.")
-	elseif F.markerWith == false then
-		U.Print("Marker: |cffff6b6bthis client accepts no way to draw a secret mark.|r")
-	else
-		U.Print(("Marker: BeebMod draws a secret mark with %s."):format(tostring(F.markerWith)))
-	end
-end, "marker - whether the unit frames can see who is marked", "frames")
-
 -- every group cell there is, in every header
 function M.Cells()
 	local out = {}
@@ -1093,7 +1060,7 @@ function M.Restyle()
 end
 
 -- ---------------------------------------------------------------------------
--- A preview: /bt frames test
+-- A preview: Made-up people, on the Testing page
 -- ---------------------------------------------------------------------------
 
 -- Made-up people in a made-up raid, drawn by the same code with plain numbers
@@ -1306,9 +1273,10 @@ function M.Preview(what)
 	return #M.previews
 end
 
--- /bt framesdump: what the client holds for the names that went blank - the
--- face, the size, the text, whether it is shown and how big - into the saved
--- file, the same way the other dumps go. Never a secret into a string.
+-- The unit frames' record (the Testing page's Record button): what the client
+-- holds for the names that went blank - the face, the size, the text, whether
+-- it is shown and how big - into the saved file, the same way the other
+-- records go. Never a secret into a string.
 local function describeText(label, fs)
 	if not (fs and fs.GetText) then
 		return label .. ": none"
@@ -1330,7 +1298,7 @@ local function describeText(label, fs)
 		say(fs:GetAlpha()), say(fs:GetWidth()), say(w), say(fs:GetHeight()))
 end
 
-BT.Command("framesdump", function()
+function M.Dump()
 	local lines = { "build: " .. tostring(BT.BUILD), "fonts: " .. tostring(BT.Fonts.Current().key)
 		.. " ok name=" .. tostring(BT.Fonts.Face("name")) }
 	for key, f in pairs(M.singles) do
@@ -1348,30 +1316,10 @@ BT.Command("framesdump", function()
 	end
 	BT.EnsureBound()
 	BeebModDB.framesDump = { at = U.Now(), lines = lines }
-	U.Print(("Unit frames: wrote down %d lines. Type /reload to save them."):format(#lines))
-end, "framesdump - write down what the game holds for the unit frames' names", "frames")
+	return #lines
+end
 
-BT.Command("frames", function(rest)
-	rest = (rest or ""):lower()
-	if rest == "test" or rest == "party" then
-		M.Preview(M.previewing == "party" and nil or "party")
-	elseif rest == "raid" then
-		M.Preview(M.previewing == "raid" and nil or "raid")
-	elseif rest == "off" then
-		M.Preview(nil)
-	elseif rest == "reset" then
-		U.Print(M.ResetPlaces() and "Unit frames: every block is back where it started."
-			or "Unit frames: they go back where they started when this fight is over.")
-		return
-	else
-		U.Print("Unit frames: type /bt frames test (or party) to show a made-up party and 4 bosses. "
-			.. "Type /bt frames raid for a raid of 40. Type /bt frames off to hide them.")
-		U.Print("Unit frames: shift-drag any frame to move its block. Type /bt frames reset to put them all back.")
-		return
-	end
-	U.Print(M.previewing and ("Unit frames: showing a made-up %s. Type /bt frames off to hide it."):format(M.previewing)
-		or "Unit frames: made-up frames hidden.")
-end, "frames test|raid|off|reset - show the group frames with made-up people, or put them back where they started", "frames")
+BT.Record("framesDump", M.Dump, "frames")
 
 -- ---------------------------------------------------------------------------
 -- Your cast bar

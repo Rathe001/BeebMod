@@ -400,8 +400,3 @@ end
 function M:Refresh()
 	self:RefreshTab()
 end
-
-BT.Command("buttons", function()
-	local n = M.Layout()
-	U.Print(("Addon buttons: %d button%s in the line."):format(n, n == 1 and "" or "s"))
-end, "gather other addons' minimap buttons into their line now", "buttons")

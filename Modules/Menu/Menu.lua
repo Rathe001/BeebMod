@@ -458,15 +458,18 @@ function M:BuildTab(panel)
 	page:Layout()
 end
 
--- /bt menudump: what the game menu is made of, for when this client lays it
--- out differently from the one this was written against
-BT.Command("menudump", function()
+-- What the game menu is made of, for when this client lays it out
+-- differently from the one this was written against: into the saved file,
+-- from the Testing page's Record button.
+function M.Dump()
 	local frame = M.Frame()
-	if type(frame) ~= "table" then
-		U.Print("Game menu: this client has no GameMenuFrame.")
-		return
-	end
 	local lines = {}
+	if type(frame) ~= "table" then
+		lines[1] = "this client has no GameMenuFrame"
+		BT.EnsureBound()
+		BeebModDB.menuDump = { at = U.Now(), lines = lines }
+		return #lines
+	end
 	local function describe(obj, path, depth)
 		if depth > 3 or type(obj) ~= "table" then
 			return
@@ -511,13 +514,15 @@ BT.Command("menudump", function()
 	end
 	lines[#lines + 1] = ("dressed last time: %s buttons · failed: %s"):format(tostring(M.lastCount), tostring(M.failed))
 	BT.EnsureBound()
-	BeebModDB.menuDump = { at = U.Now(), lines = lines }
 	local kept = 0
 	for _, line in ipairs(lines) do
 		if line:find("FORBIDDEN", 1, true) or line:find(" protected", 1, true) then
 			kept = kept + 1
 		end
 	end
-	U.Print(("Game menu: wrote down %d lines. Type /reload to save them. Redrew %s buttons. The game keeps %d from addons.%s")
-		:format(#lines, tostring(M.lastCount), kept, M.failed and (" Failed: " .. M.failed) or ""))
-end, "menudump - write the game menu's frames into the saved file", "menu")
+	lines[#lines + 1] = ("the game keeps %d from addons"):format(kept)
+	BeebModDB.menuDump = { at = U.Now(), lines = lines }
+	return #lines
+end
+
+BT.Record("menuDump", M.Dump, "menu")

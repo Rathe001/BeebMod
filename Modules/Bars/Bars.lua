@@ -478,10 +478,3 @@ end
 function M:Refresh()
 	self:RefreshTab()
 end
-
-BT.Command("bars", function()
-	local n = M.StyleAll()
-	U.Print(("Action bars: redrew %d buttons. Hotkeys are %s. Macro names are %s."):format(n,
-		opt("hotkeys", true) and "on" or "off",
-		opt("macroNames", false) and "on" or "off"))
-end, "restyle the action bars now", "bars")

@@ -13,7 +13,7 @@
 --
 -- NOT THE CLIENT'S OWN FIGURE. This client has GetAverageItemLevel, and it
 -- came out below even that sum (3, for pieces whose retail average is 4.1),
--- so it is counting by some other rule. /bt ilvl says it; nothing uses it.
+-- so it is counting by some other rule. Nothing asks it.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/ItemLevel/ItemLevel.lua")
 
@@ -82,9 +82,7 @@ local function twoHanded(itemLink)
 	return ok and equipLoc == "INVTYPE_2HWEAPON"
 end
 
--- Every worn piece and its level, and the average. `client` is the client's
--- own figure when it gives one, kept only so /bt ilvl can show the two side
--- by side.
+-- Every worn piece and its level, and the average.
 function M.Read()
 	local out = { items = {}, sum = 0, slots = #M.SLOTS }
 	local offEmpty, mainTwoHand, mainLevel = true, false, nil
@@ -105,12 +103,6 @@ function M.Read()
 		out.sum = out.sum + mainLevel
 	end
 	out.avg = #out.items > 0 and out.sum / out.slots or nil
-	if type(GetAverageItemLevel) == "function" then
-		local ok, _, equipped = pcall(GetAverageItemLevel)
-		if ok and tonumber(equipped) and tonumber(equipped) > 0 then
-			out.client = tonumber(equipped)
-		end
-	end
 	return out
 end
 
@@ -290,14 +282,3 @@ M.OnBind = M.OnEnable
 function M:OnDisable()
 	M.Show(false)
 end
-
-BT.Command("ilvl", function()
-	local d = M.Read()
-	local v = M.Value(d)
-	if not v then
-		U.Print("Item level: nothing you wear has one.")
-		return
-	end
-	U.Print(("Item level: %.1f · %d pieces in %d slots%s"):format(d.avg, #d.items, d.slots,
-		d.client and (" · the game says %.1f"):format(d.client) or ""))
-end, "print the average item level of what you wear", "ilevel")

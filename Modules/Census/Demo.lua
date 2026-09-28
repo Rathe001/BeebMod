@@ -61,8 +61,3 @@ BT.Demo.Register("census", {
 		end
 	end,
 })
-
--- the made-up book, for the tests
-function CD.Book()
-	return book
-end

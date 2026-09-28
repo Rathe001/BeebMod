@@ -350,7 +350,7 @@ function C.World(initial, reloading)
 	-- SILENT AT LOGIN (Josh 2026-09-19). The addon says nothing when you log
 	-- in - not one line, however interesting it is to the addon. Everything
 	-- that used to be announced here is kept and shown where you would go
-	-- looking for it: /bt boot for the file, /bt stats for the book.
+	-- looking for it: What loaded and The book, on the Testing page.
 	--
 	-- An addon that greets you with a line every login is an addon you end up
 	-- muting, and then it cannot tell you the one thing that matters.
@@ -370,8 +370,8 @@ function C.World(initial, reloading)
 	if C_Timer and C_Timer.After then
 		-- Housekeeping is SILENT (Josh 2026-09-18). An addon that greets you
 		-- with three lines every login is one you end up muting. What it did
-		-- is kept in BT.lastRun and shown where you go looking for it:
-		-- /bt stats.
+		-- is kept in BT.lastRun and shown where you go looking for it: The
+		-- book, on the Testing page.
 		C_Timer.After(5, function()
 			BT.lastRun = BT.lastRun or {}
 			BT.lastRun.cleaned = BT.cleanedOnLoad
@@ -448,7 +448,8 @@ function C.Start()
 		local ok, err = pcall(frame.RegisterEvent, frame, event)
 		BT.registering = nil
 		if not ok then
-			-- remembered, not announced: /bt debug lists these
+			-- remembered, not announced: What loaded, on the Testing page,
+			-- lists these
 			C.refused = C.refused or {}
 			C.refused[event] = tostring(err)
 		end

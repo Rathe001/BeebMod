@@ -33,11 +33,7 @@ local function apply(b)
 	-- shape a button is wearing is seven pieces and the flat one is hidden,
 	-- so painting the flat one would lose the pressed state entirely
 	BT.Pill.Recolour(b, fill, rim)
-	if b.tint then
-		b.label:SetTextColor(b.tint[1], b.tint[2], b.tint[3])
-	else
-		b.label:SetTextColor(text[1], text[2], text[3])
-	end
+	b.label:SetTextColor(text[1], text[2], text[3])
 end
 
 function W.Button(parent, text, width, height)
@@ -61,10 +57,6 @@ function W.Button(parent, text, width, height)
 			return
 		end
 		self.pressed = on
-		apply(self)
-	end
-	b.SetTint = function(self, color)
-		self.tint = color
 		apply(self)
 	end
 	b:SetScript("OnEnter", function(self) self.hovered = true; apply(self) end)
@@ -392,48 +384,6 @@ do
 	end)
 	W.scaleWatch = watch
 end
-
--- /bt pixels: what the borders were measured with, to check the sums in game;
--- /bt pixels snap on|off to compare the borders with and without the grid
-BT.Command("pixels", function(arg)
-	local P = BT.Pill
-	local want = tostring(arg or ""):match("^%s*snap%s+(%a+)")
-	if want == "on" or want == "off" then
-		P.snapping = want == "on"
-		P.RepaintAll()
-		W.Hairlines()
-		BT.Util.Print(("Pixels: snapping borders to the pixel grid is %s until you reload."):format(want))
-		return
-	end
-	local ok, w, h = pcall(GetPhysicalScreenSize or error)
-	local ui = P.Number(UIParent:GetEffectiveScale(), 0)
-	BT.Util.Print(("Pixels: screen %s x %s · interface scale %.4f · PixelUtil %s"):format(tostring(ok and w), tostring(ok and h),
-		ui, (PixelUtil and PixelUtil.GetNearestPixelSize) and "yes" or "no"))
-	local px = P.PixelOf(UIParent)
-	local pu = "none"
-	if PixelUtil and PixelUtil.GetNearestPixelSize then
-		local okP, v = pcall(PixelUtil.GetNearestPixelSize, 1, ui, 1)
-		pu = okP and tostring(v) or "error"
-	end
-	BT.Util.Print(("Pixels: 1 screen pixel is %s units by the screen's height and %s by PixelUtil. A border of 1 is %s."):format(
-		px and ("%.4f"):format(px) or "unknown", pu, tostring(P.Px(UIParent, 1))))
-	BT.Util.Print("Pixels: snapping to the grid is " .. (P.snapping and "on" or "off") .. ".")
-	for _, name in ipairs({ "BeebModWindow", "BeebModCensus", "GameTooltip" }) do
-		local f = _G[name]
-		if f and f.IsShown and f:IsShown() then
-			local fpx = P.PixelOf(f)
-			local l, t = P.Number(f:GetLeft(), nil), P.Number(f:GetTop(), nil)
-			if fpx and l and t then
-				BT.Util.Print(("%s: scale %.4f · corner at %.2f, %.2f screen pixels"):format(name,
-					P.Number(f:GetEffectiveScale(), 0), l / fpx, t / fpx))
-			end
-		end
-	end
-	local okC, cx, cy = pcall(GetCursorPosition)
-	if okC then
-		BT.Util.Print(("Pixels: cursor at %s, %s"):format(tostring(cx), tostring(cy)))
-	end
-end, "pixels - show how borders are measured on this screen")
 
 function W.Hairlines()
 	for tex in pairs(tinted) do

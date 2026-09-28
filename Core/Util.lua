@@ -122,23 +122,6 @@ function U.LearnRealm(realm)
 	U.realms[realm:lower()] = true
 end
 
-function U.NameFromKey(key)
-	if type(key) ~= "string" then
-		return nil
-	end
-	return key:match("^(.*)" .. SEP) or key
-end
-
--- The realm half of a player GUID ("Player-4372-0002BFB1") is a realm ID, not
--- a name, so it is only useful to tell two realms apart. We keep the ID and
--- resolve the name when we can see the unit.
-function U.RealmFromGUID(guid)
-	if type(guid) ~= "string" then
-		return nil
-	end
-	return guid:match("^Player%-(%d+)%-")
-end
-
 function U.Now()
 	return (time and time()) or os.time()
 end
@@ -194,7 +177,7 @@ end
 
 -- How old an answer is allowed to be before we stop repeating it as if it
 -- were true. Nothing refreshes these but meeting the character again.
-U.STALE = { zone = 1800, guild = 14 * 86400, level = 43200 }
+U.STALE = { level = 43200 }
 
 -- A level we saw once only ever goes up, so an old one is a floor: "3+".
 function U.LevelText(p, now)
@@ -205,48 +188,6 @@ function U.LevelText(p, now)
 		return p.level .. "+"
 	end
 	return tostring(p.level)
-end
-
--- The zone is the first thing to rot: within the hour it is where they are,
--- after that it is trivia. Returns nil once it has gone off.
-function U.ZoneText(p, now)
-	if not (p.zone and p.zoneAt) then
-		return nil
-	end
-	if (now or U.Now()) - p.zoneAt > U.STALE.zone then
-		return nil
-	end
-	return p.zone
-end
-
--- A guild holds for weeks, but say how old it is once it is over a day.
-function U.GuildText(p, now)
-	if not p.guild or p.guild == "" then
-		return nil
-	end
-	local age = p.guildAt and ((now or U.Now()) - p.guildAt) or nil
-	if age and age > 86400 then
-		return ("%s (as of %s)"):format(p.guild, U.Since(p.guildAt, now))
-	end
-	return p.guild
-end
-
--- WHICH WAY A PANEL OPENS (Josh 2026-09-19). The bar can be dragged anywhere,
--- so a panel cannot always open upward: against the top of the screen it opened
--- off it. It opens into whichever side has the room, and lines up with the edge
--- of its anchor that leaves it on screen.
---
--- Pure arithmetic in WoW's coordinates, where y counts up from the bottom of
--- the screen. Returns the panel's point, the anchor's point, and the offsets.
-function U.Placement(a, panelW, panelH, screenW, screenH)
-	local roomAbove = screenH - (a.top or 0)
-	local roomBelow = a.bottom or 0
-	local up = roomAbove >= panelH or roomAbove >= roomBelow
-	local left = ((a.left or 0) + panelW) <= screenW or (a.right or 0) - panelW < 0
-	if up then
-		return left and "BOTTOMLEFT" or "BOTTOMRIGHT", left and "TOPLEFT" or "TOPRIGHT", 0, 6
-	end
-	return left and "TOPLEFT" or "TOPRIGHT", left and "BOTTOMLEFT" or "BOTTOMRIGHT", 0, -6
 end
 
 function U.ClassColor(class)

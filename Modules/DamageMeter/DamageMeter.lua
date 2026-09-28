@@ -103,7 +103,7 @@ function M.Roots(again)
 	-- LOOKED FOR ONCE (Josh 2026-09-23, audit): with no meter found, every
 	-- restyle - each fight's start and end, every roster change, every addon
 	-- that loads - walked every frame in the game looking for one. A fresh
-	-- look is asked for by name (a meter loading, /bt meter, the tab).
+	-- look is asked for by name (a meter loading, the tab, the record).
 	if (#roots > 0 or M.scanned) and not again then
 		return roots
 	end
@@ -616,7 +616,7 @@ end
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
 	page:Note("This is the game's own damage meter. Every button and every row still does what it did before.")
-	page:Note("Switched off, the meter looks like the game's again. Type /bt meterdump to write its frames into the saved file.", true)
+	page:Note("Switched off, the meter looks like the game's again.", true)
 	-- (Josh 2026-09-24) the two things this adds to the client's meter
 	local more = page:Section("Extras")
 	BT.Widgets.SwitchRow(more, "Per second", "Each row's amount per second after its total, as in 8,421 (93.5)",
@@ -633,7 +633,7 @@ end
 function M:RefreshTab()
 	if self.found then
 		if #roots == 0 then
-			self.found:SetText("No meter window found yet. Open it, then type /bt meter.")
+			self.found:SetText("No meter window found yet. Open it, then open this page again.")
 		else
 			self.found:SetText(("%d window%s · %d pieces redrawn"):format(
 				#roots, #roots == 1 and "" or "s", M.lastCount or 0))
@@ -654,19 +654,10 @@ function M:Refresh()
 end
 
 -- ---------------------------------------------------------------------------
--- Commands
+-- The record
 -- ---------------------------------------------------------------------------
 
-BT.Command("meter", function()
-	M.Roots(true)
-	local n = M.StyleAll()
-	if #roots == 0 then
-		U.Print("Damage meter: no window found. Open it and try again. Type /bt meterdump to write what BeebMod can find into the saved file.")
-	else
-		U.Print(("Damage meter: %d window%s · %d pieces redrawn"):format(#roots, #roots == 1 and "" or "s", n))
-	end
-end, "restyle the damage meter now", "damagemeter")
-
+-- the meter's frames, into the saved file (the Testing page's Record button)
 function M.Dump()
 	M.Roots(true)
 	local lines = BT.Furniture.Dump(roots)
@@ -723,13 +714,4 @@ function M.Dump()
 	return #lines
 end
 
-BT.Command("meterdump", function(rest)
-	if (rest or "") == "clear" then
-		BT.EnsureBound()
-		BeebModDB.meterDump = nil
-		U.Print("Damage meter: cleared the dump.")
-		return
-	end
-	local n = M.Dump()
-	U.Print(("Damage meter: wrote down %d lines. Type /reload to save them."):format(n))
-end, "meterdump [clear] - write the damage meter's frames into the saved file", "damagemeter")
+BT.Record("meterDump", M.Dump, "damagemeter")

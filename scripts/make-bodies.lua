@@ -1,0 +1,138 @@
+--[[ scripts/make-bodies.lua (Josh 2026-09-28): what each model is.
+
+WHAT A MOB IS, FROM ITS MODEL (Josh 2026-09-28: "I think we need an exact
+match on mob name... I can't think of a reason we should lazy match the mob
+name", and on the harpy rule: "can that also be determined via the model?").
+A card's portrait tells the journal which model file it drew (m.body, a file
+id). The community listfile names every file id, and a creature's folder says
+what it is: 124329 is creature/harpy/harpy.m2, 1022938 is
+character/troll/male/trollmale_hd.m2. This reads the listfile and writes
+Modules/Menagerie/BodyData.lua: each model file whose folder names a page in
+Modules/Menagerie/LoreData.lua, and that page's key. Nothing is read from a
+mob's name.
+
+Run from the repo root, after scripts/fetch-lore.ps1 (it only keeps a model
+whose page is there):
+
+    curl -L -o listfile.csv https://github.com/wowdev/wow-listfile/releases/latest/download/community-listfile.csv
+    lua scripts/make-bodies.lua listfile.csv
+
+The listfile is about 150 MB and not kept in the repo.
+]]
+
+local listfile = assert(arg[1], "usage: lua scripts/make-bodies.lua <community-listfile.csv>")
+local BT = {}
+assert(loadfile("Modules/Menagerie/LoreData.lua"))("BeebMod", BT)
+local lore = BT.MenagerieLoreData
+
+-- FOLDERS NAMED SOMETHING ELSE: the model's folder, and the page it is. Only
+-- kinds that were in Classic; a folder that is its page's key needs no line.
+local ALIAS = {
+	troglodyte = "trogg",
+	tarantula = "spider", giantspider = "spider", minespider = "spider",
+	crocodile = "crocolisk",
+	direwolf = "wolf",
+	carrionbird = "carrion bird",
+	windserpent = "wind serpent",
+	kodobeast = "kodo",
+	scorpion = "scorpid",
+	quillboar = "quilboar",
+	darkirondwarf = "dark iron dwarf",
+	icetroll = "ice troll",
+	foresttroll = "forest troll",
+	trolldire = "troll",
+	highelf = "high elf",
+	quirajbattleguard = "qiraji", quirajgladiator = "qiraji", quirajprophet = "qiraji",
+	silithidscarab = "silithid", silithidtank = "silithid", silithidtankboss = "silithid",
+	silithidwasp = "silithid", silithidwaspboss = "silithid",
+	gnollcaster = "gnoll", gnollmelee = "gnoll",
+	ogremage = "ogre", ogreking = "ogre", ogremagelord = "ogre",
+	nagamale = "naga", nagafemale = "naga", nagalordmale = "naga", naga_ = "naga",
+	thunderlizard = "thunder lizard",
+	seaturtle = "sea turtle",
+	corehound = "core hound",
+	seagiant = "sea giant",
+	mountaingiant = "mountain giant",
+	chimera = "chimaera",
+	satyr = "satyr", furbolg = "furbolg", goblin = "goblin", nightelf = "night elf",
+	imp = "imp", infernal = "infernal", bogbeast = "bog beast", banshee = "banshee",
+	ghost = "ghost", ghoul = "ghoul", voidwalker = "voidwalker", succubus = "succubus",
+	felhound = "felhound", doomguard = "doomguard", wisp = "wisp", lasher = "lasher",
+	slime = "ooze", zombie = "zombie", skeleton = "skeleton", lich = "lich",
+	gargoyle = "gargoyle", dragonwhelp = "dragon whelp", drake = "drake",
+	dragonspawn = "dragonspawn", fireelemental = "fire elemental",
+	waterelemental = "water elemental", elementalearth = "earth elemental",
+	airelemental = "air elemental", golemstone = "golem",
+}
+-- the playable races' own models, and the townsfolk made from them
+-- ("humanmalepeasant", "humlblacksmith", "orcmalewarriorlight")
+local RACES = {
+	{ "^nightelf", "night elf" }, { "^human", "human" }, { "^hum[lsn]", "human" }, { "^hufm", "human" },
+	{ "^orc", "orc" }, { "^dwarf", "dwarf" }, { "^gnome", "gnome" }, { "^tauren", "tauren" },
+	{ "^troll", "troll" }, { "^goblin", "goblin" },
+}
+-- the pages a model may be: a race, an animal, a beast family. A mob's own
+-- page is about one mob ("Air Elemental (Darkshore)"), not every mob drawn
+-- with its model, and a tribe's is about one tribe.
+local KINDS = { race = true, beast = true, family = true }
+local function page(key)
+	return lore[key] and KINDS[lore[key][1]] and key or nil
+end
+
+local function pageOf(folder)
+	folder = folder:lower():gsub("_c%d+$", ""):gsub("%d+$", "")
+	local key = ALIAS[folder]
+	if key then
+		return page(key)
+	end
+	for _, r in ipairs(RACES) do
+		if folder:find(r[1]) then
+			return page(r[2])
+		end
+	end
+	return page(folder) or page((folder:gsub("s$", "")))
+end
+
+local rows, missing = {}, {}
+for line in io.lines(listfile) do
+	local id, path = line:match("^(%d+);(.+%.m2)$")
+	if id then
+		-- creature/harpy/harpy.m2; character/troll/male/trollmale_hd.m2
+		local folder = path:match("^creature/([^/]+)/[^/]+$")
+			or path:match("^character/([^/]+)/[^/]+/[^/]+$")
+		if folder then
+			local key = pageOf(folder)
+			if key then
+				rows[#rows + 1] = { tonumber(id), key }
+			elseif ALIAS[folder] then
+				missing[ALIAS[folder]] = true
+			end
+		end
+	end
+end
+table.sort(rows, function(a, b) return a[1] < b[1] end)
+
+local out = {
+	"-- What each model file is: the key of its page in LoreData.lua, by the",
+	"-- model's folder in the community listfile (https://github.com/wowdev/wow-listfile).",
+	("-- GENERATED by scripts/make-bodies.lua on %s; do not edit."):format(os.date("%Y-%m-%d")),
+	"local _, BT = ...",
+	"BT.MenagerieBodies = {",
+}
+for _, r in ipairs(rows) do
+	out[#out + 1] = ("\t[%d] = %q,"):format(r[1], r[2])
+end
+out[#out + 1] = "}"
+local f = assert(io.open("Modules/Menagerie/BodyData.lua", "wb"))
+f:write(table.concat(out, "\n"), "\n")
+f:close()
+
+local gone = {}
+for k in pairs(missing) do
+	gone[#gone + 1] = k
+end
+table.sort(gone)
+print(("wrote %d models to Modules/Menagerie/BodyData.lua"):format(#rows))
+if #gone > 0 then
+	print("no page yet for: " .. table.concat(gone, ", "))
+end

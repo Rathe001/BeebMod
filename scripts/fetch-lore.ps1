@@ -600,6 +600,22 @@ if (Test-Path $CuratedFile) {
 	$c = Get-Content $CuratedFile -Raw -Encoding UTF8 | ConvertFrom-Json
 	foreach ($p in $c.PSObject.Properties) { $curated[$p.Name] = $p.Value }
 }
+# PAGES WRITTEN WHOLE (Josh 2026-09-28: a card is its own page, then what its
+# model is, and a satyr's model had no Satyr page to point at). A page the
+# cache never held, or held as something it is not ("Satyr" is filed with the
+# organizations, and a group that is not a tribe is dropped below), is
+# written in scripts/lore-curated.json with a "kind", and comes in here as if
+# it had been fetched.
+foreach ($t in @($curated.Keys)) {
+	$h = $curated[$t]
+	if ($h.kind -and $h.status -eq "rewrite" -and $h.text) {
+		if ($lore.ContainsKey($t)) {
+			$lore[$t].kind = $h.kind
+		} else {
+			$lore[$t] = @{ title = $t; kind = $h.kind; text = $h.text; sentences = 3 }
+		}
+	}
+}
 $handDropped = 0
 $handWritten = 0
 

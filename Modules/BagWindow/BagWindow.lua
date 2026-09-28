@@ -663,9 +663,7 @@ function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
 	page:Note("These are the game's own bags. Every slot works as it did. "
 		.. "An item's quality shows as a ring in its colour.")
-	page:Note("Drag a bag window by its title and it stays there. Type /bt bags reset to put them all back.")
-	page:Note("Switched off, the bags look like the game's again. Type /bt bagdump to write the window "
-		.. "into the saved file.", true)
+	page:Note("Switched off, the bags look like the game's again.", true)
 	-- the game's bag bar, from Metrics (Josh 2026-09-24): the bag window's page
 	-- is where you look for anything to do with your bags
 	local look = page:Section("Slots")
@@ -685,6 +683,15 @@ function M:BuildTab(panel)
 				paintQuality(b)
 			end
 		end)
+	-- PUT BACK FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
+	-- slash commands"): the Reset that /bt bags reset was
+	local place = page:Section("Place")
+	local move = BT.Widgets.Row(place, "Drag to move", "Drag a bag window by its title and it stays there")
+	self.resetButton = move:SetControl(BT.Widgets.Button(move, "Reset", 62, 20))
+	self.resetButton:SetScript("OnClick", function()
+		M.ResetPosition()
+		U.Print("Bags: every bag window is back where the game puts it.")
+	end)
 	local bar = page:Section("The game's own")
 	local space = BT.GetModule("bagspace")
 	self.hideBags = BT.Widgets.SwitchRow(bar, "Hide the bag bar",
@@ -711,21 +718,12 @@ function M:Refresh()
 end
 
 -- ---------------------------------------------------------------------------
--- Commands
+-- The record
 -- ---------------------------------------------------------------------------
 
--- /bt bags reset: back where the client puts it
-BT.Command("bags", function(rest)
-	if (rest or ""):lower() == "reset" then
-		M.ResetPosition()
-		U.Print("Bags: every bag window is back where the game puts it.")
-	else
-		U.Print("Bags: type /bt bags reset to put every bag window back where the game puts it.")
-	end
-end, "bags reset - put every bag window back where the game puts it", "bagwindow")
-
--- /bt bagdump: the windows as the client built them, into the saved file
-BT.Command("bagdump", function()
+-- the windows as the client built them, into the saved file (the Testing
+-- page's Record button)
+function M.Dump()
 	local lines = BT.Furniture.Dump(M.Windows())
 	BT.EnsureBound()
 	BeebModDB.bagDump = {
@@ -733,5 +731,7 @@ BT.Command("bagdump", function()
 		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
 		lines = lines,
 	}
-	U.Print(("Bag window: wrote down %d lines. Type /reload to save them."):format(#lines))
-end, "bagdump - write the bag windows' frames into the saved file", "bagwindow")
+	return #lines
+end
+
+BT.Record("bagDump", M.Dump, "bagwindow")

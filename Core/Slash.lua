@@ -1,4 +1,5 @@
--- /bt, and the commands the toolkit itself owns (Josh 2026-09-19).
+-- /bt, and the commands the toolkit itself owns (Josh 2026-09-19): help, and
+-- What loaded for the Testing page.
 --
 -- Modules register their own with BT.Command, so this file never grows a
 -- branch for a utility it has not heard of, and a command belonging to
@@ -12,25 +13,68 @@ local CreateFrame, C_Timer = BT.Cpu.For("Core/Slash.lua")
 local U = BT.Util
 
 -- ---------------------------------------------------------------------------
--- The toolkit's own commands: the target row, and what is switched on. The
--- book's are the census's (Modules/Census/Book.lua).
+-- WHAT LOADED (Josh 2026-09-28: "I'd actually prefer to use the 'Testing'
+-- module with buttons/toggles going forward"). What /bt debug and /bt boot
+-- printed, as one report from the Testing page's Show button: the build,
+-- what the saved file handed back, each module, and what the game refused.
 -- ---------------------------------------------------------------------------
 
-BT.Command("bar", function()
-	U.Print("The target row is " .. (BT.Bar.Toggle() and "on" or "off") .. ".")
-end, "show or hide the target row at the top of the dock")
+-- what the saved file handed back at login (BT.BootReport), and what was done
+-- to it while the book was bound
+local function bootLines(say)
+	local b = BT.boot
+	if not b then
+		return
+	end
+	if b.type ~= "table" then
+		say(("saved file: nothing arrived (%s). Nothing is lost. The file is still on disk."):format(tostring(b.type)))
+	else
+		say(("saved file: schema %s · settings %s · %d characters in %d book%s"):format(tostring(b.schema),
+			b.settings and "yes" or "no", b.total, #b.books, #b.books == 1 and "" or "s"))
+	end
+	if b.bound then
+		say(("bound: %s · %d at login"):format((b.bound:gsub("|", " ")), b.boundCount or 0))
+	end
+	if BT.linkedRestored then
+		say("BeebMod put back the book the client cleared")
+	end
+	if BT.stashTaken then
+		say(("%d put back from the stashed book"):format(BT.stashTaken))
+	end
+	if BT.bakedTaken then
+		say(("%d taken from the baked file"):format(BT.bakedTaken))
+	end
+	if BT.slimmedOnLoad then
+		say(("%d rows slimmed of fields they did not need"):format(BT.slimmedOnLoad))
+	end
+	if BT.foldedOnLoad then
+		say(("%d folded in from the realm's old name"):format(BT.foldedOnLoad))
+	end
+	if BT.lateBook then
+		say(("the book turned up late · %d found · %d seen since login kept"):format(BT.lateBook.found,
+			BT.lateBook.kept))
+	end
+end
 
-BT.Command("debug", function()
+function BT.WhatLoaded()
+	BT.EnsureBound()
 	U.Print(("%s %s (%s)"):format(BT.TITLE, tostring(BT.VERSION), tostring(BT.BUILD)))
 	U.Print(("book: %s · settings: %s · characters: %s"):format(
 		BT.scope and BT.scope.key or "|cffff6b6bnone|r",
 		BT.settings and "yes" or "|cffff6b6bnone|r",
 		(BT.DB and BT.db) and tostring(BT.DB.Stats(BT.db).total) or "-"))
+	bootLines(U.Print)
 	local on = {}
 	for _, m in ipairs(BT.Modules()) do
 		on[#on + 1] = ("%s %s"):format(m.key, BT.Enabled(m.key) and "on" or "off")
 	end
 	U.Print("modules: " .. table.concat(on, ", "))
+	-- which tooltip hooks fire (Core/Tooltip.lua)
+	local T = BT.UnitTip
+	if T then
+		U.Print(("tooltip hooks: unit %s (%d filled) · item %s (%d filled)"):format(tostring(T.path),
+			T.fills or 0, tostring(T.itemPath), T.itemFills or 0))
+	end
 	local refused = {}
 	for _, from in ipairs({ BT.Boot and BT.Boot.refused, BT.Collect and BT.Collect.refused }) do
 		for event, why in pairs(from or {}) do
@@ -44,13 +88,23 @@ BT.Command("debug", function()
 	for _, err in ipairs(BT.moduleErrors or {}) do
 		U.Print("|cffff6b6bmodule error|r " .. err)
 	end
-	-- the over-time bars' flash is the client's to allow (Frames/Timers.lua)
-	local timers = BT.UnitFrames and BT.UnitFrames.Timers
-	local refused = timers and timers.seen and timers.seen.textRefused
-	if refused then
-		U.Print("|cffff6b6bflash refused|r " .. refused:sub(1, 120))
+	-- a step of the login that threw (Core/Boot.lua kept these, and nothing
+	-- printed them until 2026-09-28)
+	for _, err in ipairs(BT.Boot and BT.Boot.failed or {}) do
+		U.Print("|cffff6b6blogin step failed|r " .. err)
 	end
-end, "list what loaded and what the game refused")
+	-- the over-time bars' flash is the client's to allow (Frames/Timers.lua)
+	local F = BT.UnitFrames
+	local timers = F and F.Timers
+	local flash = timers and timers.seen and timers.seen.textRefused
+	if flash then
+		U.Print("|cffff6b6bflash refused|r " .. flash:sub(1, 120))
+	end
+	-- and a secret raid mark, which only the client may draw (Frames/Unit.lua)
+	if F and F.markerWith == false then
+		U.Print("|cffff6b6bmarks refused|r the game accepts none of the ways BeebMod draws a secret raid mark")
+	end
+end
 
 BT.Command("help", function()
 	U.Print(("%s commands. Type /bt on its own to open the window."):format(BT.TITLE))

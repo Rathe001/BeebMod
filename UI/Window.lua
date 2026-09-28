@@ -358,7 +358,7 @@ W.PAGES = {
 	-- and the addon's own reports - none of it a setting, all of it a look.
 	-- Not one module's: under General, above the rail's line.
 	testing = { title = "Testing", group = "general", fixed = true,
-		blurb = "Made-up people and auras to look at when you are alone, and BeebMod's own reports" },
+		blurb = "Made-up data to look at when you are alone, and BeebMod's own reports and records" },
 }
 
 -- A FEATURE'S OWN PAGE (Josh 2026-09-27): what it is, its switch, and a
@@ -391,10 +391,6 @@ function W.DockPageLive(key)
 	local m = BT.GetModule(key)
 	local fkey = m and BT.FeatureOf(m)
 	return m ~= nil and (not fkey or BT.FeatureOn(fkey)) and BT.Enabled(key) and BT.ClassFits(m)
-end
-
-function W.Page(key)
-	return W.PAGES[key]
 end
 
 -- the page a feature's heading opens: its own page, or its one page
@@ -486,16 +482,6 @@ function W.TabFor(key)
 		return "dock"
 	end
 	return key
-end
-
--- older names for two of the groups' questions, which the tests still ask
-function W.OnRail(key)
-	return W.Group(W.TabFor(key)) == "dock"
-end
-
-function W.InSettings(key)
-	local g = W.Group(W.TabFor(key))
-	return g ~= nil and g ~= "dock" and g ~= "general"
 end
 
 -- the tabs of one group. The Dock's in the dock's own order - which you set
@@ -774,22 +760,65 @@ local function testingPage(body)
 			BT.Welcome.Show()
 		end
 	end)
-	-- the reports /bt already writes, a click away; they go to your chat
+	-- A SAMPLE TOAST (Josh 2026-09-28): what /bt expedition toast showed
+	local toast = Wd.Row(look, "Mastery toast", "A made-up Platinum mastery. Needs the Expedition on.")
+	body.toastButton = toast:SetControl(Wd.Button(toast, "Show", 62, 20))
+	body.toastButton:SetScript("OnClick", function()
+		local m = BT.GetModule("menagerie")
+		if m and m.SampleToast and BT.Enabled("menagerie") then
+			m.SampleToast()
+		end
+	end)
+	-- BUTTONS, NOT COMMANDS (Josh 2026-09-28: "We don't need hundreds of
+	-- slash commands for debugging. I'd actually prefer to use the 'Testing'
+	-- module with buttons/toggles going forward"). The reports that were
+	-- /bt debug, /bt timers and /bt stats; they go to your chat.
 	local ask = st:Section("Ask BeebMod")
 	for _, c in ipairs({
-		{ "debug", "What loaded", "The build, the book, each module, and what the game refused" },
-		{ "timers", "Over-time bars", "Where each heal and damage bar is, spell by spell" },
-		{ "stats", "The book", "How many characters, how many are packed, and the other books" },
+		{ "whatButton", "What loaded", "Says in chat which modules loaded and what the game refused",
+			function() BT.WhatLoaded() end },
+		{ "timersButton", "Over-time bars", "Says in chat where each heal and damage bar got to, spell by spell",
+			function()
+				local T = BT.UnitFrames and BT.UnitFrames.Timers
+				if T and T.Report then
+					T.Report()
+				end
+			end },
+		{ "statsButton", "The book", "Says in chat how many characters the book holds",
+			function() BT.StatsReport() end },
 	}) do
-		local row = Wd.Row(ask, c[2], c[3] .. " · /bt " .. c[1])
+		local row = Wd.Row(ask, c[2], c[3])
 		local run = row:SetControl(Wd.Button(row, "Show", 62, 20))
-		run:SetScript("OnClick", function()
-			local cmd = SlashCmdList and SlashCmdList.BEEBSTOOLKIT
-			if cmd then
-				cmd(c[1])
-			end
-		end)
+		run:SetScript("OnClick", c[4])
+		body[c[1]] = run
 	end
+	-- RECORDS FOR CLAUDE (Josh 2026-09-28): what the frame dumps, the unit
+	-- probe and /bt cpu wrote into the saved file, from three buttons. Each
+	-- module's record is registered with BT.Record (Core/Init.lua).
+	local rec = st:Section("Record for Claude")
+	local record = Wd.Row(rec, "The game's frames", "Writes how the game built each part you have on into the saved file")
+	body.recordButton = record:SetControl(Wd.Button(record, "Record", 62, 20))
+	body.recordButton:SetScript("OnClick", function()
+		local wrote, waits = BT.RecordAll()
+		local line = ("Records: wrote %d into the saved file."):format(wrote)
+		if #waits > 0 then
+			local also = #waits == 1 and waits[1]
+				or (table.concat(waits, ", ", 1, #waits - 1) .. " and " .. waits[#waits])
+			line = line .. (" BeebMod also writes down %s."):format(also)
+		end
+		BT.Util.Print(line .. " Type /reload to save them.")
+	end)
+	local clear = Wd.Row(rec, "Records", "Takes every record out of the saved file")
+	body.clearButton = clear:SetControl(Wd.Button(clear, "Clear", 62, 20))
+	body.clearButton:SetScript("OnClick", function()
+		BT.Util.Print(("Records: took %d out of the saved file."):format(BT.ClearRecords()))
+	end)
+	local cpu = Wd.Row(rec, "CPU use", ("Times BeebMod for %d seconds and lists the costliest parts in chat")
+		:format(BT.Cpu.SECONDS))
+	body.cpuButton = cpu:SetControl(Wd.Button(cpu, "Measure", 62, 20))
+	body.cpuButton:SetScript("OnClick", function()
+		BT.Cpu.Measure()
+	end)
 	-- what is showing now, whenever the page is opened
 	body:HookScript("OnShow", function()
 		local m = BT.GetModule("frames")

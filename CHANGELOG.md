@@ -5,6 +5,50 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Debug tools are buttons on the Testing page, not commands.** BeebMod had
+  64 commands, and 48 of them are gone. The Testing page shows a sample
+  mastery toast. Its Show buttons print What loaded, Over-time bars and The
+  book to chat, which were `/bt debug`, `/bt timers` and `/bt stats`. Record
+  writes the records for Claude into the saved file, which the `/bt ...dump`
+  commands and `/bt unitprobe` did. Clear takes them out again.
+  CPU use times BeebMod for 10 seconds, as `/bt cpu` did. Type `/reload` after
+  a record to save it.
+- **Resets are Reset buttons on their own pages.** The Bag window and
+  Character sheet pages put the windows back where the game puts them. The
+  Progress page starts a new XP session. The Metrics page starts a new gold
+  session and clears the Pick Pocket record. The Unit frames page already had
+  its Reset.
+- **What is left takes typed input.** Those commands are `/bt note`, `flag`,
+  `tag`, `rate`, `find`, `prune`, `autopurge`, `cap`, `books`, `adopt`,
+  `demo`, `setup`, `census`, `expedition` and `help`. Commands that only
+  printed a number, such as `/bt gold` or `/bt speed`, are gone, since the
+  dock shows the number. Commands that repeated a setting, such as `/bt tips`
+  or `/bt frames test`, are gone too. Type `/bt` and a module's name, such as
+  `/bt gold`, to open its settings page.
+
+- **A card shows only the lore that is about its mob.** It used to match
+  words of a mob's name. Sethir the Ancient, a satyr, showed the page for
+  Ancients, and a Frostmane Troll Whelp showed three pages about Frostmane
+  trolls. Now a mob's own page is the one titled with its whole name. After
+  it come the page for the model the card draws, such as Harpy, Trogg or
+  Deer, then its beast family and its creature type.
+- **29 new descriptions for kinds of creature.** A card can now name what
+  its model is for satyrs, furbolgs, night elves, goblins, banshees, ghosts,
+  ghouls, imps, voidwalkers, succubi, infernals, doomguard, felhounds,
+  wisps, bog beasts, lashers, oozes, zombies, skeletons, liches, gargoyles,
+  dragonspawn, drakes, dragon whelps, golems and the four kinds of
+  elemental. Each is one to three sentences, written from the wiki's page
+  with everything after Classic left out.
+- **Portraits at the edge of the Field Journal stay on screen while you
+  scroll.** A portrait partly out of view is drawn whole, and the grid's edge
+  cuts it off. It used to disappear until the whole card was in view.
+- **Headings under a card leave off the wiki's tags.** "Timber Wolf (mob)" is
+  "Timber Wolf". The credit at the bottom keeps the page's full title.
+- **A critter's card says "Critter" once.** It read "Critter · Level 5 ·
+  Critter".
+
 ## 0.1.0-beta.7
 
 - **The Menagerie is now Nesingwary's Expedition.** "Menagerie" sounded like

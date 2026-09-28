@@ -224,49 +224,9 @@ end
 -- nothing else, so a tag's colour can only be the colour of its name - and the
 -- colours were chosen to sit inside a pill, not to be read as words. The
 -- squares are frames laid over the tooltip, in the gap left by the spaces each
--- line starts with, which is the same trick the note's tags use.
+-- line starts with, which is the same trick the note's tags use. A pool for
+-- each side ("TextLeft" or "TextRight"), so a tooltip can carry two columns.
 local swatches, holder = { TextLeft = {}, TextRight = {} }, nil
-
--- `side` is "TextLeft" (the default) or "TextRight", so a tooltip can carry
--- two columns of them.
-function T.Swatches(tip, colours, from, side)
-	if not (tip and tip.CreateTexture and colours) then
-		return 0
-	end
-	if not holder then
-		holder = CreateFrame("Frame", nil, UIParent)
-		holder:SetFrameStrata("TOOLTIP")
-	end
-	holder:SetParent(tip)
-	holder:ClearAllPoints()
-	holder:SetAllPoints(tip)
-	holder:Show()
-	side = side or "TextLeft"
-	local pool = swatches[side]
-	local drawn = 0
-	for i, colour in ipairs(colours) do
-		local line = T.LineOf(tip, (from or 1) + i - 1, side)
-		local sw = pool[i]
-		if not sw then
-			sw = holder:CreateTexture(nil, "OVERLAY")
-			sw:SetSize(7, 7)
-			pool[i] = sw
-		end
-		if line then
-			sw:ClearAllPoints()
-			sw:SetPoint("LEFT", line, "LEFT", 0, 0)
-			sw:SetColorTexture(colour[1], colour[2], colour[3], 1)
-			sw:Show()
-			drawn = i
-		else
-			sw:Hide()
-		end
-	end
-	for i = drawn + 1, #pool do
-		pool[i]:Hide()
-	end
-	return drawn
-end
 
 -- A RULER (Josh 2026-09-20). To put several swatches along ONE line we have
 -- to know how wide the words before each of them are, and a tooltip line will
@@ -366,7 +326,7 @@ end
 -- WHICH HOOK IS ACTUALLY LIVE (Josh 2026-09-19). Two of these counters and a
 -- name is the whole answer to "the tooltip options do nothing": either the
 -- unit hook is firing and the item one is not, or neither is, and those are
--- different bugs. /bt tips prints it.
+-- different bugs. What loaded, on the Testing page, prints it.
 T.path, T.fills, T.itemFills = "none", 0, 0
 
 function T.Fill(tip, unit)

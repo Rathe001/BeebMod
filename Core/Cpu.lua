@@ -1,8 +1,8 @@
--- /bt cpu: where the toolkit's time goes (Josh 2026-09-23).
+-- Where the toolkit's time goes (Josh 2026-09-23), measured from the Testing
+-- page's CPU row since 2026-09-28.
 --
--- Beside /bt prof (Core/Profile.lua), which times the functions the modules
--- expose, inclusively; this times what RUNS BY ITSELF - updates, events and
--- timers - by the file that made them, which is where CPU is spent unasked.
+-- This times what RUNS BY ITSELF - updates, events and timers - by the file
+-- that made them, which is where CPU is spent unasked.
 --
 -- The game's own count said BeebMod was a quarter to a third of the CPU the
 -- interface uses, with nothing to say which part. This measures it: every
@@ -234,20 +234,28 @@ function P.Report(list, secs)
 	return lines
 end
 
--- /bt cpu [seconds]
-BT.Command("cpu", function(rest)
-	local seconds = tonumber((rest or ""):match("%d+")) or 10
-	seconds = math.max(2, math.min(120, seconds))
+-- MEASURED FROM A BUTTON (Josh 2026-09-28: "I'd actually prefer to use the
+-- 'Testing' module with buttons/toggles going forward"). The CPU row on the
+-- Testing page starts this; the list goes to chat and into the saved file.
+-- False when a measurement is already running.
+P.SECONDS = 10
+
+function P.Measure(seconds)
+	seconds = math.max(2, math.min(120, seconds or P.SECONDS))
 	if P.on then
-		BT.Util.Print("Already measuring. The report comes when it ends.")
-		return
+		BT.Util.Print("CPU: already measuring. The list comes when it ends.")
+		return false
 	end
 	P.Start(seconds)
-	BT.Util.Print(("Measuring for %d seconds. Play as you normally would."):format(seconds))
+	BT.Util.Print(("CPU: measuring for %d seconds. Play as you normally would."):format(seconds))
 	local after = _G.C_Timer and _G.C_Timer.After
 	if after then
 		after(seconds, function()
 			P.Report(P.Stop())
 		end)
 	end
-end, "cpu [seconds] - time BeebMod's updates, events and timers, and list the costliest")
+	return true
+end
+
+-- the list is a record too, so Clear on the Testing page takes it out
+BT.Record("cpuDump")

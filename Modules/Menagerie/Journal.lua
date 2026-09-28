@@ -168,31 +168,16 @@ end
 -- Lore from the Warcraft Wiki
 -- ---------------------------------------------------------------------------
 --
--- WHAT A MOB IS NAMED AFTER (Josh 2026-09-26). The journal fills as you kill,
--- so there is no list of mobs to look up ahead of time - but there is a list
--- of what they are named after: races, tribes and clans, animals, beast
--- families, creature types. scripts/fetch-lore.ps1 gathers the wiki's
--- opening lines on all of them (Modules/Menagerie/LoreData.lua, CC BY-SA),
--- and a mob is matched here by the words of its name, then its family, then
--- its type.
+-- WHAT A MOB IS (Josh 2026-09-28: "I think we need an exact match on mob
+-- name. If none exists, we should fall back to the mob type... I can't think
+-- of a reason we should lazy match the mob name"). Only a page whose title is
+-- the mob's whole name is its own. Matching words of a name found an Ancient
+-- for "Sethir the Ancient", a satyr, and three Frostmane pages for one whelp.
+-- What else the card says comes from what the game knows: the model the
+-- portrait drew, the beast family, the creature type.
 --
---   "Burly Rockjaw Trogg"   rockjaw (the Rockjaw tribe), then trogg (a race)
---   "Frostmane Troll Whelp" frostmane (the Frostmane tribe), then troll
---   "Prideclaw"             no word of it has a page; its family, Cat, does
-
--- how specific each kind of page is: a mob's own, then a tribe or clan, a
--- race, an animal, a beast family, a creature type
-local KIND_RANK = { npc = 6, group = 5, race = 4, beast = 3, family = 2, type = 1 }
-
--- words too common to be what a mob is named after, however a page is titled
-local COMMON = {}
-for w in ([[young elder old great greater lesser large small giant mature adult wild feral rabid
-	diseased mangy vicious savage fierce frenzied infected corrupted burly lost lord king queen chief
-	captain guard guardian warrior shaman mystic seer brute thug bandit servant the of a an and
-	dark black red blue green grey gray white golden silver shadow blood fire frost ice stone
-	elite champion scout sentry watcher hunter defender protector bruiser runt whelp]]):gmatch("%S+") do
-	COMMON[w] = true
-end
+--   "Burly Rockjaw Trogg"   its own page, then Trogg (its model), Humanoid
+--   "Prideclaw"             no page of its own: Cat (its family), Beast
 
 -- The types whose page says nothing about a particular mob ("A humanoid
 -- usually has two arms, two legs, and one head"): a card whose best match is
@@ -200,13 +185,6 @@ end
 -- in full on the mob's own page. Elemental, Undead, Demon and the rest say
 -- something, and stay.
 local PLAIN_TYPES = { Humanoid = true, Beast = true, Critter = true, Mechanical = true }
--- where a page's "X is a Y" stops saying what X is and starts saying where
-local WHERE_WORDS = {}
-for w in ([[located found that which who whose in on at near from of living dwelling residing
-	summoned seen spawned spawns patrolling wandering roaming guarding with by during inside within
-	around along when where while under below above outside]]):gmatch("%S+") do
-	WHERE_WORDS[w] = true
-end
 -- a page shorter than this, on a card, is followed by the next that says more
 local SHORT_LORE = 140
 
@@ -216,34 +194,12 @@ local function loreData()
 end
 J.LoreData = loreData
 
--- A word's page, as written or as one of its kind: "harpies" is Harpy,
--- "troggs" Trogg, "wolves" Wolf. English plurals, the common ones.
-function J.Singular(data, w)
-	if data[w] then
-		return data[w]
-	end
-	for _, rule in ipairs({ { "ies$", "y" }, { "ves$", "f" }, { "ves$", "fe" }, { "es$", "" }, { "s$", "" } }) do
-		local s, n = w:gsub(rule[1], rule[2])
-		if n > 0 and data[s] then
-			return data[s]
-		end
-	end
-	return nil
-end
-
--- Every page that speaks of the mob, most specific first: { { kind, title,
--- text } }. A page is taken once, however many ways it matches.
--- THE SAME BODY AS ONE WE KNOW (Josh 2026-09-26: "Is there no way to
--- determine that this named mob is a harpy?" - Witchmother Arysa, one of
--- this realm's own, has no page, and her name says nothing). Every portrait
--- tells us which model file it drew (m.body); a mob whose name and pages
--- never say what it is borrows the race - or failing that the animal - of
--- another mob in the journal drawn from the same file. A tribe is not
--- borrowed: one body serves many tribes. { [body] = entry or false }, made
--- again whenever a mob's body is learnt.
-local kinLore = {}
-local BORROW = { race = 2, beast = 1 }
-
+-- WHAT ITS MODEL IS (Josh 2026-09-28, on reading "Bloodfeather Sorceresses are
+-- harpies" out of a page: "can that also be determined via the model?"). Every
+-- portrait tells us which model file it drew (m.body), and
+-- Modules/Menagerie/BodyData.lua, made from the community listfile by
+-- scripts/make-bodies.lua, says what that model is: creature/harpy is a harpy
+-- whatever the mob is called.
 function J.Body(npc, id)
 	local s = J.Store()
 	local m = s and s.mobs[npc]
@@ -251,162 +207,38 @@ function J.Body(npc, id)
 		return false
 	end
 	m.body = id
-	kinLore = {}
 	return true
 end
 
--- the page mobs with this body are: the best race or animal any of them
--- reaches by its own name and pages, and whose it was
-local function kinEntry(m)
-	local hit = kinLore[m.body]
-	if hit == nil then
-		hit = false
-		local s = J.Store()
-		local best
-		for npc, other in pairs(s and s.mobs or {}) do
-			if other.body == m.body and other ~= m then
-				for _, e in ipairs(J.WikiLore(other, true)) do
-					local b = BORROW[e.kind]
-					if b and (not best or b > best.b) then
-						best = { b = b, entry = { e.kind, e.title, e.text }, name = other.name }
-					end
-				end
-			end
-		end
-		hit = best or false
-		kinLore[m.body] = hit
-	end
-	return hit or nil
-end
-
-function J.WikiLore(m, ownOnly)
+-- Every page that speaks of the mob, its own first: { { kind, title, text,
+-- how } }. A page is taken once, however many ways it is reached.
+function J.WikiLore(m)
 	local data = loreData()
 	local out, seen = {}, {}
-	-- `how` it was found, for /bt menagerie lore: its name, part of its name,
-	-- what a page says it is, its body, its family, its type
-	local function add(entry, weight, how)
+	-- `how` it was found: its name, its model, its family, its type
+	local function add(entry, how)
 		if entry and not seen[entry[2]] then
 			seen[entry[2]] = true
-			out[#out + 1] = { kind = entry[1], title = entry[2], text = entry[3], how = how,
-				rank = (KIND_RANK[entry[1]] or 0) * 10 + (weight or 0) }
+			out[#out + 1] = { kind = entry[1], title = entry[2], text = entry[3], how = how }
 		end
 	end
 	if not (m and next(data)) then
 		return out
 	end
 	if type(m.name) == "string" and m.name ~= "" then
-		local words = {}
-		for w in m.name:lower():gsub("'s%f[%A]", ""):gmatch("[%w'%-]+") do
-			words[#words + 1] = w
-		end
-		-- its own name, whole
-		add(data[table.concat(words, " ")], 9, "name")
-		-- then any run of three, two or one of its words, the longer first.
-		-- ANOTHER MOB'S PAGE ONLY BY TWO WORDS OR MORE (Josh 2026-09-26, when
-		-- every Classic mob's page came in): "Elder Darkshore Thresher" is
-		-- well served by "Darkshore Thresher", but one word of a name is no
-		-- reason to take on some other creature's page as its own
-		for len = math.min(3, #words), 1, -1 do
-			for i = 1, #words - len + 1 do
-				local phrase = table.concat(words, " ", i, i + len - 1)
-				if not (len == 1 and COMMON[phrase]) then
-					local e = data[phrase] or (len == 1 and J.Singular(data, phrase))
-					if not (len == 1 and e and e[1] == "npc") then
-						add(e, len, "part")
-					end
-				end
-			end
-		end
+		add(data[m.name:lower()], "name")
 	end
-	-- WHAT ITS OWN PAGE SAYS IT IS (Josh 2026-09-26: a Bloodfeather Sorceress
-	-- had its own page - "Bloodfeather Sorceresses are harpies found in
-	-- Teldrassil" - and never reached the Harpy page, since "harpy" is not in
-	-- its name). The first sentence of a mob's own page, or its tribe's, names
-	-- what it is; the first race there follows the pages matched so far.
-	-- A race first; failing that, an animal or another creature's own page
-	-- ("Oakenscowl is a timberling" - and Timberling has a page).
-	local found = #out
-	for i = 1, found do
-		local e = out[i]
-		if e.kind == "npc" or e.kind == "group" then
-			local first = (e.text:match("^(.-[%.!%?])%s") or e.text):lower()
-			-- NOT ITS OWN NAME (Josh 2026-09-27: "This is definitely not a
-			-- cursed centaur"). "Cursed Highborne are banshees..." begins with
-			-- the mob's own words, and "cursed" alone found the Cursed
-			-- Centaur's page. What the sentence says it IS comes after them.
-			local own = {}
-			for _, said in ipairs({ e.title or "", m.name or "" }) do
-				for w in said:lower():gmatch("[%a'%-]+") do
-					own[w] = true
-				end
-			end
-			-- WHAT IT IS, NOT WHERE (Josh 2026-09-28: a Sickly Deer's page says
-			-- it is "located in Olsen's Farthing", and a priest named Farthing
-			-- turned up under it). What it is comes after "is" or "are" and ends
-			-- where the where begins: "Sickly Deer are deer | located in...".
-			local at
-			for _, verb in ipairs({ " is ", " are ", " was ", " were " }) do
-				local i = first:find(verb, 1, true)
-				if i and (not at or i < at) then
-					at = i + #verb
-				end
-			end
-			local is = ""
-			if at then
-				is = first:sub(at)
-				for w in is:gmatch("[%a'%-]+") do
-					if WHERE_WORDS[w] then
-						is = is:sub(1, (is:find("%f[%a'%-]" .. w:gsub("%p", "%%%0") .. "%f[^%a'%-]") or #is + 1) - 1)
-						break
-					end
-				end
-			end
-			local race, other
-			for w in is:gmatch("[%a'%-]+") do
-				local r = not COMMON[w] and not own[w] and J.Singular(data, w)
-				if r and r[2] ~= e.title then
-					if r[1] == "race" then
-						race = race or r
-					elseif r[1] == "beast" or r[1] == "npc" then
-						other = other or r
-					end
-				end
-			end
-			if race or other then
-				local before = #out
-				add(race or other, 1, "says")
-				if #out > before then
-					out[#out].via = true
-				end
-			end
-		end
-	end
-	-- nothing yet says what it is: what the mobs with its body are
-	if m.body and not ownOnly then
-		local says = false
-		for _, e in ipairs(out) do
-			says = says or e.kind == "race" or e.kind == "group" or e.kind == "beast"
-		end
-		local kin = not says and kinEntry(m)
-		if kin then
-			local before = #out
-			add(kin.entry, 0, "body")
-			if #out > before then
-				out[#out].via = true
-				out[#out].kin = kin.name
-			end
-		end
+	local bodies = BT.MenagerieBodies
+	if bodies and type(m.body) == "number" and bodies[m.body] then
+		add(data[bodies[m.body]], "body")
 	end
 	if m.family then
-		add(data[m.family:lower()], 0, "family")
+		add(data[m.family:lower()], "family")
 	end
 	local kind = J.KindOf(m)
 	if kind ~= J.UNTYPED then
-		add(data[kind:lower()], 0, "type")
+		add(data[kind:lower()], "type")
 	end
-	table.sort(out, function(a, b)
-		return a.rank > b.rank
-	end)
 	return out
 end
 
@@ -419,22 +251,20 @@ function J.LoreLine(m)
 	if not m then
 		return ""
 	end
-	-- THE WIKI'S, MOST SPECIFIC FIRST (Josh 2026-09-26: "I like the wowpedia
-	-- lore ... I do like the specific match"): the Rockjaw tribe for a
-	-- Rockjaw trogg, before troggs at large
+	-- THE WIKI'S, ITS OWN PAGE FIRST (Josh 2026-09-26: "I like the wowpedia
+	-- lore ... I do like the specific match"), then what its model is
 	local wiki = J.WikiLore(m)
 	if wiki[1] and not (wiki[1].kind == "type" and PLAIN_TYPES[wiki[1].title]) then
 		-- A LINE, THEN THE LORE: a mob's own page is often one line ("...are
 		-- harpies found in Teldrassil"), and the card has room for more; the
-		-- next page that says something - its race, its tribe, its kind of
-		-- animal - follows it
+		-- next page that says something - its race or its kind of animal -
+		-- follows it
 		local text = wiki[1].text
 		if #text < SHORT_LORE then
-			-- a race, tribe, animal or family; or a creature's page the first
-			-- one named ("is a timberling") - never a kin's one-line stub
+			-- its model's race or animal, or its family
 			for i = 2, #wiki do
 				local e = wiki[i]
-				if (e.kind ~= "type" and e.kind ~= "npc") or e.via then
+				if e.kind ~= "type" then
 					text = text .. " " .. e.text
 					break
 				end
@@ -1166,18 +996,6 @@ function J.Check(c, now, npc, was)
 		end
 	end
 	return news
-end
-
--- the next discovery milestone: the last one passed, and the one ahead
-function J.NextDiscovery(kinds)
-	local prev = 0
-	for _, t in ipairs(DISCOVER) do
-		if kinds < t[1] then
-			return prev, t[1], t[3]
-		end
-		prev = t[1]
-	end
-	return prev, nil, nil
 end
 
 -- ---------------------------------------------------------------------------

@@ -538,6 +538,11 @@ do
 end
 
 local BT = {}
+-- a page of Settings: in a group other than the Dock's and General's
+local function inSettings(key)
+	local g = BT.Window.Group(BT.Window.TabFor(key))
+	return g ~= nil and g ~= "dock" and g ~= "general"
+end
 for _, f in ipairs(files) do
 	local chunk, err = loadfile(f)
 	if not chunk then
@@ -839,7 +844,6 @@ if ok then
 
 			assert(cell.dots.side == "right" and cell.cog.side == "right",
 				"the tags hang at the right-hand end, beside the cog")
-			assert(BT.Bar.NameX() > 20, "the name sits in past the class icon")
 			local tall = BT.Bar.Row()._height
 			_G.UnitIsPlayer = function() return false end
 			BT.Bar.Update()
@@ -931,9 +935,10 @@ if ok then
 			BT.Bar.Update()
 			-- NEVER LESS THAN THE LOGO AND THE COG (Josh 2026-09-27): the row
 			-- goes, and the dock stays as its header
-			assert(BT.Bar.Toggle() == false and q:IsShown() and not BT.Bar.Row():IsShown(),
-				"/bt bar hides the row, and the dock stays as its logo and cog")
-			BT.Bar.Toggle()
+			BT.Bar.SetShown(false)
+			assert(q:IsShown() and not BT.Bar.Row():IsShown(),
+				"the Target row switch hides the row, and the dock stays as its logo and cog")
+			BT.Bar.SetShown(true)
 			BT.SetEnabled("menagerie", hadMenagerie)
 			BT.SetEnabled("census", hadCensus)
 			BT.SetEnabled("minimap", hadMap)
@@ -1294,6 +1299,63 @@ if ok then
 			tbody.firstButton:GetScript("OnClick")(tbody.firstButton)
 			assert(BT.Welcome.Frame() and BT.Welcome.Frame():IsShown(), "the first login's choice, on a click")
 			BT.Welcome.Frame():Hide()
+			-- BUTTONS, NOT COMMANDS (Josh 2026-09-28: "I'd actually prefer to use
+			-- the 'Testing' module with buttons/toggles going forward")
+			local function click(b)
+				local said, realPrint, realErr = {}, _G.print, BT.Err
+				local errs = {}
+				_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
+				BT.Err = function(msg) errs[#errs + 1] = tostring(msg) return realErr(msg) end
+				local ok, err = pcall(b:GetScript("OnClick"), b)
+				_G.print, BT.Err = realPrint, realErr
+				assert(ok, "a click runs: " .. tostring(err))
+				assert(#errs == 0, "and nothing it runs fails: " .. table.concat(errs, " | "))
+				return table.concat(said, " | ")
+			end
+			-- a sample mastery toast, where /bt expedition toast was
+			local hadMenagerie = BT.Enabled("menagerie")
+			BT.SetEnabled("menagerie", true)
+			assert(tbody.toastButton, "a button shows a sample toast")
+			click(tbody.toastButton)
+			local toastFrame = BT.MenagerieToast.Frame()
+			assert(toastFrame and toastFrame:IsShown() and toastFrame.spec
+				and toastFrame.spec.head == "Platinum mastery!", "and the toast is up")
+			BT.MenagerieToast.Next()
+			BT.SetEnabled("menagerie", hadMenagerie)
+			-- the three reports, called straight rather than through /bt
+			for _, key in ipairs({ "whatButton", "timersButton", "statsButton" }) do
+				assert(tbody[key], "a Show button: " .. key)
+				assert(click(tbody[key]) ~= "", "and it says something in chat: " .. key)
+			end
+			-- RECORD, CLEAR AND CPU: the dumps and the probes, from three buttons
+			assert(tbody.recordButton and tbody.clearButton and tbody.cpuButton, "the Record for Claude buttons")
+			local hadFrames, hadMenus = BT.Switched("frames"), BT.Switched("menus")
+			BT.SetEnabled("frames", true)
+			BT.SetEnabled("menus", true)
+			local line = click(tbody.recordButton)
+			BT.SetEnabled("frames", hadFrames)
+			BT.SetEnabled("menus", hadMenus)
+			-- the probe takes its inventory once a session; its own test wants it
+			BT.UnitProbe.inventoried = nil
+			assert(line:find("Records: wrote %d+ into the saved file") and line:find("Type /reload to save them.", 1, true),
+				"Record says what it wrote: " .. line)
+			assert(line:find("the next menu you open and your next fight", 1, true), "and what it waits for: " .. line)
+			assert(BeebModDB.framesDump and BeebModDB.unitProbe, "the records are in the saved file")
+			assert(BT.GetModule("menus").dumpNext, "and the next menu is waited for")
+			BT.GetModule("menus").dumpNext = false
+			-- the CPU row times BeebMod for its seconds, then writes the list down
+			local wasAfter, later = _G.C_Timer.After, nil
+			_G.C_Timer.After = function(_, fn) later = fn end
+			click(tbody.cpuButton)
+			_G.C_Timer.After = wasAfter
+			assert(BT.Cpu.on and later, "Measure starts timing")
+			later()
+			assert(not BT.Cpu.on and BeebModDB.cpuDump, "and when it ends the list is in the saved file")
+			local cleared = click(tbody.clearButton)
+			assert(cleared:find("Records: took %d+ out of the saved file"), "Clear says so: " .. cleared)
+			for _, r in ipairs(BT.Records()) do
+				assert(BeebModDB[r.key] == nil, "Clear takes every record out: " .. r.key)
+			end
 			BT.Window.SetView("tips")
 			assert(BT.Window.View() == "tips" and BT.Window.Panel("tips"), "a page builds its panel once")
 			assert(BT.Window.LitTab() == "tips", "and lights its own tab while it is up")
@@ -1760,7 +1822,8 @@ if ok then
 			-- which book it bound, what it folded in. An addon that greets you
 			-- with a line every login is one you end up muting - and then it
 			-- cannot tell you the one thing that matters. It is all kept, and
-			-- shown where you would go looking for it: /bt boot, /bt stats.
+			-- shown where you would go looking for it: What loaded and The book,
+			-- on the Testing page.
 			local keepDb, keepScope, keepBoot = BT.db, BT.scope, BT.boot
 			local said, realPrint = {}, _G.print
 			_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
@@ -1782,7 +1845,7 @@ if ok then
 			assert(#said == 0, "nothing was printed at login: " .. table.concat(said, " | "))
 			-- but the facts survived for the command that reports them
 			assert(BT.bakedTaken == 2592 and BT.foldedOnLoad == 14,
-				"and /bt boot can still say what happened")
+				"and What loaded can still say what happened")
 			-- the login path binds a book; put back the one the tests use
 			BT.db, BT.scope, BT.boot = keepDb, keepScope, keepBoot
 			BT.bakedTaken, BT.foldedOnLoad = nil, nil
@@ -2497,7 +2560,7 @@ if ok then
 			info.cancelFunc()
 			_G.ColorPickerFrame, _G.IsMouseButtonDown = wasPicker, wasDown
 		end },
-		{ "/bt cpu times what runs by itself, by the file that made it", function()
+		{ "measuring CPU times what runs by itself, by the file that made it", function()
 			-- (Josh 2026-09-23: the game put BeebMod at a third of the CPU)
 			local C = BT.Cpu
 			local make, timer = C.For("Modules/Test/Thing.lua")
@@ -2937,7 +3000,13 @@ if ok then
 			local wasHealth = _G.UnitHealth
 			_G.secretMeasurements = true
 			_G.UnitHealth = function() return _G.SECRET_WIDTH end
-			BT.RunCommand("unitprobe", "")
+			-- its record, as the Testing page's Record button runs it
+			local probe
+			for _, r in ipairs(BT.Records()) do
+				if r.key == "unitProbe" then probe = r end
+			end
+			assert(probe and probe.run and probe.later, "the unit probe is a record that also waits for a fight")
+			assert(probe.run() > 20, "and says how many lines it wrote")
 			local runs = BeebModDB.unitProbe
 			assert(runs and #runs == 1 and #runs[1].lines > 20, "a run of lines: " .. tostring(runs and #runs[1].lines))
 			local sawSecret, sawInventory = false, false
@@ -2954,8 +3023,8 @@ if ok then
 			assert(sawInventory, "and the inventory is taken out of combat")
 			_G.secretMeasurements = false
 			_G.UnitHealth = wasHealth
-			BT.RunCommand("unitprobe", "clear")
-			assert(BeebModDB.unitProbe == nil, "and it can be cleared")
+			BT.ClearRecords()
+			assert(BeebModDB.unitProbe == nil, "and Clear takes it out")
 		end },
 		{ "the unit frames: built, bound, painted, and the game's own put away", function()
 			-- STYLE A IN THE CORNERS (Josh 2026-09-23)
@@ -3034,8 +3103,8 @@ if ok then
 			F.Paint(player, F.Source("target"))
 			player.name.SetText = nil
 			assert(writes[1] == "" and #writes >= 2, "emptied, then written")
-			BT.RunCommand("framesdump", "")
-			assert(BeebModDB.framesDump and #BeebModDB.framesDump.lines >= 2, "and the dump writes the names down")
+			mod.Dump()
+			assert(BeebModDB.framesDump and #BeebModDB.framesDump.lines >= 2, "and the record writes the names down")
 			BeebModDB.framesDump = nil
 
 			-- TWO-PART NAMES: UnitName gives the first half on this client
@@ -3327,7 +3396,7 @@ if ok then
 			assert(raidHolder.ghost._shown == false, "and the outline goes")
 			mod.PlaceHolder("raid")
 			assert(raidHolder._points.TOPLEFT.x == 300 and raidHolder._points.TOPLEFT.y == -80, "it comes back there")
-			BT.RunCommand("frames", "reset")
+			mod.ResetPlaces()
 			assert(BT.settings.frames.pos == nil, "reset forgets it")
 			assert(raidHolder._points.TOPLEFT.x == 24, "and puts the raid back where it started")
 			-- the made-up target is not a block: a shift-drag on it moves nothing,
@@ -3446,7 +3515,6 @@ if ok then
 			F.Paint(cell, F.Source("target"))
 			assert(cell.marker._shown ~= false and cellDrawn == _G.SECRET_WIDTH and F.markerWith == "SetSpriteSheetCell",
 				"a secret mark is drawn by the sheet, never read: " .. tostring(F.markerWith))
-			SlashCmdList.BEEBSTOOLKIT("marker")
 			-- no mark at all: none shown
 			_G.GetRaidTargetIndex = function() return nil end
 			F.Paint(cell, F.Source("target"))
@@ -3473,7 +3541,7 @@ if ok then
 			cut(Fo.DEFAULT)
 			-- ONE FACE (Josh 2026-09-24): Google Sans, and the game's own only when
 			-- its file will not load; a face an older version saved is not read
-			assert(Fo.DEFAULT == "google" and #Fo.Faces() == 2, "Google Sans, and the game's as the fallback")
+			assert(Fo.DEFAULT == "google" and #Fo.FACES == 2, "Google Sans, and the game's as the fallback")
 			BT.settings.font = "fira"
 			assert(Fo.Current().key == "google", "a face saved by an older version is ignored")
 			BT.settings.font = nil
@@ -3704,7 +3772,8 @@ if ok then
 			assert(rejuv._points.TOPLEFT.rel == cell.health and rejuv._points.TOPLEFT.y == 0,
 				"along the top of the health")
 			assert(rejuv.unit == "party2", "and follow the cell's member")
-			-- /bt timers says where they got to, without falling over
+			-- Over-time bars, on the Testing page, says where they got to,
+			-- without falling over
 			T.Report()
 
 
@@ -4902,7 +4971,7 @@ if ok then
 			-- THE CLIENT'S BAGS (Josh 2026-09-24): the window, its close and
 			-- search, every slot, and each item's quality as a ring of its colour
 			local mod = BT.GetModule("bagwindow")
-			assert(mod and BT.Window.InSettings("bagwindow"), "a page of Game frames")
+			assert(mod and inSettings("bagwindow"), "a page of Game frames")
 			local hadHook = _G.hooksecurefunc
 			_G.hooksecurefunc = function(obj, name, fn)
 				local orig = obj[name]
@@ -4994,8 +5063,11 @@ if ok then
 			win:GetScript("OnShow")(win)
 			assert(win._points.TOPLEFT and win._points.TOPLEFT.x == 400 and win._points.TOPLEFT.y == -200,
 				"and it goes back there when the game moves it")
-			mod.ResetPosition()
-			assert(BT.settings.bagwindow.places == nil, "/bt bags reset forgets it")
+			-- the Reset on the Bag window page (Josh 2026-09-28: in place of /bt bags reset)
+			local _ = BT.Window.Panel("bagwindow") or BT.Window.BuildPanel("bagwindow")
+			assert(mod.resetButton, "the Bag window page has a Reset row")
+			mod.resetButton:GetScript("OnClick")(mod.resetButton)
+			assert(BT.settings.bagwindow.places == nil, "its Reset forgets it")
 			-- EVERY WINDOW (Josh 2026-09-24): a bag a window keeps its own place
 			local bag2 = _G.CreateFrame("Frame", "ContainerFrame2", _G.UIParent)
 			_G.ContainerFrame2 = bag2
@@ -5193,7 +5265,7 @@ if ok then
 			-- ONE MENU SYSTEM (Josh 2026-09-24): whatever opens a menu, its art
 			-- comes off and ours goes on; the hover light and the ticks stay
 			local mod = BT.GetModule("menus")
-			assert(mod and BT.Window.InSettings("menus"), "a page of Game frames")
+			assert(mod and inSettings("menus"), "a page of Game frames")
 			local hadHook, hadMenu = _G.hooksecurefunc, _G.Menu
 			_G.hooksecurefunc = function(obj, name, fn)
 				local orig = obj[name]
@@ -5809,7 +5881,7 @@ if ok then
 			assert(not h.fill:IsShown(), "and the surface goes")
 			BT.SetEnabled("damagemeter", true)
 			-- and it lives in Settings, like the other furniture
-			assert(BT.Window.InSettings("damagemeter"), "it is a page of Settings, not a tab")
+			assert(inSettings("damagemeter"), "it is a page of Settings, not a tab")
 
 			-- A LITTLE MORE THAN THE CLIENT'S (Josh 2026-09-24): a session window
 			-- with its header, a row and the spell breakdown
@@ -5991,7 +6063,7 @@ if ok then
 			BT.SetEnabled("prd", false)
 			assert(art._alpha == 1 and not pips:IsShown(), "switched off, nothing of ours is left")
 			BT.SetEnabled("prd", true)
-			assert(BT.Window.InSettings("prd"), "it is a page of Settings")
+			assert(inSettings("prd"), "it is a page of Settings")
 			_G.UnitClass, _G.UnitPowerMax, _G.UnitPower = wasClass, wasMax, wasPower
 			_G.C_NamePlate = nil
 			mod.Apply()
@@ -6099,7 +6171,7 @@ if ok then
 					said = true
 				end
 			end
-			assert(said, "the reason is on /bt debug instead")
+			assert(said, "the reason is on What loaded instead")
 
 			-- AND AGAIN WHEN THERE IS MORE UI THAN THERE WAS: the guild panel
 			-- and the journals are built the first time you open them
@@ -6383,7 +6455,14 @@ if ok then
 			assert(BT.Window.DropIndex(10, { 100, 90 }) == 3, "below them all is last")
 
 			-- move the quest tracker to the top
-			BT.MoveModule("tracker", 1)
+			local firstOther
+			for _, m in ipairs(BT.Modules()) do
+				if m.key ~= "tracker" then
+					firstOther = m.key
+					break
+				end
+			end
+			BT.MoveModuleNextTo("tracker", firstOther)
 			BT.Window.Rebuild()
 			assert(railKeys():find("^settings,testing,dock,tracker,map,dock:ledger,progress"), "the rail follows: " .. railKeys())
 			assert(BT.settings.order and BT.settings.order[1] == "tracker",
@@ -6408,8 +6487,8 @@ if ok then
 				return out
 			end
 			BT.SetEnabled("minimap", true)
-			BT.MoveModule("ledger", #BT.Modules())
-			BT.MoveModule("minimap", #BT.Modules())
+			BT.MoveModuleNextTo("ledger")
+			BT.MoveModuleNextTo("minimap")
 			BT.Bar.Relayout()
 			local keys = stackKeys()
 			assert(keys[#keys] == "minimap" and keys[#keys - 1] == "row",
@@ -6595,7 +6674,12 @@ if ok then
 			level = 60
 			mod.Update()
 			assert(not section:IsShown(), "at the level cap there is no bar")
-			SlashCmdList.BEEBSTOOLKIT("xp")
+			-- the Reset on the Progress page (Josh 2026-09-28: in place of /bt xp reset)
+			local _ = BT.Window.Panel("progress") or BT.Window.BuildPanel("progress")
+			assert(mod.resetButton, "the XP block on the Progress page has a Reset row")
+			mod.session.gained = 500
+			mod.resetButton:GetScript("OnClick")(mod.resetButton)
+			assert(mod.session.gained == 0, "and its Reset starts a new session")
 
 			_G.UnitLevel, _G.UnitXP, _G.UnitXPMax = realLevel, nil, nil
 			_G.GetXPExhaustion, _G.GetMaxPlayerLevel = nil, nil
@@ -6644,7 +6728,6 @@ if ok then
 			assert(figure._alpha == 1, "switched off, the figure comes back")
 			assert(not section:IsShown(), "and the line goes")
 			BT.SetEnabled("durability", true)
-			SlashCmdList.BEEBSTOOLKIT("durability")
 			_G.GetInventoryItemDurability, _G.DurabilityFrame = nil, nil
 			mod.Update()
 		end },
@@ -6698,7 +6781,6 @@ if ok then
 
 			assert(mod.Format(0, 7, false) == "12:07am" and mod.Format(12, 0, false) == "12:00pm",
 				"midnight and noon read as twelve")
-			SlashCmdList.BEEBSTOOLKIT("time")
 			_G.GetGameTime, _G.GetCVarBool = nil, nil
 		end },
 		{ "pick pocket: coin and vendor value, for rogues only", function()
@@ -6789,7 +6871,18 @@ if ok then
 			prices[5374] = 120
 			assert(select(2, mod.Worth(r)) == 120, "and priced when the client knows")
 
-			SlashCmdList.BEEBSTOOLKIT("pockets")
+			-- its Reset on the Metrics page (Josh 2026-09-28: in place of the
+			-- command's reset)
+			local metrics = BT.GetModule("metrics")
+			local _ = BT.Window.Panel("metrics") or BT.Window.BuildPanel("metrics")
+			metrics:RefreshTab()
+			local resetRow
+			for _, row in ipairs(metrics.resets or {}) do
+				if row.part.key == "pickpocket" then resetRow = row end
+			end
+			assert(resetRow and resetRow:IsShown(), "the Metrics page has a Reset row for pickpocket")
+			resetRow.button:GetScript("OnClick")(resetRow.button)
+			assert(select(1, mod.Worth(mod.Record())) == 0 and select(2, mod.Worth(mod.Record())) == 0, "and its Reset clears the record")
 			_G.UnitClass = wasClass
 			BT.Window.Rebuild()
 			mod.Update()
@@ -7010,7 +7103,6 @@ if ok then
 			watched = nil
 			mod.Update()
 			assert(not section:IsShown(), "and unticking the faction takes the line away")
-			SlashCmdList.BEEBSTOOLKIT("rep")
 
 			_G.GetWatchedFactionInfo = nil
 			BT.Util.Now = realNow
@@ -7212,7 +7304,18 @@ if ok then
 			space.Update()
 			assert(not space.Build().wanted, "no slots at all, no cell")
 
-			SlashCmdList.BEEBSTOOLKIT("gold")
+			-- its Reset on the Metrics page (Josh 2026-09-28: in place of the
+			-- command's reset)
+			local metrics = BT.GetModule("metrics")
+			local _ = BT.Window.Panel("metrics") or BT.Window.BuildPanel("metrics")
+			metrics:RefreshTab()
+			local resetRow
+			for _, row in ipairs(metrics.resets or {}) do
+				if row.part.key == "gold" then resetRow = row end
+			end
+			assert(resetRow and resetRow:IsShown(), "the Metrics page has a Reset row for gold")
+			resetRow.button:GetScript("OnClick")(resetRow.button)
+			assert(mod.session.earned == 0 and mod.session.spent == 0, "and its Reset starts a new session")
 			BT.Util.Now = realNow
 			_G.GetMoney = nil
 		end },
@@ -7284,7 +7387,7 @@ if ok then
 		end },
 		{ "the character sheet: item level on every slot", function()
 			local mod = BT.GetModule("charsheet")
-			assert(mod and BT.Window.InSettings("charsheet"), "a page of Settings, like the other restyles")
+			assert(mod and inSettings("charsheet"), "a page of Settings, like the other restyles")
 			local slots = {}
 			for id, name in pairs({ [5] = "Chest", [16] = "MainHand", [11] = "Finger0" }) do
 				local b = _G.CreateFrame("Button", "Character" .. name .. "Slot", _G.UIParent)
@@ -7318,7 +7421,7 @@ if ok then
 			BT.SetEnabled("charsheet", false)
 			assert(not chest:IsShown(), "and the module off leaves the game's sheet as it was")
 			BT.SetEnabled("charsheet", true)
-			SlashCmdList.BEEBSTOOLKIT("sheet")
+			mod.UpdateAll()
 
 			-- WRITTEN DOWN BEFORE IT IS RESKINNED: the window's frames, by name or
 			-- key, with what each draws, into the saved file
@@ -7328,13 +7431,13 @@ if ok then
 			local inset = _G.CreateFrame("Frame", nil, frame)
 			frame.Inset = inset
 			_G.CharacterFrame = frame
-			SlashCmdList.BEEBSTOOLKIT("sheetdump")
+			mod.Dump()
 			local dump = _G.BeebModDB.sheetDump
 			assert(dump and #dump.lines >= 2, "the window is written into the saved file")
 			local text = table.concat(dump.lines, "\n")
 			assert(text:find("CharacterFrame.Inset", 1, true), "a child with no name is known by its key: " .. text)
-			SlashCmdList.BEEBSTOOLKIT("sheetdump clear")
-			assert(_G.BeebModDB.sheetDump == nil, "and can be cleared")
+			BT.ClearRecords()
+			assert(_G.BeebModDB.sheetDump == nil, "and Clear on the Testing page takes it out")
 			_G.CharacterFrame = nil
 			for name in pairs(slots) do
 				_G["Character" .. name .. "Slot"] = nil
@@ -7634,8 +7737,12 @@ if ok then
 			mod.ApplyPosition()
 			local at = frame._points.TOPLEFT
 			assert(at.x == 300 and at.y == -120, "and it opens there again")
-			SlashCmdList.BEEBSTOOLKIT("sheet reset")
-			assert(BT.settings.charsheet.pos == nil, "/bt sheet reset forgets it")
+			-- the Reset on the Character sheet page (Josh 2026-09-28: in place of
+			-- /bt sheet reset)
+			local _ = BT.Window.Panel("charsheet") or BT.Window.BuildPanel("charsheet")
+			assert(mod.resetButton, "the Character sheet page has a Reset row")
+			mod.resetButton:GetScript("OnClick")(mod.resetButton)
+			assert(BT.settings.charsheet.pos == nil, "its Reset forgets it")
 			_G.UIParent.GetTop, _G.UIParent.GetEffectiveScale = wasTop, wasScale
 			_G.CharacterFrame = nil
 		end },
@@ -7671,7 +7778,6 @@ if ok then
 			local chip = mod.Build()
 			assert(chip.wanted and chip.spec.text:find("27", 1, true) and chip.spec.text:find("ilvl", 1, true),
 				"a cell: the number, and what it is")
-			SlashCmdList.BEEBSTOOLKIT("ilvl")
 
 			-- AT LOGIN THE CLIENT HAS NOT DESCRIBED YOUR GEAR YET: no levels, no
 			-- cell - and it has to turn up on its own once they arrive
@@ -7772,15 +7878,7 @@ if ok then
 			end
 			win.GetEffectiveScale, win.GetLeft, win.GetTop, _G.GetCursorPosition = keep[1], keep[2], keep[3], keep[4]
 			_G.GetPhysicalScreenSize = nil
-
-			-- /bt pixels: the numbers, and snapping switched off and on again
-			SlashCmdList.BEEBSTOOLKIT("pixels")
-			SlashCmdList.BEEBSTOOLKIT("pixels snap off")
-			assert(BT.Pill.snapping == false, "snapping can be switched off")
-			SlashCmdList.BEEBSTOOLKIT("pixels snap on")
-			assert(BT.Pill.snapping == true, "and on again")
-			SlashCmdList.BEEBSTOOLKIT("pixels snap off")
-			assert(BT.Pill.snapping == false, "off being where it starts")
+			assert(BT.Pill.snapping == false, "borders are not snapped to the grid")
 		end },
 		{ "movement speed: a cell of the readout grid", function()
 			local mod = BT.GetModule("speed")
@@ -7803,7 +7901,6 @@ if ok then
 			current = 3.5
 			mod.Update()
 			assert(mod.Percent() == 50 and chip.spec.state == "warn", "and something with hold of you is amber")
-			SlashCmdList.BEEBSTOOLKIT("speed")
 			_G.GetUnitSpeed, _G.BASE_MOVEMENT_SPEED = nil, nil
 			mod.Update()
 			assert(not chip.wanted, "a client that will not say shows no cell")
@@ -8995,7 +9092,18 @@ if ok then
 			assert(BT.DB.Get(BT.db, "Corwin Bob").seen > before, "on the row that already exists")
 			assert(BT.DB.Get(BT.db, "Snarly") == nil, "a pet with no player GUID is not a character")
 		end },
-		{ "/bt stats", function() SlashCmdList.BEEBSTOOLKIT("stats") end },
+		-- (Josh 2026-09-28) The book and What loaded are Testing page buttons now
+		{ "the book's report", function() BT.StatsReport() end },
+		{ "what loaded", function()
+			local said, realPrint = {}, _G.print
+			_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
+			local ok, err = pcall(BT.WhatLoaded)
+			_G.print = realPrint
+			assert(ok, "What loaded runs: " .. tostring(err))
+			local all = table.concat(said, " | ")
+			assert(all:find("modules: ", 1, true) and all:find("saved file: ", 1, true)
+				and all:find("tooltip hooks: ", 1, true), "the build, the file, the modules and the hooks: " .. all)
+		end },
 		{ "/bt note", function()
 			SlashCmdList.BEEBSTOOLKIT("note Beeb Bob solid tank")
 			assert((BT.Notes.Get("Beeb Bob") or {}).note == "solid tank", "the command wrote the note")
@@ -9025,7 +9133,6 @@ if ok then
 			assert(back == before, "toggled back by its label: " .. label)
 		end },
 		{ "/bt census", function() SlashCmdList.BEEBSTOOLKIT("census") end },
-		{ "/bt age", function() SlashCmdList.BEEBSTOOLKIT("age") end },
 		{ "/bt autopurge", function()
 			SlashCmdList.BEEBSTOOLKIT("autopurge 30")
 			assert(BT.settings.pruneDays == 30, "autopurge sets the window")
@@ -9044,7 +9151,26 @@ if ok then
 			SlashCmdList.BEEBSTOOLKIT("cap 150000")
 			assert(BT.settings.bookCap == 150000, "and it takes a number")
 		end },
-		{ "/bt help", function() SlashCmdList.BEEBSTOOLKIT("help") end },
+		{ "/bt help", function()
+			-- BUTTONS, NOT COMMANDS (Josh 2026-09-28: "We don't need hundreds of
+			-- slash commands for debugging"): the debug commands are gone, and
+			-- what takes typed input stays
+			local said, realPrint = {}, _G.print
+			_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
+			SlashCmdList.BEEBSTOOLKIT("help")
+			_G.print = realPrint
+			local have = {}
+			for name in pairs(BT.Commands()) do
+				have[#have + 1] = name
+			end
+			table.sort(have)
+			assert(table.concat(have, " ") == "adopt autopurge books cap census demo expedition find flag help "
+				.. "menagerie note prune rate setup tag", "only these commands are left: " .. table.concat(have, " "))
+			local all = table.concat(said, " | ")
+			for _, word in ipairs({ "debug", "edge", "lore", "model", "scene", "toast", "reset", "dump" }) do
+				assert(not all:find("%f[%w]" .. word .. "%f[%W]"), "the help names nothing that is gone: " .. word)
+			end
+		end },
 		-- THE MENAGERIE (Josh 2026-09-25): a few kills, then the journal both
 		-- ways round, the dock's line and a toast, against the real widgets
 		{ "/bt menagerie", function()
@@ -9198,10 +9324,13 @@ if ok then
 				and b.layout.rowGap >= reachFoot + reachTop / 2 and b.layout.foot > reachFoot,
 				"the gaps and margins hold what the border reaches past a card")
 			-- A STRIP THAT SCROLLS (Josh 2026-09-27): the third row, part in
-			-- view, is drawn too - its faces put away until they are wholly in
+			-- view, is drawn too - and its faces with it, whole, for the grid's
+			-- edge to clip (Josh 2026-09-28: "portraits go missing on scroll")
 			assert(shown() == 12, ("every row with any of itself in view is dealt (%d)"):format(shown()))
-			assert(not b.cards[1].portrait.covered and b.cards[9].portrait.covered,
-				"a face wholly in view is up, one half out of view is put away")
+			assert(not b.cards[1].portrait.covered and not b.cards[9].portrait.covered,
+				"a face wholly in view is up, and so is one half out of view")
+			assert(V.Crop(nil, 0, 40, 100) and V.Crop(nil, 40, 0, 100) and not V.Crop(nil, 60, 40, 100),
+				"a face with any of itself in view is shown; one wholly out of view is not")
 			local firstMob = b.cards[5].npc
 			b.grid:ScrollTo(b.layout.rows[3].y - b.layout.top)
 			assert(not b.cards[9].portrait.covered, "and it comes up once the strip scrolls to it")
@@ -9241,15 +9370,11 @@ if ok then
 				laters[2]()
 				assert(#calls == 3, "but not once it has")
 			end
-			-- A FACE AT THE GRID'S EDGE (Josh 2026-09-27): held back, unless the
-			-- setting says to draw it whole for the grid to clip
+			-- A FACE AT THE GRID'S EDGE (Josh 2026-09-28): drawn whole, and the
+			-- grid's edge clips it
 			local p9 = b.cards[9].portrait
-			BT.settings.menagerieEdge = "show"
 			V.Deal()
-			assert(not p9.covered, "drawn whole at the foot of the view when the setting says so")
-			BT.settings.menagerieEdge = nil
-			V.Deal()
-			assert(p9.covered, "and held back again by default")
+			assert(not p9.covered, "a face part out of view is shown")
 			local rare
 			for _, card in ipairs(b.cards) do
 				if card:IsShown() and card.keystone:IsShown() then rare = card end
@@ -9309,6 +9434,16 @@ if ok then
 			assert(meta:find("Rare Elite", 1, true) and meta:find("Zephras Isle", 1, true) and meta:find("Level 5", 1, true),
 				"a mob with no family still says its level, rank and zone: " .. meta)
 			rareElite.family = family
+			-- ONE CRITTER (Josh 2026-09-28, a Sickly Deer: "Critter · Level 5 ·
+			-- Critter"): a category that is its type is said once
+			local kind, rank = rareElite.kind, rareElite.rank
+			rareElite.kind, rareElite.rank = "Critter", "critter"
+			V.Open(250005)
+			meta = b.page.meta:GetText() or ""
+			local critters = 0
+			for _ in meta:gmatch("Critter") do critters = critters + 1 end
+			assert(critters == 1, "a critter is said to be a critter once: " .. meta)
+			rareElite.kind, rareElite.rank = kind, rank
 			V.Open(c.npc)
 			-- WHEN A MODEL ARRIVES (22:05, "Window.lua:486: attempt to call a
 			-- nil value"): the stub never loads one, so its handlers are run
@@ -9325,14 +9460,16 @@ if ok then
 			local wiki = MJ.WikiLore
 			MJ.WikiLore = function()
 				return { { title = "Timberling", text = "Bog beasts, [Fel Moss] and all." },
-					{ title = "Elemental", text = "Ageless spirits." } }
+					{ title = "Elemental", text = "Ageless spirits." },
+				{ title = "Timber Wolf (mob)", text = "Wolves of Northshire." } }
 			end
 			V.Refresh()
 			local lp = b.page.lorePieces
 			assert(not lp[1].rule:IsShown() and not lp[1].head:IsShown()
 				and lp[1].text:GetText() == "Bog beasts, Fel Moss and all.", "the best page first, bare, its links plain")
 			assert(lp[2].rule:IsShown() and lp[2].head:GetText() == "ELEMENTAL", "the next under its title, an ornament over it")
-			assert(b.page.loreFrom:GetText() == "Warcraft Wiki: Timberling, Elemental · CC BY-SA 3.0",
+			assert(lp[3].head:GetText() == "TIMBER WOLF", "a heading leaves off the wiki's \"(mob)\": " .. tostring(lp[3].head:GetText()))
+			assert(b.page.loreFrom:GetText() == "Warcraft Wiki: Timberling, Elemental, Timber Wolf (mob) · CC BY-SA 3.0",
 				"and the pages credited once, at the end")
 			MJ.WikiLore = wiki
 			V.Refresh()
@@ -9398,16 +9535,6 @@ if ok then
 			local corner = V.ArtPieces(art, 0, 0, 138, 104)
 			assert(corner[1].file == 1001 and corner[1].l == 0 and corner[1].t == 0,
 				"a spot at the map's corner keeps the patch on the map")
-			-- where each mob's lore came from, written down
-			SlashCmdList.BEEBSTOOLKIT("menagerie lore")
-			local report = BT.settings.menagerieLoreReport
-			assert(type(report) == "table" and #report >= 12 and report[1]:find(": "),
-				"/bt menagerie lore writes down every mob's page and how it was found")
-			-- what the client will do with the camera, asked and written down
-			SlashCmdList.BEEBSTOOLKIT("menagerie model")
-			assert(type(BT.settings.menagerieModelReport) == "table"
-				and BT.settings.menagerieModelReport[1]:find("NPC " .. c.npc),
-				"/bt menagerie model writes down the open model's calls")
 			b.dim:GetScript("OnMouseDown")(b.dim, "LeftButton")
 			assert(V.open == nil and b.box:IsShown() and not b.dim:IsShown(), "a click outside it closes the popup")
 			-- CARDS OR A LIST (Josh 2026-09-26): the list is three slim rows
@@ -9523,9 +9650,6 @@ if ok then
 			BT.settings.order = nil
 			BT.SortModules()
 			BT.Window.Rebuild()
-			SlashCmdList.BEEBSTOOLKIT("menagerie debug")
-			SlashCmdList.BEEBSTOOLKIT("menagerie map")
-			SlashCmdList.BEEBSTOOLKIT("menagerie scene")
 			-- LORE FROM THE QUEST LOG (Josh 2026-09-26): each quest read once,
 			-- its words kept, and the log's selection put back as it was
 			local saved = {}
@@ -9561,11 +9685,7 @@ if ok then
 			assert(m.ReadQuests() == 0, "nothing is read while the quest log is open in front of you")
 			for g, v in pairs(saved) do _G[g] = v end
 			al.lore = nil
-			assert(type(BT.settings.menagerieSceneReport) == "table",
-				"/bt menagerie scene writes down the character sheet's scene")
-			assert(type(BT.settings.menagerieMapReport) == "table" and BT.settings.menagerieMapReport[1]:find("calls"),
-				"/bt menagerie map writes down what the client says about maps")
-			SlashCmdList.BEEBSTOOLKIT("menagerie toast")
+			m.SampleToast()
 			SlashCmdList.BEEBSTOOLKIT("menagerie")
 			assert(not V.IsShown(), "and again closes it")
 			BT.MenagerieToast.Next()

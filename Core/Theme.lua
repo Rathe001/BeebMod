@@ -276,15 +276,3 @@ function T.Apply()
 	end
 	return true
 end
-
--- the tests want the numbers without going through frames
-function T.Snapshot()
-	return {
-		preset = T.Preset_Name(),
-		fill = T.Fill(),
-		rim = T.Rim(),
-		accent = T.Accent(),
-		thickness = T.Thickness(),
-		radius = T.Radius(),
-	}
-end

@@ -44,9 +44,6 @@ M.INK = { 0.44, 0.64, 0.80 }
 
 local big = BT.MenagerieWindow.Big
 
--- the last few kills and how each was known, for /bt menagerie debug
-M.recent = {}
-
 -- ---------------------------------------------------------------------------
 -- Settings
 -- ---------------------------------------------------------------------------
@@ -100,9 +97,6 @@ function M.Kill(info, how)
 		s.new = (s.new or 0) + (new and 1 or 0)
 		s.last = U.Now()
 	end
-	table.insert(M.recent, 1, ("%s (%s) by %s%s"):format(info.name or "?", tostring(info.npc), how,
-		new and ", new" or ""))
-	M.recent[21] = nil
 
 	local icon = T.Icon(info.kind)
 	local name = info.name or ("#" .. info.npc)
@@ -598,199 +592,24 @@ end
 -- Commands
 -- ---------------------------------------------------------------------------
 
-local function command(rest)
-	local cmd = (rest or ""):lower():match("^(%S*)")
-	if cmd == "debug" then
-		local st = K.stats
-		U.Print(("Expedition: watched %d · counted by death %d, by XP %d, by loot %d · XP lines for kills "
-			.. "already counted %d, unmatched %d · deaths that weren't yours %d"):format(st.watched or 0, st.dead or 0,
-			st.xp or 0, st.loot or 0, st.confirmed or 0, st.xpUnmatched or 0, st.notOurs or 0))
-		for i = 1, math.min(10, #M.recent) do
-			U.Print("  " .. M.recent[i])
-		end
-		-- whether the card portraits could be held still, and how
-		local how = BT.MenagerieWindow.freezeWith
-		U.Print(("Expedition: portraits %s · effects %s"):format(how == nil and "not drawn yet (open the journal first)"
-			or how == false and "keep moving, since the game gives no way to hold them still"
-			or ("held still by %s"):format(how),
-			BT.MenagerieWindow.canHideEffects and "can be switched off (SetParticlesEnabled)"
-				or "cannot be switched off"))
-		return
-	elseif cmd == "edge" then
-		-- A FACE AT THE GRID'S EDGE (Josh 2026-09-27): held back until wholly
-		-- in view, or drawn whole for the grid to clip - which only the game
-		-- can show works. Each asking changes it.
-		BT.EnsureBound()
-		local show = BT.settings.menagerieEdge ~= "show"
-		BT.settings.menagerieEdge = show and "show" or nil
-		if BT.MenagerieWindow.IsShown and BT.MenagerieWindow.IsShown() then
-			BT.MenagerieWindow.Deal()
-		end
-		U.Print(show and "Expedition: portraits at the grid's edge now show in full. If one spills past the grid, "
-			.. "type /bt expedition edge again." or "Expedition: portraits at the grid's edge now show only when fully in view.")
-		return
-	elseif cmd == "lore" then
-		-- WHERE EACH MOB'S LORE CAME FROM (Josh 2026-09-26: "Is there a way we
-		-- can make sure we're matching the mob properly with the lore?"):
-		-- every mob, the page it leads with, and how that page was found. A
-		-- mob that got no nearer than its type is one the wiki data lacks,
-		-- or that has no page: run scripts/fetch-lore.ps1 and /reload.
-		BT.EnsureBound()
-		local s = J.Store()
-		local list = {}
-		for _, m in pairs(s and s.mobs or {}) do
-			list[#list + 1] = m
-		end
-		table.sort(list, function(a, b) return (a.name or "") < (b.name or "") end)
-		local HOW = { name = "its own page", part = "part of its name", says = "its page says so",
-			body = "same body as a known one", family = "its family", type = "only its type" }
-		local lines, vague = {}, 0
-		for _, m in ipairs(list) do
-			local e = J.WikiLore(m)[1]
-			local line
-			if not e then
-				line = ("%s: no page"):format(m.name or "?")
-				vague = vague + 1
-			else
-				line = ("%s: %s (%s, %s)"):format(m.name or "?", e.title, e.kind, HOW[e.how] or e.how or "?")
-				if e.how == "type" or e.how == "family" then
-					vague = vague + 1
-				end
-			end
-			lines[#lines + 1] = line
-			U.Print("  " .. line)
-		end
-		U.Print(("Expedition: lore for %d mobs, %d with nothing nearer than their family or type. "
-			.. "Type /reload to save the list."):format(#list, vague))
-		BT.settings.menagerieLoreReport = lines
-		return
-	elseif cmd == "model" then
-		-- what the client will do with the camera on a mob's page, written
-		-- into the saved file as well, since it is a wall of numbers
-		local lines = BT.MenagerieWindow.ModelReport()
-		if not lines then
-			U.Print("Expedition: open a mob's page in the journal first.")
-			return
-		end
-		for _, line in ipairs(lines) do
-			U.Print("  " .. line)
-		end
-		BT.EnsureBound()
-		BT.settings.menagerieModelReport = lines
-		U.Print("Expedition: model report written. Type /reload to save it.")
-		return
-	elseif cmd == "map" then
-		-- what the client says about maps, for the cards' backgrounds
-		local lines = {}
-		local function say(fmt, ...)
-			lines[#lines + 1] = fmt:format(...)
-		end
-		local calls = {}
-		for _, name in ipairs({ "GetBestMapForUnit", "GetPlayerMapPosition", "GetMapInfo", "GetMapArtLayers",
-			"GetMapArtLayerTextures" }) do
-			calls[#calls + 1] = ("%s %s"):format(name, (C_Map and type(C_Map[name]) == "function") and "yes" or "NO")
-		end
-		say("calls: %s", table.concat(calls, " · "))
-		local map, x, y = K.Where()
-		local info = map and C_Map.GetMapInfo and select(2, pcall(C_Map.GetMapInfo, map))
-		say("here: map %s (%s) at %s, %s", tostring(map), type(info) == "table" and tostring(info.name) or "?",
-			x and ("%.3f"):format(x) or "no position", y and ("%.3f"):format(y) or "-")
-		local art = map and BT.MenagerieWindow.MapArt(map)
-		if art then
-			say("art: %d x %d in tiles of %d x %d, %d across, %d tiles, first %s", art.lw, art.lh, art.tw, art.th,
-				art.cols, #art.files, tostring(art.files[1]))
-		else
-			say("art: none for this map")
-		end
-		local spots, all = 0, 0
-		for _, m in pairs(J.Store().mobs) do
-			all = all + 1
-			if m.mx then
-				spots = spots + 1
-			end
-		end
-		say("journal: %d of %d kinds have a spot on the map (a kind gets one on its next kill)", spots, all)
-		for _, line in ipairs(lines) do
-			U.Print("  " .. line)
-		end
-		BT.EnsureBound()
-		BT.settings.menagerieMapReport = lines
-		return
-	elseif cmd == "scene" then
-		-- THE CHARACTER SHEET'S SCENE (Josh 2026-09-26: "the default character
-		-- sheet has a background... could we maybe use that?"). What the
-		-- client hangs behind your own model - which our character sheet takes
-		-- off (Modules/CharSheet) - and which races' scenes this client has,
-		-- as files or as atlases, for the cards and the model page.
-		local lines = {}
-		local function say(fmt, ...)
-			lines[#lines + 1] = fmt:format(...)
-		end
-		local function describe(label, t)
-			if type(t) ~= "table" or type(t.GetTexture) ~= "function" then
-				return
-			end
-			local _, tex = pcall(t.GetTexture, t)
-			local _, file = pcall(t.GetTextureFileID or function() return nil end, t)
-			local _, atlas = pcall(t.GetAtlas or function() return nil end, t)
-			local okC, l, r, top, bottom = pcall(t.GetTexCoord, t)
-			say("%s: texture %s · file %s · atlas %s · coords %s", label, tostring(tex), tostring(file),
-				tostring(atlas), okC and ("%.2f %.2f %.2f %.2f"):format(l or 0, r or 0, top or 0, bottom or 0) or "?")
-		end
-		local scene = _G.CharacterModelScene
-		if scene then
-			for key, v in pairs(scene) do
-				if type(v) == "table" and type(key) == "string" and key:find("Background") then
-					describe("CharacterModelScene." .. key, v)
-				end
-			end
-			local ok, regions = pcall(function() return { scene:GetRegions() } end)
-			for i, r in ipairs(ok and regions or {}) do
-				describe(("CharacterModelScene region %d"):format(i), r)
-			end
-		else
-			say("CharacterModelScene: not there")
-		end
-		for _, name in ipairs({ "CharacterModelFrameBackgroundTopLeft", "CharacterModelFrameBackgroundTopRight",
-			"CharacterModelFrameBackgroundBotLeft", "CharacterModelFrameBackgroundBotRight" }) do
-			describe(name, _G[name])
-		end
-		-- every race's scene, both ways the client might keep it
-		local fileOf = GetFileIDFromPath
-		local atlasOf = C_Texture and C_Texture.GetAtlasInfo
-		for _, race in ipairs({ "Human", "Dwarf", "NightElf", "Gnome", "Orc", "Scourge", "Tauren", "Troll",
-			"BloodElf", "Draenei", "Goblin", "Worgen", "Pandaren", "VoidElf", "Nightborne", "HighmountainTauren",
-			"LightforgedDraenei", "DarkIronDwarf", "MagharOrc", "ZandalariTroll", "KulTiran", "Vulpera",
-			"Mechagnome", "Dracthyr", "EarthenDwarf" }) do
-			local f = fileOf and select(2, pcall(fileOf, "Interface\\DressUpFrame\\DressUpBackground-" .. race .. "1"))
-			local a = atlasOf and select(2, pcall(atlasOf, "dressingroom-background-" .. race:lower()))
-			if f or type(a) == "table" then
-				say("%s: file %s · atlas %s", race, tostring(f),
-					type(a) == "table" and ("%sx%s"):format(tostring(a.width), tostring(a.height)) or "none")
-			end
-		end
-		for _, line in ipairs(lines) do
-			U.Print("  " .. line)
-		end
-		BT.EnsureBound()
-		BT.settings.menagerieSceneReport = lines
-		U.Print("Expedition: scene report written. Type /reload to save it.")
-		return
-	elseif cmd == "toast" then
-		local c = J.Mine()
-		local last = c and c.last and J.Store().mobs[c.last.npc]
-		T.Push({
-			head = "Platinum mastery!", text = ("500 kills on %s"):format(last and last.name or "Barn Owl"),
-			points = 10, icon = T.Icon(last and last.kind),
-		})
-		return
-	end
-	BT.MenagerieWindow.Toggle()
+-- A SAMPLE TOAST (Josh 2026-09-28: "I'd actually prefer to use the 'Testing'
+-- module with buttons/toggles going forward"): what /bt expedition toast
+-- showed, from the Testing page. A Platinum mastery on the last mob you
+-- killed, or on a Barn Owl before you have killed anything.
+function M.SampleToast()
+	local c = J.Mine()
+	local last = c and c.last and J.Store().mobs[c.last.npc]
+	T.Push({
+		head = "Platinum mastery!", text = ("500 kills on %s"):format(last and last.name or "Barn Owl"),
+		points = 10, icon = T.Icon(last and last.kind),
+	})
 end
 
 -- /bt expedition, and the old name still (Josh 2026-09-27): only the new one
 -- is in /bt's list
-BT.Command("expedition", command,
-	"expedition [debug|edge|map|model|scene|toast] - open the journal of every kind of mob you have killed",
-	"menagerie")
+local function command()
+	BT.MenagerieWindow.Toggle()
+end
+
+BT.Command("expedition", command, "open the journal of every kind of mob you have killed", "menagerie")
 BT.Command("menagerie", command, nil, "menagerie")

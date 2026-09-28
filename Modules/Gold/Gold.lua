@@ -317,19 +317,12 @@ function M:Refresh()
 	self:RefreshTab()
 end
 
-BT.Command("gold", function(rest)
-	if (rest or ""):lower() == "reset" then
-		M.Start(true, false)
-		U.Print("Gold: a new session starts now.")
-		return
-	end
-	local s = M.session
-	if not s then
-		U.Print("Gold: no session yet.")
-		return
-	end
-	local rate = M.Rate()
-	U.Print(("Gold: %s · earned %s · spent %s · %s"):format(M.Coins(money()),
-		M.Coins(s.earned), M.Coins(s.spent),
-		rate and (M.Coins(rate) .. " an hour") or "too early for a rate"))
-end, "gold [reset] - show this session's gold, or start a new session", "gold")
+-- A NEW SESSION FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
+-- slash commands"). What /bt gold reset did, as a Reset row on the Metrics
+-- page, which builds one for each part with a `resetRow` and an M.Reset.
+M.resetRow = { "Gold session", "Starts earned, spent and gold an hour again from now" }
+
+function M.Reset()
+	M.Start(true, false)
+	U.Print("Gold: a new session starts now.")
+end

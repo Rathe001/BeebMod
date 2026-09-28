@@ -24,7 +24,8 @@
 -- in case a later build hides them too.
 --
 -- A button is secure when it is a real unit frame (a click targets, a right
--- click opens the menu), and plain when it is a preview for /bt frames test.
+-- click opens the menu), and plain when it is a preview (Made-up people, on
+-- the Testing page).
 -- A preview takes its numbers from a table rather than the client; see F.Fake.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Frames/Unit.lua")
@@ -55,7 +56,8 @@ F.Secret = secret
 -- with it, but a call of the client's may be handed it. The client's own
 -- icon call first, then a sprite sheet's cell - the sheet is four by four,
 -- the marks its first eight - and whichever this client takes is kept in
--- F.markerWith for /bt marker. True when the mark is drawn.
+-- F.markerWith, which What loaded reports when it is none. True when the
+-- mark is drawn.
 function F.DrawMarker(tex, marker)
 	if F.markerWith ~= false and _G.SetRaidTargetIconTexture and F.markerWith ~= "SetSpriteSheetCell" then
 		if pcall(_G.SetRaidTargetIconTexture, tex, marker) then
@@ -490,7 +492,7 @@ function Live:Combo()
 	return 0, 0, false
 end
 
--- A preview's numbers: plain, from a table, so /bt frames test draws what a
+-- A preview's numbers: plain, from a table, so Made-up people draws what a
 -- raid looks like while you stand alone in Darkshore.
 local Fake = {}
 Fake.__index = function(t, k)

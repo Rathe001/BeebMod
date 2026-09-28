@@ -123,8 +123,11 @@ So every screen reads the same:
 - **Address the player as "you"**, and the addon as BeebMod (never "we",
   never "the toolkit").
 - **Chat lines** start with what they're about: "Expedition: ...",
-  "Ledger: ...". Debug output behind a /bt command can be terse, but still
-  plain words, not variable names.
+  "Ledger: ...". A report from a button on the Testing page can be terse,
+  but still plain words, not variable names.
+- **Debug tools** are buttons and switches on the Testing page, not /bt
+  commands. A command is for something the player types, such as a note, a
+  name to find or a number of days.
 
 ## Dirty glass
 

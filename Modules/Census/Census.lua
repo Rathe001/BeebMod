@@ -37,15 +37,9 @@ end
 -- Nothing on the dock: the census is something you go and look at, not
 -- something you watch while you play.
 
-
 BT.Command("census", function()
 	BT.CensusWindow.Toggle()
 end, "open the charts in their own window", "census")
-
-BT.Command("age", function()
-	local line = BT.Stats.AgeLine(BT.Stats.Census(BT.db))
-	BT.Util.Print("Census: " .. line:sub(1, 1):lower() .. line:sub(2))
-end, "print how old this book is", "census")
 
 -- WAS IN A GUILD (moved from the Ledger's tooltip, Josh 2026-09-26): a guild
 -- change is the census's to know, so it says so itself, for anyone in the

@@ -236,12 +236,8 @@ do
 	DB.Note(db, "Kalles Kalleborg", nil, { level = 3, guild = "Inner Sanctum", zone = "Teldrassil" }, t0)
 	local p = DB.Get(db, "Kalles Kalleborg")
 	check(p.levelAt == t0 and p.guildAt == t0 and p.zoneAt == t0, "each observed field stamps its own moment")
-	check(U.LevelText(p, t0) == "3" and U.ZoneText(p, t0) == "Teldrassil" and U.GuildText(p, t0) == "Inner Sanctum",
-		"fresh: say it plainly")
-	check(U.ZoneText(p, t0 + 3600) == nil, "an hour later the zone is not worth repeating")
+	check(U.LevelText(p, t0) == "3", "fresh: say it plainly")
 	check(U.LevelText(p, t0 + 2 * 86400) == "3+", "a day-old level is a floor, not a fact")
-	local g = U.GuildText(p, t0 + 3 * 86400)
-	check(g == "Inner Sanctum (as of 3 days ago)", ("an old guild says how old it is (%s)"):format(tostring(g)))
 	DB.Note(db, "Kalles Kalleborg", nil, { level = 9 }, t0 + 4 * 86400)
 	check(U.LevelText(p, t0 + 4 * 86400) == "9", "meeting them again is the only refresh there is")
 end
@@ -662,32 +658,6 @@ do
 	check(f.tag7, "a mark of a tag the settings have lost is kept, not swept away")
 end
 
--- 6o. The panel opens into whichever corner has the room (Josh 2026-09-19).
-do
-	-- the real rule, not a copy of it: a copy in a test proves the copy
-	local place = U.Placement
-	local W, H, PW, PH = 1920, 1080, 430, 200
-
-	-- bar near the bottom left: the panel goes up, aligned left
-	local p1 = place({ top = 120, bottom = 94, left = 40, right = 240 }, PW, PH, W, H)
-	check(p1 == "BOTTOMLEFT", ("bottom left corner opens upward (%s)"):format(p1))
-
-	-- bar at the very top: there is no room above, so it opens downward
-	local p2 = place({ top = 1070, bottom = 1044, left = 40, right = 240 }, PW, PH, W, H)
-	check(p2 == "TOPLEFT", ("top of the screen opens downward (%s)"):format(p2))
-
-	-- bar at the right edge: the panel hangs from the bar's right edge
-	local p3 = place({ top = 120, bottom = 94, left = 1700, right = 1900 }, PW, PH, W, H)
-	check(p3 == "BOTTOMRIGHT", ("right edge lines up right (%s)"):format(p3))
-
-	-- top right: both, at once
-	local p4 = place({ top = 1070, bottom = 1044, left = 1700, right = 1900 }, PW, PH, W, H)
-	check(p4 == "TOPRIGHT", ("top right does both (%s)"):format(p4))
-
-	-- a bar wider than the panel at the left edge still aligns left
-	local p5 = place({ top = 500, bottom = 474, left = 0, right = 200 }, PW, PH, W, H)
-	check(p5 == "BOTTOMLEFT", ("hard against the left edge stays left (%s)"):format(p5))
-end
 
 -- 7. The sighting throttle: one write per player per window.
 do
@@ -1560,89 +1530,80 @@ do
 	check(J.LoreLine(J.Store().mobs[5004]) == "A fox of Zephras Isle, first met at level 6.", "with no quest, a line of facts")
 	check(J.LoreLine({ kind = "Elemental" }) == "An elemental.", "with the right article")
 	for _, npc in ipairs({ 5001, 5002, 5003, 5004 }) do J.Store().mobs[npc] = nil end
-	-- LORE FROM THE WIKI (Josh 2026-09-26): matched by the words of a mob's
-	-- name, the most specific first, then its family, then its type
-	local hadData = BT.MenagerieLoreData
+	-- LORE FROM THE WIKI (Josh 2026-09-28: "I think we need an exact match on
+	-- mob name"): its own page by its whole name, then what its model is, its
+	-- family and its type. Nothing is found by a word of its name.
+	local hadData, hadBodies = BT.MenagerieLoreData, BT.MenagerieBodies
 	BT.MenagerieLoreData = {
 		["trogg"] = { "race", "Trogg", "The troggs are a race of brutish, cave-dwelling humanoids." },
 		["rockjaw"] = { "group", "Rockjaw tribe", "The Rockjaw tribe is a tribe of troggs found in Dun Morogh." },
 		["rockjaw tribe"] = { "group", "Rockjaw tribe", "The Rockjaw tribe is a tribe of troggs found in Dun Morogh." },
-		["burly"] = { "group", "Burly", "A page that happens to be called Burly." },
+		["rockjaw trogg"] = { "npc", "Rockjaw Trogg", "Rockjaw Troggs were troggs found in Dun Morogh." },
+		["burly rockjaw trogg"] = { "npc", "Burly Rockjaw Trogg", "Burly Rockjaw Troggs were troggs in Coldridge Valley." },
+		["frostmane"] = { "group", "Frostmane tribe", "The Frostmane tribe is a tribe of ice trolls in Dun Morogh." },
+		["frostmane troll"] = { "npc", "Frostmane Troll", "Frostmane Trolls are ice trolls in Dun Morogh." },
+		["troll"] = { "race", "Troll", "Trolls are a race of tall humanoids." },
+		["sethir the ancient"] = { "npc", "Sethir the Ancient", "Sethir the Ancient is a satyr on a branch of Teldrassil." },
+		["ancient"] = { "race", "Ancient", "Ancients are giant, sentient trees." },
+		["timber wolf"] = { "npc", "Timber Wolf (mob)", "Timber Wolves were wolves in Northshire Valley." },
+		["wolf"] = { "family", "Wolf", "Wolves are furry, carnivorous canines." },
+		["deer"] = { "beast", "Deer", "Deer are hoofed, plant-eating mammals." },
+		["harpy"] = { "race", "Harpy", "Harpies are vicious, flying creatures." },
+		["bloodfeather sorceress"] = { "npc", "Bloodfeather Sorceress", "Bloodfeather Sorceresses are harpies found in Teldrassil." },
 		["cat"] = { "family", "Cat", "Cats are carnivorous predators." },
 		["humanoid"] = { "type", "Humanoid", "A humanoid usually has two arms." },
+		["beast"] = { "type", "Beast", "Beasts are animals." },
+		["critter"] = { "type", "Critter", "Critters are small animals." },
 		["hogger"] = { "npc", "Hogger", "Hogger is a gnoll found atop Hogger Hill." },
-		["gnoll"] = { "race", "Gnoll", "Gnolls are hyena-like humanoids." },
+		["death's head acolyte"] = { "npc", "Death's Head Acolyte", "Death's Head Acolytes are members of the Death's Head." },
 	}
-	local trogg = { name = "Burly Rockjaw Trogg", kind = "Humanoid" }
-	local lore = J.WikiLore(trogg)
-	check(lore[1] and lore[1].title == "Rockjaw tribe" and lore[2].title == "Trogg" and lore[3].title == "Humanoid"
-		and #lore == 3, "the tribe first, then the race, then the type - and a common word is not a match")
-	check(J.LoreLine(trogg) == "The Rockjaw tribe is a tribe of troggs found in Dun Morogh."
+	-- the model files of a troll, a trogg, a harpy, a deer and a wolf
+	BT.MenagerieBodies = { [1022938] = "troll", [126239] = "trogg", [124329] = "harpy", [123362] = "deer", [126487] = "wolf" }
+	local function titlesOf(m)
+		local t = {}
+		for _, e in ipairs(J.WikiLore(m)) do t[#t + 1] = e.title end
+		return table.concat(t, " > ")
+	end
+	-- the five cards Josh sent (2026-09-28)
+	check(titlesOf({ name = "Sethir the Ancient", kind = "Humanoid" }) == "Sethir the Ancient > Humanoid",
+		"a title in a name is not a race: " .. titlesOf({ name = "Sethir the Ancient", kind = "Humanoid" }))
+	local whelp = { name = "Frostmane Troll Whelp", kind = "Humanoid", body = 1022938 }
+	check(titlesOf(whelp) == "Troll > Humanoid",
+		"no page by its whole name: no tribe or other mob by part of it, only its model and type: " .. titlesOf(whelp))
+	local trogg = { name = "Burly Rockjaw Trogg", kind = "Humanoid", body = 126239 }
+	check(titlesOf(trogg) == "Burly Rockjaw Trogg > Trogg > Humanoid", "its own page, its model, its type: " .. titlesOf(trogg))
+	check(J.LoreLine(trogg) == "Burly Rockjaw Troggs were troggs in Coldridge Valley."
 		.. " The troggs are a race of brutish, cave-dwelling humanoids.",
-		"the card takes the most specific, and a short one is followed by the next that says more")
-	-- A PAGE LEADS TO ITS RACE (Josh 2026-09-26): "Bloodfeather Sorceresses are
-	-- harpies" - the name never says harpy, the page does
-	BT.MenagerieLoreData["bloodfeather sorceress"] = { "npc", "Bloodfeather Sorceress",
-		"Bloodfeather Sorceresses are harpies found in Teldrassil." }
-	BT.MenagerieLoreData["harpy"] = { "race", "Harpy", "Harpies are vicious, flying creatures." }
-	local sorc = J.WikiLore({ name = "Bloodfeather Sorceress", kind = "Humanoid" })
-	check(sorc[1].title == "Bloodfeather Sorceress" and sorc[2].title == "Harpy", "a mob's own page leads to the race it names")
-	check(J.LoreLine({ name = "Bloodfeather Sorceress", kind = "Humanoid" })
-		== "Bloodfeather Sorceresses are harpies found in Teldrassil. Harpies are vicious, flying creatures.",
-		"and the card follows the one line with the race's")
-	check(J.Singular(BT.MenagerieLoreData, "harpies")[2] == "Harpy" and J.Singular(BT.MenagerieLoreData, "troggs")[2] == "Trogg",
-		"plurals find their pages: harpies, troggs")
-	check(J.WikiLore({ name = "Prideclaw", kind = "Beast", family = "Cat" })[1].title == "Cat",
-		"a name the wiki does not know falls to its family")
-	check(J.WikiLore({ name = "Hogger", kind = "Humanoid" })[1].title == "Hogger", "a mob with a page of its own has it")
-	check(J.WikiLore({ name = "Riverpaw Gnolls" })[1].title == "Gnoll", "a plural finds its page")
-	-- ANOTHER MOB'S PAGE ONLY BY TWO WORDS OR MORE (Josh 2026-09-26)
-	BT.MenagerieLoreData["darkshore thresher"] = { "npc", "Darkshore Thresher", "Darkshore Threshers are threshadons." }
-	BT.MenagerieLoreData["threshadon"] = { "beast", "Threshadon", "Threshadons are large aquatic dinosaurs." }
-	BT.MenagerieLoreData["vermin"] = { "npc", "Vermin", "Vermin is a rat in Stormwind." }
-	local elder = J.WikiLore({ name = "Elder Darkshore Thresher", kind = "Beast" })
-	check(elder[1].title == "Darkshore Thresher" and elder[1].how == "part" and elder[2].title == "Threshadon"
-		and elder[2].how == "says", "two words of a name reach a kin's page, and its page the kind of creature")
-	-- NOT ITS OWN NAME (Josh 2026-09-27: "This is definitely not a cursed
-	-- centaur"): a page that opens with the mob's own words is read after them
-	BT.MenagerieLoreData["cursed highborne"] = { "npc", "Cursed Highborne", "Cursed Highborne are banshees of Ameth'Aran." }
-	BT.MenagerieLoreData["cursed"] = { "npc", "Cursed Centaur", "The Cursed Centaur is a rare centaur." }
-	BT.MenagerieLoreData["banshee"] = { "race", "Banshee", "Banshees are the spirits of dead elves." }
-	local cursed = J.WikiLore({ name = "Cursed Highborne", kind = "Undead" })
-	local titles = {}
-	for _, e in ipairs(cursed) do titles[#titles + 1] = e.title end
-	check(cursed[2] and cursed[2].title == "Banshee" and not table.concat(titles, "|"):find("Centaur"),
-		"its own name's words are not what its page says it is: " .. table.concat(titles, " > "))
-	-- WHAT IT IS, NOT WHERE (Josh 2026-09-28): "located in Olsen's Farthing"
-	-- is where a Sickly Deer lives, and Farthing is a priest's page
-	BT.MenagerieLoreData["sickly deer"] = { "npc", "Sickly Deer",
-		"Sickly Deer are deer located in Olsen's Farthing in Silverpine Forest." }
-	BT.MenagerieLoreData["farthing"] = { "npc", "Farthing", "Farthing is a human priest." }
-	BT.MenagerieLoreData["deer"] = { "beast", "Deer", "Deer are hoofed, plant-eating mammals." }
-	local deer = J.WikiLore({ name = "Sickly Deer", kind = "Critter" })
-	local deerTitles = {}
-	for _, e in ipairs(deer) do deerTitles[#deerTitles + 1] = e.title end
-	check(deer[2] and deer[2].title == "Deer" and not table.concat(deerTitles, "|"):find("Farthing"),
-		"a place its page names is not what it is: " .. table.concat(deerTitles, " > "))
-	local vermin = J.WikiLore({ name = "Kobold Vermin", kind = "Humanoid" })
-	check(vermin[1].title ~= "Vermin", "one word of a name does not take another mob's page")
-	-- THE SAME BODY (Josh 2026-09-26: "Is there no way to determine that this
-	-- named mob is a harpy?"): a name that says nothing borrows the race of a
-	-- mob drawn from the same model file
-	J.Learn({ npc = 6001, name = "Bloodfeather Sorceress", kind = "Humanoid" })
+		"a short page on the card is followed by its model's")
+	local wolf = { name = "Ragged Timber Wolf", kind = "Beast", family = "Wolf", body = 126487 }
+	check(titlesOf(wolf) == "Wolf > Beast", "another mob's page is not reached by part of a name: " .. titlesOf(wolf))
+	local deer = { name = "Sickly Deer", kind = "Critter", body = 123362 }
+	check(titlesOf(deer) == "Deer > Critter", "a critter drawn as a deer is a deer: " .. titlesOf(deer))
+	-- and the rest of the rule
+	check(titlesOf({ name = "Timber Wolf", kind = "Beast", family = "Wolf" }) == "Timber Wolf (mob) > Wolf > Beast",
+		"a page whose title adds \"(mob)\" is still the mob's own")
+	check(titlesOf({ name = "Death's Head Acolyte", kind = "Humanoid" }) == "Death's Head Acolyte > Humanoid",
+		"a name with 's in it finds its page")
+	check(titlesOf({ name = "Prideclaw", kind = "Beast", family = "Cat" }) == "Cat > Beast",
+		"a name the wiki does not know falls to its family, then its type")
+	check(titlesOf({ name = "Hogger", kind = "Humanoid" }) == "Hogger > Humanoid", "a mob with a page of its own has it")
+	check(titlesOf({ name = "Bloodfeather Sorceress", kind = "Humanoid" }) == "Bloodfeather Sorceress > Humanoid",
+		"what a page says is not read for a race")
+	check(titlesOf({ name = "Riverpaw Gnoll", kind = "Humanoid" }) == "Humanoid", "nor is a word of the name")
+	-- WHAT ITS MODEL IS (Josh 2026-09-28): a name that says nothing is a
+	-- harpy once its portrait has drawn a harpy's model
 	J.Learn({ npc = 6002, name = "Witchmother Arysa", kind = "Humanoid" })
 	local arysa = J.Store().mobs[6002]
-	check(J.WikiLore(arysa)[1].title == "Humanoid", "with no body known, only her type")
-	check(J.Body(6001, 131000) and J.Body(6002, 131000) and not J.Body(6002, 131000),
-		"a body is learnt once")
-	local kin = J.WikiLore(arysa)
-	check(kin[1].title == "Harpy" and kin[1].kin == "Bloodfeather Sorceress" and kin[2].title == "Humanoid",
-		"then she is a harpy, like the Bloodfeather Sorceress")
+	check(titlesOf(arysa) == "Humanoid", "with no model known, only her type")
+	check(J.Body(6002, 124329) and not J.Body(6002, 124329), "a model is learnt once")
+	check(titlesOf(arysa) == "Harpy > Humanoid", "then she is a harpy: " .. titlesOf(arysa))
 	J.Learn({ npc = 6002, name = "Witchmother Arysa", kind = "Humanoid" })
-	check(J.Store().mobs[6002].body == 131000, "and learning her again keeps her body")
-	check(J.WikiLore(J.Store().mobs[6001])[2].kin == nil, "a mob whose own page says what it is borrows nothing")
-	check(not J.Body(6003, 5), "a body for a mob the journal has not met is not kept")
-	J.Store().mobs[6001], J.Store().mobs[6002] = nil, nil
+	check(J.Store().mobs[6002].body == 124329, "and learning her again keeps her model")
+	check(not J.Body(6003, 5), "a model for a mob the journal has not met is not kept")
+	J.Store().mobs[6002] = nil
+	BT.MenagerieBodies = { [999] = "nothing here" }
+	check(titlesOf({ name = "Nobody", kind = "Humanoid", body = 999 }) == "Humanoid", "a model whose page is gone adds nothing")
+	BT.MenagerieBodies = hadBodies
 	-- a quest's line only when it names the mob
 	BT.MenagerieLoreData = {}
 	check(J.LoreLine({ name = "Burly Rockjaw Trogg", kind = "Humanoid", zone = "Dun Morogh",

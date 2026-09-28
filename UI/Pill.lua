@@ -306,7 +306,6 @@ end
 -- moved. Compared on the screen that showed it (`/bt pixels snap off`), the
 -- borders held steadier unsnapped: a plain-coloured line exactly one pixel
 -- thick covers exactly one row of pixels wherever it lands. So off it is.
--- `/bt pixels snap on` still turns it back on, until the next /reload.
 P.snapping = false
 
 function P.Snap(t)

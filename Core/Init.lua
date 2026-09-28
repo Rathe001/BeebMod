@@ -81,8 +81,9 @@ BT.TITLE = "BeebMod"
 BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-beta.7"
 BT.SCHEMA = 13
 -- Bumped by hand whenever something changes that must be reloaded to take
--- effect. /bt debug prints it, so "did the reload take?" is never a guess.
-BT.BUILD = "2026-09-27-pictures"
+-- effect. What loaded, on the Testing page, prints it, so "did the reload
+-- take?" is never a guess.
+BT.BUILD = "2026-09-28-testing"
 
 BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off
@@ -255,24 +256,6 @@ function BT.MoveModuleNextTo(key, beforeKey, afterKey)
 		end
 	end
 	table.insert(keys, at, key)
-	BT.settings.order = keys
-	BT.SortModules()
-	return keys
-end
-
--- Put one module at a position (1 = first) and keep the rest in their order.
-function BT.MoveModule(key, to)
-	if not (BT.settings and byKey[key]) then
-		return nil
-	end
-	local keys = {}
-	for _, m in ipairs(modules) do
-		if m.key ~= key then
-			keys[#keys + 1] = m.key
-		end
-	end
-	to = math.max(1, math.min(#keys + 1, math.floor(to or 1)))
-	table.insert(keys, to, key)
 	BT.settings.order = keys
 	BT.SortModules()
 	return keys
@@ -592,6 +575,72 @@ function BT.RunCommand(name, rest)
 	return true
 end
 
+-- RECORDS FOR CLAUDE (Josh 2026-09-28: "We don't need hundreds of slash
+-- commands for debugging. I'd actually prefer to use the 'Testing' module
+-- with buttons/toggles going forward"). Each module that can write down how
+-- the game built its frames registers that here, under the key it writes in
+-- BeebModDB, and the Testing page's Record button runs every one whose module
+-- is on. Claude reads the saved file after a /reload, under the same keys the
+-- old commands used.
+--
+-- `run` writes the record and returns what it wrote, or returns nothing when
+-- it only waits for something to happen (the next menu you open). `later`
+-- says in words what it waits for. A record with no `run` (the CPU
+-- measurement, started from its own button) is only cleared.
+local records = {}
+
+function BT.Record(key, run, moduleKey, later)
+	records[#records + 1] = { key = key, run = run, module = moduleKey, later = later }
+end
+
+function BT.Records()
+	return records
+end
+
+-- every record whose module is on: how many were written now, and what the
+-- rest wait for, in words
+function BT.RecordAll()
+	local wrote, waits = 0, {}
+	for _, r in ipairs(records) do
+		if r.run and (not r.module or BT.Enabled(r.module)) then
+			local ok, n = pcall(r.run)
+			if not ok then
+				BT.Err(("record %s: %s"):format(r.key, tostring(n)))
+			else
+				if n ~= nil then
+					wrote = wrote + 1
+				end
+				if r.later then
+					waits[#waits + 1] = r.later
+				end
+			end
+		end
+	end
+	return wrote, waits
+end
+
+-- Older builds wrote a few reports into the settings instead; they go too.
+local OLD_REPORTS = { "menagerieLoreReport", "menagerieModelReport", "menagerieMapReport", "menagerieSceneReport" }
+
+-- every record out of the saved file; how many there were
+function BT.ClearRecords()
+	BT.EnsureBound()
+	local n = 0
+	for _, r in ipairs(records) do
+		if BeebModDB[r.key] ~= nil then
+			BeebModDB[r.key] = nil
+			n = n + 1
+		end
+	end
+	for _, key in ipairs(OLD_REPORTS) do
+		if BT.settings and BT.settings[key] ~= nil then
+			BT.settings[key] = nil
+			n = n + 1
+		end
+	end
+	return n
+end
+
 -- ---------------------------------------------------------------------------
 -- THE BOOK
 -- ---------------------------------------------------------------------------
@@ -623,7 +672,8 @@ end
 -- WHAT THE CLIENT HANDED US (Josh 2026-09-19). A morning came where a book of
 -- 1,913 characters came up empty and nothing in the addon could say why. This
 -- is the witness: the state of the saved variables recorded BEFORE a single
--- line of ours has touched them. /bt boot reads it back.
+-- line of ours has touched them. What loaded, on the Testing page, reads it
+-- back.
 function BT.BootReport()
 	local r = { type = type(BeebModDB), books = {}, total = 0 }
 	if type(BeebModDB) == "table" then
@@ -867,7 +917,7 @@ function BT.AcceptLateBook()
 	local session = BT.db
 	BT.Bind(sc.realm, sc.faction)
 	local added = BT.DB.Adopt(BT.db, session)
-	-- kept for /bt boot rather than announced: nothing is printed at login
+	-- kept for What loaded rather than announced: nothing is printed at login
 	BT.lateBook = { found = n, kept = added }
 	return true
 end
@@ -938,7 +988,7 @@ function BT.AdoptBook(text)
 	return nil
 end
 
--- What your other books hold, for /bt stats.
+-- What your other books hold, for The book on the Testing page.
 function BT.OtherBooks()
 	local out = {}
 	for key, book in pairs(BeebModDB and BeebModDB.realms or {}) do

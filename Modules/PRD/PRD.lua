@@ -594,8 +594,7 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("This is your own nameplate. The game shows it when the nameplateShowSelf setting is on. "
-		.. "Type /bt prddump to write its frames into the saved file.")
+	page:Note("This is your own nameplate. The game shows it when the nameplateShowSelf setting is on.")
 	local plateSection = page:Section("The display")
 	self.rows = {
 		switchRow(plateSection, "Theme the bars", "Flat bars in a one-pixel rim, in place of the game's art", "theme", true),
@@ -652,19 +651,15 @@ function M.CurrentPlate()
 end
 
 -- ---------------------------------------------------------------------------
--- Commands
+-- The record
 -- ---------------------------------------------------------------------------
 
-BT.Command("prd", function()
-	local n = M.Apply()
-	if not (plate and plate.IsVisible and plate:IsVisible()) then
-		U.Print("Resource display: not on screen. It needs nameplateShowSelf on. Type /bt prddump to see what is there.")
-	else
-		U.Print(("Resource display: %d pieces redrawn · %s"):format(n, M.Said()))
-	end
-	-- THE RAW ANSWERS (Josh 2026-09-22), because "0 of 5" can be a client
-	-- that counts points somewhere else, and "not shown" can be a row hung
-	-- behind the bar it is under
+-- THE RAW ANSWERS (Josh 2026-09-22), because "0 of 5" can be a client that
+-- counts points somewhere else, and "not shown" can be a row hung behind the
+-- bar it is under. The first lines of the record.
+local function rawAnswers(add)
+	add(("on screen %s · %s"):format(tostring(plate and plate.IsVisible and plate:IsVisible() and true or false),
+		M.Said()))
 	local function raw(fn, ...)
 		if type(fn) ~= "function" then
 			return "n/a"
@@ -673,39 +668,42 @@ BT.Command("prd", function()
 		if not ok then
 			return "err"
 		end
-		-- a secret value printed makes the whole chat line secret, and the
-		-- chat module then cannot read its own line
+		-- a secret put into a string makes the whole string secret, and a
+		-- secret cannot be saved
 		if issecretvalue and issecretvalue(v) then
 			return "secret"
 		end
 		return tostring(v)
 	end
-	U.Print(("  plate %s · found by %s · UnitFrame %s"):format(
+	add(("  plate %s · found by %s · UnitFrame %s"):format(
 		tostring(plate and (BT.Furniture.Call(plate, "GetName") or "unnamed") or "none"),
 		tostring(M.foundBy), tostring(plate and plate.UnitFrame ~= nil)))
-	U.Print(("  UnitPower(%d)=%s max=%s · GetComboPoints=%s · power type=%s · class=%s"):format(
+	add(("  UnitPower(%d)=%s max=%s · GetComboPoints=%s · power type=%s · class=%s"):format(
 		COMBO, raw(UnitPower, "player", COMBO), raw(UnitPowerMax, "player", COMBO),
 		raw(GetComboPoints, "player", "target"), raw(UnitPowerType, "player"),
 		tostring(select(2, pcall(function() return select(2, UnitClass("player")) end)))))
 	local h = M.PipFrame()
 	local anchor = M.pipAnchor
-	U.Print(("  pips %s · under %s · %d squares · anchor bottom %s"):format(
+	add(("  pips %s · under %s · %d squares · anchor bottom %s"):format(
 		h and (h:IsShown() and "shown" or "hidden") or "none",
 		tostring(anchor and (BT.Furniture.Call(anchor, "GetName") or BT.Furniture.KeyOf(plate, anchor) or "unnamed") or "nothing"),
 		h and #h.squares or 0,
 		tostring(BT.Pill.Number(anchor and BT.Furniture.Call(anchor, "GetBottom"), "secret"))))
-end, "restyle the resource display now", "prd")
+end
 
-BT.Command("prddump", function(rest)
-	if (rest or "") == "clear" then
-		BT.EnsureBound()
-		BeebModDB.prdDump = nil
-		U.Print("Resource display: cleared the dump.")
-		return
-	end
+-- the resource display's frames, and every plate the client lists, into the
+-- saved file (the Testing page's Record button)
+function M.Dump()
 	local p, how = M.Plate()
 	local lines = BT.Furniture.Dump(p and { p } or {})
 	table.insert(lines, 1, "player plate: " .. (p and ("found by " .. tostring(how)) or "NOT FOUND"))
+	local answers = {}
+	rawAnswers(function(line)
+		answers[#answers + 1] = line
+	end)
+	for n = #answers, 1, -1 do
+		table.insert(lines, 1, answers[n])
+	end
 	-- and every plate the client will list, whose it says it is, and the
 	-- driver's own bars: enough to name the thing on the next attempt
 	if C_NamePlate and C_NamePlate.GetNamePlates then
@@ -752,5 +750,7 @@ BT.Command("prddump", function(rest)
 		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
 		lines = lines,
 	}
-	U.Print(("Resource display: wrote down %d lines. Type /reload to save them."):format(#lines))
-end, "prddump [clear] - write the resource display's frames into the saved file", "prd")
+	return #lines
+end
+
+BT.Record("prdDump", M.Dump, "prd")

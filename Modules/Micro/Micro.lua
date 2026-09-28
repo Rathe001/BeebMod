@@ -914,9 +914,9 @@ function M:Refresh()
 	self:RefreshTab()
 end
 
--- /bt microdump: every button's faces as they are this moment - rest the
--- pointer on a button while you type it, and its hover state is written too
-BT.Command("microdump", function()
+-- Every button's faces as they are this moment, into the saved file (the
+-- Testing page's Record button). A button under the pointer says so.
+function M.Dump()
 	local lines = {}
 	for _, b in ipairs(M.Buttons()) do
 		local name = tostring(b.GetName and b:GetName())
@@ -939,9 +939,7 @@ BT.Command("microdump", function()
 	end
 	BT.EnsureBound()
 	BeebModDB.microDump = { at = U.Now(), lines = lines }
-	U.Print(("Micro menu: wrote down %d lines. Type /reload to save them."):format(#lines))
-end, "microdump - write the menu buttons' pictures into the saved file", "micro")
+	return #lines
+end
 
-BT.Command("micro", function()
-	U.Print(("Micro menu: redrew %d buttons."):format(M.StyleAll()))
-end, "restyle the micro menu now", "micro")
+BT.Record("microDump", M.Dump, "micro")

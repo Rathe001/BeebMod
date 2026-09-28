@@ -365,8 +365,8 @@ end
 -- The flash: a colour against the seconds left, as a step curve
 -- ---------------------------------------------------------------------------
 
--- how far each lane got, for /bt timers: buttons the client asked us to
--- dress, duration bars and flashes it took
+-- how far each lane got, for T.Report (Over-time bars, on the Testing page):
+-- buttons the client asked us to dress, duration bars and flashes it took
 T.seen = { inits = 0, bars = 0, texts = 0 }
 
 -- THE FLASH IS THE CLIENT'S (Josh 2026-09-24, /bt timers in game: 530
@@ -740,7 +740,8 @@ function T.DotSection(page, changed)
 	return dots
 end
 
--- /bt timers: where the lanes got to, from the spells found to the blink
+-- Over-time bars, on the Testing page: where the lanes got to, from the
+-- spells found to the blink
 local function say(...)
 	BT.Util.Print(...)
 end
@@ -784,10 +785,6 @@ function T.Report()
 	if (T.Blinks("hot") or T.Blinks("dot")) and not T.BlinkCurve() then
 		say("  |cffff6b6bno colour curve|r, so BeebMod can't draw the flash")
 	end
-end
-
-if BT.Command then
-	BT.Command("timers", function() T.Report() end, "where the over-time bars got to")
 end
 
 -- a new rank learned, or the book read for the first time at login

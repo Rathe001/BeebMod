@@ -584,7 +584,7 @@ end
 -- ---------------------------------------------------------------------------
 --
 -- A PREVIEW DRAWS ITS OWN (Josh 2026-09-23). A container reads a real unit,
--- and the people in /bt frames test are not real; so a preview's auras are
+-- and the Testing page's made-up people are not real; so a preview's auras are
 -- plain frames of ours laid out exactly as the containers lay theirs - the
 -- same rows, sizes, black edges, dispel colours and stack counts - with the
 -- real spells' pictures. The dispel mark is shown on a preview whatever your

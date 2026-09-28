@@ -39,7 +39,7 @@ settings.
 
 | tab | what it is |
 |---|---|
-| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. One Size setting covers them all. Shift-drag a block to move it. Type `/bt frames test` or `/bt frames raid` to preview a group. Switch them off, or one kind off, and the game's own frames come back. |
+| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. One Size setting covers them all. Shift-drag a block to move it, and Reset on the page puts every block back. Made-up people, on the Testing page, shows a made-up party or raid. Switch them off, or one kind off, and the game's own frames come back. |
 | **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
 | **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). |
 | **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
@@ -75,6 +75,13 @@ dock shows your points and rank. Click it to open the journal, or type
 `/bt demo`, shows a made-up realm, notes, a journal and a party in every
 feature at once. BeebMod saves none of it.
 
+**The Testing page** is also where the debug tools are. Its buttons show a
+sample mastery toast, print BeebMod's reports to chat (What loaded, Over-time
+bars, The book), and write records for Claude into the saved file. Record
+writes down how the game built each part you have on, and also the next menu
+you open and your next fight. Clear takes the records out again. CPU use times
+BeebMod for 10 seconds. Type `/reload` after a record to save it.
+
 ### Adding a utility
 
 A utility is one file and one call, which give it a tab and a place on the
@@ -90,7 +97,14 @@ function M:BuildTab(parent) ... end    -- built once, the first time it opens
 function M:Cells() return { ... } end  -- what it adds to the dock
 function M:OnBind(db) ... end          -- the settings are bound: migrate, sweep
 BT.Command("mycmd", function(rest) ... end, "what it does", "myutility")
+BT.Record("myDump", M.Dump, "myutility")  -- a record for the Testing page
 ```
+
+A command is for something you type, such as a name or a number of days. A
+debug tool is a button on the Testing page instead. A dump of the game's
+frames is a function that writes into `BeebModDB` under its own key and
+returns how many lines it wrote. `BT.Record` registers it, so the page's
+Record button runs it and its Clear button takes it out.
 
 A hook that goes through saved data and removes anything belongs to the
 module that owns that data, never to the core. A utility you have switched
@@ -105,7 +119,7 @@ lives in `Modules/Ledger`.
                          and Pick Pocket: when one starts, and its pace an hour
     Core/DB.lua          one row per character: read, write, merge, prune
     Core/Collect/        what the client tells BeebMod without being asked
-    Core/Slash.lua       /bt, and BeebMod's own commands
+    Core/Slash.lua       /bt, /bt help, and What loaded for the Testing page
     Core/Boot.lua        the core's own login: the settings, the dock, then BT.OnWorld
     Core/Demo.lua        made-up data for screenshots: one switch, each feature's own
     UI/Window.lua        the window: a block per feature down the side, a page per tab
@@ -142,10 +156,12 @@ lives in `Modules/Ledger`.
                          in a fight. Also your buffs' tray beside the dock
                          (Buffs.lua)
     Modules/Menu/        the game menu Escape opens, restyled (look only)
-    Core/UnitProbe.lua   /bt unitprobe: what the client tells a unit frame
-    Core/Cpu.lua         /bt cpu: times what runs on its own (updates, events,
-                         timers) by the file that made it; every file after it
-                         takes CreateFrame and C_Timer from here, one line
+    Core/UnitProbe.lua   what the client tells a unit frame, written down by
+                         Record on the Testing page
+    Core/Cpu.lua         CPU use on the Testing page: times what runs on its
+                         own (updates, events, timers) by the file that made
+                         it; every file after it takes CreateFrame and C_Timer
+                         from here, one line
     Core/Fonts.lua       the typefaces BeebMod can use (a list, one line a
                          face), and its own font objects, set in the chosen one
     Art/Fonts/           Google Sans, Google Sans Flex (static cuts), Fira Code,
@@ -156,25 +172,31 @@ lives in `Modules/Ledger`.
                          each mastery metal (scripts/make-cards.lua, in Lua)
     Modules/Menagerie/LoreData.lua
                          the cards' lore: short descriptions from Warcraft Wiki
-                         pages (https://warcraft.wiki.gg) on the races, tribes,
-                         clans, animals, beast families and creature types mobs
-                         are named after, and on every mob of every Classic
-                         zone, dungeon and raid. Text under CC BY-SA 3.0,
+                         pages (https://warcraft.wiki.gg) on every mob of every
+                         Classic zone, dungeon and raid, and on the races,
+                         animals, beast families and creature types they are.
+                         A card shows the page titled with the mob's whole
+                         name, then its model's page, its family's and its
+                         type's. Text under CC BY-SA 3.0,
                          credited on each mob's page. scripts/fetch-lore.ps1
                          writes it. The script keeps what it fetched and asks
                          the wiki only for what is new; -Rebuild writes the
                          file again from what it kept, asking only for mobs met
                          since. scripts/lore-curated.json holds the text checked
                          by hand against docs/lore-rules.md, and the script
-                         uses it in place of the wiki's. /bt expedition lore
-                         says where each mob's lore came from
+                         uses it in place of the wiki's. An entry there with a
+                         "kind" is a whole page written by hand, such as Satyr
+    Modules/Menagerie/BodyData.lua
+                         what each model file is, by its folder in the
+                         community listfile: creature/harpy is a harpy.
+                         Written by scripts/make-bodies.lua, which says how to
+                         get the listfile
     Art/Patterns/        a tiling texture for each debuff type (magic sparks,
                          curse smoke, poison bubbles, disease spores, bleed
                          drips), so you can tell a dispel mark by its shape as
                          well as its colour
     Art/Rank/            the Art Deco corner and crest round an elite or rare
                          mob's frame, gold or silver (scripts/make-rank.py)
-    Core/Profile.lua     /bt mem and /bt prof
 
 ## Tests
 
@@ -351,7 +373,7 @@ can read a whole quest log.
 A chat event carries the sender's name and GUID, but no class or race.
 `GetPlayerInfoByGUID` gives both from the GUID, which is how the chat frame
 colours a sender's name by class. BeebMod looks up every chat sighting that
-way as it arrives. `/bt identify`, which also runs once at login, looks up
+way as it arrives. Once a session, soon after login, BeebMod also looks up
 anyone already in the book who has a GUID but no class. This can't give a
 level. Only seeing someone, or a `/who` row you ran yourself, gives a level.
 
@@ -374,11 +396,9 @@ players costs one table lookup per meter row instead of one write.
 ## What ages, and how BeebMod shows it
 
 Only meeting a character again updates what BeebMod knows about them. So
-every field keeps the time it was seen, and the display tells you how old it
-is. BeebMod drops the zone after 30 minutes. A level more than half a day old
-shows as a floor ("3+"). A guild more than a day old says "as of 3 days ago".
-The tooltip never repeats level or guild, because the unit in front of you
-already shows those.
+every field keeps the time it was seen. A level more than half a day old
+shows as a floor ("3+"). The tooltip never repeats level or guild, because
+the unit in front of you already shows those.
 
 There is no spec chart. Nothing shows a stranger's talents, and inspecting
 needs them targeted and in range. The fourth chart shows your own tags

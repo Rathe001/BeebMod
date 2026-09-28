@@ -84,11 +84,6 @@ function DB.Slim(db)
 	return done
 end
 
-function DB.Migrate(db)
-	db.schema = db.schema or BT.SCHEMA
-	-- future schema bumps land here; version 1 is the first shape
-end
-
 function DB.Players(db)
 	db = db or BT.db
 	return db and db.players or {}

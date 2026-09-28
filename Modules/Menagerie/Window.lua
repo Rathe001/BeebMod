@@ -178,8 +178,7 @@ end
 -- ONLY THE CARDS IN VIEW EXIST: the grid is arithmetic, and scrolling hands
 -- the same few cards new mobs - a book of five hundred kinds costs what one
 -- screenful does. The strip scrolls smoothly and a row part in view is drawn,
--- clipped at the grid's edge; only its model waits until it is wholly in view,
--- since whether this client clips a model is not known (V.Deal).
+-- clipped at the grid's edge, its model with it (V.Deal, V.Crop).
 
 -- A RAIL, NOT HEADINGS (Josh 2026-09-26: "a rail on the left rather than sub
 -- headings and accordions. We will have a ton of zones"). The types or zones
@@ -338,8 +337,8 @@ function V.BuildBestiary()
 		return at
 	end
 	-- GLIDING, AND AT REST ON A ROW (Josh 2026-09-27: "Scrolling gets into a
-	-- state where only 1 row renders portraits"). A face part out of view is
-	-- held back (V.Crop), and a strip stopped anywhere had one whole row of
+	-- state where only 1 row renders portraits"). A face part out of view was
+	-- held back then, and a strip stopped anywhere had one whole row of
 	-- faces between two half ones. So the strip moves smoothly but comes to
 	-- rest with a row at its top: the wheel glides a row a notch, and a drag
 	-- or a click in the gutter glides to the nearest row when it lets go.
@@ -732,7 +731,12 @@ function V.Facts(npc, kills, all)
 		-- a page borrowed from a mob with the same body is taken as fact
 		-- (Josh 2026-09-26: "We should just assume it is a harpy if the
 		-- model is the same"), headed like any other
-		f.lore[#f.lore + 1] = { head = #f.lore > 0 and e.title or nil, text = (e.text:gsub("%[(.-)%]", "%1")) }
+		-- A HEADING WITHOUT THE WIKI'S TAG (Josh 2026-09-28, on "Timber Wolf
+		-- (mob)"): the wiki tells its pages apart with "(mob)" or
+		-- "(Darkshore)"; the heading is the name, and the credit keeps the
+		-- page's full title
+		local head = #f.lore > 0 and (e.title:gsub("%s*%b()$", "")) or nil
+		f.lore[#f.lore + 1] = { head = head, text = (e.text:gsub("%[(.-)%]", "%1")) }
 		titles[#titles + 1] = e.title
 	end
 	local q = type(m.lore) == "table" and m.lore or nil
@@ -752,7 +756,10 @@ function V.Facts(npc, kills, all)
 	-- the category now (J.Category), which says the rank and more
 	local _, catWord, catColor = V.CategoryOf(m)
 	local meta = {}
-	local parts = { J.KindOf(m), m.family, level(m), inColour(catWord, catColor), m.zone }
+	-- a critter is not said to be a critter twice (Josh 2026-09-28, on a
+	-- Sickly Deer: "Critter · Level 5 · Critter"), as in the list
+	local cat = catWord ~= J.KindOf(m) and inColour(catWord, catColor) or nil
+	local parts = { J.KindOf(m), m.family, level(m), cat, m.zone }
 	for i = 1, 5 do
 		if parts[i] then
 			meta[#meta + 1] = parts[i]
@@ -971,10 +978,6 @@ local function freeze(model)
 			used[#used + 1] = f[1]
 		end
 	end
-	-- whether the effects could be switched off instead, should pausing
-	-- not be enough - asked, not done: a mob made of lightning is not much
-	-- without it
-	V.canHideEffects = type(model.SetParticlesEnabled) == "function"
 	if #used > 0 then
 		V.freezeWith = table.concat(used, " + ")
 		return true
@@ -1114,19 +1117,15 @@ end
 -- of 2 so the models don't flash in?"). Cut to the view with SetViewInsets,
 -- a face did not lose its outside part: the client fitted the whole face into
 -- what was left ("Scrolling causes the bottom row to resize strangely"). So
--- a face part out of view is held back until it is wholly in, unless the
--- setting says to draw it whole and trust the grid to clip it
--- (menagerieEdge "show", /bt menagerie edge) - which only this client can
--- say it does. `over` and `under` are how much of a face `tall` high is above
--- and below the view. Whether it is to be shown.
+-- a face part out of view was held back until it was wholly in.
+-- DRAWN WHOLE, THE GRID CLIPS IT (Josh 2026-09-28, when that became the only
+-- way: "We need the portrait functionality back... portraits go missing on
+-- scroll again"). A face with any of itself in view is drawn whole, and the
+-- grid's edge clips it, as the "show" setting did on this client. `over` and
+-- `under` are how much of a face `tall` high is above and below the view.
+-- Whether it is to be shown.
 function V.Crop(model, over, under, tall)
-	if over + under >= tall then
-		return false
-	end
-	if over > 0 or under > 0 then
-		return (BT.settings and BT.settings.menagerieEdge) == "show"
-	end
-	return true
+	return over + under < tall
 end
 
 -- ---------------------------------------------------------------------------
@@ -1481,10 +1480,8 @@ function V.Deal()
 	-- A STRIP THAT SCROLLS (Josh 2026-09-27: "Rather than actually scrolling a
 	-- rendered list of items, it seems to only ever show 2 rows at a time").
 	-- Every row with any of itself in view is drawn, and the grid's edge clips
-	-- the card. A model is not known to be clipped with it, so a face part out
-	-- of view is cropped to the view (V.Crop), or put away until it is wholly
-	-- in where the client will not crop one (and framed again when it comes
-	-- back).
+	-- the card and the face on it (V.Crop). A face wholly out of view is put
+	-- away until it comes back in, and framed again when it does.
 	-- Each row of the strip keeps the same cards for as long as it is in view
 	-- - a card is its row's place in a ring of rows, not its place on the
 	-- screen - so scrolling moves models rather than loading them afresh.
@@ -1731,56 +1728,6 @@ end
 function V.Close()
 	V.open = nil
 	V.Refresh()
-end
-
--- WHERE THE CAMERA LOOKS (Josh 2026-09-26: "center the camera on the body's
--- midsection? Right now it is on the absolute center of the model, so really
--- long tails make camera rotation act strange"). The model turns about its
--- origin while the camera aims at the middle of everything, tail and all.
--- Which calls this client has for moving either one is not written down
--- anywhere, so it is asked: every camera, position and bounds call a model
--- answers to, and what each says about the model on the open page.
-local ASK = { "Camera", "Position", "Bound", "Center", "Transform", "Scale", "Facing", "Target", "Distance", "Pitch", "Yaw",
-	"File", "Display" }
-
-function V.ModelReport()
-	local model = frame and frame.bestiary and frame.bestiary.page.model
-	if not (model and V.open) then
-		return nil
-	end
-	local out = { ("model of NPC %d, facing %s"):format(V.open, tostring(model.facing)) }
-	local names = {}
-	local mt = getmetatable(model)
-	local index = mt and mt.__index
-	if type(index) == "table" then
-		for name, fn in pairs(index) do
-			if type(fn) == "function" then
-				for _, word in ipairs(ASK) do
-					if name:find(word) then
-						names[#names + 1] = name
-						break
-					end
-				end
-			end
-		end
-	end
-	table.sort(names)
-	out[#out + 1] = "calls: " .. table.concat(names, " ")
-	-- and what the ones that read something say now
-	for _, name in ipairs(names) do
-		if name:match("^Get") or name:match("^Is") then
-			local r = { pcall(model[name], model) }
-			if r[1] then
-				local vals = {}
-				for i = 2, math.max(#r, 2) do
-					local v = r[i]
-					vals[#vals + 1] = type(v) == "number" and ("%.3f"):format(v) or tostring(v)
-				end
-				out[#out + 1] = ("%s = %s"):format(name, table.concat(vals, ", "))
-			end
-		end
-	end
-	return out
 end
 
 -- THE WHOLE LADDER, NOT THE NEXT RUNG (Josh 2026-09-27: "The mastery progress

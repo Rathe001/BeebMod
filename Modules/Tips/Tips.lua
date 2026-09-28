@@ -88,8 +88,7 @@ local PAD_BOTTOM = -3
 -- and the name centred in it are three things the client's own twelve-pixel
 -- inset will not allow at once - so the inset itself is what has to give. A
 -- negative top padding asks the client to start its first line higher than it
--- otherwise would; if it refuses, nothing is worse than it was, and
--- /bt tips pad reports the inset it actually used.
+-- otherwise would; if it refuses, nothing is worse than it was.
 local PAD_TOP = -6
 -- THE HEADER'S RULE (Josh 2026-09-22). The name used to sit on a wash of its
 -- class colour that faded out to the right - the one gradient in the addon,
@@ -891,66 +890,6 @@ local function questBlock(tip)
 	return out, used
 end
 
--- A READ-ONLY LOOK AT WHAT THE TOOLTIP ACTUALLY IS: every line with its size,
--- the padding, the height, and the health bar's own geometry. Kept rather than
--- printed, because a tooltip is gone by the time you have typed anything.
-M.snaps = {}
-
-function M.Snapshot(tip, when)
-	if not (tip and tip.NumLines) then
-		return
-	end
-	local N = BT.Pill.Number
-	local snap = { when = when, lines = {} }
-	local ok, n = pcall(tip.NumLines, tip)
-	n = ok and N(n, 0) or 0
-	for i = 1, n do
-		local fs = lineOf(tip, i)
-		local text = fs and fs.GetText and fs:GetText()
-		local size = fs and fs.GetFont and select(2, fs:GetFont())
-		snap.lines[i] = ("%d [%s] %s"):format(i, tostring(N(size, 0)),
-			(type(text) == "string") and ("'" .. text .. "'") or tostring(text))
-	end
-	if tip.GetPadding then
-		local okp, r, b, l, t = pcall(tip.GetPadding, tip)
-		snap.padding = okp
-			and ("r%s b%s l%s t%s"):format(N(r, -1), N(b, -1), N(l, -1), N(t, -1))
-			or "unreadable"
-	else
-		snap.padding = "no GetPadding on this client"
-	end
-	snap.height = N(tip.GetHeight and tip:GetHeight(), -1)
-	-- THE BAND, IN NUMBERS (Josh 2026-09-20). Three goes at seating the name
-	-- in its own wash by reasoning about where the client puts a tooltip line.
-	-- These are the four values the answer is made of.
-	local fs1 = lineOf(tip, 1)
-	local sk = skins[tip]
-	snap.band = ("tip top %s · line1 top %s bottom %s height %s · rule top %s · scale %s")
-		:format(N(tip.GetTop and tip:GetTop(), -1),
-			N(fs1 and fs1.GetTop and fs1:GetTop(), -1),
-			N(fs1 and fs1.GetBottom and fs1:GetBottom(), -1),
-			N(fs1 and fs1.GetHeight and fs1:GetHeight(), -1),
-			N(sk and sk.rule and sk.rule.GetTop and sk.rule:GetTop(), -1),
-			N(tip.GetEffectiveScale and tip:GetEffectiveScale(), -1))
-	local bar = GameTooltipStatusBar
-	if bar then
-		snap.bar = ("%s h%s"):format(bar:IsShown() and "shown" or "hidden",
-			N(bar.GetHeight and bar:GetHeight(), -1))
-		if bar.GetNumPoints and bar.GetPoint then
-			local pts = {}
-			for i = 1, N(bar:GetNumPoints(), 0) do
-				local pt, _, rel, x, y = bar:GetPoint(i)
-				pts[#pts + 1] = ("%s->%s %s,%s")
-					:format(tostring(pt), tostring(rel), N(x, 0), N(y, 0))
-			end
-			snap.bar = snap.bar .. " · " .. table.concat(pts, " | ")
-		end
-	else
-		snap.bar = "no status bar"
-	end
-	M.snaps[when] = snap
-end
-
 -- THE BAND IS A LINE (Josh 2026-09-19). Measured, finally, rather than
 -- reasoned about: the padding was ours all along (r4 b2 l4 t2) and the tooltip
 -- simply had a fifth line on it reading " " at ten point. The client reserves
@@ -1231,17 +1170,6 @@ function M.Compose(tip, unit)
 		local ranked = worn.ornament and worn.ornament.style ~= nil
 		worn.accent:SetShown(not ranked)
 		M.LeftBar(worn)
-	end
-
-	-- OFF UNLESS ASKED (Josh 2026-09-19). Read-only either way, but scheduling
-	-- anything at all against a tooltip is the shape of bug that produced the
-	-- tiny text and the flicker, so the default path schedules nothing.
-	-- /bt tips pad on turns it on for as long as it takes to measure.
-	if M.measuring then
-		M.Snapshot(tip, "after the rebuild")
-		if C_Timer and C_Timer.After then
-			C_Timer.After(0, function() M.Snapshot(tip, "one frame later") end)
-		end
 	end
 end
 
@@ -1772,7 +1700,7 @@ M.DressOther = dressOther
 -- Blizzard settings control, in the first case that hit. We are now dressing
 -- frames nobody named and nobody has seen, so one of them being unlike the
 -- rest has to be survivable: it wears the client's own skin for the session
--- and the reason is on /bt debug, rather than taking the panel down with it.
+-- and the reason is on What loaded, rather than taking the panel down with it.
 local function hook(tip, key)
 	if not (tip and tip.HookScript) or M.dressed[key] then
 		return false
@@ -2154,78 +2082,3 @@ end
 function M:Refresh()
 	self:RefreshPreview()
 end
-
-BT.Command("tips", function(rest)
-	-- MEASURING, NOT GUESSING (Josh 2026-09-19). The band of empty space under
-	-- the last line has survived three fixes, each aimed at a mechanism I had
-	-- reasoned my way to. This prints what the tooltip actually is.
-	if rest == "pad on" or rest == "pad off" then
-		M.measuring = (rest == "pad on")
-		U.Print(M.measuring and "Tooltips: measuring on. Point at a player or mob, then type /bt tips pad."
-			or "Tooltips: measuring off.")
-		return
-	end
-	if rest == "skin" then
-		-- the same lesson as the band under the last line: look at what the
-		-- frame IS rather than reason about what it should be (Josh 2026-09-19)
-		local tip = _G.ShoppingTooltip1
-		if not tip then
-			U.Print("Tooltips: this game has no compare tooltip.")
-			return
-		end
-		local N = BT.Pill.Number
-		local function dump(frame, label)
-			U.Print(("|cff74c0fc%s|r %s"):format(label, tostring(frame.GetName and frame:GetName())))
-			for _, region in ipairs({ frame:GetRegions() }) do
-				local kind = region.GetObjectType and region:GetObjectType()
-				local what = tostring(region.GetName and region:GetName())
-				if kind == "FontString" then
-					what = what .. " '" .. tostring(region.GetText and region:GetText()) .. "'"
-				elseif kind == "Texture" then
-					what = what .. " tex=" .. tostring(region.GetTexture and region:GetTexture())
-						.. " atlas=" .. tostring(region.GetAtlas and region:GetAtlas())
-				end
-				U.Print(("   %s %s %s h%s"):format(tostring(kind),
-					region:IsShown() and "shown" or "hidden", what,
-					N(region.GetHeight and region:GetHeight(), -1)))
-			end
-		end
-		dump(tip, "compare")
-		for i, child in ipairs({ tip:GetChildren() }) do
-			dump(child, "child " .. i)
-		end
-		return
-	end
-	if rest == "pad" then
-		if not M.measuring then
-			U.Print("Tooltips: nothing measured. Type /bt tips pad on, then point at a player or mob.")
-			return
-		end
-		for _, when in ipairs({ "after the rebuild", "one frame later" }) do
-			local snap = M.snaps[when]
-			if snap then
-				U.Print(("|cff74c0fc%s|r · height %s · padding %s"):format(when, snap.height, snap.padding))
-				U.Print("   band " .. tostring(snap.band))
-				U.Print("   bar " .. tostring(snap.bar))
-				for _, line in ipairs(snap.lines) do
-					U.Print("   " .. line)
-				end
-			end
-		end
-		return
-	end
-	local n = tonumber(rest)
-	if n then
-		setOpt("scale", math.max(0.7, math.min(1.2, n)))
-		BT.UnitTip.Restack()
-	end
-	U.Print(("Tooltips: %d%% · guild %s · faction %s · health bar %s")
-		:format(math.floor(opt("scale", 0.95) * 100 + 0.5),
-			opt("guild", true) and "on" or "off",
-			opt("faction", true) and "on" or "off",
-			opt("healthBar", false) and "on" or "off"))
-	U.Print("last unit classification · " .. tostring(M.lastClassification))
-	local T = BT.UnitTip
-	U.Print(("hooks · unit %s (%d fired) · item %s (%d fired)")
-		:format(tostring(T.path), T.fills or 0, tostring(T.itemPath), T.itemFills or 0))
-end, "tips [0.7-1.2] - set the tooltip size · /bt tips pad on|off|pad, /bt tips skin - measure the tooltip", "tips")

@@ -229,7 +229,7 @@ function M:BuildTab(panel)
 		function() return opt("theme", true) and true or false end,
 		function(on) M.SetThemed(on) end).switch
 	self.moveSwitch = BT.Widgets.SwitchRow(sheet, "Drag it by its title",
-		"It opens where you left it. Type /bt sheet reset to put it back.",
+		"It opens where you left it",
 		function() return opt("move", true) and true or false end,
 		function(on)
 			BT.EnsureBound()
@@ -239,6 +239,14 @@ function M:BuildTab(panel)
 				M.ResetPosition()
 			end
 		end).switch
+	-- PUT BACK FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
+	-- slash commands"): the Reset that /bt sheet reset was
+	local back = BT.Widgets.Row(sheet, "Where it opens", "Back where the game puts it")
+	self.resetButton = back:SetControl(BT.Widgets.Button(back, "Reset", 62, 20))
+	self.resetButton:SetScript("OnClick", function()
+		M.ResetPosition()
+		U.Print("Character sheet: the window is back where the game puts it.")
+	end)
 	page:Layout()
 end
 
@@ -266,7 +274,7 @@ end
 -- The theme
 -- ---------------------------------------------------------------------------
 --
--- A KEY OR A NAME (Josh 2026-09-22). /bt sheetdump labels a frame by its global
+-- A KEY OR A NAME (Josh 2026-09-22). The sheet's record labels a frame by its global
 -- name when it has one and by the key it hangs off otherwise, and most of this
 -- window's frames have names: CharacterFrameLeftPaneHost is a global, not a key
 -- on CharacterFrame. Read as keys, the layout found nothing to move but the
@@ -2814,24 +2822,4 @@ function M.Dump()
 	return #lines
 end
 
-BT.Command("sheetdump", function(rest)
-	if (rest or "") == "clear" then
-		BT.EnsureBound()
-		BeebModDB.sheetDump = nil
-		U.Print("Character sheet: cleared the dump.")
-		return
-	end
-	local n = M.Dump()
-	U.Print(("Character sheet: wrote down %d lines. Type /reload to save them."):format(n))
-end, "sheetdump [clear] - write the character window's frames into the saved file", "charsheet")
-
-BT.Command("sheet", function(rest)
-	if (rest or ""):lower() == "reset" then
-		M.ResetPosition()
-		U.Print("Character sheet: the window is back where the game puts it.")
-		return
-	end
-	local n = M.UpdateAll()
-	U.Print(opt("levels", true) and ("Character sheet: item level on %d slots."):format(n)
-		or "Character sheet: item levels are off.")
-end, "sheet [reset] - item level on every slot now, or reset to put the window back where the game puts it", "charsheet")
+BT.Record("sheetDump", M.Dump, "charsheet")

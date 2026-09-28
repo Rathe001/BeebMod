@@ -287,13 +287,3 @@ end
 function M:Refresh()
 	self:RefreshTab()
 end
-
-BT.Command("durability", function()
-	local d = M.Read()
-	if not d.pct then
-		U.Print("Durability: nothing you wear has any.")
-		return
-	end
-	U.Print(("Durability: %d%%%s"):format(d.pct,
-		d.worst and d.worst.pct < 100 and (" · most worn %s %d%%"):format(d.worst.name, d.worst.pct) or ""))
-end, "print how worn your gear is", "durability")

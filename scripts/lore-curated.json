@@ -200,6 +200,12 @@
 		"status": "keep",
 		"checked": true
 	},
+	"Air elemental": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Air elementals are creatures made of air, wind and storms. On Azeroth they are led by the Windlord Thunderaan.",
+		"checked": true
+	},
 	"Air Elemental (Darkshore)": {
 		"status": "keep",
 		"checked": true
@@ -1492,6 +1498,12 @@
 	},
 	"Bannok Grimaxe": {
 		"status": "keep",
+		"checked": true
+	},
+	"Banshee": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Banshees are undead elf and human women without bodies, known for their unholy screams and for possessing the bodies of their enemies. Many were made when the Scourge invaded Quel'Thalas in the Third War and slaughtered its high elves. Many banshees joined the Forsaken once they were freed from the Lich King.",
 		"checked": true
 	},
 	"Barak Kodobane": {
@@ -3024,6 +3036,12 @@
 	},
 	"Bodyguard (mob)": {
 		"status": "drop",
+		"checked": true
+	},
+	"Bog beast": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Bog beasts are large plant creatures of temperate marshes and damp caves. They are also called fen creepers, spore beasts or cave beasts.",
 		"checked": true
 	},
 	"Boiling Elemental": {
@@ -7485,6 +7503,12 @@
 		"status": "keep",
 		"checked": true
 	},
+	"Doomguard": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Doomguard are winged demons who serve the Burning Legion with great fervor, and once served as Archimonde's personal escort. They command the Legion's front-line forces. They use fire magic, dark curses and their weapons.",
+		"checked": true
+	},
 	"Doomguard Commander": {
 		"status": "keep",
 		"checked": true
@@ -7566,6 +7590,12 @@
 		"status": "keep",
 		"checked": true
 	},
+	"Dragon whelp": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Dragon whelps are the smallest and youngest dragons. Where there are whelps, their larger kin are usually close by, guarding the flight's eggs.",
+		"checked": true
+	},
 	"Dragon-Lord Neeralak": {
 		"status": "drop",
 		"checked": true
@@ -7632,8 +7662,20 @@
 		"status": "drop",
 		"checked": true
 	},
+	"Dragonspawn": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Dragonspawn are dragonkin that the dragons made to serve them. They make up the ground armies of the dragonflights.",
+		"checked": true
+	},
 	"Dragonspawn Refugee": {
 		"status": "keep",
+		"checked": true
+	},
+	"Drake": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Drakes are young dragons, weaker than their parents but still dangerous. A drake is about the size of a horse, with a wider wingspan. Drakes are common in the Burning Steppes, the Swamp of Sorrows and Winterspring.",
 		"checked": true
 	},
 	"Drakeadon": {
@@ -8261,6 +8303,12 @@
 	},
 	"Eagle": {
 		"status": "keep",
+		"checked": true
+	},
+	"Earth elemental": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Earth elementals are creatures made of rock.",
 		"checked": true
 	},
 	"Earth Elemental (Silithus)": {
@@ -9325,6 +9373,12 @@
 		"status": "keep",
 		"checked": true
 	},
+	"Felhound": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Felhounds are ugly, red, spined demons from the Twisting Nether. Pit lords use them to sniff out magic. They feed on it, draining wizards through two tendrils before tearing them apart.",
+		"checked": true
+	},
 	"Felhound (Blasted Lands)": {
 		"status": "keep",
 		"checked": true
@@ -9603,6 +9657,12 @@
 	},
 	"Fire Blossom": {
 		"status": "drop",
+		"checked": true
+	},
+	"Fire elemental": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Fire elementals are creatures made of fire and magma.",
 		"checked": true
 	},
 	"Fire Elemental (Darkshore)": {
@@ -10524,6 +10584,12 @@
 		"status": "drop",
 		"checked": true
 	},
+	"Furbolg": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Furbolgs are a hulking, simple-minded race of bear-men who live in the northern regions of Kalimdor. Many of their tribes have fallen to corruption and turned hostile, but some, such as the Timbermaw, tolerate outsiders. The furbolgs were old allies of the night elves.",
+		"checked": true
+	},
 	"Furious Air Elemental": {
 		"status": "drop",
 		"checked": true
@@ -10722,6 +10788,12 @@
 	},
 	"Garginox": {
 		"status": "drop",
+		"checked": true
+	},
+	"Gargoyle": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Gargoyles are large, vicious, bat-like creatures that can turn to stone for a time. Most of them serve the Scourge.",
 		"checked": true
 	},
 	"Gargoyle (Stratholme)": {
@@ -10949,6 +11021,12 @@
 		"status": "keep",
 		"checked": true
 	},
+	"Ghost": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Ghosts are tortured spirits, trapped between the realms of the living and the dead. They often don't know that they are no longer alive. Their hunger for touch does great harm to any living thing they reach.",
+		"checked": true
+	},
 	"Ghost Howl": {
 		"status": "keep",
 		"checked": true
@@ -10987,6 +11065,12 @@
 	},
 	"Ghostpaw Runner": {
 		"status": "keep",
+		"checked": true
+	},
+	"Ghoul": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Ghouls are rotting corpses that serve as the Scourge's shock troops. They were once innocent townsfolk, and they devour the flesh of the fallen. Ghouls terrorize the Plaguelands, and mindless ones are found in Silverpine Forest and Duskwood.",
 		"checked": true
 	},
 	"Ghoul Berserker": {
@@ -11375,6 +11459,12 @@
 		"status": "keep",
 		"checked": true
 	},
+	"Goblin": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Goblins are small green humanoids from the Isle of Kezan. Their love of money, explosives and technology makes them dangerous to their enemies and to themselves. Trade princes rule the goblin cartels, and most goblins stay neutral and sell their goods and services to other races.",
+		"checked": true
+	},
 	"Goblin Assassin": {
 		"status": "drop",
 		"checked": true
@@ -11442,6 +11532,12 @@
 	},
 	"Goldtooth": {
 		"status": "keep",
+		"checked": true
+	},
+	"Golem": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Golems are constructs made by magic from bone, flesh, metal or stone, and are thought to be mindless. They are usually built to guard a person, a place or a thing.",
 		"checked": true
 	},
 	"Golem Lord Argelmach": {
@@ -13953,6 +14049,12 @@
 		"status": "drop",
 		"checked": true
 	},
+	"Imp": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Imps are small, cackling, mischievous demons of felfire and trickery. Alone they are little threat, but in a group they can overwhelm an enemy. The imp is the first demon a warlock learns to summon.",
+		"checked": true
+	},
 	"Imp Minion": {
 		"status": "keep",
 		"checked": true
@@ -14010,6 +14112,12 @@
 	},
 	"Infectious Ghoul": {
 		"status": "keep",
+		"checked": true
+	},
+	"Infernal": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Infernals are nearly mindless masses of matter and fel energy, made by more powerful demons. They fall to earth as green, molten meteorites. They exist only to destroy every living thing in their path.",
 		"checked": true
 	},
 	"Infernal (Felwood)": {
@@ -15732,6 +15840,12 @@
 		"text": "Lars was a human quest giver at a small camp on the northern edge of the Hushed Bank in Duskwood. He spent his days trying to survive with his companion Sven Yorgen.",
 		"checked": true
 	},
+	"Lasher": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Lashers are walking plants found in many parts of Azeroth. Orchid lashers have especially large flowers.",
+		"checked": true
+	},
 	"Lashtail Raptor": {
 		"status": "rewrite",
 		"text": "Lashtail Raptors are raptors found in Stranglethorn Vale.",
@@ -15915,6 +16029,12 @@
 	},
 	"Ley Sprite": {
 		"status": "keep",
+		"checked": true
+	},
+	"Lich": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Liches are powerful undead, usually bound to the will of the Lich King. They wield frost magic and necromancy and often hold high rank in the Scourge. A lich binds its soul to a phylactery, and dies for good only when the phylactery is destroyed.",
 		"checked": true
 	},
 	"Licillin": {
@@ -18855,6 +18975,12 @@
 		"status": "drop",
 		"checked": true
 	},
+	"Night elf": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Night elves, or kaldorei, meaning \"children of the stars\" in Darnassian, are one of the oldest races in the world. They were among the first to study magic, and their civilization once spanned ancient Kalimdor. Their war with the Burning Legion ended in the Great Sundering.",
+		"checked": true
+	},
 	"Night Web Matriarch": {
 		"status": "keep",
 		"checked": true
@@ -19398,6 +19524,12 @@
 	},
 	"Oona tribe": {
 		"status": "drop",
+		"checked": true
+	},
+	"Ooze": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Oozes, also called slimes, are mindless slime creatures. They take on something of their surroundings, which may be why there are so many kinds. Many have bones inside them, with a skull for a head.",
 		"checked": true
 	},
 	"Oozeling (mob)": {
@@ -22809,6 +22941,12 @@
 		"text": "Saturated Oozes are oozes found in the Temple of Atal'Hakkar.",
 		"checked": true
 	},
+	"Satyr": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Satyrs are demons, most of them sworn to the Burning Legion. Their curse began with Xavius, a Highborne sorcerer whom Sargeras remade as a demon during the War of the Ancients. Satyrs live in sects throughout Kalimdor and harry their night elf cousins.",
+		"checked": true
+	},
 	"Saurid": {
 		"status": "drop",
 		"checked": true
@@ -24957,6 +25095,12 @@
 		"status": "keep",
 		"checked": true
 	},
+	"Skeleton": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Skeletons are undead raised by necromancy, often used as fodder or shock troops. They look frail but can be very strong and hard to hurt. Some keep their minds and fight with weapons and magic.",
+		"checked": true
+	},
 	"Skeleton (mob)": {
 		"status": "rewrite",
 		"text": "Skeletons are summoned by Lord Maldazzar in the Western Plaguelands, and by Gordunni Soulreapers.",
@@ -26852,6 +26996,12 @@
 	},
 	"Subterranean Diemetradon": {
 		"status": "keep",
+		"checked": true
+	},
+	"Succubus": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Succubi are seductive and sadistic demons. Many serve the Burning Legion, and some serve a warlock. Kil'jaeden brought them into the Legion to spy on worlds it meant to conquer.",
 		"checked": true
 	},
 	"Succubus Minion": {
@@ -29977,6 +30127,12 @@
 		"status": "drop",
 		"checked": true
 	},
+	"Voidwalker": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Voidwalkers are large, shapeless creatures of the void in shades of blue and purple, and they hover in the air. Their grip can crush bone to powder. A spellcaster's bindings keep a voidwalker from harming anyone without leave.",
+		"checked": true
+	},
 	"Voidwalker Minion": {
 		"status": "keep",
 		"checked": true
@@ -30410,6 +30566,12 @@
 	},
 	"Watchman Doomgrip": {
 		"status": "keep",
+		"checked": true
+	},
+	"Water elemental": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Water elementals are creatures made of water and other liquids.",
 		"checked": true
 	},
 	"Water snail": {
@@ -30965,6 +31127,12 @@
 	},
 	"Wiry Swoop": {
 		"status": "keep",
+		"checked": true
+	},
+	"Wisp": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Wisps are ancient spirits of nature that live in the forests of Kalimdor. They are the spirits of dead night elves who have become one with the forest.",
 		"checked": true
 	},
 	"Wisp (Darkshore)": {
@@ -31924,6 +32092,12 @@
 	},
 	"Zolo": {
 		"status": "keep",
+		"checked": true
+	},
+	"Zombie": {
+		"status": "rewrite",
+		"kind": "race",
+		"text": "Zombies are a kind of undead. Most are humans and trolls, but goblin and high elf zombies have been seen too.",
 		"checked": true
 	},
 	"Zombie Chow": {

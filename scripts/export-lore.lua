@@ -1,5 +1,5 @@
 -- EXPORT THE EXPEDITION'S DESCRIPTIONS FOR REVIEW (Josh 2026-09-28, the lore
--- rewrite in docs/handoff-lore-rewrite.md). Reads the generated
+-- rewrite, rules in docs/lore-rules.md). Reads the generated
 -- Modules/Menagerie/LoreData.lua and writes every page, with the lookup keys
 -- that reach it, to batch files in scripts/lore-work/export: the broad pages
 -- (group, beast, race, family, type) as broad-NN.json, the mob pages as

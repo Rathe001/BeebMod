@@ -28,7 +28,8 @@ f:SetScript("OnEvent", function(_, event, addon, func)
 	BT.blocked[key] = true
 	-- WRITTEN DOWN, NOT SHOUTED (Josh 2026-09-19). This used to put the event
 	-- and ten frames of stack straight into the chat frame, which is the exact
-	-- addon spam it exists to diagnose. /bt debug prints what was collected.
+	-- addon spam it exists to diagnose. What loaded, on the Testing page,
+	-- prints what was collected.
 	local while_ = BT.registering and (" while registering " .. BT.registering) or ""
 	BT.blockedLog = BT.blockedLog or {}
 	BT.blockedLog[#BT.blockedLog + 1] = ("%s calling %s%s"):format(event, tostring(func), while_)

@@ -1243,30 +1243,6 @@ function M:Refresh()
 	M.Queue()
 end
 
-BT.Command("tracker", function(rest)
-	local n = tonumber(rest)
-	if n then
-		BT.Bar.SetScale(math.max(0.7, math.min(1.3, n)))
-	end
-	M.Update()
-	-- the colour each title actually resolved to, so "it is still not green"
-	-- can be checked rather than argued about (Josh 2026-09-19)
-	if rest == "colours" then
-		for _, q in ipairs(BT.Quests.Watched()) do
-			local c = M.LevelColour(q.level)
-			U.Print(("[%d] %s · %.2f %.2f %.2f%s"):format(q.level or 0, q.title,
-				c[1], c[2], c[3], q.complete and " · complete" or ""))
-		end
-		U.Print(("your level %s · GetQuestDifficultyColor %s")
-			:format(tostring(UnitLevel and UnitLevel("player")),
-				GetQuestDifficultyColor and "yes" or "MISSING"))
-		return
-	end
-	U.Print(("Quest tracker: %d quests · dock %d%% · game's tracker %s")
-		:format(M.lastCount or 0, math.floor(BT.Bar.Scale() * 100 + 0.5),
-			M.ClientFrame() and "hidden" or "not found"))
-end, "tracker [0.7-1.3] - set the whole dock's size · /bt tracker colours - show where each quest title's colour came from", "tracker")
-
 -- the tests reach in here rather than at the frames
 function M.Frame() return frame end
 

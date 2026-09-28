@@ -31,7 +31,6 @@ local M = BT.Module({
 	kind = "readout",
 })
 
-
 local WORDS = "|cff8a9894%s|r"
 local FULL = "|cfff26659"
 local TIGHT = "|cfff2c75a"
@@ -194,19 +193,6 @@ function M.Reagents()
 			always = ALWAYS[id] == true }
 	end
 	return out
-end
-
--- the row: each one carried (or always shown) as its icon and its count
-function M.ReagentRow(list)
-	list = list or M.Reagents()
-	local parts = {}
-	for _, r in ipairs(list) do
-		if r.count > 0 or r.always then
-			local colour = r.count <= 0 and FULL or PLAIN
-			parts[#parts + 1] = ("|T%s:13:13:0:0|t %s%d|r"):format(tostring(r.icon), colour, r.count)
-		end
-	end
-	return table.concat(parts, "  ")
 end
 
 -- ---------------------------------------------------------------------------
@@ -515,9 +501,3 @@ end
 function M:Refresh()
 	self:RefreshTab()
 end
-
-BT.Command("space", function()
-	local b = M.Bags()
-	U.Print(("Bags: %d/%d · reagents %d/%d"):format(b.bags.used, b.bags.total,
-		b.reagents.used, b.reagents.total))
-end, "print how full your bags are", "bagspace")

@@ -245,18 +245,3 @@ M.OnBind = M.OnEnable
 function M:OnDisable()
 	M.Show(false)
 end
-
-BT.Command("speed", function()
-	local pct = M.Percent()
-	if not pct then
-		U.Print("Speed: the game doesn't give addons your speed.")
-		return
-	end
-	if M.secret then
-		U.Print(("Speed: %d%%, from your character sheet. The game doesn't give addons your live speed."):format(pct))
-		return
-	end
-	local current, run = M.Read()
-	U.Print(("Speed: %d%% · running %s · moving now %s")
-		:format(pct, tostring(M.Percentage(run) or "?"), tostring(M.Percentage(current) or "?")))
-end, "print how fast you are, as a percentage", "speed")

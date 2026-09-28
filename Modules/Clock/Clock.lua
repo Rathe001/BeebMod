@@ -189,7 +189,3 @@ M.OnBind = M.OnEnable
 function M:OnDisable()
 	M.Show(false)
 end
-
-BT.Command("time", function()
-	U.Print(("Clock: local %s · server %s"):format(M.Text("local"), M.Text("server")))
-end, "print the local and the server time", "clock")
