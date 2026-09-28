@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.6
 
 - **Nine kinds of mob, scored by how hard they are and how often you meet
   one.** The Menagerie no longer goes by the client's rank alone: a mob is a
