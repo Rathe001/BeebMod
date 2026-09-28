@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.7
 
 - **The Menagerie is now Nesingwary's Expedition.** "Menagerie" sounded like
   pets, and you hunt these mobs. The window's two tabs are **Field Journal**,
