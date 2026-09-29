@@ -1781,6 +1781,31 @@ do
 		"by mastery: the highest mastery first, then the most killed, then A to Z")
 	_G.GetUnitName = function(unit) return unit == "player" and "Beeb Drood" or nil end
 
+	-- ONE NAME, ONE PAGE (Josh 2026-09-28: "Getting duplicates", two cards
+	-- called Skyhopper - one of them the quest's Enchanted Skyhopper)
+	do
+		local book, me = J.Store(), J.Mine()
+		local first = J.Kill({ npc = 251314, name = "Skyhopper", kind = "Beast", guid = "s1" }, T + 500)
+		local second = J.Kill({ npc = 251400, name = "Skyhopper", kind = "Beast", guid = "s2" }, T + 501)
+		check(first and not second and me.kills[251314] == 2 and me.kills[251400] == nil and book.mobs[251400] == nil,
+			"a second mob of the same name and type is the same page, not a new one")
+		local other = J.Kill({ npc = 251500, name = "Skyhopper", kind = "Humanoid", guid = "s3" }, T + 502)
+		check(other and book.mobs[251500] ~= nil, "the same name on another type of creature is a page of its own")
+		-- a book that has the two already, from before: made one at login
+		book.mobs[251401] = { name = "Skyhopper", kind = "Beast", lo = 9, hi = 9 }
+		me.kills[251401], me.first[251401], me.earned["mastery:251401:1"] = 3, T - 50, T - 40
+		check(J.MergeSame() == 1 and book.mobs[251401] == nil and me.kills[251314] == 5
+			and me.first[251314] == T - 50 and me.earned["mastery:251314:1"] == T - 40
+			and me.earned["mastery:251401:1"] == nil and book.mobs[251314].hi == 9,
+			"two pages for one mob become one: kills added, the first kill and the mastery kept")
+		check(J.PageOf({ npc = 251401, name = "Skyhopper", kind = "Beast" }) == 251314,
+			"and the merged id goes on that page from then on")
+		for _, npc in ipairs({ 251314, 251500 }) do
+			book.mobs[npc], me.kills[npc], me.first[npc] = nil, nil, nil
+		end
+		me.earned["mastery:251314:1"], book.same = nil, nil
+	end
+
 	-- THE KILL RULES, with a client that answers from a table of units
 	_G.GetTime = function() return T end
 	_G.strsplit = _G.strsplit or function(sep, s)

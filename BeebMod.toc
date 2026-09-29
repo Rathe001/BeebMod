@@ -78,6 +78,7 @@ Modules\Tracker\Tracker.lua
 Modules\Bars\Bars.lua
 Modules\Micro\Micro.lua
 Modules\BagWindow\BagWindow.lua
+Modules\BagWindow\BagSlots.lua
 Modules\Menus\Menus.lua
 Modules\CharSheet\CharSheet.lua
 Modules\Minimap\Minimap.lua

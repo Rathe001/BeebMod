@@ -1401,7 +1401,12 @@ function M.Fit()
 	if w <= 0 then
 		w = frame.wantWidth or FLOOR
 	end
-	local size = math.max(60, w - PAD * 2)
+	-- IN WHOLE UNITS (Josh 2026-09-28: a minimap gone black for good, after
+	-- skinning a tiger, on a screen that is not ours). A dock whose width
+	-- comes out at a fraction could hand the map 199.99 one layout and 200 the
+	-- next, and each was a new size, and each new size a step of the zoom
+	-- (below). Rounded, a size is the same size.
+	local size = math.floor(math.max(60, w - PAD * 2) + 0.5)
 	local before = BT.Pill.Number(map.GetWidth and map:GetWidth(), 0)
 	pcall(map.SetSize, map, size, size)
 	-- where the map is in this section, for the dock to leave clear under it
@@ -1414,17 +1419,8 @@ function M.Fit()
 	-- A RESIZED MAP KEEPS THE PICTURE IT HAD (Josh 2026-09-21). The client
 	-- draws the ground again when the zoom changes, not when the size does,
 	-- so a step in and back out makes it draw at the new size.
-	if before ~= size and type(map.GetZoom) == "function"
-		and type(map.SetZoom) == "function" then
-		local ok, z = pcall(map.GetZoom, map)
-		if ok and type(z) == "number" then
-			pcall(map.SetZoom, map, z > 0 and z - 1 or z + 1)
-			pcall(map.SetZoom, map, z)
-			-- our own step, not the wheel: its zoom events are an echo too
-			-- when the dock resized the map outside M.Apply
-			local now = (type(GetTime) == "function" and GetTime()) or 0
-			M.quietUntil = math.max(M.quietUntil or 0, now + 0.25)
-		end
+	if math.abs(before - size) >= 1 then
+		M.Redraw()
 	end
 	local tall = size + ZONE_H + PAD * 2
 	local changed = frame.wantHeight ~= tall
@@ -1432,6 +1428,44 @@ function M.Fit()
 	frame:SetHeight(tall)
 	fitting = false
 	return changed
+end
+
+-- A step of the zoom in and back out, so the client draws the ground at the
+-- map's new size. AT MOST ONCE A SECOND (Josh 2026-09-28, the black map):
+-- whatever keeps resizing the map, the client is never asked to draw it
+-- again faster than that; a resize in between gets one step when the second
+-- is up.
+M.REDRAW_GAP = 1
+function M.Redraw()
+	local map = _G.Minimap
+	if not (map and type(map.GetZoom) == "function" and type(map.SetZoom) == "function") then
+		return false
+	end
+	local now = (type(GetTime) == "function" and GetTime()) or 0
+	local wait = (M.redrawnAt or -math.huge) + M.REDRAW_GAP - now
+	if wait > 0 then
+		if not M.redrawLater and C_Timer and C_Timer.After then
+			M.redrawLater = true
+			C_Timer.After(wait, function()
+				M.redrawLater = false
+				if BT.Enabled("minimap") then
+					M.Redraw()
+				end
+			end)
+		end
+		return false
+	end
+	local ok, z = pcall(map.GetZoom, map)
+	if not (ok and type(z) == "number") then
+		return false
+	end
+	M.redrawnAt = now
+	pcall(map.SetZoom, map, z > 0 and z - 1 or z + 1)
+	pcall(map.SetZoom, map, z)
+	-- our own step, not the wheel: its zoom events are an echo too when the
+	-- dock resized the map outside M.Apply
+	M.quietUntil = math.max(M.quietUntil or 0, now + 0.25)
+	return true
 end
 
 function M.StyleAll(plain)

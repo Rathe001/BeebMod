@@ -1,14 +1,19 @@
--- Reputation: the faction you are watching, and how long the rest of the
--- standing will take (Josh 2026-09-22).
+-- Reputation: the faction you are watching, and where you stand with it
+-- (Josh 2026-09-22).
 --
 -- The same line and thin bar as Experience, for whichever faction is ticked
 -- "Show as Experience Bar" in the reputation panel - and, like the client's
 -- own bar, not there at all when none is. The bar is the standing's colour,
 -- the one the reputation panel paints it.
 --
--- THE PACE IS PER FACTION, for this session: watch another faction and back,
--- and the first one's pace is still there. A /reload carries the session on;
--- a login starts a new one.
+-- WHAT THIS SESSION GAINED is kept per faction: watch another faction and
+-- back, and the first one's gains are still there. A /reload carries the
+-- session on; a login starts a new one.
+--
+-- NO TIME TO THE NEXT STANDING (Josh 2026-09-28: "I think we can remove the
+-- rep time estimates"). Reputation comes in lumps - a quest turned in, a
+-- batch of kills - so an hour's pace said little ("11h 57m to Honored"). The
+-- line is the faction and its standing; the hover says what is left.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Rep/Rep.lua")
 
@@ -158,7 +163,6 @@ function M.Rate(t, now)
 	return BT.Session.Rate(t.gained, t.since, now)
 end
 
-local duration = BT.Session.Duration
 
 local function big(n)
 	n = math.floor(n or 0)
@@ -181,16 +185,10 @@ function M.Lines(f, rate)
 	if f.reaction >= TOP or f.max <= 0 then
 		return left, ""
 	end
-	local nextName = M.StandingName(f.reaction + 1)
-	local togo = math.max(0, f.max - f.cur)
-	local right = ""
-	if rate and rate > 0 then
-		right = ("%s %s"):format(duration(togo * 3600 / rate), WORDS:format("to " .. nextName))
-	end
-	-- NO AMOUNT BEFORE THERE IS A PACE (Josh 2026-09-22). "2,807 to Honored"
-	-- took half the line from the faction's name, and the hover says it
-	-- anyway. Until there is a time to give, the name has the whole line.
-	return left, right
+	-- NO AMOUNT EITHER (Josh 2026-09-22). "2,807 to Honored" took half the
+	-- line from the faction's name, and the hover says it anyway. The name has
+	-- the whole line.
+	return left, ""
 end
 
 function M.Update()
@@ -228,15 +226,12 @@ function M.Update()
 end
 
 -- (Josh 2026-09-27, the dock's tooltips redrawn) the watched faction's
--- standing and how long the next one takes at your pace, then every faction
--- that moved this session
+-- standing and what is left of it, then every faction that moved this session
 function M.Tip()
 	local f = M.Read()
 	if not (f and BT.Tip) then
 		return
 	end
-	local session = M.session and M.session.factions and M.session.factions[f.name]
-	local rate = M.Rate(session)
 	BT.Tip.Show(M.frame, { build = function(t)
 		local c = M.StandingColour(f.reaction)
 		t:Header({ name = f.name, sub = "The faction you watch", pill = M.StandingName(f.reaction), pillState = c })
@@ -246,10 +241,7 @@ function M.Tip()
 		else
 			t:Headline(big(f.cur), "/ " .. big(f.max))
 			t:Bar(f.cur / f.max, c)
-			local togo = f.max - f.cur
-			local secs = rate and rate > 0 and togo * 3600 / rate or nil
-			t:Scale(("%s to %s"):format(big(togo), M.StandingName(f.reaction + 1)),
-				secs and ("about %s"):format(duration(secs)) or nil)
+			t:Scale(("%s to %s"):format(big(f.max - f.cur), M.StandingName(f.reaction + 1)))
 		end
 		local moved = {}
 		for name, entry in pairs(M.session and M.session.factions or {}) do
@@ -382,7 +374,7 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("The faction you watch, and roughly how long the rest of its standing will take. Watch a faction by ticking \"Show as Experience Bar\" in the reputation panel.")
+	page:Note("The faction you watch, and where you stand with it. Watch a faction by ticking \"Show as Experience Bar\" in the reputation panel.")
 	page:Note("With no faction watched there is no line, the same as the game's own bar.", true)
 	local r = BT.Widgets.SwitchRow(page:Section("The game's own"), "Hide the game's bar",
 		"Hides the game's reputation bar while this one shows",

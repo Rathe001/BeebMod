@@ -610,6 +610,130 @@ function J.Learn(info, now)
 	return m
 end
 
+-- ONE NAME, ONE PAGE (Josh 2026-09-28: "Getting duplicates" - two cards
+-- called Skyhopper). The game can give two mobs the same name and body under
+-- different ids: Zephras Isle's Enchanted Skyhopper is a Skyhopper to look
+-- at, on purpose ("You won't be able to tell which are enchanted by looking
+-- at them"). What you see is one kind of mob, so it is one page: a mob of a
+-- name and creature type the journal already has goes on that page, its
+-- kills added to that page's. A type not yet read matches on the name alone.
+-- menagerie.same[npc] = the npc whose page it is, so each id is looked up once.
+local function sameName(a, b)
+	if type(a.name) ~= "string" or a.name == "" or type(b.name) ~= "string" then
+		return false
+	end
+	if a.name:lower() ~= b.name:lower() then
+		return false
+	end
+	local ka, kb = J.KindOf(a), J.KindOf(b)
+	return ka == kb or ka == J.UNTYPED or kb == J.UNTYPED
+end
+
+-- the npc whose page a mob `info` = { npc, name, kind } goes on
+function J.PageOf(info)
+	local s = J.Store()
+	if not (s and info and info.npc) then
+		return info and info.npc
+	end
+	s.same = s.same or {}
+	local to = s.same[info.npc]
+	if to and s.mobs[to] then
+		return to
+	end
+	if s.mobs[info.npc] then
+		return info.npc
+	end
+	for npc, m in pairs(s.mobs) do
+		if sameName(info, m) then
+			s.same[info.npc] = npc
+			return npc
+		end
+	end
+	return info.npc
+end
+
+-- one page into another: what it is, and every character's kills of it
+local function merge(s, to, from)
+	local m, d = s.mobs[to], s.mobs[from]
+	if d.lo then
+		m.lo = math.min(m.lo or d.lo, d.lo)
+	end
+	if d.hi then
+		m.hi = math.max(m.hi or d.hi, d.hi)
+	end
+	for _, field in ipairs({ "kind", "family", "rank", "zone", "instance", "body", "lore" }) do
+		if m[field] == nil then
+			m[field] = d[field]
+		end
+	end
+	m.skull = m.skull or d.skull
+	m.boss = m.boss or d.boss
+	if (not m.mx or m.spotGuess) and d.mx and not d.spotGuess then
+		m.map, m.mx, m.my, m.spotGuess = d.map, d.mx, d.my, nil
+	end
+	m.seen = math.max(m.seen or 0, d.seen or 0)
+	for _, c in pairs(s.chars) do
+		if type(c) == "table" then
+			local kills, first = c.kills or {}, c.first or {}
+			if kills[from] then
+				kills[to] = (kills[to] or 0) + kills[from]
+				kills[from] = nil
+			end
+			if first[from] then
+				first[to] = math.min(first[to] or first[from], first[from])
+				first[from] = nil
+			end
+			if c.last and c.last.npc == from then
+				c.last.npc = to
+			end
+			-- a mastery earned on either is earned on the page, when it first was
+			for id, at in pairs(c.earned or {}) do
+				local npc, tier = tostring(id):match("^mastery:(%d+):(%d+)$")
+				if tonumber(npc) == from then
+					local mine = ("mastery:%d:%s"):format(to, tier)
+					c.earned[mine] = math.min(c.earned[mine] or at, at)
+					c.earned[id] = nil
+				end
+			end
+		end
+	end
+	s.mobs[from] = nil
+	s.same = s.same or {}
+	s.same[from] = to
+end
+
+-- Pages already in the book for the same mob, made one: the lowest id keeps
+-- the page. How many went.
+function J.MergeSame()
+	local s = J.Store()
+	if not s then
+		return 0
+	end
+	local ids = {}
+	for npc in pairs(s.mobs) do
+		if type(npc) == "number" then
+			ids[#ids + 1] = npc
+		end
+	end
+	table.sort(ids)
+	local n = 0
+	for i, to in ipairs(ids) do
+		if s.mobs[to] then
+			for k = i + 1, #ids do
+				local from = ids[k]
+				if s.mobs[from] and sameName(s.mobs[to], s.mobs[from]) then
+					merge(s, to, from)
+					n = n + 1
+				end
+			end
+		end
+	end
+	if n > 0 then
+		J.rev = (J.rev or 0) + 1
+	end
+	return n
+end
+
 -- A SPOT UNTIL THERE IS A REAL ONE (Josh 2026-09-26: "still not seeing the
 -- portrait backgrounds"). Spots are kept from the kill, so a mob killed
 -- before they were has none until it is killed again. Standing in its zone,
@@ -668,6 +792,8 @@ function J.Kill(info, now)
 		return false, {}
 	end
 	now = now or U.Now()
+	-- a mob of a name the book has is that page's (J.PageOf)
+	info.npc = J.PageOf(info)
 	J.Learn(info, now)
 	local npc = info.npc
 	local was = c.kills[npc] or 0

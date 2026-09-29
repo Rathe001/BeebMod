@@ -5,6 +5,34 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **One card for mobs that share a name.** The game can give two different
+  mobs the same name and look: Zephras Isle's Enchanted Skyhopper is a
+  Skyhopper to look at, on purpose. They made two cards called Skyhopper.
+  A mob with the same name and creature type as one already in the journal
+  now goes on that card, and its kills are added to it. Journals that
+  already have two cards for one name are made into one when you log in,
+  keeping the kills, the first kill and any mastery.
+- **The reputation line has no time to the next standing.** Reputation comes
+  in lumps, so the estimate ("11h 57m to Honored") said little. The line
+  shows the faction and your standing, and the tooltip still says how much is
+  left.
+- **Your bag slots are beside the backpack.** With the game's bag bar hidden
+  there was nowhere to put a bag on or swap one. Four slots now sit down the
+  left of the backpack's window. Drag a bag onto one to put it on or swap it,
+  drag one off to take it out, click one to open that bag, and point at one
+  for its tooltip. A switch on the Bag window page turns them off.
+- **The XP tooltip says what the time to level is waiting for.** Until it
+  has 3 XP gains to go on, it says how many more it needs, where it used to
+  show nothing.
+- **The minimap is asked to redraw less often.** When the dock resizes the
+  map, BeebMod steps the zoom in and out so the game draws it again. The
+  map's size is now whole units, so a width a fraction off no longer counts
+  as a new size, and the zoom step happens at most once a second. This is
+  aimed at a minimap that turned black and stayed black, which hasn't been
+  reproduced here.
+
 ## 0.1.0-beta.11
 
 - **Skinning a corpse no longer counts as a kill.** Skinning opens the

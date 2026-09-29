@@ -506,6 +506,8 @@ end
 -- a book was bound: the GUIDs this character counted before a reload are
 -- still counted, and the mobs in view are looked at afresh
 function M:OnBind()
+	-- two pages for one mob, from before they were one (J.MergeSame)
+	J.MergeSame()
 	K.Reset(J.Counted())
 	M.Show(true)
 end

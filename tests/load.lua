@@ -2646,6 +2646,30 @@ if ok then
 			assert(mm.Echo(), "a zoom straight after the layout is its own echo")
 			now = now + 1
 			assert(not mm.Echo(), "a zoom a second later is the wheel")
+			-- THE BLACK MAP (Josh 2026-09-28): a width a fraction off is not a
+			-- new size, and the zoom steps to redraw at most once a second
+			local map = _G.Minimap
+			local steps = 0
+			local hadGet, hadSet = map.GetZoom, map.SetZoom
+			map.GetZoom = function() return 2 end
+			map.SetZoom = function() steps = steps + 1 end
+			local section = mm.Build()
+			section:SetWidth(208)
+			mm.Fit()
+			local was = steps
+			section:SetWidth(208.3)
+			mm.Fit()
+			assert(steps == was and map._width == 200, "a fraction of a unit is the same size: " .. tostring(map._width))
+			now = now + 5
+			section:SetWidth(240)
+			mm.Fit()
+			assert(steps == was + 2, "a new size steps the zoom in and back out")
+			section:SetWidth(260)
+			mm.Fit()
+			assert(steps == was + 2, "but not again within the second")
+			now = now + 1.5
+			assert(mm.Redraw() and steps == was + 4, "and a second later it may")
+			map.GetZoom, map.SetZoom = hadGet, hadSet
 			_G.GetTime = wasTime
 			-- the resource display ignores settings that are not nameplates'
 			local prd = BT.GetModule("prd")
@@ -5135,7 +5159,41 @@ if ok then
 			_G.ContainerFrame2 = nil
 			_G.UIParent.GetTop = parentTop
 
+			-- BAG SLOTS (Josh 2026-09-28: "We currently have no way to replace
+			-- bags on the bag bar"): four slots beside the backpack, asking the
+			-- game to do what its own do
+			local S = mod.BagSlots
+			local calls, cursor = {}, false
+			_G.CursorHasItem = function() return cursor end
+			_G.PutItemInBag = function(inv) calls[#calls + 1] = "put " .. inv end
+			_G.PickupBagFromSlot = function(inv) calls[#calls + 1] = "pick " .. inv end
+			_G.ToggleBag = function(bag) calls[#calls + 1] = "toggle " .. bag end
+			_G.GetInventoryItemTexture = function(_, inv) return inv == 20 and 133633 or nil end
+			win:Show()
+			assert(S.Attach() and S.frame:IsShown() and S.frame:GetParent() == win, "beside the backpack while it is open")
+			local bs = S.frame.buttons
+			assert(#bs == 4 and bs[1].inv == 20 and bs[4].inv == 23, "four slots, for inventory slots 20 to 23")
+			assert(bs[1].icon._texture == 133633 and not bs[2].icon:IsShown(), "a bag shows its picture, an empty slot none")
+			bs[1]:GetScript("OnClick")(bs[1], "LeftButton")
+			cursor = true
+			bs[2]:GetScript("OnReceiveDrag")(bs[2])
+			bs[4]:GetScript("OnClick")(bs[4], "LeftButton")
+			cursor = false
+			bs[3]:GetScript("OnDragStart")(bs[3])
+			assert(table.concat(calls, ",") == "toggle 1,put 21,put 23,pick 22",
+				"a click opens the bag, a bag dropped or clicked on goes in, a drag takes it out: " .. table.concat(calls, ","))
+			S.SetOn(false)
+			assert(not S.frame:IsShown() and BT.settings.bagwindow.bagSlots == false, "switched off, the column goes")
+			S.SetOn(true)
+			assert(S.frame:IsShown() and BT.settings.bagwindow.bagSlots == nil, "and comes back")
+			win:Hide()
+			assert(not S.Attach() and not S.frame:IsShown(), "with the backpack closed there is nothing to stand beside")
+			win:Show()
+			_G.CursorHasItem, _G.PutItemInBag, _G.PickupBagFromSlot, _G.ToggleBag = nil, nil, nil, nil
+			_G.GetInventoryItemTexture = nil
+
 			BT.SetEnabled("bagwindow", false)
+			assert(not S.frame:IsShown(), "and the module off takes it away")
 			assert(frameArt._alpha == 1 and redX._alpha == 1 and fieldArt._alpha == 1
 				and normal._alpha == 1 and slot.IconBorder._alpha == 1, "switched off, every piece is the client's again")
 			assert(slot.icon._texCoord[1] == 0 and not panel.fill:IsShown(), "the picture and the window too")
@@ -6763,13 +6821,20 @@ if ok then
 			-- RIGHT-CLICK TO START AGAIN (Josh 2026-09-28): the tooltip says so,
 			-- and a right-click on the line does it
 			section:GetScript("OnEnter")(section)
-			assert(BT.Tip.Says("RIGHT-CLICK") and BT.Tip.Says("start the pace and the session again"),
+			assert(BT.Tip.Says("RIGHT-CLICK") and BT.Tip.Says("start the pace again"),
 				"the tooltip names the right-click: " .. table.concat(BT.Tip.Texts(), " | "))
 			section:GetScript("OnMouseUp")(section, "LeftButton")
 			assert(mod.Rate() ~= nil, "a left-click resets nothing")
 			section:GetScript("OnMouseUp")(section, "RightButton")
 			assert(mod.Rate() == nil and mod.session.gained == 0 and #mod.PaceList() == 0,
 				"a right-click starts the pace and the session again")
+			-- NOT YET, AND WHY (Josh 2026-09-28): with no pace, the tooltip
+			-- says what it is waiting for
+			assert(BT.Tip.Says("The time to level shows after 3 more gains of XP."),
+				"the tooltip says what the pace needs: " .. table.concat(BT.Tip.Texts(), " | "))
+			assert(mod.Waiting({ {}, {} }) == "The time to level shows after 1 more gain of XP."
+				and mod.Waiting({ {}, {}, {} }) == "The time to level shows after a little more play.",
+				"one gain, and then a little more time")
 			BT.Tip.Hide()
 
 			-- a reload carries it on; a login does not
@@ -7193,9 +7258,9 @@ if ok then
 			assert(f.cur == 1200 and f.max == 6000, "1,200 of 6,000 into Friendly")
 			local left, right = mod.Lines(f, nil)
 			assert(left:find("Undercity", 1, true) and left:find("Friendly", 1, true), "the faction and standing: " .. left)
-			-- no amount before there is a pace: the name has the whole line, and
-			-- the hover says how much is left
-			assert(right == "", "nothing on the right before there is a pace: " .. right)
+			-- no amount and no time: the name has the whole line, and the hover
+			-- says how much is left
+			assert(right == "", "nothing on the right: " .. right)
 			assert(mod.fill._width == 40, "a fifth of the bar: " .. tostring(mod.fill._width))
 			assert(mod.fill._color and mod.fill._color[2] > mod.fill._color[1],
 				"in the standing's colour, green for friendly")
@@ -7209,8 +7274,9 @@ if ok then
 			assert(t.gained == 4800, "gains carry across a standing: " .. tostring(t.gained))
 			clock = clock + 1800
 			assert(math.abs(mod.Rate(t) - 9600) < 0.01, "per hour: " .. tostring(mod.Rate(t)))
+			-- NO TIME TO THE NEXT STANDING (Josh 2026-09-28), whatever the pace
 			local _, eta = mod.Lines(mod.Read(), mod.Rate(t))
-			assert(eta:find("1h 15m", 1, true) and eta:find("to Revered", 1, true), "and time to the next: " .. eta)
+			assert(eta == "", "and no time to the next standing: " .. eta)
 
 			-- another faction watched, then back: the first one's pace is kept
 			watched = { name = "Orgrimmar", reaction = 4, low = 0, high = 3000, value = 100 }

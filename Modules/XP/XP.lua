@@ -198,6 +198,16 @@ function M.Pace(list)
 	return gained * 3600 / counted
 end
 
+-- what the pace still needs, in words, while there is none
+function M.Waiting(list)
+	list = list or M.PaceList() or {}
+	local more = M.MIN_GAINS - #list
+	if more > 0 then
+		return ("The time to level shows after %d more %s of XP."):format(more, more == 1 and "gain" or "gains")
+	end
+	return "The time to level shows after a little more play."
+end
+
 -- experience per hour at your pace, or nil while there is too little to go on
 function M.Rate()
 	return M.Pace()
@@ -304,19 +314,21 @@ function M.Tip()
 		t:Scale(("%s XP to %d"):format(big(math.max(0, max - cur)), level + 1),
 			(rested or 0) > 0 and ("%s rested"):format(big(rested)) or nil, "rested")
 		local secs = M.ToLevel(cur, max, rate)
-		if secs or (s and (s.gained or 0) > 0) then
-			t:Section("At your pace")
-			if secs then
-				t:Row(("Level %d in"):format(level + 1), "about " .. duration(secs))
-			end
-			if s and (s.gained or 0) > 0 then
-				t:Row("This session", ("+%s in %s"):format(big(s.gained), duration(U.Now() - (s.start or U.Now()))))
-			end
-			if rate then
-				t:Row("Per hour", big(math.floor(rate)))
-			end
+		t:Section("At your pace")
+		if secs then
+			t:Row(("Level %d in"):format(level + 1), "about " .. duration(secs))
+		else
+			-- NOT YET, AND WHY (Josh 2026-09-28: "Not seeing any 'x to next
+			-- level' estimates now"): the pace needs a few gains first
+			t:Note(M.Waiting())
 		end
-		t:Foot({ { "Right-click", "start the pace and the session again" } })
+		if s and (s.gained or 0) > 0 then
+			t:Row("This session", ("+%s in %s"):format(big(s.gained), duration(U.Now() - (s.start or U.Now()))))
+		end
+		if rate then
+			t:Row("Per hour", big(math.floor(rate)))
+		end
+		t:Foot({ { "Right-click", "start the pace again" } })
 	end })
 end
 

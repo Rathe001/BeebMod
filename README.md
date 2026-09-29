@@ -30,7 +30,7 @@ settings.
 |---|---|
 | **Dock** | The panel itself: its size, and the **Clock** in its header. The clock shows local or server time; click it to switch. |
 | **Minimap** | The client's map, moved into the dock, and **Addon buttons**: other addons' minimap buttons in one line, a switch each. |
-| **Progress** | **Experience** (the XP bar, and time to level at your current pace) and **Reputation** (the watched faction, and time to the next standing), a switch each. |
+| **Progress** | **Experience** (the XP bar, and time to level at your current pace) and **Reputation** (the watched faction, and your standing with it), a switch each. |
 | **Metrics** | A grid of readouts, each with its own switch: gold and gold per hour, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
 | **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
 | **Micro menu** | The game's menu buttons, in the dock. |
@@ -48,7 +48,7 @@ settings.
 
 | tab | what it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Its page has the switch that hides the game's bag bar. |
+| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Your four bag slots sit down the left of the backpack. Drag a bag onto one to put it on, or off one to take it out. Its page has the switch that hides the game's bag bar. |
 | **Character sheet** | Item level on every slot, short stat lists with sections that fold, and BeebMod's look. |
 | **Menus** | The **Game menu** that Escape opens, and every **Dropdown menu**, a switch each. The game keeps some of its menu buttons from addons, so those keep the game's look. |
 | **Tooltips** | Unit tooltips rebuilt into two lines, in BeebMod's look. Elites and rares get a gold or silver border. |

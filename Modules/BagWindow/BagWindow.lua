@@ -315,6 +315,9 @@ function M.StyleAll(plain, force)
 		for _, s in pairs(fields) do
 			BT.Pill.ShowSurface(s, false)
 		end
+		if M.BagSlots then
+			M.BagSlots.Attach()
+		end
 		return 0
 	end
 	for _, w in ipairs(M.Windows()) do
@@ -335,6 +338,10 @@ function M.StyleAll(plain, force)
 	dressSearch((_G.ContainerFrameCombinedBags and _G.ContainerFrameCombinedBags.SearchBox)
 		or _G.BagItemSearchBox)
 	M.lastCount = n
+	-- the bag slots beside the backpack (Modules/BagWindow/BagSlots.lua)
+	if M.BagSlots then
+		M.BagSlots.Attach()
+	end
 	M.Hook()
 	-- the window may not have existed when the module came on
 	M.WatchPosition()
@@ -683,6 +690,13 @@ function M:BuildTab(panel)
 				paintQuality(b)
 			end
 		end)
+	BT.Widgets.SwitchRow(look, "Bag slots", "Your four bag slots beside the backpack. Drag a bag onto one to put it on.",
+		function() return M.BagSlots and M.BagSlots.On() or false end,
+		function(on)
+			if M.BagSlots then
+				M.BagSlots.SetOn(on)
+			end
+		end)
 	-- PUT BACK FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
 	-- slash commands"): the Reset that /bt bags reset was
 	local place = page:Section("Place")
@@ -695,7 +709,7 @@ function M:BuildTab(panel)
 	local bar = page:Section("The game's own")
 	local space = BT.GetModule("bagspace")
 	self.hideBags = BT.Widgets.SwitchRow(bar, "Hide the bag bar",
-		"The backpack and bag slots by the action bars. Your bag keys still open your bags.",
+		"The backpack and bag slots by the action bars. The bag window has its own bag slots.",
 		function() return space and space.HideClient() and true or false end,
 		function(on)
 			if space then
