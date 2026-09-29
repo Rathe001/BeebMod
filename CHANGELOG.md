@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.14
 
 - **A target fades past 28 yards, whatever your class.** The target, focus
   and boss frames asked whether one of your spells would reach. A warrior's
