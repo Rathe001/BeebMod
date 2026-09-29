@@ -78,7 +78,7 @@ BT.NAME = ADDON
 -- BeebModDB, because renaming either of those is renaming the file the
 -- book lives in, and this client is already bad enough at handing that back.
 BT.TITLE = "BeebMod"
-BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-beta.14"
+BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-beta.15"
 BT.SCHEMA = 13
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
