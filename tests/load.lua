@@ -3249,21 +3249,25 @@ if ok then
 			assert(target.combo._shown == false, "and no combo row under a friend")
 			_G.UnitCanAttack, _G.UnitThreatSituation = wasAttack, wasThreat
 
-			-- IN REACH: a target is faded when your spells will not reach it,
-			-- and the client's follow distance answers when no spell does
-			local wasSpell, wasNear, wasParty = _G.C_Spell, _G.CheckInteractDistance, _G.UnitInParty
+			-- IN REACH (Josh 2026-09-29: "Can we just test a 30 yard range?"): a
+			-- target is faded past the follow distance, 28 yards, whatever the class
+			local wasSpell, wasNear, wasParty, wasClass = _G.C_Spell, _G.CheckInteractDistance, _G.UnitInParty, _G.UnitClass
 			_G.UnitInParty = function() return false end
-			_G.C_Spell = { IsSpellInRange = function() return false end }
+			_G.UnitClass = function() return "Warrior", "WARRIOR" end
+			-- no spell is asked: a warrior's Charge says no to anything close
+			_G.C_Spell = { IsSpellInRange = function() error("no spell is asked") end }
+			local askedFor
+			_G.CheckInteractDistance = function(_, i) askedFor = i return false end
 			F.Paint(target, F.Source("target"))
-			assert(target._alpha == F.FAR_ALPHA, "a target out of reach is faded: " .. tostring(target._alpha))
-			_G.C_Spell = { IsSpellInRange = function() return true end }
+			assert(askedFor == 4 and target._alpha == F.FAR_ALPHA,
+				"past 28 yards a target is faded: " .. tostring(target._alpha))
+			_G.CheckInteractDistance = function() return true end
 			F.Paint(target, F.Source("target"))
-			assert(target._alpha == 1, "and in reach is not")
-			_G.C_Spell = { IsSpellInRange = function() return nil end }
-			_G.CheckInteractDistance = function() return false end
+			assert(target._alpha == 1, "and within them it is not")
+			_G.CheckInteractDistance = function() return nil end
 			F.Paint(target, F.Source("target"))
-			assert(target._alpha == F.FAR_ALPHA, "no spell answers: the follow distance does")
-			_G.C_Spell, _G.CheckInteractDistance, _G.UnitInParty = wasSpell, wasNear, wasParty
+			assert(target._alpha == 1, "no answer at all is not faded")
+			_G.C_Spell, _G.CheckInteractDistance, _G.UnitInParty, _G.UnitClass = wasSpell, wasNear, wasParty, wasClass
 			F.Paint(target, F.Source("target"))
 
 			-- NOTHING READS A NUMBER: a secret health goes to the bar as it came

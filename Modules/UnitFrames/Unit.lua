@@ -300,12 +300,14 @@ end
 -- IN REACH (Josh 2026-09-23: "the out of range fader is not working, at
 -- least on targets"). It was only ever asked of a group: UnitInRange answers
 -- for your party and raid (in secret, onto an alpha) and for nobody else, so
--- the target, the focus and the bosses were never faded at all. For those it
--- is asked whether a spell of yours would reach them - a harmful one for an
--- enemy, a helpful one for a friend, the longest-reaching your class has at
--- its first rank - and where no spell answers, whether they are within the
--- client's follow distance (28 yards; plain in a fight, the probe said).
--- A rogue's and a warrior's is Throw: a melee check would flicker all fight.
+-- the target, the focus and the bosses were never faded at all.
+-- ONE DISTANCE FOR EVERYONE ELSE (Josh 2026-09-29: "Can we just test a 30
+-- yard range?"). They are faded past the client's follow distance, 28 yards,
+-- whatever your class. It asked a spell of each class before - Throw and
+-- Charge for a warrior - and those refuse anything within 8 yards, so a
+-- warrior's target faded while she hit it; and the answer can be a secret,
+-- which only the client may read, so no two could be weighed together. The
+-- one answer goes to the alpha as it came.
 -- HOW FAR A FADED FRAME FADES (Josh 2026-09-23: "hard to tell if it is
 -- faded"): a cell out of range to a quarter, a single frame to a third
 F.FAR_ALPHA = 0.35
@@ -342,32 +344,6 @@ function F.HealthMode(kind, k)
 	local chosen = F.Opt("health", nil)
 	return (type(chosen) == "table" and chosen[key]) or F.HEALTH_DEFAULT[key]
 end
-F.RANGE_SPELLS = {
-	PRIEST = { harm = { 585 }, help = { 2050 } },          -- Smite, Lesser Heal
-	MAGE = { harm = { 133, 116 }, help = { 1459 } },       -- Fireball, Frostbolt, Arcane Intellect
-	WARLOCK = { harm = { 686 }, help = { 5697 } },         -- Shadow Bolt, Unending Breath
-	DRUID = { harm = { 5176 }, help = { 5185 } },          -- Wrath, Healing Touch
-	PALADIN = { harm = { 853 }, help = { 635 } },          -- Hammer of Justice, Holy Light
-	SHAMAN = { harm = { 403 }, help = { 331 } },           -- Lightning Bolt, Healing Wave
-	HUNTER = { harm = { 75, 1978 }, help = {} },           -- Auto Shot, Serpent Sting
-	ROGUE = { harm = { 2764 }, help = {} },                -- Throw
-	WARRIOR = { harm = { 2764, 100 }, help = {} },         -- Throw, Charge
-}
-
--- a spell's answer, or nil when it gives none (not known, no range, no unit)
-local function spellReach(id, unit)
-	local fn = C_Spell and C_Spell.IsSpellInRange
-	if not fn then
-		return nil
-	end
-	local ok, r = pcall(fn, id, unit)
-	-- type() is the one question safe to ask of a secret
-	if ok and type(r) == "boolean" then
-		return r
-	end
-	return nil
-end
-
 function Live:InRange()
 	local unit = self.unit
 	if unit == "player" then
@@ -376,22 +352,12 @@ function Live:InRange()
 	if UnitInParty and (plain(UnitInParty, unit) or plain(UnitInRaid, unit)) then
 		return (raw(UnitInRange, unit))
 	end
-	local class = select(2, raw(UnitClass, "player"))
-	local spells = F.RANGE_SPELLS[(not secret(class)) and class or ""]
-	if spells then
-		local list = plain(UnitCanAssist, "player", unit) and spells.help or spells.harm
-		for _, id in ipairs(list) do
-			local r = spellReach(id, unit)
-			if r ~= nil then
-				return r
-			end
-		end
-	end
-	local near = plain(CheckInteractDistance, unit, 4)
-	if near == nil then
+	-- within 28 yards; no answer at all is in reach, not faded
+	local near = raw(CheckInteractDistance, unit, 4)
+	if not secret(near) and near == nil then
 		return true
 	end
-	return near and true or false
+	return near
 end
 function Live:IsTarget() return (raw(UnitIsUnit, self.unit, "target")) end
 -- WHOSE THREAT (Josh 2026-09-23, "not seeing an aggro indicator at all"). On a

@@ -5,6 +5,14 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **A target fades past 28 yards, whatever your class.** The target, focus
+  and boss frames asked whether one of your spells would reach. A warrior's
+  Throw and Charge refuse anything within 8 yards, so her target faded while
+  she was hitting it. The frames now use the game's follow distance for
+  everyone. Your party and raid still fade by the game's own range check.
+
 ## 0.1.0-beta.13
 
 - **Each part of BeebMod is called inside by the name you see.** The
