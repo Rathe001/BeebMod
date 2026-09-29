@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.13
 
 - **Each part of BeebMod is called inside by the name you see.** The
   Expedition, the Dock, tags and nine utilities had older names in the code
