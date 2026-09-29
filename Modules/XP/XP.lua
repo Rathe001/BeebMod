@@ -267,7 +267,7 @@ function M.Update()
 	if cap ~= M.hiddenAtCap then
 		M.hiddenAtCap = cap
 		M.frame:SetShown(not cap and BT.Enabled("xp"))
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 	end
 	if cap then
 		return
@@ -283,7 +283,7 @@ function M.Update()
 	local a = BT.Widgets.ACCENT
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(a[1], a[2], a[3], 0.9)
-	BT.Bar.BandColor(M.frame, a)
+	BT.Dock.BandColor(M.frame, a)
 	M.rested:SetColorTexture(a[1], a[2], a[3], 0.30)
 	local done = max > 0 and math.min(1, cur / max) or 0
 	local ahead = max > 0 and math.min(1 - done, (rested or 0) / max) or 0
@@ -336,10 +336,10 @@ function M.Build()
 	if M.frame then
 		return M.frame
 	end
-	M.frame = BT.Bar.Section("xp", 7)
+	M.frame = BT.Dock.Section("xp", 7)
 	M.frame.kind = "meter"
 	M.frame.wantHeight = LINE_H
-	-- the client draws nothing inside a frame with no height (see Perf)
+	-- the client draws nothing inside a frame with no height (see Performance)
 	M.frame:SetHeight(LINE_H)
 	M.text = BT.Widgets.Label(M.frame, "", "small")
 	M.text:SetPoint("TOPLEFT", M.frame, "TOPLEFT", INSET, -3)
@@ -441,7 +441,7 @@ function M.Show(on)
 			M.ticker = nil
 		end
 	end
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 end
 
 function M:OnEnable()

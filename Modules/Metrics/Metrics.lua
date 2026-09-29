@@ -82,7 +82,7 @@ function M:BuildTab(panel)
 	self.colsSeg = cols:SetControl(BT.Widgets.Segmented(cols, { { 3, "Three" }, { 2, "Two" } }, function(n)
 		BT.EnsureBound()
 		BT.settings.metricsCols = (n == 2) and 2 or nil
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 	end))
 	self:RefreshTab()
 end
@@ -93,7 +93,7 @@ function M:RefreshTab()
 		return
 	end
 	if self.colsSeg then
-		self.colsSeg:Select(BT.Bar.Cols())
+		self.colsSeg:Select(BT.Dock.Cols())
 	end
 	for _, r in ipairs(self.rows) do
 		local fits = BT.ClassFits(r.part)

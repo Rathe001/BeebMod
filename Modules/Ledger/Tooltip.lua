@@ -9,10 +9,10 @@ local U = BT.Util
 local T = {}
 BT.Tooltip = T
 
-local function flagsOn(p)
+local function tagsOn(p)
 	local out = {}
-	for _, f in ipairs(BT.AllFlags()) do
-		if p.flags and p.flags[f.key] then
+	for _, f in ipairs(BT.AllTags()) do
+		if p.tags and p.tags[f.key] then
 			out[#out + 1] = f
 		end
 	end
@@ -322,7 +322,7 @@ function T.Fill(tip, unit)
 	-- someone you wrote on, in front of you: their face brought up to date
 	local _, info = BT.Notes.Face(unit)
 	BT.Notes.Seen(key, info)
-	local flags = flagsOn(p)
+	local tags = tagsOn(p)
 	-- A THIN LINE, NOT A BLANK ONE (Josh 2026-09-19). The note wanted air above
 	-- and below it. A blank tooltip line is ten pixels, which is a gap rather
 	-- than a breath - so the spacer is a line sized down to four.
@@ -348,14 +348,14 @@ function T.Fill(tip, unit)
 	-- A tooltip line cannot measure a substring of itself, so the words before
 	-- each swatch are measured off-screen and the squares are laid at those
 	-- offsets - see Core/Tooltip.lua's ruler.
-	if #flags > 0 then
+	if #tags > 0 then
 		local LEAD, GAP = "    ", "   "
 		local text, offsets, colours = "", {}, {}
-		for i, f in ipairs(flags) do
+		for i, f in ipairs(tags) do
 			offsets[i] = BT.UnitTip.Measure(text, TAG_SIZE) + 1
 			colours[i] = f.color or { 0.6, 0.65, 0.62 }
 			text = text .. LEAD .. f.label
-			if i < #flags then
+			if i < #tags then
 				text = text .. GAP
 			end
 		end

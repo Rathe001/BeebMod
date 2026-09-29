@@ -22,7 +22,7 @@ local MODES = {
 	{ key = "level", label = "Level" },
 	{ key = "guild", label = "Guild" },
 	{ key = "zone",  label = "Zone"  },
-	{ key = "flag",  label = "Tags"  },
+	{ key = "tag",   label = "Tags"  },
 }
 C.MODES = MODES
 
@@ -41,8 +41,8 @@ local function rowLabel(mode, key)
 	end
 	if mode == "class" then
 		return prettyClass(key)
-	elseif mode == "flag" then
-		local f = U.FlagByKey(key)
+	elseif mode == "tag" then
+		local f = U.TagByKey(key)
 		return f and f.label or key
 	end
 	return key
@@ -56,8 +56,8 @@ local function rowColor(mode, key)
 	if mode == "class" then
 		local r, g, b = U.ClassColor(key)
 		return r, g, b
-	elseif mode == "flag" then
-		local f = U.FlagByKey(key)
+	elseif mode == "tag" then
+		local f = U.TagByKey(key)
 		if f and f.color then
 			return f.color[1], f.color[2], f.color[3]
 		end
@@ -144,7 +144,7 @@ function C.Build(parent)
 			C.Refresh(view)
 		end)
 		b.modeKey = m.key
-		b.needsLedger = m.key == "flag"
+		b.needsLedger = m.key == "tag"
 		view.modeButtons[m.key] = b
 	end
 
@@ -232,7 +232,7 @@ function C.Filter(view)
 	-- a pick on a chart that is not there today (tags, with the Ledger off)
 	-- is a filter nobody can see or undo
 	local pick = view.pick
-	if pick and pick.mode == "flag" and not BT.Enabled("ledger") then
+	if pick and pick.mode == "tag" and not BT.Enabled("ledger") then
 		view.pick, pick = nil, nil
 	end
 	return { bands = bandFilter(view), seen = view.seen, pick = pick }

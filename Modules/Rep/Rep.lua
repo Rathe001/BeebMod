@@ -201,7 +201,7 @@ function M.Update()
 	if want ~= M.shownFor then
 		M.shownFor = want
 		M.frame:SetShown(want)
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 	end
 	if not f then
 		return
@@ -218,7 +218,7 @@ function M.Update()
 	local c = M.StandingColour(f.reaction)
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(c[1], c[2], c[3], 0.9)
-	BT.Bar.BandColor(M.frame, c)
+	BT.Dock.BandColor(M.frame, c)
 	local done = (f.reaction >= TOP or f.max <= 0) and 1 or math.min(1, f.cur / f.max)
 	-- a texture of no width is drawn as a whole one, so an empty bar is hidden
 	M.fill:SetShown(done > 0)
@@ -264,7 +264,7 @@ function M.Build()
 	if M.frame then
 		return M.frame
 	end
-	M.frame = BT.Bar.Section("rep", 7)
+	M.frame = BT.Dock.Section("rep", 7)
 	M.frame.kind = "meter"
 	M.frame.wantHeight = LINE_H
 	M.frame:SetHeight(LINE_H)
@@ -351,7 +351,7 @@ function M.Show(on)
 			M.ticker = nil
 		end
 	end
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 end
 
 function M:OnEnable()

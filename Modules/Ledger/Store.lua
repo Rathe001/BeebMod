@@ -13,7 +13,7 @@
 --     realms = { ["Whitemane|Alliance"] = { people = { [key] = row } } },
 --   }
 --   row = { name, realm, class, race, level, guild, guid, last,
---           note, noted, notedBy, rating, flags = { [tag] = true } }
+--           note, noted, notedBy, rating, tags = { [tag] = true } }
 --
 -- (It is filed inside BeebModDB until the Ledger is an addon of its own,
 -- which takes it into a saved variable of its own once.)
@@ -71,7 +71,7 @@ end
 
 -- anything of yours on it: a row with none of these is not kept
 function N.IsMine(p)
-	return p ~= nil and (p.note ~= nil or p.flags ~= nil or p.rating ~= nil)
+	return p ~= nil and (p.note ~= nil or p.tags ~= nil or p.rating ~= nil)
 end
 
 function N.Get(key)
@@ -213,28 +213,28 @@ function N.SetNote(key, text, info)
 	return p
 end
 
-function N.SetFlag(key, flag, on, info)
-	if not U.FlagByKey(flag) then
+function N.SetTag(key, tag, on, info)
+	if not U.TagByKey(tag) then
 		return nil
 	end
 	local p = N.Open(key, info)
 	if not p then
 		return nil
 	end
-	p.flags = p.flags or {}
-	p.flags[flag] = on and true or nil
-	if not next(p.flags) then
-		p.flags = nil
+	p.tags = p.tags or {}
+	p.tags[tag] = on and true or nil
+	if not next(p.tags) then
+		p.tags = nil
 	end
 	touched(true)
 	settle(key, p)
 	return p
 end
 
-function N.ToggleFlag(key, flag, info)
+function N.ToggleTag(key, tag, info)
 	local p = N.Get(key)
-	local on = not (p and p.flags and p.flags[flag])
-	return N.SetFlag(key, flag, on, info), on
+	local on = not (p and p.tags and p.tags[tag])
+	return N.SetTag(key, tag, on, info), on
 end
 
 function N.SetRating(key, rating, info)
@@ -257,7 +257,7 @@ end
 
 -- The people written on, found: a prefix of either half of the name, or the
 -- words anywhere in a guild or a note, as the census's search reads them.
--- query = { text, class, guild, flag, minLevel, maxLevel, limit }
+-- query = { text, class, guild, tag, minLevel, maxLevel, limit }
 -- Returns { { key, p } }, the latest written first.
 function N.Search(query)
 	query = query or {}
@@ -274,7 +274,7 @@ function N.Search(query)
 				or (p.note ~= nil and p.note:lower():find(text, 1, true) ~= nil)
 		end
 		if ok and query.class and p.class ~= query.class then ok = false end
-		if ok and query.flag and not (p.flags and p.flags[query.flag]) then ok = false end
+		if ok and query.tag and not (p.tags and p.tags[query.tag]) then ok = false end
 		if ok and query.guild and p.guild ~= query.guild then ok = false end
 		if ok and query.minLevel and (p.level or 0) < query.minLevel then ok = false end
 		if ok and query.maxLevel and (p.level or 0) > query.maxLevel then ok = false end
@@ -301,7 +301,7 @@ end
 -- THE MOVE (once): what you wrote on the census's rows, into the Ledger
 -- ---------------------------------------------------------------------------
 
-local MINE = { "note", "noted", "notedBy", "rating", "flags" }
+local MINE = { "note", "noted", "notedBy", "rating", "tags" }
 
 local function copy(t)
 	if type(t) ~= "table" then

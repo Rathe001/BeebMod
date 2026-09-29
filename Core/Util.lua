@@ -264,11 +264,11 @@ function U.UnitFullName(unit)
 end
 
 -- a tag by its key; nothing when the Ledger, which keeps the tags, is not here
-function U.FlagByKey(key)
-	if not BT.AllFlags then
+function U.TagByKey(key)
+	if not BT.AllTags then
 		return nil
 	end
-	for _, f in ipairs(BT.AllFlags()) do
+	for _, f in ipairs(BT.AllTags()) do
 		if f.key == key then
 			return f
 		end

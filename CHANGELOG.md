@@ -5,6 +5,93 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Each part of BeebMod is called inside by the name you see.** The
+  Expedition, the Dock, tags and nine utilities had older names in the code
+  and in your saved file. At your first login with this version, your
+  switches, settings, tags, journal and commendations move to the new names;
+  nothing is lost, and a second login changes nothing. After updating, quit
+  and start the game again: several files moved, and `/reload` does not load
+  new files.
+- **`/bt tag [name] <tag>` puts a tag on someone or takes it off.** It was
+  `/bt flag`, which still works.
+- **A page opens by its title**: `/bt currency`, `/bt tooltips`,
+  `/bt unitframes`, `/bt resourcedisplay`. The old short names, such as
+  `/bt gold` and `/bt tips`, now search the Ledger instead.
+- **The Commendations page's Points column says "Unique kills"**, where it
+  still said "Kinds".
+- **The top Expedition rank is Expedition Leader**, in place of Nesingwary's
+  Equal. It still takes 3,600 points.
+- **Each Expedition rank has a badge.** Greenhorn's is stitched leather with a
+  paw print. Each rank after it adds something: iron, bronze, silver and then
+  gold, spears, tusks, antlers and a ribbon, up to Expedition Leader's tiger
+  stripes and jade. Your badge is large at the top of the Commendations page.
+  Above the commendations, the ten ranks sit in a row: the ones you have
+  reached are lit, yours glows gold, and the ones ahead are grey. Point at one
+  to see the points it takes. The toast for a new rank shows its badge, and
+  the Testing page has a button that shows it.
+
+- **The Expedition is this character's alone.** The This character and All
+  characters buttons are gone. The journal and the Commendations page show
+  the character you are playing, and an enemy's page shows only your kills.
+  Your other characters' journals are kept, and each shows when you play it.
+- **A timed delivery shows its clock.** A quest that only asks you to carry
+  something, such as Iverron's Antidote, counts as ready to hand in the moment
+  you take it, and the tracker hid the clock of a ready quest. The clock now
+  shows until the quest is handed in or fails. It is as large as the quest's
+  title, in amber with a pocket watch before it and a band of the same colour
+  behind it, and turns red in the last minute. The quest's tooltip counts
+  down with it while it is open.
+- **"Unique kills" in place of "kinds".** The Expedition's title reads "73
+  kills (7 unique)", and the journal, the Commendations page, the toasts and
+  the settings say "unique kill" where they said "kind of mob", and
+  "enemy" where they said "mob". The Tooltips settings say "NPCs".
+- **The Commendations page is redrawn.** A column down the left shows your
+  rank and the points to the next, how many commendations you have earned of
+  all there are, each group with its own count and bar, and where your points
+  come from. Click a group to see it alone. The commendations are tiles three
+  across; earned ones are lit, and say when they were earned and by which
+  kill (for zone ones, in which zone). Kills from before this show only the
+  date.
+- **Your own unit frame shows the resting Zzz** while you are resting, as the
+  game's player frame did.
+- **The Field Journal's list is a table.** One row an enemy, with its face at
+  the left, under column headings that stay put as you scroll: name, rank,
+  type, family, level, zone, kills, mastery and points. Click a heading to
+  sort by that column, and click it again to turn the order round.
+- **An enemy's page can show where you killed it.** A Model · Map switch in the
+  corner of the model's frame shows the map of the zone instead, with a dot
+  for each place you killed it. The dots are round and see-through, and get
+  smaller the more of them there are. The first kill's dot is larger. The
+  mouse wheel zooms in on the map and a drag moves it; Reset view shows the
+  whole zone again. Each kill's
+  place is kept from now on, up to 25 places for an enemy; kills from before
+  show only the first. An enemy met in a dungeon shows that dungeon's loading
+  screen, because this client has no dungeon maps. The switch remembers your
+  choice for the next enemy.
+- **The reagent bag and the keyring are under the bag slots.** With the
+  game's bag bar hidden, both were out of reach. Under the four bags, a
+  reagent bag slot works like the others: drop a reagent bag on it, drag it
+  off, click to open it. Under that, a click on the keyring opens it, and a
+  key dropped on it goes in. Each shows where the game has one.
+- **A bag you put on shows in its slot.** The slots looked in Classic's
+  inventory slots, 20 to 23, and this client keeps bags in 31 to 34, so an
+  equipped bag never showed. They now ask the game's own bag slots which
+  inventory slot is theirs.
+- **Every bag slot has a tooltip.** A bag shows the game's own tooltip for
+  it, or its name. An empty slot says what it is and what to drop on it.
+- **Pointing at a bag slot lights up that bag's slots** in the open bag
+  windows, as the game's own bag bar does.
+- **The bag slots are a row inside the backpack.** They sit across its
+  bottom left, on the line with your money, instead of in a column beside
+  the window.
+- **Each part uses its own name inside BeebMod too.** Some were kept under
+  older names, such as "gold" for Currency and "tips" for Tooltips. Your
+  settings move to the new names when you log in. There is nothing to do.
+  Typing `/bt` and a part's name opens its page, so `/bt currency` works
+  where `/bt gold` did.
+
 ## 0.1.0-beta.12
 
 - **One card for mobs that share a name.** The game can give two different

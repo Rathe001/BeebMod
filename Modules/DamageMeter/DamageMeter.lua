@@ -37,7 +37,7 @@ local U = BT.Util
 
 local M = BT.Module({
 	key = "damagemeter",
-	feature = "frames",
+	feature = "unitframes",
 	title = "Damage meter",
 	blurb = "Draws the game's own damage meter flat",
 	order = 58,
@@ -706,7 +706,7 @@ function M.Dump()
 		lines[#lines + 1] = "types: " .. table.concat(types, " ")
 	end
 	BT.EnsureBound()
-	BeebModDB.meterDump = {
+	BeebModDB.damagemeterDump = {
 		at = U.Now(),
 		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
 		lines = lines,
@@ -714,4 +714,4 @@ function M.Dump()
 	return #lines
 end
 
-BT.Record("meterDump", M.Dump, "damagemeter")
+BT.Record("damagemeterDump", M.Dump, "damagemeter")

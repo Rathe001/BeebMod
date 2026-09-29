@@ -258,7 +258,7 @@ function M.Layout()
 		end
 		M.list = {}
 		frame:Hide()
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 		return 0
 	end
 	local found = M.Find()
@@ -319,7 +319,7 @@ function M.Layout()
 	if want ~= frame:IsShown() then
 		frame:SetShown(want)
 	end
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 	return #list
 end
 
@@ -327,7 +327,7 @@ function M.Build()
 	if M.frame then
 		return M.frame
 	end
-	M.frame = BT.Bar.Section("buttons", 6)
+	M.frame = BT.Dock.Section("buttons", 6)
 	M.frame.wantHeight = ICON + PAD_Y * 2
 	M.frame:SetHeight(M.frame.wantHeight)
 	-- the dock sets the width; the rows are worked out against it

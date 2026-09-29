@@ -20,7 +20,7 @@ local CreateFrame, C_Timer = BT.Cpu.For("Modules/ItemLevel/ItemLevel.lua")
 local U = BT.Util
 
 local M = BT.Module({
-	key = "ilevel",
+	key = "itemlevel",
 	title = "Item level",
 	blurb = "The average item level of what you wear",
 	order = 39.65,
@@ -125,7 +125,7 @@ function M.Update()
 	end
 	local cell = M.Cell()
 	-- nothing worn that has a level, nothing to say
-	M.chip:Want(cell ~= nil and BT.Enabled("ilevel"))
+	M.chip:Want(cell ~= nil and BT.Enabled("itemlevel"))
 	if cell then
 		M.chip:Set(cell)
 	end
@@ -199,7 +199,7 @@ function M.Build()
 	if M.chip then
 		return M.chip
 	end
-	M.chip = BT.Bar.Chip("ilevel", "worn", 1)
+	M.chip = BT.Dock.Chip("itemlevel", "worn", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
 	M.chip:SetScript("OnLeave", function()
 		if GameTooltip then
@@ -221,7 +221,7 @@ function M.Settle()
 	if C_Timer and C_Timer.After then
 		for _, after in ipairs(LOOK_AGAIN) do
 			C_Timer.After(after, function()
-				if BT.Enabled("ilevel") then
+				if BT.Enabled("itemlevel") then
 					M.Update()
 				end
 			end)
@@ -236,7 +236,7 @@ for _, event in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "PLAYER_ENTERING_WORLD",
 end
 local queued = false
 M.events:SetScript("OnEvent", function(_, event, unit)
-	if not BT.Enabled("ilevel") then
+	if not BT.Enabled("itemlevel") then
 		return
 	end
 	if event == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then
@@ -251,7 +251,7 @@ M.events:SetScript("OnEvent", function(_, event, unit)
 		queued = true
 		C_Timer.After(0, function()
 			queued = false
-			if BT.Enabled("ilevel") then
+			if BT.Enabled("itemlevel") then
 				M.Update()
 			end
 		end)
@@ -269,7 +269,7 @@ function M.Show(on)
 	else
 		M.Update()
 	end
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 end
 
 function M:OnEnable()

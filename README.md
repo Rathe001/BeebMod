@@ -48,7 +48,7 @@ settings.
 
 | tab | what it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Your four bag slots sit down the left of the backpack. Drag a bag onto one to put it on, or off one to take it out. Its page has the switch that hides the game's bag bar. |
+| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row across the foot of the backpack. Drag a bag onto a slot to put it on, or off one to take it out. Its page has the switch that hides the game's bag bar. |
 | **Character sheet** | Item level on every slot, short stat lists with sections that fold, and BeebMod's look. |
 | **Menus** | The **Game menu** that Escape opens, and every **Dropdown menu**, a switch each. The game keeps some of its menu buttons from addons, so those keep the game's look. |
 | **Tooltips** | Unit tooltips rebuilt into two lines, in BeebMod's look. Elites and rares get a gold or silver border. |
@@ -64,12 +64,13 @@ page searches the people you wrote about, and with the Census on, everyone
 the Census knows. The Ledger keeps what you write in its own book
 (`BeebModDB.ledger`), so it doesn't need the Census.
 
-**Nesingwary's Expedition** is a journal of every kind of mob you have
-killed. Each kind has a card with its model, its lore from the Warcraft Wiki
-and its mastery. Every kind and every commendation is worth points. The
-points set your rank, from Greenhorn to Nesingwary's Equal. A line in the
+**Nesingwary's Expedition** is a journal of every enemy you have
+killed. Each has a card with its model, its lore from the Warcraft Wiki
+and its mastery. On its page, a Model · Map switch shows the zone's map with
+a dot for each place you killed it, or a dungeon's loading screen. Every unique kill and every commendation is worth points. The
+points set your rank, from Greenhorn to Expedition Leader. A line in the
 dock shows your points and rank. Click it to open the journal, or type
-`/bt expedition`. Its files are still in `Modules/Menagerie`.
+`/bt expedition`.
 
 **Made-up data** is for screenshots. A switch on the Testing page, or
 `/bt demo`, shows a made-up realm, notes, a journal and a party in every
@@ -97,7 +98,7 @@ function M:BuildTab(parent) ... end    -- built once, the first time it opens
 function M:Cells() return { ... } end  -- what it adds to the dock
 function M:OnBind(db) ... end          -- the settings are bound: migrate, sweep
 BT.Command("mycmd", function(rest) ... end, "what it does", "myutility")
-BT.Record("myDump", M.Dump, "myutility")  -- a record for the Testing page
+BT.Record("myutilityDump", M.Dump, "myutility")  -- a record for the Testing page
 ```
 
 A command is for something you type, such as a name or a number of days. A
@@ -105,6 +106,13 @@ debug tool is a button on the Testing page instead. A dump of the game's
 frames is a function that writes into `BeebModDB` under its own key and
 returns how many lines it wrote. `BT.Record` registers it, so the page's
 Record button runs it and its Clear button takes it out.
+
+A utility is named after its title. "Resource display" has the key
+`resourcedisplay`, lives in `Modules/ResourceDisplay/ResourceDisplay.lua`,
+keeps its options in `settings.resourcedisplay` and writes its record as
+`resourcedisplayDump`. To rename one, change all of these and add the old and
+new names as a step in `Core/Rename.lua`, which moves the saved values across
+at the next login.
 
 A hook that goes through saved data and removes anything belongs to the
 module that owns that data, never to the core. A utility you have switched
@@ -114,6 +122,8 @@ lives in `Modules/Ledger`.
 ## Files
 
     Core/Init.lua        the module registry, the settings and the book
+    Core/Rename.lua      moves saved settings from a module's old name to its
+                         new one, once, at login
     Core/Util.lua        names, keys, how old a record is, colours
     Core/Session.lua     "this session" for Currency, Experience, Reputation
                          and Pick Pocket: when one starts, and its pace an hour
@@ -125,7 +135,7 @@ lives in `Modules/Ledger`.
     UI/Window.lua        the window: a block per feature down the side, a page per tab
     UI/Welcome.lua       the first login's six cards, a switch per feature
     UI/Settings.lua      General: the look, and the panel header's switches
-    UI/Bar.lua           the dock: a row of cells, and sections under it
+    UI/Dock.lua          the dock: a row of cells, and sections under it
     UI/Pill.lua          the pill, and the one place a measurement is judged
                          good or bad
     UI/Tip.lua           the tooltip frame every cell in the dock shares
@@ -139,23 +149,25 @@ lives in `Modules/Ledger`.
                          the notes on a tooltip
     Modules/Minimap/     the map in the dock; Modules/Buttons/ the addon buttons
     Modules/XP/, Rep/    the experience and reputation lines of the dock
-    Modules/Metrics/     the readout grid; Gold/, Space/, Durability/,
-                         ItemLevel/, Pickpocket/, Speed/ and Perf/ are its rows
+    Modules/Metrics/     the readout grid; Currency/, Bags/, Durability/,
+                         ItemLevel/, Pickpocket/, Speed/ and Performance/ are
+                         its rows
     Modules/Clock/       the time in the dock's header
     Modules/Census/      the counting and the charts
-    Modules/Tips/        the compact tooltip, and its switches
+    Modules/Tooltips/    the compact tooltip, and its switches
     Modules/Tracker/     the quest tracker in the dock (Quests.lua reads the log)
-    Modules/Bars/, BagWindow/, Chat/, DamageMeter/, Menus/, Micro/
+    Modules/Bars/, BagWindow/, Chat/, DamageMeter/, Dropdowns/, Micro/
                          the client's own frames, drawn flat
     Modules/CharSheet/   the character window
-    Modules/PRD/         the personal resource display
-    Modules/Frames/      the unit frames: one secure button drawn from secret
+    Modules/ResourceDisplay/
+                         the personal resource display
+    Modules/UnitFrames/  the unit frames: one secure button drawn from secret
                          values it never reads, the groups without snippets,
                          and auras in the client's own containers (Auras.lua),
                          because this client doesn't let an addon read an aura
                          in a fight. Also your buffs' tray beside the dock
                          (Buffs.lua)
-    Modules/Menu/        the game menu Escape opens, restyled (look only)
+    Modules/GameMenu/    the game menu Escape opens, restyled (look only)
     Core/UnitProbe.lua   what the client tells a unit frame, written down by
                          Record on the Testing page
     Core/Cpu.lua         CPU use on the Testing page: times what runs on its
@@ -170,23 +182,26 @@ lives in `Modules/Ledger`.
                          beside it
     Art/Cards/           the Expedition card's ornaments, white and tinted for
                          each mastery metal (scripts/make-cards.lua, in Lua)
-    Modules/Menagerie/LoreData.lua
+    Art/Ranks/           the ten Expedition rank badges, drawn in
+                         scripts/rank-badges.html and cut into textures by
+                         scripts/make-badges.py (headless Edge and Pillow)
+    Modules/Expedition/LoreData.lua
                          the cards' lore: short descriptions from Warcraft Wiki
-                         pages (https://warcraft.wiki.gg) on every mob of every
+                         pages (https://warcraft.wiki.gg) on every enemy of every
                          Classic zone, dungeon and raid, and on the races,
                          animals, beast families and creature types they are.
-                         A card shows the page titled with the mob's whole
+                         A card shows the page titled with the enemy's whole
                          name, then its model's page, its family's and its
                          type's. Text under CC BY-SA 3.0,
                          credited on the Expedition's settings page. scripts/fetch-lore.ps1
                          writes it. The script keeps what it fetched and asks
                          the wiki only for what is new; -Rebuild writes the
-                         file again from what it kept, asking only for mobs met
+                         file again from what it kept, asking only for enemies met
                          since. scripts/lore-curated.json holds the text checked
                          by hand against docs/lore-rules.md, and the script
                          uses it in place of the wiki's. An entry there with a
                          "kind" is a whole page written by hand, such as Satyr
-    Modules/Menagerie/BodyData.lua
+    Modules/Expedition/BodyData.lua
                          what each model file is, by its folder in the
                          community listfile: creature/harpy is a harpy.
                          Written by scripts/make-bodies.lua, which says how to
@@ -295,9 +310,9 @@ shows a stranger's talents; the census has no spec chart for the same reason.
 The cog sits at the right end, apart from the other cells, because it opens
 the settings, and you need to find it with everything else switched off.
 
-    BT.Bar.Cell(key, width)      a cell on the row
-    BT.Bar.Section(key, order)   a panel of your own underneath it
-    BT.Bar.MakeHandle(child)     let something in it drag the whole dock
+    BT.Dock.Cell(key, width)      a cell on the row
+    BT.Dock.Section(key, order)   a panel of your own underneath it
+    BT.Dock.MakeHandle(child)     let something in it drag the whole dock
 
 Everything in the dock takes mouse clicks. The row is cells you click and the
 tracker is quests you click, so no bare part of the panel is left to drag. The
@@ -306,7 +321,7 @@ the minimap and stays wherever you drag it.
 
 The dock decides where it sits, how big it is and how it looks. A module
 decides what goes in its section and how tall that comes out (`wantHeight`,
-`wantWidth`, then `BT.Bar.Relayout()`). With the top row switched off, the
+`wantWidth`, then `BT.Dock.Relayout()`). With the top row switched off, the
 dock stays for the sections. With nothing in it at all, it hides.
 
 The dock never runs off the bottom of the screen. It has the room from its top

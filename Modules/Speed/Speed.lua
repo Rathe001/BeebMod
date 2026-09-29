@@ -207,7 +207,7 @@ function M.Build()
 	if M.chip then
 		return M.chip
 	end
-	M.chip = BT.Bar.Chip("speed", "run", 1)
+	M.chip = BT.Dock.Chip("speed", "run", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
 	M.chip:SetScript("OnLeave", function()
 		if GameTooltip then
@@ -232,7 +232,7 @@ function M.Show(on)
 		M.ticker:Cancel()
 		M.ticker = nil
 	end
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 end
 
 function M:OnEnable()

@@ -98,12 +98,12 @@ function M.LevelFor(button)
 	if not (button and button.GetID and type(GetInventoryItemLink) == "function") then
 		return nil
 	end
-	local ilevel = BT.GetModule("ilevel")
-	if not (ilevel and ilevel.LevelOf) then
+	local itemlevel = BT.GetModule("itemlevel")
+	if not (itemlevel and itemlevel.LevelOf) then
 		return nil
 	end
 	local ok, link = pcall(GetInventoryItemLink, "player", button:GetID())
-	return ok and ilevel.LevelOf(link) or nil
+	return ok and itemlevel.LevelOf(link) or nil
 end
 
 function M.Update(button)
@@ -737,8 +737,8 @@ local function dressClose(button)
 		o.cross.beebs = true
 		o.cross:SetSize(10, 10)
 		o.cross:SetPoint("CENTER")
-		o.cross:SetTexture(BT.Bar.ICONS)
-		BT.Bar.CrossCoord(o.cross)
+		o.cross:SetTexture(BT.Dock.ICONS)
+		BT.Dock.CrossCoord(o.cross)
 		button:HookScript("OnEnter", function()
 			if dressed[button] and M.Themed() then
 				dressed[button].cross:SetVertexColor(1, 1, 1, 1)
@@ -785,8 +785,8 @@ local function dressToggle(button)
 		o.chevron.beebs = true
 		o.chevron:SetSize(12, 12)
 		o.chevron:SetPoint("CENTER")
-		o.chevron:SetTexture(BT.Bar.ICONS)
-		BT.Bar.ChevronCoord(o.chevron)
+		o.chevron:SetTexture(BT.Dock.ICONS)
+		BT.Dock.ChevronCoord(o.chevron)
 		o.chevron:SetVertexColor(0.62, 0.68, 0.66, 1)
 		o.surface = BT.Pill.Surface(button, "BACKGROUND", -7)
 		o.kind = "button"
@@ -1116,7 +1116,7 @@ local function compactRow(row)
 			if M.Chevron then
 				local c = M.Chevron(row)
 				if c then
-					BT.Bar.ChevronCoord(c, folded)
+					BT.Dock.ChevronCoord(c, folded)
 					c:Show()
 				end
 			end
@@ -1543,7 +1543,7 @@ local function chevron(row)
 	c.beebs = true
 	c:SetSize(8, 8)
 	c:SetPoint("LEFT", row, "LEFT", 3, 0)
-	c:SetTexture(BT.Bar.ICONS)
+	c:SetTexture(BT.Dock.ICONS)
 	c:SetVertexColor(0.55, 0.62, 0.60, 1)
 	row.beebsChevron = c
 	return c
@@ -1597,7 +1597,7 @@ function M.FoldRow(row)
 		end
 		local c = chevron(row)
 		if c then
-			BT.Bar.ChevronCoord(c, M.Folded(title))
+			BT.Dock.ChevronCoord(c, M.Folded(title))
 			c:Show()
 		end
 		place(row.Title, { { "LEFT", row, "LEFT", 14, 0 } })
@@ -2814,7 +2814,7 @@ function M.Dump()
 		end
 	end
 	BT.EnsureBound()
-	BeebModDB.sheetDump = {
+	BeebModDB.charsheetDump = {
 		at = U.Now and U.Now() or 0,
 		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
 		lines = lines,
@@ -2822,4 +2822,4 @@ function M.Dump()
 	return #lines
 end
 
-BT.Record("sheetDump", M.Dump, "charsheet")
+BT.Record("charsheetDump", M.Dump, "charsheet")

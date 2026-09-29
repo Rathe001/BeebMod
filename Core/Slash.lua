@@ -50,6 +50,9 @@ local function bootLines(say)
 	if BT.foldedOnLoad then
 		say(("%d folded in from the realm's old name"):format(BT.foldedOnLoad))
 	end
+	if BT.renamedOnLoad then
+		say(("%d settings moved to their new names"):format(BT.renamedOnLoad))
+	end
 	if BT.lateBook then
 		say(("the book turned up late · %d found · %d seen since login kept"):format(BT.lateBook.found,
 			BT.lateBook.kept))
@@ -93,14 +96,14 @@ function BT.WhatLoaded()
 	for _, err in ipairs(BT.Boot and BT.Boot.failed or {}) do
 		U.Print("|cffff6b6blogin step failed|r " .. err)
 	end
-	-- the over-time bars' flash is the client's to allow (Frames/Timers.lua)
+	-- the over-time bars' flash is the client's to allow (UnitFrames/Timers.lua)
 	local F = BT.UnitFrames
 	local timers = F and F.Timers
 	local flash = timers and timers.seen and timers.seen.textRefused
 	if flash then
 		U.Print("|cffff6b6bflash refused|r " .. flash:sub(1, 120))
 	end
-	-- and a secret raid mark, which only the client may draw (Frames/Unit.lua)
+	-- and a secret raid mark, which only the client may draw (UnitFrames/Unit.lua)
 	if F and F.markerWith == false then
 		U.Print("|cffff6b6bmarks refused|r the game accepts none of the ways BeebMod draws a secret raid mark")
 	end

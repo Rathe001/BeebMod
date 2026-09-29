@@ -33,6 +33,7 @@
 # line that loaded it: anyone else installing the addon has no such link.
 # the core: the book, the window, the bar, and the look of everything
 Core\Init.lua
+Core\Rename.lua
 Core\Cpu.lua
 Core\Util.lua
 Core\Session.lua
@@ -56,7 +57,7 @@ UI\Window.lua
 UI\CensusWindow.lua
 UI\Settings.lua
 UI\Welcome.lua
-UI\Bar.lua
+UI\Dock.lua
 UI\Tip.lua
 
 # the utilities. Each one registers a tab, its cells on the bar and its own
@@ -72,22 +73,22 @@ Modules\Census\Chart.lua
 Modules\Census\Census.lua
 Modules\Census\Book.lua
 Modules\Census\Demo.lua
-Modules\Tips\Tips.lua
+Modules\Tooltips\Tooltips.lua
 Modules\Tracker\Quests.lua
 Modules\Tracker\Tracker.lua
 Modules\Bars\Bars.lua
 Modules\Micro\Micro.lua
 Modules\BagWindow\BagWindow.lua
 Modules\BagWindow\BagSlots.lua
-Modules\Menus\Menus.lua
+Modules\Dropdowns\Dropdowns.lua
 Modules\CharSheet\CharSheet.lua
 Modules\Minimap\Minimap.lua
 Modules\Clock\Clock.lua
 Modules\Buttons\Buttons.lua
 Modules\Metrics\Metrics.lua
-Modules\Perf\Perf.lua
-Modules\Gold\Gold.lua
-Modules\Space\Space.lua
+Modules\Performance\Performance.lua
+Modules\Currency\Currency.lua
+Modules\Bags\Bags.lua
 Modules\Durability\Durability.lua
 Modules\ItemLevel\ItemLevel.lua
 Modules\Pickpocket\Pickpocket.lua
@@ -96,26 +97,27 @@ Modules\XP\XP.lua
 Modules\Rep\Rep.lua
 # every kind of mob you have killed: the book, what counts as a kill, the
 # toast and the journal window before the module that drives them
-Modules\Menagerie\LoreData.lua
-Modules\Menagerie\BodyData.lua
-Modules\Menagerie\Journal.lua
-Modules\Menagerie\Kills.lua
-Modules\Menagerie\Toast.lua
-Modules\Menagerie\Card.lua
-Modules\Menagerie\Window.lua
-Modules\Menagerie\Menagerie.lua
-Modules\Menagerie\Demo.lua
+Modules\Expedition\LoreData.lua
+Modules\Expedition\BodyData.lua
+Modules\Expedition\Journal.lua
+Modules\Expedition\Kills.lua
+Modules\Expedition\Toast.lua
+Modules\Expedition\Card.lua
+Modules\Expedition\Window.lua
+Modules\Expedition\Stage.lua
+Modules\Expedition\Expedition.lua
+Modules\Expedition\Demo.lua
 Modules\Chat\Chat.lua
 Modules\DamageMeter\DamageMeter.lua
-Modules\PRD\PRD.lua
-Modules\Menu\Menu.lua
+Modules\ResourceDisplay\ResourceDisplay.lua
+Modules\GameMenu\GameMenu.lua
 # every unit frame, in the toolkit's clothes
-Modules\Frames\Unit.lua
-Modules\Frames\Auras.lua
-Modules\Frames\Timers.lua
-Modules\Frames\Buffs.lua
-Modules\Frames\Frames.lua
-Modules\Frames\Demo.lua
+Modules\UnitFrames\Unit.lua
+Modules\UnitFrames\Auras.lua
+Modules\UnitFrames\Timers.lua
+Modules\UnitFrames\Buffs.lua
+Modules\UnitFrames\UnitFrames.lua
+Modules\UnitFrames\Demo.lua
 
 Core\Slash.lua
 # what the client will tell a unit frame: a record on the Testing page

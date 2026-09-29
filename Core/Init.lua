@@ -97,8 +97,11 @@ BT.SETTINGS = {
 	-- the most characters a book keeps: past it, the ones seen longest ago
 	-- go first (DB.Cap). About 9 MB of saved file, packed (Josh 2026-09-24).
 	bookCap = 150000,      -- 0 = no limit
-	bar = true,            -- the floating bar
-	barPos = nil,          -- where you dragged it
+	-- targetRow: false when you hide the target row along the top of the dock.
+	-- No default: the dock reads anything but false as on, and a default here
+	-- would be filled in before Core/Rename.lua could move an old "bar = false"
+	-- to it.
+	dockPos = nil,         -- where you dragged the dock
 }
 
 -- ---------------------------------------------------------------------------
@@ -162,8 +165,10 @@ end
 -- MODULES THAT ARE GONE (Josh 2026-09-24): their switch, their place in your
 -- tab order and their own settings, so the saved file stops carrying them.
 -- "bags" was the Bag bar restyle; the Bags line in Metrics owns the client's
--- bag bar now.
-BT.RETIRED = { "bags" }
+-- bag bar now, and since 2026-09-29 its key as well (Core/Rename.lua), so
+-- "bags" is off this list: every release until then dropped the restyle's
+-- leftovers at each bind, and from here on the name is a live module's.
+BT.RETIRED = {}
 
 function BT.DropRetired()
 	local s = BT.settings
@@ -301,18 +306,18 @@ end
 -- Six of them, each a switch of its own over every module in it. Switching a
 -- feature off takes all of its modules with it and remembers each one's own
 -- switch, so switching it back on brings back exactly what you had. A
--- feature with one page (the Census, the Ledger, the Menagerie) IS its
+-- feature with one page (the Census, the Ledger, the Expedition) IS its
 -- module: switched on, the module is on too.
 --
 -- The dock's logo and cog are none of these: they are always there, the way
--- back into the settings whatever is switched off (UI/Bar.lua).
+-- back into the settings whatever is switched off (UI/Dock.lua).
 -- ---------------------------------------------------------------------------
 BT.FEATURES = {
 	-- each with its picture (Art/Features, made by scripts/make-feature-art.ps1
 	-- from screenshots taken with /bt demo on, Josh 2026-09-27)
 	{ key = "dock", title = "Dock", color = { 0.45, 0.75, 0.99 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock",
 		line = "A panel at the side of the screen. It holds the minimap, clock, XP, reputation, gold, bags, durability and quest tracker." },
-	{ key = "frames", title = "Unit frames", color = { 0.49, 0.77, 0.48 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\frames",
+	{ key = "unitframes", title = "Unit frames", color = { 0.49, 0.77, 0.48 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes",
 		line = "Frames for you, your party, raid, target and focus, with buffs. Your heals and damage over time show as bars." },
 	{ key = "interface", title = "Interface", color = { 0.88, 0.64, 0.29 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface",
 		line = "The game's action bars, bags, chat, character sheet, tooltips and menus, drawn in BeebMod's style." },
@@ -322,11 +327,12 @@ BT.FEATURES = {
 		line = "Notes, tags and a rating for people you meet. They show on their tooltip, and in the dock when you target them." },
 	-- NESINGWARY'S EXPEDITION (Josh 2026-09-27: "Menagerie ... kind of feels
 	-- like it implies pets", and "make the player feel like they are part of
-	-- the nesingwary expidition"). The name players see; its key, its module
-	-- and its saved journal are still "menagerie". `short` where there is no room.
-	{ key = "menagerie", title = "Nesingwary's Expedition", short = "Expedition", color = { 0.44, 0.64, 0.80 },
-		single = "menagerie", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\menagerie",
-		line = "A journal of every kind of mob you kill, with its lore and masteries. Each kind is worth points. Your points set your rank." },
+	-- the nesingwary expidition"). Its key, module, files and saved journal
+	-- took the name too on 2026-09-29 (Core/Rename.lua). `short` where there
+	-- is no room.
+	{ key = "expedition", title = "Nesingwary's Expedition", short = "Expedition", color = { 0.44, 0.64, 0.80 },
+		single = "expedition", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition",
+		line = "A journal of every enemy you kill, with its lore and masteries. Each unique kill is worth points. Your points set your rank." },
 }
 local featureByKey = {}
 for _, f in ipairs(BT.FEATURES) do
@@ -338,7 +344,7 @@ function BT.Feature(key)
 end
 
 -- a module that still says the group it used to be filed under
-local FROM_GROUP = { dock = "dock", combat = "frames", windows = "interface" }
+local FROM_GROUP = { dock = "dock", combat = "unitframes", windows = "interface" }
 
 -- the feature a module (or a module's key) is part of: its own word, its
 -- owner's for a part, or what its older group meant
@@ -487,8 +493,8 @@ function BT.SetEnabled(key, on)
 	-- there; Rebuild asks the live modules which cells there should BE. With
 	-- Update, switching the Ledger off left its name, its dots and its note
 	-- sitting on the dock with nothing behind them.
-	if BT.Bar then
-		BT.Bar.Rebuild()
+	if BT.Dock then
+		BT.Dock.Rebuild()
 	end
 	return true
 end
@@ -523,8 +529,8 @@ function BT.SetFeature(key, on)
 	if BT.Window then
 		BT.Window.Rebuild()
 	end
-	if BT.Bar then
-		BT.Bar.Rebuild()
+	if BT.Dock then
+		BT.Dock.Rebuild()
 	end
 	return true
 end
@@ -619,8 +625,6 @@ function BT.RecordAll()
 	return wrote, waits
 end
 
--- Older builds wrote a few reports into the settings instead; they go too.
-local OLD_REPORTS = { "menagerieLoreReport", "menagerieModelReport", "menagerieMapReport", "menagerieSceneReport" }
 
 -- every record out of the saved file; how many there were
 function BT.ClearRecords()
@@ -632,9 +636,10 @@ function BT.ClearRecords()
 			n = n + 1
 		end
 	end
-	for _, key in ipairs(OLD_REPORTS) do
-		if BT.settings and BT.settings[key] ~= nil then
-			BT.settings[key] = nil
+	-- and a record still under the name it had before its module was renamed
+	for _, key in ipairs(BT.Rename and BT.Rename.OldRecords() or {}) do
+		if BeebModDB[key] ~= nil then
+			BeebModDB[key] = nil
 			n = n + 1
 		end
 	end
@@ -798,6 +803,13 @@ function BT.Bind(realm, faction)
 	-- none - then what you wrote, which is the floor under both
 	BT.TakeStashed(key)
 	BT.TakeStashedSettings()
+	-- THE OLD NAMES TO THE NEW (Josh 2026-09-29, Core/Rename.lua): after the
+	-- stashes, which may carry the old ones, and before anything reads a
+	-- module's switch, its place or its options
+	if BT.Rename then
+		local moved = BT.Rename.Run(BeebModDB, BeebModKeep, BeebModChar)
+		BT.renamedOnLoad = moved > 0 and moved or nil
+	end
 	-- after the stashes, which would otherwise bring them back
 	BT.DropRetired()
 	-- a switch for each feature, once, from the modules you already have on

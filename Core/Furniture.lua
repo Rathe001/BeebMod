@@ -238,7 +238,7 @@ end
 
 -- a window: our surface and shadow on the root, then the tree. `surface`,
 -- when given, is a frame of ours the surface is drawn on instead - for a root
--- nothing may be made on (a menu the client is composing: Modules/Menus)
+-- nothing may be made on (a menu the client is composing: Modules/Dropdowns)
 function Dresser:DressRoot(root, surface)
 	local host = surface or root
 	self.roots[host] = true

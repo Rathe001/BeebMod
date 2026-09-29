@@ -132,7 +132,7 @@ function M.Build()
 	if M.frame then
 		return M.frame
 	end
-	M.frame = BT.Bar.HeaderItem(CreateFrame("Button", nil, UIParent))
+	M.frame = BT.Dock.HeaderItem(CreateFrame("Button", nil, UIParent))
 	M.frame:SetSize(60, 18)
 	-- THE HEADER'S SIZE, NOT THE SMALL PRINT (Josh 2026-09-22): the time is
 	-- one of the things you glance at, so it reads at the size of the name
@@ -176,7 +176,7 @@ function M.Show(on)
 			M.ticker = nil
 		end
 	end
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 end
 
 function M:OnEnable()

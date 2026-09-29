@@ -45,8 +45,8 @@ local GROUP_H, GROUP_GAP, FOOT_H = 20, 8, 16
 -- they need the room
 -- (640 tall, Josh 2026-09-24: the rail's five groups want the room; 660
 -- the same day, for the Testing tab under General; 682, a tab's stride more,
--- for the Menagerie's, Josh 2026-09-25)
--- (taller by two tabs, Josh 2026-09-27: the Ledger's row and the Menagerie's
+-- for the Expedition's, Josh 2026-09-25)
+-- (taller by two tabs, Josh 2026-09-27: the Ledger's row and the Expedition's
 -- line have tabs in the Dock's block too, and the rail has to hold them)
 local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 728
 -- the page's own header: its name, a line under it, and its switch
@@ -128,8 +128,8 @@ local function makeTab(i)
 		local g = tab:CreateTexture(nil, "OVERLAY")
 		g:SetSize(10, 10)
 		g:SetPoint("RIGHT", tab, "RIGHT", -6, up and 4 or -4)
-		g:SetTexture(BT.Bar.ICONS)
-		BT.Bar.ChevronCoord(g, up)
+		g:SetTexture(BT.Dock.ICONS)
+		BT.Dock.ChevronCoord(g, up)
 		g:SetVertexColor(0.55, 0.63, 0.59, 0.9)
 		g:Hide()
 		tab.grip[n] = g
@@ -308,9 +308,9 @@ function W.Drop(tab)
 	end
 	-- the rail re-anchors every tab, the dragged one included
 	W.Rebuild()
-	if BT.Bar then
-		BT.Bar.Rebuild()
-		BT.Bar.Relayout()
+	if BT.Dock then
+		BT.Dock.Rebuild()
+		BT.Dock.Relayout()
 	end
 end
 
@@ -348,7 +348,7 @@ W.PAGES = {
 		blurb = "The map in the dock, and the line of other addons' buttons" },
 	progress = { title = "Progress", group = "dock", members = { "xp", "rep" },
 		blurb = "Your level and standing, and about how long the rest will take" },
-	allmenus = { title = "Menus", group = "interface", members = { "menu", "menus" },
+	allmenus = { title = "Menus", group = "interface", members = { "gamemenu", "dropdowns" },
 		blurb = "The menu Escape opens, and every dropdown and right-click menu" },
 	censusset = { title = "Census", group = "census", members = { "census" },
 		blurb = "The realm's charts, in their own window" },
@@ -374,14 +374,14 @@ end
 -- ANOTHER FEATURE'S ROW IN THE DOCK (Josh 2026-09-27: "We are not able to
 -- rearrange the menagerie or ledger... I guess the dock settings can be what
 -- the widget displays? Those entries should disappear if the module is
--- disabled"). The Menagerie's line and the Ledger's target row stand in the
+-- disabled"). The Expedition's line and the Ledger's target row stand in the
 -- dock, but their tabs are in their own features' blocks, where nothing is
 -- dragged. So each has a second tab in the Dock's block, at its place in the
 -- dock's order: dragged, it moves the row, and its page is what the row
 -- shows (the module's BuildDockTab). It is there only while its module is.
-W.DOCK_PAGES = { menagerie = "dock:menagerie", ledger = "dock:ledger" }
-W.PAGES["dock:menagerie"] = { title = "Expedition", group = "dock", members = { "menagerie" },
-	dockOf = "menagerie", blurb = "Nesingwary's Expedition's line in the dock. Drag this tab to move it." }
+W.DOCK_PAGES = { expedition = "dock:expedition", ledger = "dock:ledger" }
+W.PAGES["dock:expedition"] = { title = "Expedition", group = "dock", members = { "expedition" },
+	dockOf = "expedition", blurb = "Nesingwary's Expedition's line in the dock. Drag this tab to move it." }
 W.PAGES["dock:ledger"] = { title = "Ledger", group = "dock", members = { "ledger" },
 	dockOf = "ledger", blurb = "The Ledger's target row in the dock. Drag this tab to move it." }
 
@@ -603,22 +603,22 @@ local function dockPage(body)
 	local sizeSec = st:Section("Size")
 	local size = BT.Widgets.Row(sizeSec, "Dock size", "The whole panel, from the header to the quests")
 	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir)
-		local now = math.floor((BT.Bar.Scale() + dir * 0.05) * 100 + 0.5) / 100
-		BT.Bar.SetScale(math.max(0.7, math.min(1.3, now)))
+		local now = math.floor((BT.Dock.Scale() + dir * 0.05) * 100 + 0.5) / 100
+		BT.Dock.SetScale(math.max(0.7, math.min(1.3, now)))
 		W.RefreshDock()
 	end))
 	body.sizeText = step.value
 	-- ONE WIDTH, WHATEVER IS IN IT (Josh 2026-09-24)
 	local wide = BT.Widgets.Row(sizeSec, "Dock width", "The same with or without the quests")
 	local wstep = wide:SetControl(BT.Widgets.Stepper(wide, function(dir)
-		BT.Bar.SetWidth(BT.Bar.Width() + dir * BT.Bar.WIDTH_STEP)
+		BT.Dock.SetWidth(BT.Dock.Width() + dir * BT.Dock.WIDTH_STEP)
 		W.RefreshDock()
 	end))
 	body.widthText = wstep.value
 	-- (Josh 2026-09-24) where it stays, and how loud it is in a fight
 	local feel = st:Section("Behaviour")
 	BT.Widgets.SwitchRow(feel, "Lock in place", "Drag it by anything in it when it's unlocked",
-		function() return BT.Bar.Locked() end,
+		function() return BT.Dock.Locked() end,
 		function(on)
 			BT.EnsureBound()
 			BT.settings.dockLocked = on and true or nil
@@ -627,7 +627,7 @@ local function dockPage(body)
 	body.fadeSeg = fade:SetControl(BT.Widgets.Segmented(fade, {
 		{ "off", "Off" }, { "soft", "70%" }, { "strong", "40%" },
 	}, function(key)
-		BT.Bar.SetFade(key)
+		BT.Dock.SetFade(key)
 	end))
 	local head = st:Section("Header")
 	local clock = BT.Widgets.SwitchRow(head, "Clock", "The time in the header. Click it for local or server time.",
@@ -644,11 +644,11 @@ end
 function W.RefreshDock()
 	local panel = panels.dock
 	local body = panel and panel.body
-	if body and body.sizeText and BT.Bar and BT.Bar.Scale then
-		body.sizeText:SetText(("%d%%"):format(math.floor(BT.Bar.Scale() * 100 + 0.5)))
+	if body and body.sizeText and BT.Dock and BT.Dock.Scale then
+		body.sizeText:SetText(("%d%%"):format(math.floor(BT.Dock.Scale() * 100 + 0.5)))
 	end
-	if body and body.widthText and BT.Bar and BT.Bar.Width then
-		body.widthText:SetText(tostring(BT.Bar.Width()))
+	if body and body.widthText and BT.Dock and BT.Dock.Width then
+		body.widthText:SetText(tostring(BT.Dock.Width()))
 	end
 	if body and body.fadeSeg then
 		body.fadeSeg:Select(BT.settings and BT.settings.dockFade or "off")
@@ -668,8 +668,8 @@ local function censusPage(body)
 			if not v and BT.CensusWindow then
 				BT.CensusWindow.Hide()
 			end
-			if BT.Bar then
-				BT.Bar.Relayout()
+			if BT.Dock then
+				BT.Dock.Relayout()
 			end
 			W.SyncTab("census")
 		end)
@@ -685,8 +685,8 @@ local function censusPage(body)
 			else
 				BT.settings.censusButton = false
 			end
-			if BT.Bar then
-				BT.Bar.Relayout()
+			if BT.Dock then
+				BT.Dock.Relayout()
 			end
 		end)
 	BT.Widgets.SwitchRow(sec, "Up to date while open", "Redraws the open charts as you see new people",
@@ -727,17 +727,17 @@ local function testingPage(body)
 				BT.Demo.Set(on)
 			end
 		end)
-	-- the unit frames' made-up group (Modules/Frames/Frames.lua)
+	-- the unit frames' made-up group (Modules/UnitFrames/UnitFrames.lua)
 	local people = Wd.Row(look, "Made-up people", "The unit frames as a group when you are alone. Needs Unit frames on.")
 	body.peopleSeg = people:SetControl(Wd.Segmented(people, {
 		{ "off", "Off" }, { "party", "Party" }, { "raid", "Raid" },
 	}, function(key)
-		local m = BT.GetModule("frames")
+		local m = BT.GetModule("unitframes")
 		if m and m.Preview then
 			m.Preview(key ~= "off" and key or nil)
 		end
 	end))
-	-- the buff tray full (Modules/Frames/Buffs.lua)
+	-- the buff tray full (Modules/UnitFrames/Buffs.lua)
 	body.aurasRow = Wd.SwitchRow(look, "Made-up auras", "Fills the tray with buffs, a weapon poison and debuffs. Needs Buffs on.",
 		function()
 			local B = BT.UnitFrames and BT.UnitFrames.Buffs
@@ -764,9 +764,18 @@ local function testingPage(body)
 	local toast = Wd.Row(look, "Mastery toast", "A made-up Platinum mastery. Needs the Expedition on.")
 	body.toastButton = toast:SetControl(Wd.Button(toast, "Show", 62, 20))
 	body.toastButton:SetScript("OnClick", function()
-		local m = BT.GetModule("menagerie")
-		if m and m.SampleToast and BT.Enabled("menagerie") then
+		local m = BT.GetModule("expedition")
+		if m and m.SampleToast and BT.Enabled("expedition") then
 			m.SampleToast()
+		end
+	end)
+	-- and a new rank's, with its badge (Josh 2026-09-29)
+	local rankToast = Wd.Row(look, "Rank toast", "Your rank, shown as if you had just reached it. Needs the Expedition on.")
+	body.rankToastButton = rankToast:SetControl(Wd.Button(rankToast, "Show", 62, 20))
+	body.rankToastButton:SetScript("OnClick", function()
+		local m = BT.GetModule("expedition")
+		if m and m.SampleRankToast and BT.Enabled("expedition") then
+			m.SampleRankToast()
 		end
 	end)
 	-- BUTTONS, NOT COMMANDS (Josh 2026-09-28: "We don't need hundreds of
@@ -821,7 +830,7 @@ local function testingPage(body)
 	end)
 	-- what is showing now, whenever the page is opened
 	body:HookScript("OnShow", function()
-		local m = BT.GetModule("frames")
+		local m = BT.GetModule("unitframes")
 		body.peopleSeg:Select(m and m.previewing or "off")
 		Wd.SyncRows()
 	end)

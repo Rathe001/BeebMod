@@ -82,7 +82,7 @@ local buildFilters
 local FILTER_W = 584
 -- what the panel is filtering by; it used to hang off the window frame, and
 -- the window belongs to the toolkit now
-local state = { mineOnly = false, flagFilter = nil }
+local state = { mineOnly = false, tagFilter = nil }
 -- declared here because the panel's open and close paths use them before the
 -- file gets round to defining them
 local editorTop, fitWindow, shownCards, cardsHeight = nil, nil, 0, 0
@@ -166,7 +166,7 @@ local function buildEditor(parent, anchor, label, paint)
 	e.rule:SetPoint("TOPLEFT", E_PAD, -(E_PAD + 16))
 	e.rule:SetPoint("TOPRIGHT", -E_PAD, -(E_PAD + 16))
 
-	e.flagBtns, e.pool = {}, {}
+	e.tagBtns, e.pool = {}, {}
 
 	-- the new-tag row, and the maker it turns into
 	e.newTag = CreateFrame("Button", nil, e)
@@ -216,7 +216,7 @@ local function buildEditor(parent, anchor, label, paint)
 		self:SetText("")
 		self:ClearFocus()
 		B.ShowTagMaker(false)
-		B.RebuildFlags()
+		B.RebuildTags()
 		B.Refresh()
 	end)
 	e.maker.box:SetScript("OnEscapePressed", function(self)
@@ -304,7 +304,7 @@ local function buildEditor(parent, anchor, label, paint)
 end
 
 -- One row per tag, two to a line: a square of its colour, then its name.
-function B.RebuildFlags()
+function B.RebuildTags()
 	-- the filter buttons on the Find tab show the same list, and used to be
 	-- built once: a tag made in the editor had no button until /reload
 	if buildFilters then
@@ -315,9 +315,9 @@ function B.RebuildFlags()
 	end
 	local e = editor
 	local width = (E_W - E_PAD * 2 - 8) / 2
-	local flags = BT.AllFlags()
+	local tags = BT.AllTags()
 	local y = E_PAD + 22
-	for i, f in ipairs(flags) do
+	for i, f in ipairs(tags) do
 		local row = e.pool[i]
 		if not row then
 			row = CreateFrame("Button", nil, e)
@@ -341,7 +341,7 @@ function B.RebuildFlags()
 			row.hot:Hide()
 			row:SetScript("OnEnter", function(self)
 				self.hot:Show()
-				local tag = U.FlagByKey(self.flagKey)
+				local tag = U.TagByKey(self.tagKey)
 				self.kill:SetShown(tag ~= nil and not tag.builtin)
 			end)
 			row:SetScript("OnLeave", function(self)
@@ -373,8 +373,8 @@ function B.RebuildFlags()
 			row.kill:SetFrameLevel(BT.Pill.Number(row.GetFrameLevel and row:GetFrameLevel(), 5) + 2)
 			row.kill.icon = row.kill:CreateTexture(nil, "OVERLAY")
 			row.kill.icon:SetAllPoints()
-			row.kill.icon:SetTexture(BT.Bar.ICONS)
-			BT.Bar.CrossCoord(row.kill.icon)
+			row.kill.icon:SetTexture(BT.Dock.ICONS)
+			BT.Dock.CrossCoord(row.kill.icon)
 			row.kill.icon:SetVertexColor(0.55, 0.60, 0.58, 1)
 			row.kill:Hide()
 			row.kill:SetScript("OnEnter", function(self)
@@ -385,7 +385,7 @@ function B.RebuildFlags()
 				self.icon:SetVertexColor(0.55, 0.60, 0.58, 1)
 			end)
 			row.kill:SetScript("OnClick", function(self)
-				local tag = U.FlagByKey(row.flagKey)
+				local tag = U.TagByKey(row.tagKey)
 				if tag and not tag.builtin then
 					B.ConfirmTagDelete(tag)
 				end
@@ -399,13 +399,13 @@ function B.RebuildFlags()
 					return
 				end
 				if click == "RightButton" then
-					local tag = U.FlagByKey(self.flagKey)
+					local tag = U.TagByKey(self.tagKey)
 					if tag and not tag.builtin then
 						B.ConfirmTagDelete(tag)
 					end
 					return
 				end
-				N.ToggleFlag(selected, self.flagKey, editor and editor.info)
+				N.ToggleTag(selected, self.tagKey, editor and editor.info)
 				B.Refresh()
 			end)
 			e.pool[i] = row
@@ -415,16 +415,16 @@ function B.RebuildFlags()
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", e, "TOPLEFT", E_PAD + column * (width + 8), -(y + line * E_ROW))
 		row:SetWidth(width)
-		row.flagKey = f.key
+		row.tagKey = f.key
 		row.tag = f
 		row:Show()
-		e.flagBtns[f.key] = row
+		e.tagBtns[f.key] = row
 	end
-	for i = #flags + 1, #e.pool do
+	for i = #tags + 1, #e.pool do
 		e.pool[i]:Hide()
 	end
 	-- everything under the tags hangs off however many rows there were
-	local lines = math.ceil(#flags / 2)
+	local lines = math.ceil(#tags / 2)
 	local below = y + lines * E_ROW + 2
 	e.newTag:ClearAllPoints()
 	e.newTag:SetPoint("TOPLEFT", e, "TOPLEFT", E_PAD, -below)
@@ -468,7 +468,7 @@ function B.ShowTagMaker(show)
 	end
 	editor.maker:SetShown(show and true or false)
 	editor.newTag:SetShown(not show)
-	B.RebuildFlags()
+	B.RebuildTags()
 	if show then
 		editor.maker.box:SetFocus()
 	end
@@ -488,7 +488,7 @@ function B.ConfirmTagDelete(tag)
 	if characters == 0 then
 		BT.RemoveTag(tag.key)
 		editor.confirm:Hide()
-		B.RebuildFlags()
+		B.RebuildTags()
 		B.Refresh()
 		return
 	end
@@ -499,7 +499,7 @@ function B.ConfirmTagDelete(tag)
 	editor.confirm.yes:SetScript("OnClick", function()
 		BT.RemoveTag(tag.key)
 		editor.confirm:Hide()
-		B.RebuildFlags()
+		B.RebuildTags()
 		B.Refresh()
 	end)
 	editor.confirm:Show()
@@ -523,9 +523,9 @@ local function refreshEditor()
 		return
 	end
 	editor.title:SetText(U.Colorize(p.name, p.class))
-	for _, row in pairs(editor.flagBtns) do
+	for _, row in pairs(editor.tagBtns) do
 		local f = row.tag
-		local on = p.flags and p.flags[row.flagKey]
+		local on = p.tags and p.tags[row.tagKey]
 		local c = (f and f.color) or { 0.6, 0.65, 0.62 }
 		if on then
 			row.swatch:SetColorTexture(c[1], c[2], c[3], 1)
@@ -540,7 +540,7 @@ local function refreshEditor()
 			row.bg:Hide()
 			row.text:SetTextColor(0.42, 0.48, 0.45)
 		end
-		row.text:SetText(f and f.label or row.flagKey)
+		row.text:SetText(f and f.label or row.tagKey)
 	end
 	-- refilled for a different character, or when the box is not being
 	-- typed in - never over a half-written note (the tag maker takes the
@@ -575,7 +575,7 @@ function B.DockEditor()
 	else
 		editor:SetPoint("CENTER")
 	end
-	B.RebuildFlags()
+	B.RebuildTags()
 end
 
 local function num(v, fallback)
@@ -598,7 +598,7 @@ function B.FloatEditor(anchor)
 	editor:ClearAllPoints()
 	editor:SetWidth(E_W)
 	editor:SetClampedToScreen(true) -- the backstop, whatever the arithmetic says
-	B.RebuildFlags()
+	B.RebuildTags()
 	-- BESIDE THE ROW, NOT BESIDE THE PANEL (Josh 2026-09-21). This took the
 	-- dock over whatever it was handed, which top-aligned it with the whole
 	-- panel. That was the same thing while the dock began with the Ledger's
@@ -607,7 +607,7 @@ function B.FloatEditor(anchor)
 	--
 	-- The frame you clicked decides the height; the dock still decides the
 	-- side, because that is about the screen edge rather than about the row.
-	local dock = BT.Bar and BT.Bar.Frame()
+	local dock = BT.Dock and BT.Dock.Frame()
 	anchor = anchor or dock
 	if not anchor then
 		editor:SetPoint("CENTER")
@@ -624,7 +624,7 @@ function B.FloatEditor(anchor)
 	-- sat low and ran over the dock's edge. The height is the ROW's top and
 	-- the side is the DOCK's edge, eight clear of it, like everything else
 	-- that opens beside the panel.
-	local row = BT.Bar and BT.Bar.Row and BT.Bar.Row()
+	local row = BT.Dock and BT.Dock.Row and BT.Dock.Row()
 	local topOf = (row and row.IsShown and row:IsShown() and row) or anchor
 	local dockTop = dock and num(dock.GetTop and dock:GetTop(), nil)
 	local rowTop = num(topOf.GetTop and topOf:GetTop(), nil)
@@ -759,8 +759,8 @@ end
 
 -- handles for the headless tests, which click these rather than trust them
 
-function B.EditorFlagButtons()
-	return editor and editor.flagBtns
+function B.EditorTagButtons()
+	return editor and editor.tagBtns
 end
 
 function B.EditorNoteBox()
@@ -812,8 +812,8 @@ local function cardTag(card, i)
 		end)
 		t:SetScript("OnLeave", function(self) self.hot:Hide() end)
 		t:SetScript("OnClick", function(self)
-			if card.key and self.flagKey then
-				N.ToggleFlag(card.key, self.flagKey)
+			if card.key and self.tagKey then
+				N.ToggleTag(card.key, self.tagKey)
 				B.Refresh()
 			end
 		end)
@@ -832,8 +832,8 @@ local function layTags(card, p, open)
 	-- rather than assumed (Josh 2026-09-19 - it was 580 against a 584-wide
 	-- panel, so nothing ever wrapped and the row ran off the edge)
 	local width = BT.Pill.Number(card.GetWidth and card:GetWidth(), 560) - 28
-	for _, f in ipairs(BT.AllFlags()) do
-		local on = p.flags and p.flags[f.key] or false
+	for _, f in ipairs(BT.AllTags()) do
+		local on = p.tags and p.tags[f.key] or false
 		if open or on then
 			shown = shown + 1
 			local t = cardTag(card, shown)
@@ -860,7 +860,7 @@ local function layTags(card, p, open)
 			t:SetWidth(w)
 			t:ClearAllPoints()
 			t:SetPoint("TOPLEFT", card, "TOPLEFT", 14 + x, -30 - y)
-			t.flagKey = f.key
+			t.tagKey = f.key
 			t.live = open and true or false
 			t:EnableMouse(t.live)
 			t:Show()
@@ -965,11 +965,11 @@ local function refreshFind()
 	end
 	local query = {
 		text = text ~= "" and text or nil,
-		flag = state.flagFilter,
+		tag = state.tagFilter,
 		mineOnly = state.mineOnly,
 		limit = CARDS + 1,
 	}
-	local asked = query.text ~= nil or query.flag ~= nil or query.mineOnly
+	local asked = query.text ~= nil or query.tag ~= nil or query.mineOnly
 	results = {}
 	if asked then
 		-- the people you wrote on first; then, with a census, anyone else it
@@ -980,7 +980,7 @@ local function refreshFind()
 			have[r.key] = true
 		end
 		local C = census()
-		if C and not query.flag and not query.mineOnly and #results < query.limit then
+		if C and not query.tag and not query.mineOnly and #results < query.limit then
 			for _, r in ipairs(C.Search(BT.db, query)) do
 				if #results >= query.limit then
 					break
@@ -1069,8 +1069,8 @@ function B.Refresh()
 	-- the panel changed the book and repainted the panel, and the row of dots
 	-- on the dock - the same tags, on the same character - went on showing
 	-- what it showed a minute ago.
-	if BT.Bar and BT.Bar.Update then
-		BT.Bar.Update()
+	if BT.Dock and BT.Dock.Update then
+		BT.Dock.Update()
 	end
 	-- A UNIT TOOLTIP IS ONLY REDRAWN WHEN IT WOULD SAY SOMETHING ELSE (Josh
 	-- 2026-09-19). Restack re-sets the unit, which tears the tooltip down and
@@ -1094,10 +1094,10 @@ buildFilters = function()
 	if not findView then
 		return 0
 	end
-	findView.flagButtons = findView.flagButtons or {}
-	local pool = findView.flagButtons
+	findView.tagButtons = findView.tagButtons or {}
+	local pool = findView.tagButtons
 	local fx, fy, n = 146, -34, 0
-	for _, f in ipairs(BT.AllFlags()) do
+	for _, f in ipairs(BT.AllTags()) do
 		n = n + 1
 		-- sized to the label: a fixed width let "Do not group" run out of its
 		-- own button (Josh 2026-09-19)
@@ -1112,13 +1112,13 @@ buildFilters = function()
 				-- written out, because `(x == y) and nil or y` can never BE
 				-- nil: `and nil` is false, so the `or` branch always wins and
 				-- the filter could be switched on but never off (Josh 2026-09-19)
-				if state.flagFilter == self.flagKey then
-					state.flagFilter = nil
+				if state.tagFilter == self.tagKey then
+					state.tagFilter = nil
 				else
-					state.flagFilter = self.flagKey
+					state.tagFilter = self.tagKey
 				end
 				for _, other in ipairs(pool) do
-					other:SetPressed(other.flagKey == state.flagFilter)
+					other:SetPressed(other.tagKey == state.tagFilter)
 				end
 				refreshFind()
 			end)
@@ -1127,20 +1127,20 @@ buildFilters = function()
 			b:SetLabel(f.label)
 			b:SetWidth(w)
 		end
-		b.flagKey = f.key
+		b.tagKey = f.key
 		b:ClearAllPoints()
 		b:SetPoint("TOPLEFT", fx, fy)
-		b:SetPressed(state.flagFilter == f.key)
+		b:SetPressed(state.tagFilter == f.key)
 		b:Show()
 		fx = fx + w + 5
 	end
 	for i = n + 1, #pool do
 		pool[i]:Hide()
-		pool[i].flagKey = nil
+		pool[i].tagKey = nil
 	end
 	-- a filter on a tag that no longer exists is no filter
-	if state.flagFilter and not U.FlagByKey(state.flagFilter) then
-		state.flagFilter = nil
+	if state.tagFilter and not U.TagByKey(state.tagFilter) then
+		state.tagFilter = nil
 	end
 	return n
 end
@@ -1294,7 +1294,7 @@ function B.Build(parent)
 	moreLine:SetPoint("TOPLEFT", 20, -(CARDS_TOP + CARDS * CARD_RICH))
 
 	editor = buildEditor(UIParent, panel, label, paint)
-	B.RebuildFlags()
+	B.RebuildTags()
 	if C_Timer and C_Timer.NewTicker then
 		C_Timer.NewTicker(1, B.Tick)
 	end
@@ -1318,11 +1318,11 @@ end
 
 -- the filter row and which tag it is filtering by, for the tests
 function B.FilterButtons()
-	return findView and findView.flagButtons or {}
+	return findView and findView.tagButtons or {}
 end
 
-function B.FlagFilter()
-	return state.flagFilter
+function B.TagFilter()
+	return state.tagFilter
 end
 
 -- who the panel is open on

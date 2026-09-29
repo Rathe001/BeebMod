@@ -22,7 +22,7 @@ local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Tags.lua")
 -- One word each, so a pill stays a pill: "Good player" was a wide badge
 -- wherever three of them had to fit (Josh 2026-09-19). `key` is what the book
 -- stores, so renaming a label is safe and renaming a key is not.
-BT.FLAGS = {
+BT.TAGS = {
 	{ key = "good",  label = "Good",  short = "Good",  icon = "|cff40c057+|r", color = { 0.25, 0.78, 0.40 }, builtin = true },
 	{ key = "bad",   label = "Bad",   short = "Bad",   icon = "|cffff6b6bv|r", color = { 0.91, 0.30, 0.30 }, builtin = true },
 	{ key = "troll", label = "Troll", short = "Troll", icon = "|cffba9ffa!|r", color = { 0.73, 0.62, 0.98 }, builtin = true },
@@ -39,18 +39,18 @@ BT.TAG_COLORS = {
 	{ name = "violet", color = { 0.73, 0.62, 0.98 } },
 }
 
--- Flags that used to exist, and where they land now. Anything else that is
+-- Tags that used to exist, and where they land now. Anything else that is
 -- still in use becomes a custom tag rather than being thrown away, and a NOTE
 -- is never touched.
-BT.FLAG_MOVED = { great = "good", terrible = "bad", watch = "troll" }
-BT.FLAG_RETIRED = { friendly = "Good company", recruit = "Worth asking",
+BT.TAG_MOVED = { great = "good", terrible = "bad", watch = "troll" }
+BT.TAG_RETIRED = { friendly = "Good company", recruit = "Worth asking",
 	tank = "Tank", healer = "Healer" }
-BT.FLAG_DROPPED = { avoid = true }
+BT.TAG_DROPPED = { avoid = true }
 
 -- Built-ins first, then yours, in the order you made them.
-function BT.AllFlags()
+function BT.AllTags()
 	local out = {}
-	for _, f in ipairs(BT.FLAGS) do
+	for _, f in ipairs(BT.TAGS) do
 		out[#out + 1] = f
 	end
 	for _, t in ipairs((BT.settings and BT.settings.tags) or {}) do
@@ -76,7 +76,7 @@ function BT.AddTag(label, colorIndex, key)
 	if #label > 20 then
 		return nil, "that name is too long for a button."
 	end
-	for _, f in ipairs(BT.AllFlags()) do
+	for _, f in ipairs(BT.AllTags()) do
 		if f.label:lower() == label:lower() then
 			return nil, ("there is already a tag called %s."):format(f.label)
 		end
@@ -116,7 +116,7 @@ function BT.TagUsage(key)
 	for _, book in pairs(ledgerBooks()) do
 		local here = 0
 		for _, p in pairs(book.people or {}) do
-			if p.flags and p.flags[key] then
+			if p.tags and p.tags[key] then
 				here = here + 1
 			end
 		end
@@ -147,10 +147,10 @@ function BT.RemoveTag(key)
 	for _, book in pairs(ledgerBooks()) do
 		local people = book.people or {}
 		for key, p in pairs(people) do
-			if p.flags and p.flags[found.key] then
-				p.flags[found.key] = nil
-				if not next(p.flags) then
-					p.flags = nil
+			if p.tags and p.tags[found.key] then
+				p.tags[found.key] = nil
+				if not next(p.tags) then
+					p.tags = nil
 				end
 				-- a row that was only this tag is nobody's any more
 				if BT.Notes and not BT.Notes.IsMine(p) then
@@ -178,29 +178,29 @@ function BT.MigrateTags()
 		return
 	end
 	local live = {}
-	for _, f in ipairs(BT.AllFlags()) do
+	for _, f in ipairs(BT.AllTags()) do
 		live[f.key] = true
 	end
-	-- a flag dropped outright leaves the book and every character on it:
+	-- a tag dropped outright leaves the book and every character on it:
 	-- RemoveTag handles the ones that had become tags, and this sweeps the
 	-- marks left by ones that never did
-	for dropped in pairs(BT.FLAG_DROPPED) do
+	for dropped in pairs(BT.TAG_DROPPED) do
 		if live[dropped] then
 			BT.RemoveTag(dropped)
 			live[dropped] = nil
 		end
 	end
 	for _, p in pairs(db.players or {}) do
-		for k in pairs(p.flags or {}) do
-			if BT.FLAG_DROPPED[k] then
-				p.flags[k] = nil
+		for k in pairs(p.tags or {}) do
+			if BT.TAG_DROPPED[k] then
+				p.tags[k] = nil
 			end
 		end
-		if p.flags and not next(p.flags) then
-			p.flags = nil
+		if p.tags and not next(p.tags) then
+			p.tags = nil
 		end
 	end
-	-- a retired flag you actually used becomes a custom tag, so a judgement
+	-- a retired tag you actually used becomes a custom tag, so a judgement
 	-- you made months ago survives the day the built-in list changed
 	-- WHEN THE TAG CANNOT BE MADE (Josh 2026-09-22). AddTag refuses a label
 	-- that is already a tag of yours, and refuses a thirteenth tag - and on
@@ -209,14 +209,14 @@ function BT.MigrateTags()
 	-- mark moves onto it; a full panel means the mark simply stays as it is.
 	local movedTo = {}
 	for _, p in pairs(db.players or {}) do
-		for k in pairs(p.flags or {}) do
-			if not live[k] and not movedTo[k] and not BT.FLAG_MOVED[k] and BT.FLAG_RETIRED[k] then
-				if BT.AddTag(BT.FLAG_RETIRED[k], nil, k) then
+		for k in pairs(p.tags or {}) do
+			if not live[k] and not movedTo[k] and not BT.TAG_MOVED[k] and BT.TAG_RETIRED[k] then
+				if BT.AddTag(BT.TAG_RETIRED[k], nil, k) then
 					live[k] = true
 				else
 					local existing
-					for _, f in ipairs(BT.AllFlags()) do
-						if f.label:lower() == BT.FLAG_RETIRED[k]:lower() then
+					for _, f in ipairs(BT.AllTags()) do
+						if f.label:lower() == BT.TAG_RETIRED[k]:lower() then
 							existing = f
 						end
 					end
@@ -230,7 +230,7 @@ function BT.MigrateTags()
 		end
 	end
 	for _, p in pairs(db.players or {}) do
-		if p.flags then
+		if p.tags then
 			-- collect first, THEN edit: adding a key to the table you are
 			-- walking is an "invalid key to next" error, not a warning
 			-- ONLY WHAT IS KNOWN TO BE OLD (Josh 2026-09-23, audit). Every key
@@ -241,20 +241,20 @@ function BT.MigrateTags()
 			-- retired onto an existing tag, or dropped - and anything else is
 			-- left alone, to show again if its tag comes back.
 			local stale = {}
-			for k in pairs(p.flags) do
-				if not live[k] and (BT.FLAG_MOVED[k] or movedTo[k] or BT.FLAG_DROPPED[k]) then
+			for k in pairs(p.tags) do
+				if not live[k] and (BT.TAG_MOVED[k] or movedTo[k] or BT.TAG_DROPPED[k]) then
 					stale[#stale + 1] = k
 				end
 			end
 			for _, k in ipairs(stale) do
-				p.flags[k] = nil
-				local moved = BT.FLAG_MOVED[k] or movedTo[k]
+				p.tags[k] = nil
+				local moved = BT.TAG_MOVED[k] or movedTo[k]
 				if moved then
-					p.flags[moved] = true
+					p.tags[moved] = true
 				end
 			end
-			if not next(p.flags) then
-				p.flags = nil
+			if not next(p.tags) then
+				p.tags = nil
 			end
 		end
 	end

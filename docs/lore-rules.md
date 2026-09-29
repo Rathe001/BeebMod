@@ -1,7 +1,7 @@
 # Rules for the Expedition's mob descriptions
 
 For anyone sorting, rewriting or checking the descriptions in the
-Expedition's field journal (`Modules/Menagerie/LoreData.lua`). Read this and
+Expedition's field journal (`Modules/Expedition/LoreData.lua`). Read this and
 `docs/writing-style.md`; nothing else is needed.
 
 ## What a description is

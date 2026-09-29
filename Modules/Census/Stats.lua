@@ -3,7 +3,7 @@
 --
 -- No SPEC here, and there cannot be: this game has no API that tells you a
 -- stranger's talents, and inspecting needs them targeted and in range. Your
--- own flags stand in - they are the roles you actually care about.
+-- own tags stand in - they are the roles you actually care about.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Census/Stats.lua")
 
@@ -114,7 +114,7 @@ end
 -- Every chart the window can draw, plus how old the book is.
 --
 -- `bands` is a set of band keys to count, or nil for all of them. It filters
--- the class, race and flag charts - who you are looking at - but never the
+-- the class, race and tag charts - who you are looking at - but never the
 -- LEVEL chart, which is a chart OF the bands and would be nonsense filtered by
 -- itself; there the selection is a highlight (Josh 2026-09-19). A character
 -- with no level on file cannot be in a band, so a filter excludes them and the
@@ -148,11 +148,11 @@ local keyOf = {
 	guild = guildKey,
 	zone = function(p) return p.zone or S.UNKNOWN end,
 }
-S.PICKABLE = { class = true, race = true, guild = true, zone = true, flag = true }
+S.PICKABLE = { class = true, race = true, guild = true, zone = true, tag = true }
 
-local function picks(pick, p, flags)
-	if pick.mode == "flag" then
-		return flags ~= nil and flags[pick.key] ~= nil
+local function picks(pick, p, tags)
+	if pick.mode == "tag" then
+		return tags ~= nil and tags[pick.key] ~= nil
 	end
 	local of = keyOf[pick.mode]
 	return of ~= nil and of(p) == pick.key
@@ -176,14 +176,14 @@ local function begin(now, filter)
 		now = now, bands = bands, filtering = filtering,
 		seen = seenWithin[filter.seen] and filter.seen or nil,
 		within = seenWithin[filter.seen], pick = pick,
-		class = {}, race = {}, band = {}, flag = {}, guild = {}, zone = {},
+		class = {}, race = {}, band = {}, tag = {}, guild = {}, zone = {},
 		ages = {}, ageBuckets = {},
 		-- book: every character; total: those seen recently enough; matched:
 		-- those of them the pick picks (all of them with no pick)
 		book = 0, total = 0, matched = 0, mine = 0,
 		unknownClass = 0, unknownLevel = 0, unknownRace = 0,
 		unknownGuild = 0, unknownZone = 0,
-		-- characters carrying at least one tag: the flag chart's rows count
+		-- characters carrying at least one tag: the tag chart's rows count
 		-- marks, and a character with three tags is one character
 		tagged = 0,
 	}
@@ -204,9 +204,9 @@ local AGE = S.AGE_BUCKETS
 local function yours(key, p)
 	local mine = key and BT.Notes and BT.Notes.Get(key)
 	if mine then
-		return true, mine.flags
+		return true, mine.tags
 	end
-	return DB.IsMine(p), p.flags
+	return DB.IsMine(p), p.tags
 end
 
 local function count(t, p, key)
@@ -219,8 +219,8 @@ local function count(t, p, key)
 	end
 	t.total = t.total + 1
 	local pick = t.pick
-	local isMine, flags = yours(key, p)
-	local matched = pick == nil or picks(pick, p, flags)
+	local isMine, tags = yours(key, p)
+	local matched = pick == nil or picks(pick, p, tags)
 	-- a chart counts a character the pick picks - or anybody, if the pick
 	-- was made on that chart
 	local pickMode = pick and pick.mode
@@ -272,15 +272,15 @@ local function count(t, p, key)
 			t.unknownZone = t.unknownZone + 1
 		end
 	end
-	if matched or pickMode == "flag" then
-		if flags and next(flags) then
+	if matched or pickMode == "tag" then
+		if tags and next(tags) then
 			t.tagged = t.tagged + 1
-			for key in pairs(flags) do
-				t.flag[key] = (t.flag[key] or 0) + 1
+			for key in pairs(tags) do
+				t.tag[key] = (t.tag[key] or 0) + 1
 			end
 		end
 	end
-	if pick and not picks(pick, p, flags) then
+	if pick and not picks(pick, p, tags) then
 		return
 	end
 	t.ages[#t.ages + 1] = age
@@ -348,12 +348,12 @@ local function finish(t)
 		class = classRows,
 		race = sorted(t.race),
 		level = bands,
-		flag = sorted(t.flag),
+		tag = sorted(t.tag),
 		guild = topRows(t.guild, S.TOP, { [S.UNGUILDED] = true }),
 		zone = topRows(t.zone, S.TOP + 1),
 		tagged = t.tagged,
 		unknown = {
-			class = t.unknownClass, level = t.unknownLevel, race = t.unknownRace, flag = 0,
+			class = t.unknownClass, level = t.unknownLevel, race = t.unknownRace, tag = 0,
 			guild = t.unknownGuild, zone = t.unknownZone,
 		},
 		age = {
@@ -416,7 +416,7 @@ local function subtitle(mode, census, counted)
 	local unknown = (census.unknown and census.unknown[mode]) or 0
 	local pick = census.pick
 	local of = (pick and pick.mode ~= mode and census.matched) or census.total
-	if mode == "flag" then
+	if mode == "tag" then
 		-- characters, not marks: "6 of 3 tagged" was three people with two
 		-- tags each
 		return ("%d of %d tagged"):format(census.tagged or counted, of)

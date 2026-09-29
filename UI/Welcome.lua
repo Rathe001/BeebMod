@@ -50,8 +50,8 @@ function W.Apply(picks)
 	if BT.Window and BT.Window.Rebuild then
 		pcall(BT.Window.Rebuild)
 	end
-	if BT.Bar and BT.Bar.Relayout then
-		pcall(BT.Bar.Relayout)
+	if BT.Dock and BT.Dock.Relayout then
+		pcall(BT.Dock.Relayout)
 	end
 	return true
 end

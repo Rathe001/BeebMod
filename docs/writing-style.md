@@ -59,7 +59,7 @@ enough to have an effect? Could I put it more shortly?
 
 ## Rules for BeebMod
 
-1. **Say what happens.** "Each new kind of mob you kill is worth 1 point." Not
+1. **Say what happens.** "Each unique kill is worth 1 point." Not
    "Every discovery brings you closer to your next rank."
 2. **One thing per sentence.** Don't bundle an instruction, a number and a
    goal into one elegant sentence. Split them, or move the numbers into rows.
@@ -72,14 +72,14 @@ enough to have an effect? Could I put it more shortly?
    to life" unless a window really opens. "The journal" is the window; don't
    dress it up as "your field journal" in running text.
 6. **Say what's missing and the one thing that fills it.** Empty states are
-   one or two plain sentences: "No kills yet. Kill a mob and it goes in the
+   one or two plain sentences: "No kills yet. Kill an enemy and it goes in the
    journal."
 7. **Say limits plainly.** "The game doesn't give addons your live speed, so
    this is the number from your character sheet." No "unfortunately", no
    "we're working on it".
 8. **Name clicks exactly.** "Click: open your bags." "Shift-click: stop
    tracking." Never "interact" or "tap".
-9. **Use the player's words.** Mob, pull, tag, rested, reset, vendor. Not
+9. **Use the player's words.** Enemy, pull, tag, rested, reset, vendor. Not
    entity, encounter unit, engagement.
 10. **Leave out what doesn't matter now.** A row of zeros, a setting nobody
     changed, a total that equals its only part: leave them out.
@@ -152,7 +152,7 @@ up constantly in generated text. Don't use them:
 
 | Dirty glass | Clear |
 |---|---|
-| Kill any mob to open your field journal. Each new kind is worth a point, and **50 points** make you a **Tracker**. | No kills yet. Each new kind of mob you kill is worth 1 point. *(row)* Next rank · Tracker at 50 |
+| Kill any enemy to open your field journal. Each new kind is worth a point, and **50 points** make you a **Tracker**. | No kills yet. Each unique kill is worth 1 point. *(row)* Next rank · Tracker at 50 |
 | As the character sheet last showed it. The game keeps the live figure to itself. | From your character sheet. The game doesn't give addons your live speed. |
 | Home is chat and the auction house. World is combat and other players: over 150 ms, casts and hits feel late. | Home latency is chat and the auction house. World latency is combat. Above about 150 ms, casts and swings feel late. |
 | Everything you need, right in the dock. | *(say nothing; show it)* |

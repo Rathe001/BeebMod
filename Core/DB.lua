@@ -12,7 +12,7 @@
 --   faction              "Alliance" / "Horde" when we could tell
 --   zone                 where we last saw them
 --   first last seen      unix seconds, and how many times we wrote them down
---   note flags rating    yours: free text, { key = true }, 1-5
+--   note tags rating     yours: free text, { key = true }, 1-5
 --
 -- AT REST, A STRING (Josh 2026-09-24). A row in `players` is either that
 -- table or the same row packed into one short string (Core/Pack.lua), which
@@ -215,9 +215,9 @@ local function absorb(to, from)
 		to.note = (to.note and to.note ~= "" and to.note ~= from.note)
 			and (to.note .. " / " .. from.note) or from.note
 	end
-	if from.flags then
-		to.flags = to.flags or {}
-		for k in pairs(from.flags) do to.flags[k] = true end
+	if from.tags then
+		to.tags = to.tags or {}
+		for k in pairs(from.tags) do to.tags[k] = true end
 	end
 	to.rating = to.rating or from.rating
 	return to
@@ -526,10 +526,10 @@ end
 -- rows once. A row that still carries one - written by an older version and
 -- not yet moved - is still yours, and nothing here drops it.
 function DB.IsMine(p)
-	return (p.note ~= nil) or (p.flags ~= nil) or (p.rating ~= nil)
+	return (p.note ~= nil) or (p.tags ~= nil) or (p.rating ~= nil)
 end
 
--- query = { text, class, guild, surname, flag, minLevel, maxLevel, mineOnly, limit }
+-- query = { text, class, guild, surname, tag, minLevel, maxLevel, mineOnly, limit }
 -- Matching is case-insensitive and by prefix on name, substring on guild and
 -- note, which is what you want when you half-remember a name.
 --
@@ -577,7 +577,7 @@ function DB.Search(db, query)
 				or (p.note ~= nil and p.note:lower():find(text, 1, true) ~= nil)
 		end
 		if ok and query.class and p.class ~= query.class then ok = false end
-		if ok and query.flag and not (p.flags and p.flags[query.flag]) then ok = false end
+		if ok and query.tag and not (p.tags and p.tags[query.tag]) then ok = false end
 		if ok and query.guild and p.guild ~= query.guild then ok = false end
 		if ok and family and not name:find(family) then ok = false end
 		if ok and query.minLevel and (p.level or 0) < query.minLevel then ok = false end

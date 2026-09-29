@@ -143,8 +143,8 @@ local function dressClose(button)
 		cross.beebs = true
 		cross:SetSize(10, 10)
 		cross:SetPoint("CENTER")
-		cross:SetTexture(BT.Bar.ICONS)
-		BT.Bar.CrossCoord(cross)
+		cross:SetTexture(BT.Dock.ICONS)
+		BT.Dock.CrossCoord(cross)
 		crosses[button] = cross
 		button:HookScript("OnEnter", function()
 			if BT.Enabled("bagwindow") then
@@ -410,7 +410,7 @@ function M.Watch()
 end
 
 local function refitBar()
-	local space = BT.GetModule("bagspace")
+	local space = BT.GetModule("bags")
 	if space and space.Refit then
 		space.Refit()
 	end
@@ -690,7 +690,7 @@ function M:BuildTab(panel)
 				paintQuality(b)
 			end
 		end)
-	BT.Widgets.SwitchRow(look, "Bag slots", "Your four bag slots beside the backpack. Drag a bag onto one to put it on.",
+	BT.Widgets.SwitchRow(look, "Bag slots", "Your bag slots, across the foot of the backpack. Drag a bag onto one to put it on.",
 		function() return M.BagSlots and M.BagSlots.On() or false end,
 		function(on)
 			if M.BagSlots then
@@ -707,7 +707,7 @@ function M:BuildTab(panel)
 		U.Print("Bags: every bag window is back where the game puts it.")
 	end)
 	local bar = page:Section("The game's own")
-	local space = BT.GetModule("bagspace")
+	local space = BT.GetModule("bags")
 	self.hideBags = BT.Widgets.SwitchRow(bar, "Hide the bag bar",
 		"The backpack and bag slots by the action bars. The bag window has its own bag slots.",
 		function() return space and space.HideClient() and true or false end,
@@ -740,7 +740,7 @@ end
 function M.Dump()
 	local lines = BT.Furniture.Dump(M.Windows())
 	BT.EnsureBound()
-	BeebModDB.bagDump = {
+	BeebModDB.bagwindowDump = {
 		at = U.Now(),
 		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
 		lines = lines,
@@ -748,4 +748,4 @@ function M.Dump()
 	return #lines
 end
 
-BT.Record("bagDump", M.Dump, "bagwindow")
+BT.Record("bagwindowDump", M.Dump, "bagwindow")

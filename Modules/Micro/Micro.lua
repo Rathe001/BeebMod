@@ -546,9 +546,9 @@ function M.Section()
 	if M.section then
 		return M.section
 	end
-	M.section = BT.Bar.Section("micro", 55)
+	M.section = BT.Dock.Section("micro", 55)
 	M.section.wantHeight = ROW_H
-	-- the client draws nothing inside a frame with no height (see Perf)
+	-- the client draws nothing inside a frame with no height (see Performance)
 	M.section:SetHeight(ROW_H)
 	if M.section.HookScript then
 		M.section:HookScript("OnSizeChanged", function()
@@ -642,7 +642,7 @@ local function layoutMenu(menu)
 	if M.section.wantHeight ~= want then
 		M.section.wantHeight = want
 		M.section:SetHeight(want)
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 	end
 	return shown
 end
@@ -770,13 +770,13 @@ local function fill()
 		if section:IsShown() then
 			section:Hide()
 			M.Release()
-			BT.Bar.Relayout()
+			BT.Dock.Relayout()
 		end
 		return false
 	end
 	if not section:IsShown() then
 		section:Show()
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 	end
 	M.Layout()
 	return true
@@ -859,7 +859,7 @@ function M.Apply()
 		M.Release()
 		section:Hide()
 	end
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 	return on
 end
 

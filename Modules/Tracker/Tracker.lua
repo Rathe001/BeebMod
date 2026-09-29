@@ -94,7 +94,7 @@ local ROW, GAP, PAD = 15, 4, 6
 -- dock was - so a dock dragged to the top of the screen still scrolled at
 -- 45%, and one with a map above the quests still ran off the bottom. The
 -- tracker says how tall it would like to be; the dock gives it what is left
--- between everything else and the bottom of the screen (see BT.Bar.Room),
+-- between everything else and the bottom of the screen (see BT.Dock.Room),
 -- and the list scrolls past that. The QUESTS line stays put while it does:
 -- it is the fold and the handle, and a list whose header scrolls away is a
 -- list you cannot fold without scrolling back up.
@@ -237,8 +237,8 @@ local function rowFrame(i)
 	row.mark.check = row.mark:CreateTexture(nil, "ARTWORK")
 	row.mark.check:SetSize(MARK, MARK)
 	row.mark.check:SetPoint("CENTER")
-	row.mark.check:SetTexture(BT.Bar.ICONS)
-	BT.Bar.CheckCoord(row.mark.check)
+	row.mark.check:SetTexture(BT.Dock.ICONS)
+	BT.Dock.CheckCoord(row.mark.check)
 	row.mark:SetScript("OnClick", function(self)
 		if self.quest then
 			Q.SuperTrack(self.quest)
@@ -275,7 +275,7 @@ local function rowFrame(i)
 	row.chevron = row:CreateTexture(nil, "ARTWORK")
 	row.chevron:SetSize(MARK, MARK)
 	row.chevron:SetPoint("LEFT", 0, 0)
-	row.chevron:SetTexture(BT.Bar.ICONS)
+	row.chevron:SetTexture(BT.Dock.ICONS)
 	row.chevron:SetVertexColor(MUTED[1], MUTED[2], MUTED[3], 1)
 	row.chevron:Hide()
 
@@ -542,7 +542,7 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 	row:SetHeight(ROW)
 	row.text:SetFontObject(nil)
 	pcall(row.text.SetFont, row.text, select(1, row.text:GetFont()),
-		BT.Fonts.Size(kind == "title" and TITLE or ((kind == "head" or kind == "zone") and HEAD or LINE)),
+		BT.Fonts.Size((kind == "title" or kind == "clock") and TITLE or ((kind == "head" or kind == "zone") and HEAD or LINE)),
 		select(3, row.text:GetFont()))
 	row.text:SetText(text or "")
 	row.text:SetTextColor(colour[1], colour[2], colour[3])
@@ -552,7 +552,29 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 	-- than two quests with objectives under them. They step in, and their check
 	-- steps in with them so the ticks line up in a gutter of their own.
 	row.text:ClearAllPoints()
-	row.text:SetPoint("LEFT", kind == "line" and (INDENT + NEST) or (kind == "zone" and 0 or INDENT), 0)
+	-- A CLOCK YOU CANNOT MISS (Josh 2026-09-29: "it doesn't stand out very
+	-- much. Can we make it larger and highlight it somehow"): the title's
+	-- size, a pocket watch before it, and a band of its colour behind it
+	local clock = kind == "clock"
+	if clock and not row.watch then
+		row.band = row:CreateTexture(nil, "BACKGROUND")
+		row.band:SetPoint("TOPLEFT", row, "TOPLEFT", INDENT + NEST - 4, 0)
+		row.band:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+		row.watch = row:CreateTexture(nil, "ARTWORK")
+		row.watch:SetSize(12, 12)
+		row.watch:SetPoint("LEFT", row, "LEFT", INDENT + NEST, 0)
+		row.watch:SetTexture("Interface\\Icons\\INV_Misc_PocketWatch_01")
+		row.watch:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	end
+	if row.watch then
+		row.watch:SetShown(clock)
+		row.band:SetShown(clock)
+		if clock then
+			row.band:SetColorTexture(colour[1], colour[2], colour[3], 0.14)
+		end
+	end
+	row.text:SetPoint("LEFT", (kind == "line" and (INDENT + NEST)) or (clock and (INDENT + NEST + 16))
+		or (kind == "zone" and 0 or INDENT), 0)
 	row.text:SetPoint("RIGHT", 0, 0)
 	row.mark:ClearAllPoints()
 	row.mark:SetPoint("LEFT", kind == "line" and NEST or 0, 0)
@@ -564,8 +586,8 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 	row.isHeader = (kind == "head")
 	row.chevron:SetShown(row.isHeader)
 	if row.isHeader then
-		BT.Bar.ChevronCoord(row.chevron, opt("collapsed", false))
-		BT.Bar.MakeHandle(row) -- the one line of the dock that is not a control
+		BT.Dock.ChevronCoord(row.chevron, opt("collapsed", false))
+		BT.Dock.MakeHandle(row) -- the one line of the dock that is not a control
 	end
 
 	if mark == "strike" then
@@ -586,9 +608,9 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 		local failed = mark == "failed"
 		local c = failed and FAILED or DONE
 		if failed then
-			BT.Bar.CrossCoord(row.mark.check)
+			BT.Dock.CrossCoord(row.mark.check)
 		else
-			BT.Bar.CheckCoord(row.mark.check)
+			BT.Dock.CheckCoord(row.mark.check)
 		end
 		row.mark.check:SetVertexColor(c[1], c[2], c[3], 1)
 		row.mark.check:Show()
@@ -754,9 +776,10 @@ function M.TimeLeft(endsAt, now)
 	return ("%d:%02d left"):format(m, s)
 end
 
--- under a minute, the clock is red
+-- amber while it runs; red in the last minute
+local CLOCK = { 1.00, 0.72, 0.28 }
 local function clockColour(endsAt, now)
-	return (endsAt - now) < 60 and FAILED or DIM
+	return (endsAt - now) < 60 and FAILED or CLOCK
 end
 
 -- THE CLOCK TICKS ON ITS OWN (the list is not drawn again every second): the
@@ -771,7 +794,19 @@ function M.TickClocks()
 			row.text:SetText(M.TimeLeft(row.endsAt, now))
 			local c = clockColour(row.endsAt, now)
 			row.text:SetTextColor(c[1], c[2], c[3])
+			if row.band then
+				row.band:SetColorTexture(c[1], c[2], c[3], 0.14)
+			end
 		end
+	end
+	-- THE TOOLTIP'S CLOCK TOO (Josh 2026-09-29: "Tooltip timer doesn't update
+	-- in real time when it is open"): a quest's tooltip open over a timed
+	-- quest is drawn again with the clock
+	local tip = BT.Tip and BT.Tip.IsShown() and BT.Tip.Frame and BT.Tip.Frame()
+	local owner = tip and tip.owner
+	if owner and owner.quest and owner.quest.endsAt and not owner.quest.failed then
+		M.QuestTip(owner, owner.quest)
+		any = true
 	end
 	if not any and M.clockTicker then
 		M.clockTicker:Cancel()
@@ -809,7 +844,7 @@ function M.QuestTip(owner, q)
 		end
 		t:Header({ icon = false, name = q.title or "Quest", sub = #sub > 0 and table.concat(sub, " · ") or nil,
 			pill = pill, pillState = pillState })
-		if q.endsAt and not q.failed and not q.complete then
+		if q.endsAt and not q.failed then
 			t:Row("Time", M.TimeLeft(q.endsAt), (q.endsAt - ((type(GetTime) == "function" and GetTime()) or 0)) < 60 and "bad" or nil)
 		end
 		if #objectives > 0 then
@@ -836,7 +871,7 @@ function M.Update()
 	end
 	if not BT.Enabled("tracker") then
 		frame:Hide()
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 		return 0
 	end
 	local here = hereZone()
@@ -845,7 +880,7 @@ function M.Update()
 	if #quests == 0 and opt("hideEmpty", true) then
 		band(nil)
 		frame:Hide()
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 		return 0
 	end
 	frame:Show()
@@ -899,10 +934,14 @@ function M.Update()
 		local titleColour = quest.failed and FAILED or levelColour(quest.level)
 		y = setRow(i, y, "title", level .. quest.title, mark, titleColour, quest)
 		-- its clock, first under the title while it runs (Q.Timers)
-		if quest.endsAt and not quest.failed and not quest.complete then
+		-- DONE IS NOT DELIVERED (Josh 2026-09-29: "Time limit is still not
+		-- showing" - Iverron's Antidote): a quest that asks you only to carry
+		-- something reads as complete the moment it is taken, and its clock
+		-- is still running until you hand it in. Only a failed one has none.
+		if quest.endsAt and not quest.failed then
 			i = i + 1
 			local now = (type(GetTime) == "function" and GetTime()) or 0
-			y = setRow(i, y, "line", M.TimeLeft(quest.endsAt, now), nil, clockColour(quest.endsAt, now), quest)
+			y = setRow(i, y, "clock", M.TimeLeft(quest.endsAt, now), nil, clockColour(quest.endsAt, now), quest)
 			rows[i].endsAt = quest.endsAt
 			if not M.clockTicker and C_Timer and C_Timer.NewTicker then
 				M.clockTicker = C_Timer.NewTicker(1, M.TickClocks)
@@ -942,7 +981,7 @@ function M.Update()
 	frame.minHeight = math.min(content, M.listTop + MIN_LINES * ROW + PAD)
 	frame:SetHeight(content)
 	M.maxHeight = content
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 	return i
 end
 
@@ -1018,8 +1057,8 @@ function M.Build()
 		return frame
 	end
 	rows = {}
-	frame = BT.Bar.Section("tracker", 10)
-	-- as wide as the dock, which has a width of its own (UI/Bar.lua): the
+	frame = BT.Dock.Section("tracker", 10)
+	-- as wide as the dock, which has a width of its own (UI/Dock.lua): the
 	-- list asking for 230 was what made the whole dock wider with it
 	frame.wantWidth = nil
 	-- the one section the dock may cut short to stay on the screen
@@ -1129,7 +1168,7 @@ function band(top, bottom)
 	end
 	paintBand()
 	-- on whole screen pixels, so neither rule straddles two
-	local snap = (BT.Bar and BT.Bar.Snap) or function(v) return v end
+	local snap = (BT.Dock and BT.Dock.Snap) or function(v) return v end
 	local t = snap(top - 2)
 	local h = snap(bottom + 2) - t
 	frame.band:ClearAllPoints()
@@ -1230,7 +1269,7 @@ end
 function M:OnDisable()
 	if frame then
 		frame:Hide()
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 	end
 	showClient()
 end

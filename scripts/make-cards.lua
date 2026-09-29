@@ -1,4 +1,4 @@
---[[ scripts/make-cards.lua (Josh 2026-09-26): the Menagerie card's ornaments.
+--[[ scripts/make-cards.lua (Josh 2026-09-26): the Expedition card's ornaments.
 
 The card's border is its mastery, and it gathers ornament as the mastery
 climbs (chosen from the mockup, round four): a stepped corner at Bronze, the
@@ -18,7 +18,7 @@ one-unit line lands clean and a slant is smoothed.
 writes Art/Cards/*.tga. Coordinates are in DESIGN UNITS - the mockup's card
 was 184 units wide - at two pixels a unit, so the art stays crisp when the
 card is drawn larger than the mockup and is only brought down when smaller.
-Modules/Menagerie/Card.lua places each piece by the same units.]]
+Modules/Expedition/Card.lua places each piece by the same units.]]
 local here = arg and arg[0] and arg[0]:match("^(.*)[/\\]") or "."
 local OUT = here .. "/../Art/Cards/"
 

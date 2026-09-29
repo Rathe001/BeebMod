@@ -3,8 +3,8 @@
 --
 -- ONE SWITCH, NOTHING SAVED. While it is on, each feature shows a made-up
 -- world instead of yours: a realm's worth of characters in the census, notes
--- on a dozen of them (and on you) in the ledger, a journal of mobs at every
--- rank and mastery in the menagerie, a party on the unit frames. Each
+-- on a dozen of them (and on you) in the ledger, a journal of enemies at every
+-- rank and mastery in the Expedition, a party on the unit frames. Each
 -- feature makes its own (it registers here), so a feature that is off - or
 -- not there - simply has nothing to show. Nothing is written into your saved
 -- books; the switch is off again after a reload, and switching it off puts
@@ -170,8 +170,8 @@ local function redraw()
 		C.drawnAt, C.drawnTime = nil, nil
 		pcall(C.Tick)
 	end
-	for _, f in ipairs({ BT.Window and BT.Window.Refresh, BT.MenagerieWindow and BT.MenagerieWindow.Refresh,
-		BT.Find and BT.Find.Refresh, BT.Bar and BT.Bar.Update }) do
+	for _, f in ipairs({ BT.Window and BT.Window.Refresh, BT.ExpeditionWindow and BT.ExpeditionWindow.Refresh,
+		BT.Find and BT.Find.Refresh, BT.Dock and BT.Dock.Update }) do
 		pcall(f)
 	end
 end

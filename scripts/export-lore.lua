@@ -1,13 +1,13 @@
 -- EXPORT THE EXPEDITION'S DESCRIPTIONS FOR REVIEW (Josh 2026-09-28, the lore
 -- rewrite, rules in docs/lore-rules.md). Reads the generated
--- Modules/Menagerie/LoreData.lua and writes every page, with the lookup keys
+-- Modules/Expedition/LoreData.lua and writes every page, with the lookup keys
 -- that reach it, to batch files in scripts/lore-work/export: the broad pages
 -- (group, beast, race, family, type) as broad-NN.json, the mob pages as
 -- npc-NN.json. Run from the repo root: lua scripts/export-lore.lua
 local BROAD_SIZE, NPC_SIZE = 115, 150
 local OUT = "scripts/lore-work/export/"
 
-local f = assert(io.open("Modules/Menagerie/LoreData.lua", "rb"))
+local f = assert(io.open("Modules/Expedition/LoreData.lua", "rb"))
 local src = f:read("*a")
 f:close()
 -- P is local in the file; make it a global so it can be read back
@@ -15,7 +15,7 @@ src = src:gsub("\nlocal P = {", "\nLORE_P = {", 1):gsub("P%[(%d+)%]", "LORE_P[%1
 local BT = {}
 assert(load(src, "LoreData"))(nil, BT)
 local P, keys = LORE_P, {}
-for key, entry in pairs(BT.MenagerieLoreData) do
+for key, entry in pairs(BT.ExpeditionLoreData) do
 	keys[entry] = keys[entry] or {}
 	table.insert(keys[entry], key)
 end

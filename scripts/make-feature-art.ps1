@@ -26,11 +26,11 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $PicW, $PicH, $CanvasW = 455, 256, 512
 $Crops = @(
 	@{ key = "dock";      file = "64.png"; x = 860;  y = 0;   w = 675; h = 380 },
-	@{ key = "frames";    file = "64.png"; x = 0;    y = 0;   w = 900; h = 506 },
+	@{ key = "unitframes"; file = "64.png"; x = 0;   y = 0;   w = 900; h = 506 },
 	@{ key = "interface"; file = "66.png"; x = 520;  y = 520; w = 780; h = 438 },
 	@{ key = "census";    file = "67.png"; x = 490;  y = 250; w = 680; h = 382 },
 	@{ key = "ledger";    file = "69.png"; x = 1055; y = 612; w = 480; h = 270 },
-	@{ key = "menagerie"; file = "74.png"; x = 430;  y = 145; w = 760; h = 427 }
+	@{ key = "expedition"; file = "74.png"; x = 430;  y = 145; w = 760; h = 427 }
 )
 
 # an uncompressed 24-bit TGA, bottom row first, blue-green-red

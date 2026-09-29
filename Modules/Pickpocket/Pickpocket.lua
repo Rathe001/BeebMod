@@ -324,7 +324,7 @@ function M.Build()
 	if M.chip then
 		return M.chip
 	end
-	M.chip = BT.Bar.Chip("pickpocket", "pockets", 1)
+	M.chip = BT.Dock.Chip("pickpocket", "pockets", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
 	M.chip:SetScript("OnLeave", function()
 		if GameTooltip then
@@ -388,7 +388,7 @@ function M.Show(on)
 	end
 	-- wanted or not by what Update finds (and only by a rogue)
 	M.Update()
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 end
 
 function M:OnEnable()

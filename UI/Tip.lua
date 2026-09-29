@@ -568,7 +568,7 @@ end
 
 local function anchor(owner)
 	frame:ClearAllPoints()
-	local bar = BT.Bar and BT.Bar.Frame and BT.Bar.Frame()
+	local bar = BT.Dock and BT.Dock.Frame and BT.Dock.Frame()
 	local screenW = ask(UIParent, "GetWidth", 0)
 	local bl, br = ask(bar, "GetLeft"), ask(bar, "GetRight")
 	local ol, or_ = ask(owner, "GetLeft"), ask(owner, "GetRight")
@@ -615,7 +615,7 @@ function T.Show(owner, spec)
 	frame:SetHeight(t.y + (t.footed and 0 or 12))
 	frame.owner = owner
 	-- the dock's size, whatever the screen's
-	local bar = BT.Bar and BT.Bar.Frame and BT.Bar.Frame()
+	local bar = BT.Dock and BT.Dock.Frame and BT.Dock.Frame()
 	local scale = ask(bar, "GetEffectiveScale", 1) / ask(UIParent, "GetEffectiveScale", 1)
 	frame:SetScale(scale > 0 and scale or 1)
 	anchor(owner)

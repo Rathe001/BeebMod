@@ -270,7 +270,7 @@ end
 --
 -- AND WHERE THE CLIENT HAS NO PixelUtil (Josh 2026-09-23), the thickness is
 -- worked out from the screen's own height - the sum the dock snaps with
--- (UI/Bar.lua, B.Snap) - rather than left as units, which at a small scale
+-- (UI/Dock.lua, B.Snap) - rather than left as units, which at a small scale
 -- is less than a pixel and comes and goes on the grid.
 function P.PixelOf(frame)
 	if type(GetPhysicalScreenSize) ~= "function" or not (frame and frame.GetEffectiveScale) then

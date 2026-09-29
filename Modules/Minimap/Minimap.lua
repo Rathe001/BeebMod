@@ -219,7 +219,7 @@ function M.Build()
 	if M.frame then
 		return M.frame
 	end
-	M.frame = BT.Bar.Section("minimap", 5)
+	M.frame = BT.Dock.Section("minimap", 5)
 	M.frame.wantWidth = FLOOR
 	-- THE DOCK STACKS BY wantHeight (Josh 2026-09-21). Setting the frame's
 	-- own height is not the same thing: without this the section counted for
@@ -240,7 +240,7 @@ function M.Build()
 			C_Timer.After(0, function()
 				relaying = false
 				if BT.Enabled("minimap") then
-					BT.Bar.Relayout()
+					BT.Dock.Relayout()
 				end
 			end)
 		end
@@ -1256,7 +1256,7 @@ function M.Apply(plain)
 		end
 		if M.frame then
 			M.frame:Hide()
-			BT.Bar.Relayout()
+			BT.Dock.Relayout()
 		end
 		return true
 	end
@@ -1323,9 +1323,9 @@ function M.Apply(plain)
 	BT.Pill.ShowSurface(M.skin, false)
 	-- laid out, then squared to the width that came back, then laid out again
 	-- with the height that produced
-	BT.Bar.Relayout()
+	BT.Dock.Relayout()
 	if M.Fit() then
-		BT.Bar.Relayout()
+		BT.Dock.Relayout()
 	end
 	-- MEASURED ONCE IT HAS BEEN LAID OUT (Josh 2026-09-21). The corners are
 	-- placed before the dock has stacked and sized the panel, and a map with

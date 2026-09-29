@@ -53,15 +53,15 @@ function M:BuildDockTab(parent)
 	local stack = BT.Widgets.Stack(parent)
 	local dock = stack:Section("The row")
 	self.rowRow = BT.Widgets.SwitchRow(dock, "Target row", "Your target, their tags and your note",
-		function() return BT.settings and BT.settings.bar ~= false end,
+		function() return BT.settings and BT.settings.targetRow ~= false end,
 		function(on)
 			BT.EnsureBound()
-			BT.settings.bar = on and true or false
-			if BT.Bar then
-				BT.Bar.SetShown(on)
+			BT.settings.targetRow = on and true or false
+			if BT.Dock then
+				BT.Dock.SetShown(on)
 			end
 		end)
-	self.rowRow.field = "bar"
+	self.rowRow.field = "targetRow"
 	stack:Note("Drag this tab on the rail to move the row in the dock.", true)
 	stack:Layout()
 end
@@ -81,7 +81,7 @@ function M:OnBind()
 end
 
 function M:OnDisable()
-	BT.Bar.SetMark(nil) -- the toolkit's own glyph back in the first slot
+	BT.Dock.SetMark(nil) -- the toolkit's own glyph back in the first slot
 	BT.Find.CloseEditor()
 	if BT.Tooltip and BT.Tooltip.HidePills then
 		BT.Tooltip.HidePills()
@@ -114,8 +114,8 @@ end
 
 local function tagsOn(p)
 	local out = {}
-	for _, f in ipairs(BT.AllFlags()) do
-		if p and p.flags and p.flags[f.key] then
+	for _, f in ipairs(BT.AllTags()) do
+		if p and p.tags and p.tags[f.key] then
 			out[#out + 1] = f
 		end
 	end
@@ -123,10 +123,10 @@ local function tagsOn(p)
 end
 
 function M:Cells()
-	local PAD = BT.Bar.PAD
+	local PAD = BT.Dock.PAD
 
 	-- who you are pointing at; clicking writes on them
-	local who = BT.Bar.Cell("who", 120)
+	local who = BT.Dock.Cell("who", 120)
 	who.button = CreateFrame("Button", nil, who)
 	who.button:SetAllPoints()
 	who.button:RegisterForClicks("AnyUp")
@@ -151,7 +151,7 @@ function M:Cells()
 	who.pencil.icon = who.pencil:CreateTexture(nil, "ARTWORK")
 	who.pencil.icon:SetAllPoints()
 	who.pencil.icon:SetTexture("Interface\\AddOns\\BeebMod\\Art\\icons")
-	BT.Bar.PencilCoord(who.pencil.icon)
+	BT.Dock.PencilCoord(who.pencil.icon)
 	who.pencil.icon:SetVertexColor(0.55, 0.63, 0.59, 1)
 	who.pencil:Hide()
 
@@ -204,14 +204,14 @@ function M:Cells()
 
 	-- the tags hang at the right-hand end, beside the cog: they are marks about
 	-- the person on this line, so they belong on this line
-	local dots = BT.Bar.Cell("dots", 0)
+	local dots = BT.Dock.Cell("dots", 0)
 	dots.side = "right"
 	dots.list = {}
 	-- the note's own mark, at the head of the row of tags
 	dots.note = dots:CreateTexture(nil, "ARTWORK")
 	dots.note:SetSize(DOT + 3, DOT + 3)
-	dots.note:SetTexture(BT.Bar.ICONS)
-	BT.Bar.NoteCoord(dots.note)
+	dots.note:SetTexture(BT.Dock.ICONS)
+	BT.Dock.NoteCoord(dots.note)
 	dots.note:SetVertexColor(0.90, 0.88, 0.80, 1)
 	dots.note:Hide()
 	for i = 1, MAX_DOTS do
@@ -295,7 +295,7 @@ function M:Cells()
 		else
 			self.text:SetFontObject(BeebModFontHighlightSmall)
 			self.text:SetText(EMPTY)
-			local row = BT.Bar.Row and BT.Bar.Row()
+			local row = BT.Dock.Row and BT.Dock.Row()
 			if row then
 				self.text:SetPoint("RIGHT", row, "RIGHT", -PAD, 0)
 			end
@@ -304,16 +304,16 @@ function M:Cells()
 		-- the unit's own class: a stranger has no row to read it from
 		local class = (info and info.class) or (p and p.class)
 		if class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class] then
-			BT.Bar.SetMark("Interface\\TargetingFrame\\UI-Classes-Circles", CLASS_ICON_TCOORDS[class])
+			BT.Dock.SetMark("Interface\\TargetingFrame\\UI-Classes-Circles", CLASS_ICON_TCOORDS[class])
 		elseif key then
-			BT.Bar.SetMark(nil)
+			BT.Dock.SetMark(nil)
 		else
-			BT.Bar.SetMark(RETICLE, RETICLE_COORDS, QUIET)
+			BT.Dock.SetMark(RETICLE, RETICLE_COORDS, QUIET)
 		end
 		local measured = key and self.text.GetStringWidth and self.text:GetStringWidth() or HINT_W
 		-- room for the pencil at the end, whether or not it is showing: the
 		-- row must not jump when you point at it
-		BT.Bar.SetCellWidth(self, BT.Pill.Number(measured, 90) + PAD * 2 + 16)
+		BT.Dock.SetCellWidth(self, BT.Pill.Number(measured, 90) + PAD * 2 + 16)
 		self.wanted = true
 		if not key then
 			who.pencil:Hide()
@@ -355,7 +355,7 @@ function M:Cells()
 			x = x + shown * DOT + math.max(0, shown - 1) * DOT_GAP
 		end
 		dots.wanted = shown > 0 or dots.note.text ~= nil
-		BT.Bar.SetCellWidth(dots, x + 6)
+		BT.Dock.SetCellWidth(dots, x + 6)
 	end
 	dots.Update = function() end
 
@@ -400,37 +400,38 @@ BT.Command("note", function(rest)
 	BT.Find.Refresh()
 end, "note [name] <text|clear> - write or clear a note, on your target if you give no name. With no text it reads the note back.", "ledger")
 
-BT.Command("flag", function(rest)
-	local key, flag, name, info = N.WhoAndRest(rest)
+-- A tag on someone, or off them: /bt tag [name] <tag>. By what you see
+-- (Josh 2026-09-23, audit): a tag of yours is "tag3" inside and "Tank" on
+-- the screen, so the label is tried first, whole and in any case, then the
+-- key.
+local function toggle(rest)
 	-- WhoAndRest returns nothing at all when nobody matches and nothing is
-	-- targeted, and indexing that nil was a Lua error where the usage
-	-- line should have been
-	-- BY WHAT YOU SEE (Josh 2026-09-23, audit): a tag of yours is "tag3"
-	-- inside and "Tank" on the screen, and only the inside name was taken.
-	-- The label is tried first, whole and in any case, then the key.
-	local said = (flag or ""):match("^%s*(.-)%s*$")
+	-- targeted, and indexing that nil was a Lua error where the usage line
+	-- should have been
+	local key, said, name, info = N.WhoAndRest(rest)
+	said = (said or ""):match("^%s*(.-)%s*$")
 	local tag
-	for _, f in ipairs(BT.AllFlags()) do
+	for _, f in ipairs(BT.AllTags()) do
 		if f.label:lower() == said:lower() or f.key == said then
 			tag = f
 		end
 	end
 	if not key or not tag then
 		local labels = {}
-		for _, f in ipairs(BT.AllFlags()) do
+		for _, f in ipairs(BT.AllTags()) do
 			labels[#labels + 1] = f.label
 		end
-		U.Print("Ledger: type /bt flag [name] <" .. table.concat(labels, " | ") .. ">.")
+		U.Print("Ledger: type /bt tag [name] <" .. table.concat(labels, " | ") .. ">.")
 		return
 	end
-	local p, on = N.ToggleFlag(key, tag.key, info)
+	local p, on = N.ToggleTag(key, tag.key, info)
 	if not p and on then
 		U.Print(("Ledger: couldn't tag %s. Target them first."):format(name))
 		return
 	end
 	U.Print(("Ledger: %s %s on %s."):format(on and "set" or "cleared", tag.label, name))
 	BT.Find.Refresh()
-end, "flag [name] <tag> - put a tag on someone, or take it off, by the tag's name", "ledger")
+end
 
 BT.Command("tag", function(rest)
 	local sub, arg = rest:match("^(%S*)%s*(.-)$")
@@ -445,20 +446,25 @@ BT.Command("tag", function(rest)
 		local ok, gone = BT.RemoveTag(arg)
 		U.Print(ok and ("Ledger: deleted " .. gone.label .. " and took it off every character.")
 			or ("Ledger: you have no tag called " .. arg .. "."))
+	elseif sub ~= "" then
+		toggle(rest)
+		return
 	else
 		local built, mine = {}, {}
-		for _, f in ipairs(BT.AllFlags()) do
+		for _, f in ipairs(BT.AllTags()) do
 			local into = f.builtin and built or mine
 			into[#into + 1] = f.icon .. " " .. f.label
 		end
 		U.Print("Built-in tags: " .. table.concat(built, ", "))
 		U.Print("Your tags: " .. (#mine > 0 and table.concat(mine, ", ") or "none. Type /bt tag new <name> to make one."))
 	end
-	if BT.Find.RebuildFlags then
-		BT.Find.RebuildFlags()
+	if BT.Find.RebuildTags then
+		BT.Find.RebuildTags()
 		BT.Find.Refresh()
 	end
-end, "tag - list the tags | tag new <name> | tag delete <name>", "ledger")
+end, "tag [name] <tag> - put a tag on someone, or take it off | tag - list the tags | tag new <name> | tag delete <name>", "ledger")
+-- the command's name until 2026-09-29, kept so it still works; no help line
+BT.Command("flag", toggle, nil, "ledger")
 
 BT.Command("rate", function(rest)
 	local key, n, name, info = N.WhoAndRest(rest)

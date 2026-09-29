@@ -721,13 +721,13 @@ local function controlButton(holder, i, coord, flip, onClick, tip)
 	b:SetPoint("RIGHT", holder, "RIGHT", -((i - 1) * (CONTROL + CONTROL_GAP)), 0)
 	b.icon = b:CreateTexture(nil, "ARTWORK")
 	b.icon:SetAllPoints()
-	b.icon:SetTexture(BT.Bar.ICONS)
+	b.icon:SetTexture(BT.Dock.ICONS)
 	coord(b.icon, flip)
 	b.icon:SetVertexColor(MARK[1], MARK[2], MARK[3], 1)
 	b:SetScript("OnEnter", function(self)
 		BT.Widgets.Tint(self.icon)
 		if tip and GameTooltip then
-			BT.Bar.Tip(self, function() GameTooltip:AddLine(tip, 1, 1, 1) end)
+			BT.Dock.Tip(self, function() GameTooltip:AddLine(tip, 1, 1, 1) end)
 		end
 	end)
 	b:SetScript("OnLeave", function(self)
@@ -783,20 +783,20 @@ function M.Controls(frame, plain)
 		frame.beebsControls = holder
 
 		-- reading right to left: the menu, the newest, down, up
-		controlButton(holder, 1, BT.Bar.CogCoord, nil, function()
+		controlButton(holder, 1, BT.Dock.CogCoord, nil, function()
 			M.OpenMenu(frame)
 		end, "Chat menu")
-		controlButton(holder, 2, BT.Bar.CheckCoord, nil, function()
+		controlButton(holder, 2, BT.Dock.CheckCoord, nil, function()
 			if frame.ScrollToBottom then
 				frame:ScrollToBottom()
 			end
 		end, "Newest line")
-		controlButton(holder, 3, BT.Bar.ChevronCoord, false, function()
+		controlButton(holder, 3, BT.Dock.ChevronCoord, false, function()
 			if frame.ScrollDown then
 				frame:ScrollDown()
 			end
 		end, "Scroll down")
-		controlButton(holder, 4, BT.Bar.ChevronCoord, true, function()
+		controlButton(holder, 4, BT.Dock.ChevronCoord, true, function()
 			if frame.ScrollUp then
 				frame:ScrollUp()
 			end

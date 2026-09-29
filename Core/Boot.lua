@@ -38,8 +38,8 @@ handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
 	else
 		BT.Bind(realm, faction)
 	end
-	if BT.Bar then
-		BT.Bar.Create()
+	if BT.Dock then
+		BT.Dock.Create()
 	end
 	for _, fn in ipairs(listeners) do
 		local ok, err = pcall(fn, initial, reloading)
@@ -54,8 +54,8 @@ end
 
 -- light the dock's target row up, or let it go dark
 handlers.PLAYER_TARGET_CHANGED = function()
-	if BT.Bar then
-		BT.Bar.Update()
+	if BT.Dock then
+		BT.Dock.Update()
 	end
 end
 
@@ -82,8 +82,8 @@ end
 function Boot.Fallback()
 	if Boot.refused and Boot.refused.PLAYER_ENTERING_WORLD then
 		BT.Bind(GetRealmName and GetRealmName(), UnitFactionGroup and UnitFactionGroup("player"))
-		if BT.Bar then
-			BT.Bar.Create()
+		if BT.Dock then
+			BT.Dock.Create()
 		end
 	end
 end

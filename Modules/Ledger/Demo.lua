@@ -40,7 +40,7 @@ local function build()
 				last = now - who.ago,
 				note = n[1], noted = n[1] and (now - i * 86400 * 2) or nil,
 				notedBy = n[1] and ALTS[1 + (i % #ALTS)] or nil,
-				flags = n[2], rating = n[3],
+				tags = n[2], rating = n[3],
 			}
 		end
 	end
@@ -52,7 +52,7 @@ local function build()
 		people[me] = {
 			name = U.Me and U.Me() or me, class = class, level = UnitLevel and UnitLevel("player") or nil,
 			note = "Always first to the mailbox after a dungeon. Good company.", noted = now - 3 * 86400,
-			notedBy = ALTS[1], flags = { good = true }, rating = 5, last = now,
+			notedBy = ALTS[1], tags = { good = true }, rating = 5, last = now,
 		}
 	end
 	return people
