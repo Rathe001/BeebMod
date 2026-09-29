@@ -5,6 +5,41 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Frame rate and latency share one row of the dock's grid**, under the
+  other readouts: "65 fps", then home latency after the house and world
+  latency after the globe. Each figure still turns amber or red when it is
+  worth noticing. They were three separate cells.
+
+- **The PvP tab's rewards stay inside the character window.** "Next Rewards
+  at Rank 1", the tabard and where to buy it now sit at the foot of the
+  right-hand pane, with the rank's description above them. They hung below
+  the window.
+- **The game's reputation bar stays hidden when you watch a new faction.**
+  The game fades a new bar in, and that brought the bar back while the
+  Reputation line was showing.
+
+- **Each line of the dock starts with a shield.** The Expedition's is your
+  rank's badge. Level's is in Experience's colour with your level on it, and
+  the line says how far through the level you are, such as "46%".
+  Reputation's has a banner, in the colour of your standing. Only the shield
+  is drawn, so it stays readable at that size.
+- **A PvP line in the dock**, under the Level line, and on the Progress
+  page with Level and Reputation. It shows your rank with the game's own insignia and your rank
+  points, such as "0 / 750 pts", with a bar for how far through them you
+  are. Before your first rank, its shield is your side's colour with two
+  swords. Point at it for the next rank and your honorable kills today,
+  yesterday and in all. The game shows rank points only in the PvP tab of
+  your character window, so BeebMod reads them there each time the game
+  writes them, and keeps them for each character. If the line is missing,
+  open that tab once.
+
+- **A commendation's toast opens that commendation.** Clicking it opens the
+  Commendations page on the commendation's group, with every commendation
+  shown, scrolled to it and outlined in gold. It opened the page as you
+  last left it before.
+
 ## 0.1.0-beta.14
 
 - **A target fades past 28 yards, whatever your class.** The target, focus

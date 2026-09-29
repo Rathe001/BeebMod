@@ -95,6 +95,7 @@ Modules\Pickpocket\Pickpocket.lua
 Modules\Speed\Speed.lua
 Modules\XP\XP.lua
 Modules\Rep\Rep.lua
+Modules\PvP\PvP.lua
 # every kind of mob you have killed: the book, what counts as a kill, the
 # toast and the journal window before the module that drives them
 Modules\Expedition\LoreData.lua

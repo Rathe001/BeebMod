@@ -6,11 +6,11 @@
 -- looking at the fight. Read at a glance, and nothing else: no graph, no
 -- history, no memory table.
 --
--- THREE READOUTS (Josh 2026-09-22, the panel redesign). They were one line of
--- their own; now they are three cells of the panel's readout grid - the frame
--- rate, then home and world latency under the house and the globe. A good
--- number is plain; amber and red are the only colours, and they mean "worth
--- noticing" and "this is why that felt wrong".
+-- ONE ROW OF THE READOUT GRID (Josh 2026-09-22, the panel redesign; one
+-- cell since 2026-09-29, M.Line) - the frame rate, then home and world
+-- latency after the house and the globe. A good number is plain; amber and
+-- red are the only colours, and they mean "worth noticing" and "this is why
+-- that felt wrong".
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Performance/Performance.lua")
 
@@ -73,7 +73,7 @@ function M.Read()
 	return fps, home, world
 end
 
--- the three cells, as they should read now
+-- the three figures, each as it should read now (M.Line joins them)
 function M.Cells(fps, home, world)
 	local function ms(mark, v)
 		return {
@@ -92,14 +92,33 @@ function M.Cells(fps, home, world)
 	}
 end
 
+-- ONE CELL, NOT THREE (Josh 2026-09-29: "The performance/latency metrics
+-- should be grouped together instead of individual cells"): a row of the
+-- grid to itself, the frame rate, then home and world latency after the
+-- house and the globe, each figure in its own colour when it is worth
+-- noticing. The marks are drawn in the words, from the same sheet.
+local MARKS = {
+	home = "|TInterface\\AddOns\\BeebMod\\Art\\net:12:12:0:0:128:32:0:32:0:32:138:153:148|t",
+	world = "|TInterface\\AddOns\\BeebMod\\Art\\net:12:12:0:0:128:32:32:64:0:32:138:153:148|t",
+}
+local STATE_WORDS = { warn = "|cfff2c759%s|r", alert = "|cfff26659%s|r" }
+
+function M.Line(fps, home, world)
+	local cells = M.Cells(fps, home, world)
+	local function part(spec)
+		local fmt = STATE_WORDS[spec.state or ""]
+		return fmt and fmt:format(spec.text) or spec.text
+	end
+	local text = ("%s    %s %s    %s %s"):format(part(cells.fps), MARKS.home, part(cells.home),
+		MARKS.world, part(cells.world))
+	return { text = text, parts = cells }
+end
+
 function M.Update()
 	if not M.chips then
 		return
 	end
-	local cells = M.Cells(M.Read())
-	for id, c in pairs(M.chips) do
-		c:Set(cells[id])
-	end
+	M.chips.all:Set(M.Line(M.Read()))
 end
 
 -- a cell's state as the tooltip colours it
@@ -134,9 +153,7 @@ function M.Build()
 		return M.chips
 	end
 	M.chips = {
-		fps = BT.Dock.Chip("performance", "fps", 1),
-		home = BT.Dock.Chip("performance", "home", 2),
-		world = BT.Dock.Chip("performance", "world", 3),
+		all = BT.Dock.Chip("performance", "all", 1, true),
 	}
 	for _, c in pairs(M.chips) do
 		c:SetScript("OnEnter", function(self) M.Tip(self) end)

@@ -1957,6 +1957,7 @@ local LADDER_H, LADDER_BADGE = 118, 54
 local LADDER_W = WIDTH - PAD * 2 - COMMENDATION_RAIL_W - 24
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local GOLD = { 1, 0.82, 0.30 }
+local FOCUS = GOLD
 local CHECK_TEX = "Interface\\RaidFrame\\ReadyCheck-Ready"
 
 function V.BuildCommendations()
@@ -2272,6 +2273,22 @@ local function commendationRow(i)
 	r.fill = r:CreateTexture(nil, "ARTWORK")
 	r.fill:SetHeight(3)
 	r.fill:SetPoint("BOTTOMLEFT", r.track, "BOTTOMLEFT", 0, 0)
+	-- the one a toast was clicked for: a gold line round it
+	r.focus = {}
+	for _, side in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" },
+		{ "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+		local t = r:CreateTexture(nil, "OVERLAY", nil, 2)
+		t:SetPoint(side[1])
+		t:SetPoint(side[2])
+		if side[1] == "TOPLEFT" and side[2] == "BOTTOMLEFT" or side[1] == "TOPRIGHT" then
+			t:SetWidth(2)
+		else
+			t:SetHeight(2)
+		end
+		t:SetColorTexture(FOCUS[1], FOCUS[2], FOCUS[3], 0.95)
+		t:Hide()
+		r.focus[#r.focus + 1] = t
+	end
 	a.rows[i] = r
 	return r
 end
@@ -2482,6 +2499,7 @@ function V.DrawCommendations(kills, feats)
 	drawLadder(a, (BT.Expedition.Points(kills, feats)))
 	local pick = ui().commendationPick or "all"
 	local y, ri, hi = 0, 0, 0
+	local focusY
 	for _, g in ipairs(groups) do
 		-- what this view keeps of the group; a group left empty is not headed
 		local list = {}
@@ -2565,6 +2583,13 @@ function V.DrawCommendations(kills, feats)
 					r.fill:SetShown(share > 0)
 					r.fill:SetWidth(math.max(1, (tileW - 22) * share))
 				end
+				local focused = V.focus ~= nil and it.id == V.focus
+				for _, t in ipairs(r.focus) do
+					t:SetShown(focused)
+				end
+				if focused then
+					focusY = y
+				end
 				r:Show()
 			end
 			y = y + COMMENDATION_TILE_H + COMMENDATION_GAP
@@ -2577,6 +2602,12 @@ function V.DrawCommendations(kills, feats)
 		a.heads[i]:Hide()
 	end
 	a.list:SetContentHeight(y + 6)
+	-- opened for one commendation: its row at the top, its group's heading
+	-- above it when it is the group's first row
+	if V.scrollToFocus then
+		V.scrollToFocus = nil
+		a.list:ScrollTo(focusY and math.max(0, focusY - HEAD_ROW_H) or 0)
+	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -2632,12 +2663,15 @@ function V.Changed()
 end
 
 -- open, on an enemy or a view if one is named
-function V.Show(npc, view)
+function V.Show(npc, view, focus)
 	if not BT.Enabled("expedition") then
 		return false
 	end
 	BT.EnsureBound()
 	V.Build()
+	-- the commendation it was opened for, if any, outlined until it is
+	-- opened again (V.ShowCommendation)
+	V.focus, V.scrollToFocus = focus, focus ~= nil
 	-- opened on an enemy, its page; opened plainly, the cards, not whatever page
 	-- was up when it was closed
 	V.open = npc
@@ -2650,6 +2684,32 @@ function V.Show(npc, view)
 	frame:Raise()
 	V.Refresh()
 	return true
+end
+
+-- A TOAST OPENS ITS COMMENDATION (Josh 2026-09-29: "Clicking the
+-- achievement toast should take me to that achievement"): the Commendations
+-- page, everything shown, the commendation's own group picked on the rail,
+-- and its tile scrolled to and outlined in gold.
+function V.ShowCommendation(id)
+	if not BT.Enabled("expedition") then
+		return false
+	end
+	BT.EnsureBound()
+	local J = BT.Expedition
+	local pick = "all"
+	if J.Store() then
+		local kills, feats = J.Counts()
+		for _, g in ipairs(V.Groups(kills, feats)) do
+			for _, it in ipairs(g.list) do
+				if it.id == id then
+					pick = g.key
+				end
+			end
+		end
+	end
+	local u = ui()
+	u.commendationShow, u.commendationPick = "all", pick
+	return V.Show(nil, "commendations", id)
 end
 
 function V.Hide()

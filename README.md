@@ -30,7 +30,7 @@ settings.
 |---|---|
 | **Dock** | The panel itself: its size, and the **Clock** in its header. The clock shows local or server time; click it to switch. |
 | **Minimap** | The client's map, moved into the dock, and **Addon buttons**: other addons' minimap buttons in one line, a switch each. |
-| **Progress** | **Experience** (the XP bar, and time to level at your current pace) and **Reputation** (the watched faction, and your standing with it), a switch each. |
+| **Progress** | **Experience** (the XP bar, and time to level at your current pace), **Reputation** (the watched faction, and your standing with it) and **PvP** (your PvP rank with its insignia, how far to the next, and this week's honor), a switch each. Each line starts with a shield: your level on it, a banner, or your rank. |
 | **Metrics** | A grid of readouts, each with its own switch: gold and gold per hour, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
 | **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
 | **Micro menu** | The game's menu buttons, in the dock. |
@@ -148,7 +148,8 @@ lives in `Modules/Ledger`.
     Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab,
                          the notes on a tooltip
     Modules/Minimap/     the map in the dock; Modules/Buttons/ the addon buttons
-    Modules/XP/, Rep/    the experience and reputation lines of the dock
+    Modules/XP/, Rep/, PvP/
+                         the experience, reputation and PvP lines of the dock
     Modules/Metrics/     the readout grid; Currency/, Bags/, Durability/,
                          ItemLevel/, Pickpocket/, Speed/ and Performance/ are
                          its rows
@@ -185,6 +186,9 @@ lives in `Modules/Ledger`.
     Art/Ranks/           the ten Expedition rank badges, drawn in
                          scripts/rank-badges.html and cut into textures by
                          scripts/make-badges.py (headless Edge and Pillow)
+    Art/Dock/            the shields at the start of the Level, reputation and
+                         PvP lines, in layers: a field the game tints, a rim,
+                         a banner and swords (the same script)
     Modules/Expedition/LoreData.lua
                          the cards' lore: short descriptions from Warcraft Wiki
                          pages (https://warcraft.wiki.gg) on every enemy of every

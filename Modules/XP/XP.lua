@@ -1,9 +1,9 @@
 -- Experience: where you are in the level, and how long the rest will take
 -- (Josh 2026-09-22).
 --
--- One line of the dock and a thin bar under it. The line says the level and
--- how far through it you are, and roughly how long until the next one at the
--- pace of this session; the bar shows the same, with rested experience as a
+-- One line of the dock and a thin bar under it. The shield at its start says
+-- the level, the line how far through it you are, and roughly how long until
+-- the next one at your pace; the bar shows the same, with rested experience as a
 -- paler stretch ahead of it. Point at it for the numbers.
 --
 -- WHAT THIS SESSION GAINED is kept as the gold per hour is: a login starts
@@ -245,7 +245,10 @@ M.Big = big
 
 function M.Lines(level, cur, max, rate)
 	local pct = max > 0 and math.floor(cur / max * 100) or 0
-	local left = ("Level %d %s"):format(level, WORDS:format(("· %d%%"):format(pct)))
+	-- THE LEVEL IS ON THE SHIELD (Josh 2026-09-29: "put the number level
+	-- inside the icon - it would save some room"): the line says how far
+	-- through it you are, and the hover says the rest
+	local left = ("%d%%"):format(pct)
 	local secs = M.ToLevel(cur, max, rate)
 	-- ONE GRAMMAR WITH REPUTATION (Josh 2026-09-22, the panel redesign): the
 	-- right side is a time, and only once there is a pace. What is
@@ -275,8 +278,9 @@ function M.Update()
 	local left, right = M.Lines(level, cur, max, M.Rate())
 	M.text:SetText(left)
 	M.eta:SetText(right)
+	M.shield.number:SetText(level)
 
-	local w = BT.Pill.Number(M.frame:GetWidth(), 0) - INSET * 2
+	local w = BT.Dock.LineBarWidth(M.frame, INSET)
 	if w <= 0 then
 		return
 	end
@@ -284,6 +288,7 @@ function M.Update()
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(a[1], a[2], a[3], 0.9)
 	BT.Dock.BandColor(M.frame, a)
+	M.shield.field:SetVertexColor(a[1], a[2], a[3])
 	M.rested:SetColorTexture(a[1], a[2], a[3], 0.30)
 	local done = max > 0 and math.min(1, cur / max) or 0
 	local ahead = max > 0 and math.min(1 - done, (rested or 0) / max) or 0
@@ -342,8 +347,10 @@ function M.Build()
 	-- the client draws nothing inside a frame with no height (see Performance)
 	M.frame:SetHeight(LINE_H)
 	M.text = BT.Widgets.Label(M.frame, "", "small")
-	M.text:SetPoint("TOPLEFT", M.frame, "TOPLEFT", INSET, -3)
 	M.text:SetJustifyH("LEFT")
+	-- a shield at the start, your level on it
+	M.shield = BT.Dock.LineShield(M.frame, INSET)
+	BT.Dock.LineNumber(M.frame, M.shield)
 	M.eta = BT.Widgets.Label(M.frame, "", "small")
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
 	M.eta:SetJustifyH("RIGHT")
@@ -356,9 +363,9 @@ function M.Build()
 	M.text:SetWordWrap(false)
 	-- the bar: a faint track, the experience, and rested ahead of it
 	M.track = M.frame:CreateTexture(nil, "BORDER")
-	M.track:SetPoint("TOPLEFT", M.frame, "TOPLEFT", INSET, -(TEXT_H + 3))
 	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -(TEXT_H + 3))
 	M.track:SetHeight(BAR_H)
+	BT.Dock.LineAfter(M.shield.icon, M.text, M.track, TEXT_H)
 	M.fill = M.frame:CreateTexture(nil, "ARTWORK")
 	M.fill:SetPoint("TOPLEFT", M.track, "TOPLEFT", 0, 0)
 	M.fill:SetHeight(BAR_H)

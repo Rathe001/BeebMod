@@ -2155,14 +2155,34 @@ local function layoutPages(frame, left, right)
 		-- AND bottom, so it is exactly the room between the meter and whatever
 		-- sits along the bottom of the pane.
 		local floor = (d == pick(pick(frame, "ReputationFrame"), "ReputationDetailFrame")) and (8 + 3 * 22) or 8
-		for _, key in ipairs({ "Description", "Content" }) do
-			local piece = d[key]
-			if piece and piece.IsShown and piece:IsShown() then
-				place(piece, {
-					{ "TOPLEFT", d, "TOPLEFT", 8, y },
-					{ "BOTTOMRIGHT", d, "BOTTOMRIGHT", -8, floor },
-				})
-				break
+		local function up(piece)
+			return piece and piece.IsShown and piece:IsShown()
+		end
+		if up(d.Description) and up(d.Content) then
+			-- BOTH, AS THE PVP PANE HAS (Josh 2026-09-29: "the next pvp reward is
+			-- still not moved"): the words, and under them the next rank's
+			-- rewards. The game hangs the rewards from the pane's bottom edge,
+			-- which put them under the window; they stand on the pane's floor
+			-- instead, as tall as what is in them, and the words take the rest.
+			local tall = M.ContentHeight(d.Content)
+			place(d.Content, {
+				{ "BOTTOMLEFT", d, "BOTTOMLEFT", 8, floor },
+				{ "BOTTOMRIGHT", d, "BOTTOMRIGHT", -8, floor },
+			}, nil, tall)
+			place(d.Description, {
+				{ "TOPLEFT", d, "TOPLEFT", 8, y },
+				{ "BOTTOMRIGHT", d.Content, "TOPRIGHT", 0, 8 },
+			})
+		else
+			for _, key in ipairs({ "Description", "Content" }) do
+				local piece = d[key]
+				if up(piece) then
+					place(piece, {
+						{ "TOPLEFT", d, "TOPLEFT", 8, y },
+						{ "BOTTOMRIGHT", d, "BOTTOMRIGHT", -8, floor },
+					})
+					break
+				end
 			end
 		end
 		if d.EmptyText and d.EmptyText.IsShown and d.EmptyText:IsShown() then
@@ -2217,6 +2237,32 @@ local function layoutPages(frame, left, right)
 		info:SetAlpha(1)
 		info:Show()
 	end
+end
+
+-- How tall a pane's list of pieces really is: the game gives the PvP
+-- rewards 141 pixels and puts its last line of words, 45 tall, at 117 down.
+-- Each piece's own offset from the list's top, and the tallest of it and
+-- its words, whichever reaches lowest.
+function M.ContentHeight(content)
+	local okH, h = pcall(content.GetHeight, content)
+	local tall = okH and type(h) == "number" and h or 0
+	local okC, kids = pcall(function() return { content:GetChildren() } end)
+	for _, kid in ipairs(okC and kids or {}) do
+		local okP, point, rel, _, _, y = pcall(kid.GetPoint, kid, 1)
+		if okP and point == "TOPLEFT" and rel == content and type(y) == "number" then
+			local okK, kh = pcall(kid.GetHeight, kid)
+			local own = okK and type(kh) == "number" and kh or 0
+			local okR, regions = pcall(function() return { kid:GetRegions() } end)
+			for _, r in ipairs(okR and regions or {}) do
+				local okT, rh = pcall(r.GetHeight, r)
+				if okT and type(rh) == "number" and rh > own then
+					own = rh
+				end
+			end
+			tall = math.max(tall, -y + own)
+		end
+	end
+	return math.floor(tall + 0.5)
 end
 
 local laying = false

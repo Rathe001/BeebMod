@@ -3,13 +3,14 @@
 The badges are drawn in scripts/rank-badges.html, the same drawing as the
 mockup they were chosen from. This opens that page in headless Microsoft Edge
 at twice the size, so every edge is smoothed when it is brought down, and cuts
-the picture into ten textures:
+the picture into textures:
 
     python scripts/make-badges.py [proof.png]
 
 writes Art/Ranks/rank1.tga (Greenhorn) to rank10.tga (Expedition Leader),
-256 x 256 each, 32-bit with the ground clear. Needs Edge and Pillow
-(pip install pillow). A proof, if named, is the ten in a row on the window's
+and the dock's other shields in pieces - Art/Dock/field.tga, rim.tga,
+banner.tga and swords.tga - 256 x 256 each, 32-bit with the ground clear.
+Needs Edge and Pillow (pip install pillow). A proof, if named, is the ten in a row on the window's
 own dark, to look at before starting the game.
 """
 import os
@@ -22,8 +23,9 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 PAGE = os.path.join(HERE, "rank-badges.html")
-OUT = os.path.join(ROOT, "Art", "Ranks")
-COUNT, SIZE, SCALE = 10, 256, 2
+# each picture on the page, in order, and the file it becomes
+NAMES = [("Ranks", f"rank{i}") for i in range(1, 11)] + [("Dock", "field"), ("Dock", "rim"), ("Dock", "banner"), ("Dock", "swords")]
+COUNT, SIZE, SCALE = len(NAMES), 256, 2
 
 EDGES = [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -62,7 +64,8 @@ def save_tga(img, path):
 
 
 def main():
-    os.makedirs(OUT, exist_ok=True)
+    for folder in {f for f, _ in NAMES}:
+        os.makedirs(os.path.join(ROOT, "Art", folder), exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         shot = os.path.join(tmp, "badges.png")
         render(shot)
@@ -76,9 +79,10 @@ def main():
         # brought down with the colour weighted by its alpha, so the clear
         # ground leaves no dark fringe round the edge
         cell = cell.convert("RGBa").resize((SIZE, SIZE), Image.LANCZOS).convert("RGBA")
-        save_tga(cell, os.path.join(OUT, f"rank{i + 1}.tga"))
+        folder, name = NAMES[i]
+        save_tga(cell, os.path.join(ROOT, "Art", folder, name + ".tga"))
         badges.append(cell)
-        print(f"wrote Art/Ranks/rank{i + 1}.tga")
+        print(f"wrote Art/{folder}/{name}.tga")
     if len(sys.argv) > 1:
         proof = Image.new("RGBA", (COUNT * SIZE, SIZE), (10, 15, 13, 255))
         for i, cell in enumerate(badges):

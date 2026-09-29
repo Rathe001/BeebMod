@@ -215,15 +215,41 @@ end
 -- order, and the dock stacks its sections in the same one - so the order is a
 -- setting, a list of module keys, and the module list itself is sorted by it.
 -- Everything that walks the modules (the rail, the dock, the cells on the row)
--- follows without knowing there is an order at all. A module the list has not
--- heard of yet - one added in a later version - goes at the end, in its
--- default place among any others like it.
+-- follows without knowing there is an order at all.
+-- A NEW MODULE GOES WHERE IT BELONGS (Josh 2026-09-29: the PvP line came in at
+-- the foot of the dock, "It should be with the other meters"). One the list
+-- has not heard of yet - added in a later version - goes straight after the
+-- module that comes before it by default, so PvP joins Level and Reputation
+-- rather than the end of everything.
 function BT.SortModules()
 	local order = BT.settings and BT.settings.order
 	local rank = {}
 	if type(order) == "table" then
 		for i, key in ipairs(order) do
-			rank[key] = i
+			if byKey[key] then
+				rank[key] = i
+			end
+		end
+	end
+	if next(rank) then
+		local byDefault = {}
+		for i, m in ipairs(modules) do
+			byDefault[i] = m
+		end
+		table.sort(byDefault, function(a, b)
+			if a.order ~= b.order then
+				return a.order < b.order
+			end
+			return a.key < b.key
+		end)
+		local after, step = 0, 0
+		for _, m in ipairs(byDefault) do
+			if rank[m.key] then
+				after, step = rank[m.key], 0
+			else
+				step = step + 1
+				rank[m.key] = after + step / 1000
+			end
 		end
 	end
 	table.sort(modules, function(a, b)

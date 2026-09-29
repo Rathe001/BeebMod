@@ -373,6 +373,73 @@ function B.PaintBand(f)
 	end
 end
 
+-- A SHIELD AT THE START OF EACH LINE (Josh 2026-09-29): the Expedition's
+-- rank badge, and to line up with it a shield for Level, with your level on
+-- it, and one for reputation, with a banner. Only the shield is drawn: the
+-- art leaves room round it for the higher ranks' antlers and tusks. It
+-- reaches from the text's top to the bar's foot; the text and the bar start
+-- after it (B.LineAfter).
+B.LINE_ICON_W, B.LINE_ICON_H, B.LINE_ICON_GAP = 17, 23, 6
+B.LINE_ICON_CROP = { 0.25, 0.75, 0.2, 0.875 }
+B.SHIELD_FIELD = "Interface\\AddOns\\BeebMod\\Art\\Dock\\field"
+B.SHIELD_RIM = "Interface\\AddOns\\BeebMod\\Art\\Dock\\rim"
+B.SHIELD_BANNER = "Interface\\AddOns\\BeebMod\\Art\\Dock\\banner"
+B.SHIELD_SWORDS = "Interface\\AddOns\\BeebMod\\Art\\Dock\\swords"
+
+-- one layer of a line's shield, at the line's top left; `sub` orders layers
+function B.LineIcon(f, inset, sub, file)
+	local t = f:CreateTexture(nil, "ARTWORK", nil, sub or 0)
+	t:SetSize(B.LINE_ICON_W, B.LINE_ICON_H)
+	t:SetPoint("TOPLEFT", f, "TOPLEFT", inset, -3)
+	local c = B.LINE_ICON_CROP
+	t:SetTexCoord(c[1], c[2], c[3], c[4])
+	if file then
+		t:SetTexture(file)
+	end
+	return t
+end
+
+-- a shield of the dock's own, the field tinted by the caller: the field, the
+-- rim over it, and a mark over that if one is given
+function B.LineShield(f, inset, mark)
+	local s = {}
+	s.field = B.LineIcon(f, inset, 1, B.SHIELD_FIELD)
+	s.rim = B.LineIcon(f, inset, 2, B.SHIELD_RIM)
+	if mark then
+		s.mark = B.LineIcon(f, inset, 3, mark)
+	end
+	s.icon = s.field
+	return s
+end
+
+-- a number on a line's shield, such as your level (Josh 2026-09-29: "put the
+-- number level inside the icon - it would save some room")
+B.SHIELD_FONT = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\JosefinSans-Bold.ttf"
+function B.LineNumber(f, s)
+	local n = f:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")
+	pcall(n.SetFont, n, B.SHIELD_FONT, 10, "")
+	n:SetPoint("CENTER", s.icon, "CENTER", 0, 1)
+	n:SetJustifyH("CENTER")
+	n:SetTextColor(1, 1, 1)
+	if n.SetShadowColor then
+		n:SetShadowColor(0, 0, 0, 0.9)
+		n:SetShadowOffset(1, -1)
+	end
+	s.number = n
+	return n
+end
+
+-- where a line's text and bar start, once a shield is at its left
+function B.LineAfter(icon, text, track, textH)
+	text:SetPoint("TOPLEFT", icon, "TOPRIGHT", B.LINE_ICON_GAP, 0)
+	track:SetPoint("TOPLEFT", icon, "TOPRIGHT", B.LINE_ICON_GAP, -textH)
+end
+
+-- how wide a line's bar is, with a shield at its left
+function B.LineBarWidth(f, inset)
+	return BT.Pill.Number(f:GetWidth(), 0) - inset * 2 - B.LINE_ICON_W - B.LINE_ICON_GAP
+end
+
 -- a meter's colour, whenever its bar is painted
 function B.BandColor(f, c)
 	if not f then
@@ -521,8 +588,10 @@ local function paintChip(c)
 end
 
 -- A readout cell, one per (module, id): made once, filled in with :Set.
--- `order` places it among its own module's cells.
-function B.Chip(owner, id, order)
+-- `order` places it among its own module's cells. A WIDE one (Josh
+-- 2026-09-29: "The performance/latency metrics should be grouped together
+-- instead of individual cells") has a row of its own, under the others.
+function B.Chip(owner, id, order, wide)
 	B.Create()
 	local key = owner .. ":" .. tostring(id)
 	if chipIndex[key] then
@@ -538,6 +607,7 @@ function B.Chip(owner, id, order)
 	c.text:SetJustifyH("LEFT")
 	c.text:SetWordWrap(false)
 	c.owner, c.id, c.order = owner, id, order or 0
+	c.wide = wide and true or false
 	c.wanted = false
 	c:Hide()
 	-- spec = { icon, coords, tint, text, state }
@@ -622,7 +692,13 @@ local function layoutChips(width, rank)
 		return B.Snap(n * ROW_H)
 	end
 	local cw = (width - INSET * 2) / COLS
-	for i, c in ipairs(shown) do
+	-- the cells three across, then each wide one on a row of its own
+	local narrow, wide = {}, {}
+	for _, c in ipairs(shown) do
+		local into = c.wide and wide or narrow
+		into[#into + 1] = c
+	end
+	for i, c in ipairs(narrow) do
 		local col, rowN = (i - 1) % COLS, math.floor((i - 1) / COLS)
 		c:ClearAllPoints()
 		c:SetPoint("TOPLEFT", grid, "TOPLEFT", INSET + col * cw, -edge(rowN))
@@ -630,7 +706,16 @@ local function layoutChips(width, rank)
 		c:SetHeight(edge(rowN + 1) - px - edge(rowN))
 		c:Show()
 	end
-	local rows = math.ceil(#shown / COLS)
+	local narrowRows = math.ceil(#narrow / COLS)
+	for i, c in ipairs(wide) do
+		local rowN = narrowRows + i - 1
+		c:ClearAllPoints()
+		c:SetPoint("TOPLEFT", grid, "TOPLEFT", INSET, -edge(rowN))
+		c:SetWidth(width - INSET * 2 - 2)
+		c:SetHeight(edge(rowN + 1) - px - edge(rowN))
+		c:Show()
+	end
+	local rows = narrowRows + #wide
 	grid.wantHeight = edge(rows)
 	grid:SetHeight(grid.wantHeight)
 	-- A GRID YOU CAN SEE (Josh 2026-09-22). The dividers were there at half
@@ -649,8 +734,9 @@ local function layoutChips(width, rank)
 		line:ClearAllPoints()
 		local gap = B.Snap(COLUMN_GAP)
 		line:SetPoint("TOPLEFT", grid, "TOPLEFT", math.floor(INSET + n * cw - 4), -gap)
-		line:SetHeight(edge(rows) - px - gap * 2)
-		line:SetShown(#shown > n)
+		-- only as far down as the rows of three go
+		line:SetHeight(math.max(1, edge(narrowRows) - px - gap * 2))
+		line:SetShown(#narrow > n)
 	end
 	grid.rowLines = grid.rowLines or {}
 	for r = 1, math.max(rows - 1, #grid.rowLines) do

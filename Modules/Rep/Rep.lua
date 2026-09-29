@@ -211,11 +211,13 @@ function M.Update()
 	M.text:SetText(left)
 	M.eta:SetText(right)
 
-	local w = BT.Pill.Number(M.frame:GetWidth(), 0) - INSET * 2
+	local c = M.StandingColour(f.reaction)
+	-- the shield's field wears the standing's colour, as the bar does
+	M.shield.field:SetVertexColor(c[1], c[2], c[3])
+	local w = BT.Dock.LineBarWidth(M.frame, INSET)
 	if w <= 0 then
 		return
 	end
-	local c = M.StandingColour(f.reaction)
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(c[1], c[2], c[3], 0.9)
 	BT.Dock.BandColor(M.frame, c)
@@ -269,8 +271,9 @@ function M.Build()
 	M.frame.wantHeight = LINE_H
 	M.frame:SetHeight(LINE_H)
 	M.text = BT.Widgets.Label(M.frame, "", "small")
-	M.text:SetPoint("TOPLEFT", M.frame, "TOPLEFT", INSET, -3)
 	M.text:SetJustifyH("LEFT")
+	-- a shield at the start with a banner on it (Josh 2026-09-29)
+	M.shield = BT.Dock.LineShield(M.frame, INSET, BT.Dock.SHIELD_BANNER)
 	M.eta = BT.Widgets.Label(M.frame, "", "small")
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
 	M.eta:SetJustifyH("RIGHT")
@@ -282,9 +285,9 @@ function M.Build()
 	M.text:SetHeight(TEXT_H - 2)
 	M.text:SetWordWrap(false)
 	M.track = M.frame:CreateTexture(nil, "BORDER")
-	M.track:SetPoint("TOPLEFT", M.frame, "TOPLEFT", INSET, -(TEXT_H + 3))
 	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -(TEXT_H + 3))
 	M.track:SetHeight(BAR_H)
+	BT.Dock.LineAfter(M.shield.icon, M.text, M.track, TEXT_H)
 	M.fill = M.frame:CreateTexture(nil, "ARTWORK")
 	M.fill:SetPoint("TOPLEFT", M.track, "TOPLEFT", 0, 0)
 	M.fill:SetHeight(BAR_H)

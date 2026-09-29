@@ -2,7 +2,8 @@
 <!-- scripts/rank-badges.html (Josh 2026-09-29): the Expedition's ten rank
 badges, drawn as in the mockup the art was chosen from. scripts/make-badges.py
 opens this in headless Edge, which draws the ten in a row on a clear ground,
-and cuts the picture into Art/Ranks/rank1.tga to rank10.tga.
+and cuts the picture into Art/Ranks/rank1.tga to rank10.tga - and then the
+three pieces of the dock's other shields, into Art/Dock.
 
 Change a badge here, then run the script again. -->
 <html><head><meta charset="utf-8">
@@ -161,10 +162,51 @@ Change a badge here, then run the script again. -->
     return `<svg viewBox="-12 -16 144 144" role="img" aria-label="${RANKS[i][1]} badge" width="100%" height="100%">${parts.join("")}</svg>`;
   }
 
+  // THE DOCK'S OTHER SHIELDS (Josh 2026-09-29): the Level and reputation
+  // lines wear a shield like the Expedition's badge, so the three line up.
+  // Each is in layers the client puts together: a white field it tints (the
+  // Experience colour, or the standing's), a steel rim over it, and a banner
+  // for reputation - the level is the client's own text.
+  function piece(kind) {
+    const m = METAL.iron, id = "p" + (uid++);
+    const svg = (inner) => `<svg viewBox="-12 -16 144 144" width="100%" height="100%">${inner}</svg>`;
+    if (kind === "field") {
+      return svg(`<defs><radialGradient id="f${id}" cx=".5" cy=".3" r=".8">
+          <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#7a7a7a"/></radialGradient></defs>
+        <path d="${SHIELD}" transform="${around(.84)}" fill="url(#f${id})"/>`);
+    }
+    if (kind === "rim") {
+      return svg(`<defs>
+          <linearGradient id="r${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${m[0]}"/><stop offset=".45" stop-color="${m[1]}"/><stop offset="1" stop-color="${m[2]}"/></linearGradient>
+          <mask id="m${id}"><rect x="-12" y="-16" width="144" height="144" fill="#fff"/>
+            <path d="${SHIELD}" transform="${around(.84)}" fill="#000"/></mask>
+          <clipPath id="c${id}"><path d="${SHIELD}" transform="${around(.84)}"/></clipPath></defs>
+        <path d="${SHIELD}" fill="url(#r${id})" stroke="${m[2]}" stroke-width="2" mask="url(#m${id})"/>
+        <path d="${SHIELD}" transform="${around(.84)}" fill="none" stroke="${m[2]}" stroke-width="1.5"/>
+        <path d="${SHIELD}" transform="${around(.84)}" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="1"/>
+        <path clip-path="url(#c${id})" d="M20 14 H100 V40 Q60 30 20 44 Z" fill="#ffffff" opacity=".10"/>`);
+    }
+    // two swords crossed: PvP, before the first rank
+    if (kind === "swords") {
+      const sword = `<g stroke="#2b3134" stroke-width="1.5" stroke-linejoin="round">
+          <path d="M43 80 L77 38 L81 34 L80 40 L46 83 Z" fill="#e6ecef"/>
+          <path d="M38 72 L52 86" stroke="#e6ecef" stroke-width="5" stroke-linecap="round"/>
+          <path d="M44 82 L36 92" stroke="#b08a5a" stroke-width="5" stroke-linecap="round"/></g>
+          <circle cx="35" cy="93" r="3.4" fill="#e6ecef"/>`;
+      return svg(sword + `<g transform="translate(120 0) scale(-1 1)">${sword}</g>`);
+    }
+    // a banner on its pole: reputation
+    return svg(`<g stroke="#2b3134" stroke-width="2" stroke-linejoin="round">
+        <path d="M44 34 V88" stroke="#e6ecef" stroke-width="5" stroke-linecap="round"/>
+        <path d="M46 36 L80 42 L70 52 L80 62 L46 60 Z" fill="#e6ecef"/></g>
+        <circle cx="44" cy="32" r="4" fill="#e6ecef"/>`);
+  }
+
   const row = document.getElementById("row");
-  RANKS.forEach((_, i) => {
+  const cells = RANKS.map((_, i) => badge(i)).concat([piece("field"), piece("rim"), piece("banner"), piece("swords")]);
+  cells.forEach((html) => {
     const cell = document.createElement("div");
-    cell.innerHTML = badge(i);
+    cell.innerHTML = html;
     row.appendChild(cell);
   });
 })();

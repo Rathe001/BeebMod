@@ -34,6 +34,8 @@ local BAR_H = 4
 -- the same line as Experience and Reputation: text, then a thin bar
 local LINE_H = TEXT_H + BAR_H + 9
 local INSET = 6
+-- YOUR BADGE AT THE START OF THE LINE (Josh 2026-09-29), where Level and
+-- reputation have a shield of their own (BT.Dock.LineIcon)
 -- how often the unit tokens are looked at: a death is seen within a fifth of
 -- a second, and a look is a handful of reads per enemy in view
 local SCAN_EVERY = 0.2
@@ -120,7 +122,7 @@ function M.Kill(info, how)
 			T.Push({
 				head = "Expedition commendation", text = a.title, points = a.points,
 				icon = a.kind and T.Icon(a.kind) or icon,
-				onClick = function() BT.ExpeditionWindow.Show(nil, "commendations") end,
+				onClick = function() BT.ExpeditionWindow.ShowCommendation(a.id) end,
 			})
 		end
 	end
@@ -163,8 +165,9 @@ function M.Update()
 	local left, right = M.Lines(points, st)
 	M.text:SetText(left)
 	M.eta:SetText(right)
+	M.badge:SetTexture(J.RankBadge((J.Rank(points))))
 
-	local w = BT.Pill.Number(M.frame:GetWidth(), 0) - INSET * 2
+	local w = BT.Dock.LineBarWidth(M.frame, INSET)
 	if w <= 0 then
 		return
 	end
@@ -248,8 +251,8 @@ function M.Build()
 	-- the client draws nothing inside a frame with no height (see Perf)
 	M.frame:SetHeight(LINE_H)
 	M.text = BT.Widgets.Label(M.frame, "", "small")
-	M.text:SetPoint("TOPLEFT", M.frame, "TOPLEFT", INSET, -3)
 	M.text:SetJustifyH("LEFT")
+	M.badge = BT.Dock.LineIcon(M.frame, INSET)
 	M.eta = BT.Widgets.Label(M.frame, "", "small")
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
 	M.eta:SetJustifyH("RIGHT")
@@ -257,8 +260,8 @@ function M.Build()
 	M.text:SetHeight(TEXT_H - 2)
 	M.text:SetWordWrap(false)
 	M.track = M.frame:CreateTexture(nil, "BORDER")
-	M.track:SetPoint("TOPLEFT", M.frame, "TOPLEFT", INSET, -(TEXT_H + 3))
 	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -(TEXT_H + 3))
+	BT.Dock.LineAfter(M.badge, M.text, M.track, TEXT_H)
 	M.track:SetHeight(BAR_H)
 	M.fill = M.frame:CreateTexture(nil, "ARTWORK")
 	M.fill:SetPoint("TOPLEFT", M.track, "TOPLEFT", 0, 0)

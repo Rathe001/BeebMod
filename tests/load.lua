@@ -1245,7 +1245,7 @@ if ok then
 				and BT.Window.HeadTab("expedition") == "expedition" and BT.Window.HeadTab("dock") == "feature:dock",
 				"a feature of one page opens that page; the others a page of their own")
 			-- a shared page: a switch each, and the tab goes to it
-			assert(table.concat(BT.Window.MembersOf("progress"), ",") == "xp,rep"
+			assert(table.concat(BT.Window.MembersOf("progress"), ",") == "xp,pvp,rep"
 				and BT.Window.TabFor("rep") == "progress" and BT.Window.TabFor("clock") == "dock",
 				"experience and reputation share a page; the clock is on the Dock's")
 			-- A BLOCK FOR EACH FEATURE (Josh 2026-09-27): its name and its switch
@@ -5675,7 +5675,7 @@ if ok then
 			opened("Item level", function() ilvl.Tip() end, "Item level")
 			local perf = BT.GetModule("performance")
 			local chips = perf.Build()
-			opened("Performance", function() perf.Tip(chips.fps) end, "home ms")
+			opened("Performance", function() perf.Tip(chips.all) end, "home ms")
 			local speed = BT.GetModule("speed")
 			speed.Build()
 			opened("Speed", function() speed.Tip() end, "Movement speed")
@@ -5735,17 +5735,17 @@ if ok then
 			BT.Window.SetView("rep")
 			assert(BT.Window.View() == "progress", "a module on a shared page opens that page")
 			local panel = BT.Window.Panel("progress")
-			assert(panel and #panel.switches == 2 and panel.switches[1].module == "xp"
-				and panel.switches[2].module == "rep", "a switch for each")
+			assert(panel and #panel.switches == 3 and panel.switches[1].module == "xp"
+				and panel.switches[2].module == "pvp" and panel.switches[3].module == "rep", "a switch for each")
 			assert(panel.enable == nil, "and no one switch over the page")
-			panel.switches[2].switch:GetScript("OnClick")(panel.switches[2].switch)
+			panel.switches[3].switch:GetScript("OnClick")(panel.switches[3].switch)
 			assert(not BT.Enabled("rep"), "the switch switches it")
 			local tabOn
 			for _, t in ipairs(BT.Window.Tabs()) do
 				if t.key == "progress" then tabOn = not t.off end
 			end
 			assert(tabOn, "the tab is lit while either is on")
-			panel.switches[2].switch:GetScript("OnClick")(panel.switches[2].switch)
+			panel.switches[3].switch:GetScript("OnClick")(panel.switches[3].switch)
 			assert(BT.Enabled("rep"), "and back on")
 
 			BT.Window.SetView("dock")
@@ -6891,8 +6891,23 @@ if ok then
 			assert(railKeys():find("^settings,testing,dock,progress,map"), "the tab moves: " .. railKeys())
 			keys = {}
 			for _, m in ipairs(BT.Modules()) do keys[#keys + 1] = m.key end
-			assert(table.concat(keys, ","):find("xp,rep,minimap,buttons", 1, true),
-				"and both its modules, in their order, ahead of the map's: " .. table.concat(keys, ","))
+			assert(table.concat(keys, ","):find("xp,pvp,rep,minimap,buttons", 1, true),
+				"and all its modules, in their order, ahead of the map's: " .. table.concat(keys, ","))
+			-- A NEW MODULE GOES WHERE IT BELONGS (Josh 2026-09-29): an order
+			-- saved before PvP existed, with Level and Reputation below the map,
+			-- puts PvP straight after Level, not at the foot of the dock
+			local saved = {}
+			for _, m in ipairs(BT.Modules()) do
+				if m.key ~= "pvp" and m.key ~= "xp" and m.key ~= "rep" then saved[#saved + 1] = m.key end
+			end
+			table.insert(saved, 2, "xp")
+			table.insert(saved, 3, "rep")
+			BT.settings.order = saved
+			BT.SortModules()
+			keys = {}
+			for _, m in ipairs(BT.Modules()) do keys[#keys + 1] = m.key end
+			assert(table.concat(keys, ","):find("^[%w]+,xp,pvp,rep,"),
+				"a module the saved order has not heard of goes after its neighbour: " .. table.concat(keys, ","))
 			BT.settings.order = nil
 			BT.SortModules()
 			BT.Window.Rebuild()
@@ -6919,7 +6934,12 @@ if ok then
 			mod.Update()
 
 			local left, right = mod.Lines(level, cur, max, nil)
-			assert(left:find("Level 8", 1, true) and left:find("25%", 1, true), "the level and how far: " .. left)
+			-- THE LEVEL IS ON THE SHIELD (Josh 2026-09-29): the line says how far
+			assert(left == "25%", "how far through the level: " .. left)
+			assert(mod.shield.number:GetText() == "8" or mod.shield.number:GetText() == 8,
+				"and the level is on the shield: " .. tostring(mod.shield.number:GetText()))
+			assert(mod.shield.field._vertex and mod.shield.field._vertex[2] == BT.Widgets.ACCENT[2],
+				"which wears Experience's colour")
 			-- before there is a pace, nothing: the same grammar as reputation,
 			-- and what is left is on the hover
 			assert(right == "", "and nothing on the right before there is a pace: " .. right)
@@ -6927,9 +6947,11 @@ if ok then
 			assert(BT.GetModule("rep").Build().kind == "meter", "and so is reputation")
 			assert(mod.Big(1234567) == "1,234,567" and mod.Big(999) == "999",
 				"with the thousands marked")
-			-- the bar: a quarter done, rested a fifth ahead of it, on 200 of room
-			assert(mod.fill._width == 50, "a quarter of the bar is filled: " .. tostring(mod.fill._width))
-			assert(mod.rested._width == 40 and mod.rested._shown ~= false,
+			-- the bar: a quarter done, rested a fifth ahead of it, on the room
+			-- left after the shield
+			local room = 212 - 12 - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP
+			assert(math.abs(mod.fill._width - room / 4) < 0.01, "a quarter of the bar is filled: " .. tostring(mod.fill._width))
+			assert(math.abs(mod.rested._width - room / 5) < 0.01 and mod.rested._shown ~= false,
 				"and rested is a paler stretch ahead of it: " .. tostring(mod.rested._width))
 
 			-- a session: 1500 into this level, then a level-up carrying 500 over
@@ -7424,7 +7446,12 @@ if ok then
 			-- no amount and no time: the name has the whole line, and the hover
 			-- says how much is left
 			assert(right == "", "nothing on the right: " .. right)
-			assert(mod.fill._width == 40, "a fifth of the bar: " .. tostring(mod.fill._width))
+			-- the bar starts after the shield at the line's left
+			local barW = 212 - 12 - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP
+			assert(math.abs(mod.fill._width - barW / 5) < 0.01, "a fifth of the bar: " .. tostring(mod.fill._width))
+			assert(mod.shield.mark and mod.shield.mark._texture == BT.Dock.SHIELD_BANNER
+				and mod.shield.field._vertex and mod.shield.field._vertex[2] > mod.shield.field._vertex[1],
+				"a banner on a shield of the standing's colour")
 			assert(mod.fill._color and mod.fill._color[2] > mod.fill._color[1],
 				"in the standing's colour, green for friendly")
 
@@ -7453,7 +7480,7 @@ if ok then
 			mod.Update()
 			local _, none = mod.Lines(mod.Read(), nil)
 			assert(none == "", "nothing comes after exalted")
-			assert(mod.fill._width == 200, "and the bar is full")
+			assert(mod.fill._width == 212 - 12 - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP, "and the bar is full")
 
 			-- a reload keeps the session; nothing watched puts the line away
 			local session = mod.session
@@ -7465,6 +7492,129 @@ if ok then
 
 			_G.GetWatchedFactionInfo = nil
 			BT.Util.Now = realNow
+		end },
+		-- PVP (Josh 2026-09-29: "I think we should add a pvp meter, and we can
+		-- use the pvp rank icon for it")
+		{ "pvp: your rank, its insignia, and the way to the next", function()
+			local mod = BT.GetModule("pvp")
+			assert(mod and mod.dock, "the module is loaded, and is a right-panel module")
+			local names = { [5] = "Private", [6] = "Corporal", [7] = "Sergeant" }
+			local rank = 0
+			local saved = {}
+			local stubbed = { "UnitPVPRank", "GetPVPRankInfo", "GetPVPRankProgress", "GetPVPSessionStats",
+				"GetPVPThisWeekStats", "GetPVPLastWeekStats", "GetPVPLifetimeStats", "UnitFactionGroup",
+				"GetFileIDFromPath" }
+			for _, g in ipairs(stubbed) do
+				saved[g] = _G[g]
+			end
+			-- a client with no honor system: no line at all
+			_G.UnitPVPRank, _G.GetPVPRankInfo = nil, nil
+			BT.SetEnabled("pvp", true)
+			mod.Show(true)
+			local section = mod.Build()
+			assert(not section:IsShown(), "no honor system, no line")
+			_G.UnitPVPRank = function() return rank end
+			_G.GetPVPRankInfo = function(id) return names[id], id - 4 end
+			_G.GetPVPRankProgress = function() return 0.25 end
+			_G.GetPVPSessionStats = function() return 3, 120 end
+			_G.GetPVPThisWeekStats = function() return 14, 1450 end
+			_G.GetPVPLastWeekStats = function() return 40, 2, 3900, 812 end
+			_G.GetPVPLifetimeStats = function() return 210, 9, 6 end
+			_G.UnitFactionGroup = function() return "Alliance", "Alliance" end
+			_G.GetFileIDFromPath = function(path) return path:find("PvPRank", 1, true) and 1234 or nil end
+			section:SetWidth(212)
+			mod.Update()
+			assert(section:IsShown(), "with one, the line")
+			-- before the first rank: your side's shield and swords
+			local left, right = mod.Lines(mod.Read())
+			assert(left:find("no rank yet", 1, true) and right:find("1,450", 1, true),
+				"no rank yet, and this week's honor: " .. left .. " | " .. right)
+			assert(not mod.insignia:IsShown() and mod.shield.mark._texture == BT.Dock.SHIELD_SWORDS
+				and mod.shield.field._vertex[3] > mod.shield.field._vertex[1], "a blue shield with swords, for the Alliance")
+			-- ranked: the game's insignia, and the bar towards the next
+			rank = 7
+			mod.Update()
+			left = mod.Lines(mod.Read())
+			assert(left:find("Sergeant", 1, true) and left:find("rank 3", 1, true), "the rank and its number: " .. left)
+			assert(mod.insignia:IsShown() and mod.insignia._texture == "Interface\\PvPRankBadges\\PvPRank03"
+				and mod.shield.field:IsShown() == false, "the game's insignia in place of the shield")
+			-- the dock gave the line its width once it showed
+			local room = section:GetWidth() - 12 - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP
+			assert(math.abs(mod.fill._width - room / 4) < 0.01, "a quarter of the way: " .. tostring(mod.fill._width))
+			-- a client without the file keeps the shield
+			_G.GetFileIDFromPath = function() return nil end
+			mod.Update()
+			assert(not mod.insignia:IsShown() and mod.shield.field:IsShown() ~= false, "no insignia file, the shield")
+			-- the hover
+			mod.Tip()
+			local said = table.concat(BT.Tip.Texts(), " | ")
+			assert(said:find("of the way to Rank 4", 1, true) and said:find("210", 1, true)
+				and said:find("812", 1, true) and said:find("Corporal", 1, true),
+				"the hover: the next rank, your kills, last week's standing and your highest rank: " .. said)
+			BT.Tip.Hide()
+			for _, g in ipairs(stubbed) do _G[g] = saved[g] end
+			mod.Update()
+			assert(not section:IsShown(), "and with the honor system gone again, no line")
+
+			-- THIS GAME'S RANK POINTS (Josh 2026-09-29, two records): no call
+			-- says them, the PvP tab's labels do, and each write is read
+			local hadHook, hadAfter, hadSheet = _G.hooksecurefunc, _G.C_Timer.After, _G.CharacterFrame
+			_G.hooksecurefunc = function(obj, name, fn)
+				local orig = obj[name]
+				obj[name] = function(...)
+					local r = orig(...)
+					fn(...)
+					return r
+				end
+			end
+			_G.C_Timer.After = function(_, fn) fn() end
+			_G.UnitFactionGroup = function() return "Horde", "Horde" end
+			-- as the game has it: the tab by its own name, PVPRankFrame, and not
+			-- under the character window's keys
+			local sheet = _G.CreateFrame("Frame")
+			local pvpTab = _G.CreateFrame("Frame", nil, sheet)
+			_G.PVPRankFrame = pvpTab
+			local info = _G.CreateFrame("Frame", nil, pvpTab)
+			pvpTab.MainInfoFrame = info
+			info.CurrentRankField = info:CreateFontString()
+			info.CurrentRankProgressField = info:CreateFontString()
+			info.CurrentRankField:SetText("Civilian")
+			info.CurrentRankProgressField:SetText("Rank Points: |cnHIGHLIGHT_FONT_COLOR:0 / 750|r")
+			_G.CharacterFrame = sheet
+			BT.settings.pvp = nil
+			mod.watching = nil
+			mod.Update()
+			assert(section:IsShown(), "the PvP tab says a rank: the line shows")
+			left, right = mod.Lines(mod.Read())
+			assert(left:find("Civilian", 1, true) and left:find("no rank yet", 1, true) and right:find("0 / 750", 1, true),
+				"Civilian, no rank yet, and the points: " .. left .. " | " .. right)
+			assert(not mod.insignia:IsShown() and mod.shield.field._vertex[1] > mod.shield.field._vertex[3],
+				"a red shield with swords, for the Horde")
+			-- the game writes a new rank and more points: read as it writes
+			info.CurrentRankField:SetText("Grunt")
+			info.CurrentRankProgressField:SetText("Rank Points: |cnHIGHLIGHT_FONT_COLOR:1,125 / 1,500|r")
+			left, right = mod.Lines(mod.Read())
+			assert(left:find("Grunt", 1, true) and left:find("rank 2", 1, true) and right:find("1,125 / 1,500", 1, true),
+				"Grunt is rank 2, with 1,125 of 1,500: " .. left .. " | " .. right)
+			assert(mod.insignia:IsShown() and mod.insignia._texture == "Interface\\PvPRankBadges\\PvPRank02",
+				"with the game's insignia for rank 2")
+			local roomNow = section:GetWidth() - 12 - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP
+			assert(math.abs(mod.fill._width - roomNow * 0.75) < 0.01, "three quarters of the way: " .. tostring(mod.fill._width))
+			-- kept for the character: the tab gone, the line still knows
+			_G.CharacterFrame, _G.PVPRankFrame = nil, nil
+			left = mod.Lines(mod.Read())
+			assert(left:find("Grunt", 1, true), "kept for the character when the tab is not there")
+			mod.Tip()
+			said = table.concat(BT.Tip.Texts(), " | ")
+			assert(said:find("rank points", 1, true) and said:find("Next rank: Sergeant", 1, true),
+				"the hover: the points and the next rank: " .. said)
+			BT.Tip.Hide()
+			_G.hooksecurefunc, _G.C_Timer.After, _G.CharacterFrame = hadHook, hadAfter, hadSheet
+			_G.UnitFactionGroup = saved.UnitFactionGroup
+			BT.settings.pvp = nil
+			mod.watching = nil
+			mod.Update()
+			assert(not section:IsShown(), "and with nothing kept and no tab, no line")
 		end },
 		{ "currency is a cell of the readout grid: what you have, and earned per hour", function()
 			local mod = BT.GetModule("currency")
@@ -7680,7 +7830,7 @@ if ok then
 			BT.Util.Now = realNow
 			_G.GetMoney = nil
 		end },
-		{ "performance is three cells of the readout grid", function()
+		{ "performance is one row of the readout grid", function()
 			local mod = BT.GetModule("performance")
 			assert(mod and mod.kind == "readout", "the module is loaded, as a readout")
 			_G.GetFramerate = function() return 59.6 end
@@ -7689,39 +7839,49 @@ if ok then
 			mod.Show(true)
 			mod.Update()
 			local chips = mod.Build()
-			assert(chips.fps.wanted and chips.home.wanted and chips.world.wanted, "three cells")
-			assert(chips.fps.order < chips.home.order and chips.home.order < chips.world.order,
-				"frame rate, then home, then world")
-			assert(chips.fps.spec.text:find("60", 1, true) and not chips.fps.spec.state,
-				"frames a second, rounded, and plain when fine: " .. chips.fps.spec.text)
-			assert(chips.home.spec.icon == mod.HOUSE.icon and chips.home.spec.coords == mod.HOUSE.coords
-				and chips.home.spec.text:find("42", 1, true), "home under the house")
-			assert(chips.world.spec.coords == mod.GLOBE.coords and chips.world.spec.state == "alert",
-				"the world under the globe, red at 310")
+			-- ONE CELL, NOT THREE (Josh 2026-09-29: "grouped together instead of
+			-- individual cells"): the three figures in one wide cell
+			assert(chips.all.wanted and chips.all.wide and chips.fps == nil, "one wide cell")
+			local text = chips.all.spec.text
+			local at60, at42, at310 = text:find("60", 1, true), text:find("42", 1, true), text:find("310", 1, true)
+			assert(at60 and at42 and at310 and at60 < at42 and at42 < at310,
+				"frame rate, then home, then world: " .. text)
+			local parts = chips.all.spec.parts
+			assert(not parts.fps.state and parts.world.state == "alert" and text:find("|cfff26659310", 1, true),
+				"plain when fine, and the world red at 310")
+			assert(select(2, text:gsub("Art\\net:", "")) == 2, "the house and the globe drawn in the line")
 			assert(mod.FpsState(40) == "warn" and mod.MsState(150) == "warn" and mod.MsState(20) == nil,
 				"amber is worth noticing, plain is fine")
 
-			-- the grid: three across, one row, a height the client will draw
+			-- the grid: the row to itself, as wide as the grid, a height the
+			-- client will draw
 			BT.Dock.Relayout()
-			local grid = chips.fps:GetParent()
+			local grid = chips.all:GetParent()
 			assert(grid.key == "readouts" and (grid.wantHeight or 0) > 0 and (grid._height or 0) > 0,
 				"one group, with a height")
-			local fpsAt, homeAt = chips.fps._points.TOPLEFT, chips.home._points.TOPLEFT
-			assert(fpsAt and homeAt and fpsAt.y == homeAt.y and homeAt.x > fpsAt.x,
-				"side by side on one row")
+			local at = chips.all._points.TOPLEFT
+			local others = 0
+			for _, c in ipairs(BT.Dock.Cells()) do
+				if c ~= chips.all and c:IsShown() and c._points and c._points.TOPLEFT then
+					others = others + 1
+					assert(c._points.TOPLEFT.y > at.y, "under every other cell: " .. tostring(c.owner))
+				end
+			end
+			assert(at and at.x <= 8 and (chips.all._width or 0) > (grid._width or 0) / 2,
+				"from the grid's left, across it: " .. tostring(chips.all._width))
 			-- EVERY ROW THE SAME: a cell and the pixel of line under it, from
 			-- the top of the grid, with the figures a pixel low in it
-			assert(chips.fps._height == 18 and grid.wantHeight > 0 and grid.wantHeight % 19 == 0,
-				"a row is its cell and its line: " .. tostring(chips.fps._height) .. "/" .. tostring(grid.wantHeight))
-			local words = chips.fps.text._points.LEFT
+			assert(chips.all._height == 18 and grid.wantHeight > 0 and grid.wantHeight % 19 == 0,
+				"a row is its cell and its line: " .. tostring(chips.all._height) .. "/" .. tostring(grid.wantHeight))
+			local words = chips.all.text._points.LEFT
 			assert(words and words.y == -1, "and the figures sit a pixel below the middle")
 
-			-- a client that will not say still draws cells rather than failing
+			-- a client that will not say still draws the cell rather than failing
 			_G.GetNetStats = nil
 			mod.Update()
-			assert(chips.home.spec.text:find("-", 1, true), "a dash without numbers")
+			assert(chips.all.spec.parts.home.text:find("-", 1, true), "a dash without numbers")
 			BT.SetEnabled("performance", false)
-			assert(not chips.fps.wanted, "and switching it off takes the cells away")
+			assert(not chips.all.wanted, "and switching it off takes the cell away")
 			BT.SetEnabled("performance", true)
 			BT.SetEnabled("performance", false)
 			_G.GetFramerate = nil
@@ -7912,6 +8072,23 @@ if ok then
 			frame.PVPRankFrame = pvp
 			pvp.MainInfoFrame = _G.CreateFrame("Frame", nil, pvp)
 			pvp.MainInfoFrame:SetSize(398, 135)
+			-- the PvP pane: its words, and under them the next rank's rewards,
+			-- which the game hangs from the pane's bottom edge; the last line
+			-- of words, 45 tall, sits 117 down a list the game made 141 tall
+			local pvpDetail = _G.CreateFrame("Frame", nil, pvp)
+			pvp.DetailFrame = pvpDetail
+			pvpDetail.Title = pvpDetail:CreateFontString()
+			pvpDetail.Description = _G.CreateFrame("Frame", nil, pvpDetail)
+			pvpDetail.Content = _G.CreateFrame("Frame", nil, pvpDetail)
+			pvpDetail.Content:SetSize(156, 141)
+			pvpDetail.Content:SetPoint("TOP", pvpDetail, "BOTTOM", 0, -6)
+			for _, row in ipairs({ { -10, 40, 11 }, { -52, 55, 11 }, { -117, 24, 45 } }) do
+				local item = _G.CreateFrame("Frame", nil, pvpDetail.Content)
+				item:SetSize(156, row[2])
+				item:SetPoint("TOPLEFT", pvpDetail.Content, "TOPLEFT", 0, row[1])
+				local label = item:CreateFontString()
+				label:SetHeight(row[3])
+			end
 			local title = frame:CreateFontString("CharacterFrameTitleText")
 			_G.CharacterFrameTitleText = title
 			_G.CharacterFrame = frame
@@ -7964,6 +8141,16 @@ if ok then
 			assert(detail.Title._width == 156 and detail.StandingBar._width == 152,
 				"a details pane's pieces fit the pane: " .. tostring(detail.Title._width))
 			assert(words._width == 148, "and the words inside them keep a margin, so nothing runs past the edge")
+			-- THE PVP REWARDS IN THE PANE (Josh 2026-09-29: "the next pvp reward
+			-- is still not moved"): on the pane's floor, as tall as the list's
+			-- last line reaches, and the words above them
+			local rewards = pvpDetail.Content
+			assert(rewards._points and rewards._points.BOTTOMLEFT and rewards._points.BOTTOMLEFT.rel == pvpDetail
+				and not rewards._points.TOP, "the rewards stand on the pane's floor, not under it")
+			assert(rewards._height == 162, "as tall as their last line reaches: " .. tostring(rewards._height))
+			local desc = pvpDetail.Description._points or {}
+			assert(desc.BOTTOMRIGHT and desc.BOTTOMRIGHT.rel == rewards and desc.TOPLEFT,
+				"and the words fill the room above them")
 			assert(title._justify == "LEFT" and title._points.LEFT, "the name sits on the left of the title bar")
 			-- THE STATS, TIGHT: 15px lines, 18px headers, and a section folds
 			BT.settings.charsheet.folded = nil
@@ -8282,7 +8469,7 @@ if ok then
 			local perf, dur = BT.GetModule("performance"), BT.GetModule("durability")
 			BT.SetEnabled("metrics", true)
 			BT.SetEnabled("performance", true)
-			assert(BT.Enabled("performance") and perf.Build().fps.wanted, "a part is on while Metrics is")
+			assert(BT.Enabled("performance") and perf.Build().all.wanted, "a part is on while Metrics is")
 			assert(BT.settings.modules.metrics == true,
 				"switching on is written down, not left blank for an old copy to fill")
 
@@ -8290,14 +8477,14 @@ if ok then
 			assert(not BT.Enabled("performance") and BT.Switched("performance"),
 				"Metrics off puts its parts away, and remembers each one's own switch")
 			BT.Dock.Relayout()
-			assert(not perf.Build().fps:IsShown(), "and the cells go")
+			assert(not perf.Build().all:IsShown(), "and the cells go")
 			BT.SetEnabled("metrics", true)
 			BT.Dock.Relayout()
-			assert(BT.Enabled("performance") and perf.Build().fps:IsShown(), "on again brings them back")
+			assert(BT.Enabled("performance") and perf.Build().all:IsShown(), "on again brings them back")
 
 			BT.SetEnabled("performance", false)
 			BT.Dock.Relayout()
-			assert(not perf.Build().fps:IsShown() and BT.Enabled("metrics"), "one part off is only that part")
+			assert(not perf.Build().all:IsShown() and BT.Enabled("metrics"), "one part off is only that part")
 
 			-- the tab: a row with a switch per part
 			BT.Window.SetView("metrics")
@@ -10134,6 +10321,12 @@ if ok then
 			-- THE BADGE (Josh 2026-09-29): the rank's own, large at the top
 			assert(rail.badge._texture == MJ.RankBadge(rankN) and rail.badge._texture:find("Ranks\\rank" .. rankN, 1, true),
 				"the rail shows the rank's badge: " .. tostring(rail.badge._texture))
+			-- and at the start of its line in the dock, the shield alone
+			local em = BT.GetModule("expedition")
+			em.Update()
+			assert(em.badge and em.badge._texture == MJ.RankBadge(rankN)
+				and em.badge._texCoord and em.badge._texCoord[1] == BT.Dock.LINE_ICON_CROP[1],
+				"the dock's line starts with the rank's shield: " .. tostring(em.badge and em.badge._texture))
 			-- and the ten ranks above the tiles: lit to yours, faded after it
 			local ladder = ach.ladder
 			assert(#ladder.rungs == 10 and ladder.rungs[10].name:GetText() == "Expedition Leader"
@@ -10146,6 +10339,36 @@ if ok then
 			ladder.rungs[10]:GetScript("OnEnter")(ladder.rungs[10])
 			ladder.rungs[10]:GetScript("OnLeave")(ladder.rungs[10])
 			-- a new rank's toast carries its badge, larger than an icon
+			-- A TOAST OPENS ITS COMMENDATION (Josh 2026-09-29: "I clicked the
+			-- Blooded toast and it took me here"): its group, everything
+			-- shown, and its tile outlined
+			local wantGroup, wantItem
+			for _, g in ipairs(V.Groups(MJ.Counts())) do
+				if not g.count and not wantItem then
+					wantGroup, wantItem = g.key, g.list[#g.list]
+				end
+			end
+			local u = MJ.Store() and BT.settings.expeditionUI
+			u.commendationShow, u.commendationPick = "done", "all"
+			V.Hide()
+			assert(V.ShowCommendation(wantItem.id) and V.IsShown(), "the toast's click opens the window")
+			assert(u.view == "commendations" and u.commendationShow == "all" and u.commendationPick == wantGroup,
+				("on its group (%s), everything shown"):format(tostring(u.commendationPick)))
+			local outlined
+			for _, r in ipairs(ach.rows) do
+				if r:IsShown() and r.focus[1]:IsShown() then
+					assert(not outlined, "only one tile is outlined")
+					outlined = r
+				end
+			end
+			assert(outlined and outlined.title:GetText() == wantItem.title,
+				"and its tile is outlined: " .. tostring(outlined and outlined.title:GetText()))
+			V.Show(nil, "commendations")
+			for _, r in ipairs(ach.rows) do
+				assert(not r.focus[1]:IsShown(), "opened plainly, nothing is outlined")
+			end
+			u.commendationPick = "all"
+			V.Refresh()
 			local TT = BT.ExpeditionToast
 			local heldQueue = TT.queue
 			for i = #heldQueue, 1, -1 do heldQueue[i] = nil end

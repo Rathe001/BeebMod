@@ -70,6 +70,16 @@ local function fade(f, away)
 		return
 	end
 	if away then
+		-- THE CLIENT FADES A NEW BAR IN (Josh 2026-09-29: the reputation bar
+		-- came back when a faction was newly watched). Its fade-in animation
+		-- sets the alpha every frame it plays, over ours; stopped, it cannot.
+		local anim = f.FadeInAnimation
+		if type(anim) == "table" and anim.IsPlaying and anim.Stop then
+			local ok, playing = pcall(anim.IsPlaying, anim)
+			if ok and playing then
+				pcall(anim.Stop, anim)
+			end
+		end
 		if faded[f] == nil then
 			local ok, mouse = pcall(function() return f.IsMouseEnabled and f:IsMouseEnabled() end)
 			faded[f] = { mouse = ok and mouse or false }
@@ -147,6 +157,89 @@ local function later()
 end
 S.Later = later
 
+-- WHAT THE CLIENT'S BARS SAY (Josh 2026-09-29: "Showing the rep meter should
+-- hide the default exp bar rep tracker" - the reputation bar stayed up while
+-- the experience one went). For the Testing page: each container, what it
+-- says it shows, the bars in it and which are up, the client's numbering,
+-- and what was asked to be hidden.
+function S.Dump()
+	local lines = {}
+	local function add(s) lines[#lines + 1] = s end
+	local function where(f)
+		local ok, p, rel, rp, x, y = pcall(f.GetPoint, f, 1)
+		local relName = ok and rel and rel.GetName and rel:GetName() or tostring(rel)
+		return ok and ("%s %s %s %s %s"):format(tostring(p), tostring(relName), tostring(rp), tostring(x), tostring(y)) or "?"
+	end
+	local function shown(f)
+		local ok, v = pcall(function() return f:IsShown() end)
+		return ok and tostring(v) or "?"
+	end
+	local function alpha(f)
+		local ok, v = pcall(function() return f:GetAlpha() end)
+		return ok and tostring(v) or "?"
+	end
+	add(("wanted: xp=%s rep=%s"):format(tostring(S.wanted.xp), tostring(S.wanted.rep)))
+	local info = _G.StatusTrackingBarInfo
+	local e = info and info.BarsEnum
+	if type(e) == "table" then
+		local parts = {}
+		for k, v in pairs(e) do parts[#parts + 1] = k .. "=" .. tostring(v) end
+		table.sort(parts)
+		add("BarsEnum: " .. table.concat(parts, " "))
+	else
+		add("BarsEnum: none")
+	end
+	for _, name in ipairs(CONTAINERS) do
+		local c = _G[name]
+		if type(c) ~= "table" then
+			add(name .. ": none")
+		else
+			add(("%s: shown=%s alpha=%s shownBarIndex=%s kind=%s at %s"):format(name, shown(c), alpha(c),
+				tostring(c.shownBarIndex), tostring(S.ShownKind(c)), where(c)))
+			for i, bar in pairs(type(c.bars) == "table" and c.bars or {}) do
+				local bn = type(bar) == "table" and bar.GetName and bar:GetName()
+				add(("  bars[%s] %s shown=%s alpha=%s"):format(tostring(i), tostring(bn),
+					type(bar) == "table" and shown(bar) or "?", type(bar) == "table" and alpha(bar) or "?"))
+			end
+			local keys = {}
+			for k, v in pairs(c) do
+				if type(v) ~= "function" and type(v) ~= "userdata" then keys[#keys + 1] = tostring(k) end
+			end
+			table.sort(keys)
+			add("  fields: " .. table.concat(keys, " "))
+		end
+	end
+	for kind, names in pairs(OLD) do
+		for _, name in ipairs(names) do
+			local f = _G[name]
+			add(("%s (%s): %s"):format(name, kind, type(f) == "table" and ("shown=" .. shown(f) .. " alpha=" .. alpha(f)
+				.. " at " .. where(f)) or "none"))
+		end
+	end
+	-- anything else the client calls a status or tracking bar
+	local more = {}
+	for name, v in pairs(_G) do
+		if type(name) == "string" and type(v) == "table" and v.IsShown
+			and (name:find("StatusTracking") or name:find("ReputationBar") or name:find("ReputationWatch")
+				or name:find("ExpBar") or name:find("StatusBar$")) then
+			more[#more + 1] = name
+		end
+	end
+	table.sort(more)
+	for _, name in ipairs(more) do
+		local f = _G[name]
+		add(("%s: shown=%s alpha=%s at %s"):format(name, shown(f), alpha(f), where(f)))
+	end
+	BT.EnsureBound()
+	BeebModDB.statusbarsDump = {
+		at = BT.Util and BT.Util.Now and BT.Util.Now() or 0,
+		build = (GetBuildInfo and select(1, GetBuildInfo())) or "?",
+		lines = lines,
+	}
+	return #lines
+end
+BT.Record("statusbarsDump", S.Dump)
+
 function S.Watch()
 	if S.events then
 		return S.events
@@ -157,6 +250,14 @@ function S.Watch()
 		pcall(S.events.RegisterEvent, S.events, event)
 	end
 	S.events:SetScript("OnEvent", later)
+	-- and whenever a container starts fading a bar in, or finishes
+	for _, name in ipairs(CONTAINERS) do
+		local anim = type(_G[name]) == "table" and _G[name].FadeInAnimation
+		if type(anim) == "table" and anim.HookScript then
+			pcall(anim.HookScript, anim, "OnPlay", later)
+			pcall(anim.HookScript, anim, "OnFinished", later)
+		end
+	end
 	-- and after the manager lays the bars out itself
 	local manager = _G.StatusTrackingBarManager
 	if type(manager) == "table" and hooksecurefunc then
