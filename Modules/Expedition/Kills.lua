@@ -424,6 +424,99 @@ function K.Cast(spellID, t)
 	return isPick
 end
 
+-- ---------------------------------------------------------------------------
+-- What an enemy casts
+-- ---------------------------------------------------------------------------
+
+-- ONLY WHAT YOU HAVE SEEN (Josh 2026-09-29: "I actually kind of like only
+-- recording abilities that have been seen... it kind of drives home 'I'm
+-- learning about this enemy'"). An enemy's page lists the spells you saw it
+-- cast, from the casts the client announces for a unit we can read: its
+-- nameplate, your target, and the rest of K.Watched. Nothing is looked up
+-- anywhere else.
+--
+-- ONE CAST, COUNTED ONCE. The client announces a cast for every token that
+-- points at the enemy - its nameplate and your target are two - and a spell
+-- with a cast time is announced as it starts and again as it lands. So a
+-- start within half a second of another for the same enemy and spell is the
+-- same one, and a landing within CAST_WINDOW of its start was counted at the
+-- start. An instant spell only lands, and counts then.
+--
+-- A spell the client keeps secret can't be read or kept. K.stats says how
+-- many were (the Testing page's record, expeditionDump).
+local CAST_WINDOW = 15
+local SAME_CAST = 0.5
+local started, landed = {}, {}
+K.stats.casts, K.stats.castSecret, K.stats.castRepeat = 0, 0, 0
+K.lastCasts = {}
+
+local function remember(list, key, t)
+	list[key] = t
+	-- a few hundred enemies in a long session: the old ones go
+	list.n = (list.n or 0) + 1
+	if list.n > 400 then
+		for k, at in pairs(list) do
+			if k ~= "n" and t - at > CAST_WINDOW then
+				list[k] = nil
+			end
+		end
+		list.n = 0
+	end
+end
+
+function K.EnemyCast(unit, spellID, event, t)
+	if not K.Watched(unit) or unit == "player" or spellID == nil then
+		return nil
+	end
+	t = t or now()
+	if secret(spellID) then
+		K.stats.castSecret = K.stats.castSecret + 1
+		return nil
+	end
+	if type(spellID) ~= "number" or spellID <= 0 then
+		return nil
+	end
+	-- a friendly guard's heal isn't something you're learning to fight
+	if UnitCanAttack and ask(UnitCanAttack, "player", unit) == false then
+		return nil
+	end
+	local w = K.Observe(unit, t)
+	local guid = UnitGUID and UnitGUID(unit)
+	if not (w and w.npc) or type(guid) ~= "string" or secret(guid) then
+		return nil
+	end
+	local key = guid .. ":" .. spellID
+	if event == "UNIT_SPELLCAST_SUCCEEDED" then
+		local s, l = started[key], landed[key]
+		if (s and t - s <= CAST_WINDOW) or (l and t - l <= SAME_CAST) then
+			K.stats.castRepeat = K.stats.castRepeat + 1
+			-- landed, so the same landing seen through a second token is
+			-- skipped too
+			started[key] = nil
+			remember(landed, key, t)
+			return nil
+		end
+		remember(landed, key, t)
+	else
+		local s = started[key]
+		if s and t - s <= SAME_CAST then
+			K.stats.castRepeat = K.stats.castRepeat + 1
+			return nil
+		end
+		remember(started, key, t)
+	end
+	K.stats.casts = K.stats.casts + 1
+	local last = K.lastCasts
+	last[#last + 1] = { npc = w.npc, name = w.name, spell = spellID, event = event }
+	if #last > 20 then
+		table.remove(last, 1)
+	end
+	if K.onCast then
+		K.onCast({ npc = w.npc, name = w.name, kind = w.kind }, spellID)
+	end
+	return w
+end
+
 -- is somebody picking this pocket? (then the loot is a living enemy's)
 local function pickpocketing(t)
 	return K.pickedAt ~= nil and t - K.pickedAt <= 3

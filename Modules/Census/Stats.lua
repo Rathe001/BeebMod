@@ -186,6 +186,8 @@ local function begin(now, filter)
 		-- characters carrying at least one tag: the tag chart's rows count
 		-- marks, and a character with three tags is one character
 		tagged = 0,
+		-- the Ledger's people, looked up once for the whole count
+		people = BT.Notes and BT.Notes.People and BT.Notes.People() or nil,
 	}
 	for _, b in ipairs(S.AGE_BUCKETS) do
 		t.ageBuckets[b.key] = 0
@@ -201,8 +203,8 @@ local AGE = S.AGE_BUCKETS
 -- YOUR TAGS ARE THE LEDGER'S (Josh 2026-09-26): what you wrote on someone is
 -- in its own book (Modules/Ledger/Store.lua), looked up by the key; a row an
 -- older version wrote on, not moved yet, still carries its own
-local function yours(key, p)
-	local mine = key and BT.Notes and BT.Notes.Get(key)
+local function yours(t, key, p)
+	local mine = key and t.people and t.people[key]
 	if mine then
 		return true, mine.tags
 	end
@@ -219,7 +221,7 @@ local function count(t, p, key)
 	end
 	t.total = t.total + 1
 	local pick = t.pick
-	local isMine, tags = yours(key, p)
+	local isMine, tags = yours(t, key, p)
 	local matched = pick == nil or picks(pick, p, tags)
 	-- a chart counts a character the pick picks - or anybody, if the pick
 	-- was made on that chart
@@ -364,18 +366,35 @@ local function finish(t)
 	}
 end
 
+-- a packed character is read into one borrowed table, only the six fields a
+-- count wants (Core/Pack.lua, P.CensusReader); a table row is read as it is
+local function reader(db)
+	local read = BT.Pack and BT.Pack.CensusReader and BT.Pack.CensusReader(db)
+	local lean = {}
+	return function(key, row)
+		if type(row) == "string" then
+			return read and read(row, lean) or DB.View(db, key, row)
+		end
+		return row
+	end
+end
+
 function S.Census(db, now, filter)
 	local t = begin(now or U.Now(), filter)
-	-- read where they lie: a packed character is read out of its string
-	-- into a borrowed table, never unpacked into a row of its own
-	for key, p in DB.Each(db) do
-		count(t, p, key)
+	local view = reader(db)
+	for key, row in pairs(DB.Players(db)) do
+		count(t, view(key, row), key)
 	end
 	return finish(t)
 end
 
--- The same census, `per` characters a call: each call of the step it returns
--- counts the next slice, and the last hands back the charts (nil until then).
+-- The same census, a slice a call: each call of the step it returns counts
+-- the next slice, and the last hands back the charts (nil until then, with
+-- how far it has got, 0 to 1). A slice is `per` characters - or, given a
+-- budget in milliseconds and a clock to hold it to, as many as fit in it:
+-- the game's Lua ran a 2,000-character slice at 49 ms (Josh 2026-09-29).
+-- The book's size comes back with the step, so a caller can tell whether a
+-- slice at a time is worth it.
 -- The book is listed first, so characters seen while it runs wait for the
 -- next one rather than upsetting the walk.
 S.JOB_SLICE = 2000
@@ -388,19 +407,28 @@ function S.CensusJob(db, now, filter, per)
 		keys[#list] = key
 	end
 	local t = begin(now or U.Now(), filter)
+	local view = reader(db)
 	local at = 0
 	per = per or S.JOB_SLICE
-	return function()
-		local stop = math.min(#list, at + per)
-		for i = at + 1, stop do
-			count(t, DB.View(db, keys[i], list[i]), keys[i])
+	return function(budget)
+		local clock = budget and type(debugprofilestop) == "function" and debugprofilestop or nil
+		local started = clock and clock()
+		local stop = clock and #list or math.min(#list, at + per)
+		local i = at
+		while i < stop do
+			i = i + 1
+			count(t, view(keys[i], list[i]), keys[i])
+			-- the clock is asked every hundred: asking it is not free either
+			if clock and i % 100 == 0 and clock() - started >= budget then
+				break
+			end
 		end
-		at = stop
+		at = i
 		if at >= #list then
 			return finish(t)
 		end
-		return nil
-	end
+		return nil, (#list > 0 and at / #list or 1)
+	end, #list
 end
 
 -- What a chart is a chart OF. The unidentified are mentioned only when there

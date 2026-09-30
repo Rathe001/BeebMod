@@ -218,7 +218,7 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod redraws the game's character sheet. Click a stat heading to fold its section.")
+	page:Note("BeebMod redraws the game's character sheet.")
 	local sheet = page:Section("Sheet")
 	self.levelSwitch = BT.Widgets.SwitchRow(sheet, "Item level on every slot",
 		"In the corner of each piece you wear. Shirts and tabards show none.",
@@ -1188,13 +1188,17 @@ local function statRow(row)
 	end
 	if row.Title and not row.Label then
 		-- a stat header: small capitals beside its rule
-		tight()
+		if M.FOLDS then
+			tight()
+		end
 		header(row.Title)
 		sized(row.Title, 9)
 	elseif row.Label then
 		-- 10 for both, the tightest text in the window: the stats are read at
 		-- a glance, and the more of them fit, the less the pane scrolls
-		tight()
+		if M.FOLDS then
+			tight()
+		end
 		sized(row.Label, 10)
 		sized(row.Value, 10)
 	end
@@ -1208,7 +1212,7 @@ local function statRow(row)
 	if M.ResistRow then
 		M.ResistRow(row)
 	end
-	if M.FoldRow then
+	if M.FoldRow and M.FOLDS then
 		M.FoldRow(row)
 	end
 end
@@ -1221,6 +1225,19 @@ M.StatRow = statRow
 -- AS MUCH AS FITS WITHOUT SCROLLING (Josh 2026-09-22). The stats are read, not
 -- clicked, and the pane is short, so they get the tightest spacing in the
 -- window: 15px lines at 10px, 18px headers in 9px capitals.
+--
+-- OFF: THE GAME'S LIST IS LEFT ALONE (Josh 2026-09-29: an error on opening the
+-- character sheet - "attempt to perform arithmetic on local
+-- 'baseDefenseSkill' (a secret number value, while execution tainted by
+-- 'BeebMod')"). The tight lines and the folds both worked by giving the
+-- stats list new functions for measuring its rows, and by asking it to lay
+-- itself out again. Either makes the game run the whole list as ours - and
+-- the game will not let an addon's code do sums with a secret, which the
+-- defence line is. So the list keeps its own spacing and its own layout;
+-- the rows are still dressed (their size, colours, the resistance swatches)
+-- after the game draws them, which it allows. What follows stays for the
+-- day the client offers a way to fold that is its own.
+M.FOLDS = false
 local function statExtent(h)
 	if type(h) ~= "number" or h <= 0 then
 		return h
@@ -1266,6 +1283,9 @@ end
 -- put right, then it lays out again: once immediately, so the fold is
 -- instant, and once on the next frame, when every row has its new height.
 function M.Refold()
+	if not M.FOLDS then
+		return
+	end
 	local stats = pick(_G.CharacterFrame, "CharacterStatsPaneScrollBox")
 	local box = stats and stats.ScrollBox
 	if not (box and box.FullUpdate) then
@@ -1717,7 +1737,8 @@ function M.CompactLists()
 	for _, box in ipairs(M.Lists()) do
 		local changed
 		if box == statBox then
-			changed = tightList(box)
+			-- the game's own, untouched (see M.FOLDS)
+			changed = M.FOLDS and tightList(box)
 		else
 			changed = compactList(box)
 		end
@@ -1728,8 +1749,11 @@ function M.CompactLists()
 end
 
 function M.RelayoutLists()
+	local stats = pick(_G.CharacterFrame, "CharacterStatsPaneScrollBox")
+	local statBox = stats and stats.ScrollBox
 	for _, box in ipairs(M.Lists()) do
-		if box.FullUpdate then
+		-- never the stats: laid out by us, the game counts it as ours (M.FOLDS)
+		if box.FullUpdate and (box ~= statBox or M.FOLDS) then
 			pcall(box.FullUpdate, box, true)
 		end
 	end

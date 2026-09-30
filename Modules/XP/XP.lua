@@ -36,6 +36,34 @@ local INSET = 6
 local EVERY = 10
 
 local WORDS = "|cff8a9894%s|r"
+-- the level's shield: dark slate, and a fifth of Experience's colour at
+-- four tenths of its light
+M.SHIELD_SLATE = { 0.20, 0.22, 0.23 }
+
+-- THE RIM BY BRACKET (Josh 2026-09-29: "we should use 10 level brackets
+-- though. 1-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60. These tend to be
+-- major breakpoints, and match pvp brackets"). The rim takes the item
+-- quality colours in turn, poor grey to artifact gold at 60, crowned.
+M.RIMS = {
+	"Interface\\AddOns\\BeebMod\\Art\\Dock\\level1",
+	"Interface\\AddOns\\BeebMod\\Art\\Dock\\level2",
+	"Interface\\AddOns\\BeebMod\\Art\\Dock\\level3",
+	"Interface\\AddOns\\BeebMod\\Art\\Dock\\level4",
+	"Interface\\AddOns\\BeebMod\\Art\\Dock\\level5",
+	"Interface\\AddOns\\BeebMod\\Art\\Dock\\level6",
+	"Interface\\AddOns\\BeebMod\\Art\\Dock\\level7",
+}
+-- the 60 shield's crop: taller than the others', so its crown is in it
+M.CROWN_CROP = { 0.25, 0.75, 0.06, 0.875 }
+
+function M.Bracket(level)
+	level = tonumber(level) or 1
+	return math.max(1, math.min(#M.RIMS, math.floor(level / 10) + 1))
+end
+function M.ShieldTint(a)
+	local s = M.SHIELD_SLATE
+	return s[1] * 0.8 + a[1] * 0.08, s[2] * 0.8 + a[2] * 0.08, s[3] * 0.8 + a[3] * 0.08
+end
 
 -- ---------------------------------------------------------------------------
 -- What the client says
@@ -247,8 +275,10 @@ function M.Lines(level, cur, max, rate)
 	local pct = max > 0 and math.floor(cur / max * 100) or 0
 	-- THE LEVEL IS ON THE SHIELD (Josh 2026-09-29: "put the number level
 	-- inside the icon - it would save some room"): the line says how far
-	-- through it you are, and the hover says the rest
-	local left = ("%d%%"):format(pct)
+	-- through it you are, and the hover says the rest. A TITLE FIRST (Josh
+	-- 2026-09-29: "we need some titles for these progress bars, kind of like
+	-- how the expedition starts with Expedition"): "Level · 46%".
+	local left = ("Level %s"):format(WORDS:format(("· %d%%"):format(pct)))
 	local secs = M.ToLevel(cur, max, rate)
 	-- ONE GRAMMAR WITH REPUTATION (Josh 2026-09-22, the panel redesign): the
 	-- right side is a time, and only once there is a pace. What is
@@ -278,7 +308,19 @@ function M.Update()
 	local left, right = M.Lines(level, cur, max, M.Rate())
 	M.text:SetText(left)
 	M.eta:SetText(right)
-	M.shield.number:SetText(level)
+	-- the level on the shield, or the Testing page's preview of another
+	local shown = BT.Dock.preview.level or level
+	local bracket = M.Bracket(shown)
+	M.shield.number:SetText(shown)
+	M.shield.rim:SetTexture(M.RIMS[bracket])
+	-- 60 wears a crown over the shield: drawn with a taller crop so it shows,
+	-- and the number a little lower, in the middle of the field again
+	local crop = bracket == #M.RIMS and M.CROWN_CROP or BT.Dock.LINE_ICON_CROP
+	for _, layer in ipairs({ M.shield.field, M.shield.rim }) do
+		layer:SetTexCoord(crop[1], crop[2], crop[3], crop[4])
+	end
+	M.shield.number:ClearAllPoints()
+	M.shield.number:SetPoint("CENTER", M.shield.icon, "CENTER", 0, bracket == #M.RIMS and -0.5 or 1)
 
 	local w = BT.Dock.LineBarWidth(M.frame, INSET)
 	if w <= 0 then
@@ -288,7 +330,11 @@ function M.Update()
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(a[1], a[2], a[3], 0.9)
 	BT.Dock.BandColor(M.frame, a)
-	M.shield.field:SetVertexColor(a[1], a[2], a[3])
+	-- A DARK SHIELD (Josh 2026-09-29: "what if we make the shield darker? It
+	-- kind of looks too similar to the expidition"): dark slate with a trace
+	-- of Experience's colour, so the white level reads on it - a class colour
+	-- darkened alone came out the brown of the Expedition's leather
+	M.shield.field:SetVertexColor(M.ShieldTint(a))
 	M.rested:SetColorTexture(a[1], a[2], a[3], 0.30)
 	local done = max > 0 and math.min(1, cur / max) or 0
 	local ahead = max > 0 and math.min(1 - done, (rested or 0) / max) or 0
@@ -354,6 +400,9 @@ function M.Build()
 	M.eta = BT.Widgets.Label(M.frame, "", "small")
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
 	M.eta:SetJustifyH("RIGHT")
+	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
+	-- the right side sat a pixel high, its height its own)
+	M.eta:SetHeight(TEXT_H - 2)
 	-- A LONG NAME STOPS SHORT OF THE RIGHT-HAND TEXT (Josh 2026-09-22):
 	-- "Gnomeregan Exiles · Friendly" ran straight into "2,807 to Honored".
 	-- The left text ends where the right one begins, and is cut short with

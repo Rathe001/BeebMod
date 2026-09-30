@@ -40,6 +40,16 @@ function M:BuildTab(parent)
 			BT.settings.tooltip = on and true or false
 		end)
 	self.notesRow.field = "tooltip"
+	-- THE PEOPLE YOU GROUPED WITH (Josh 2026-09-29), Modules/Ledger/Groups.lua
+	local groups = stack:Section("Groups")
+	self.groupsRow = BT.Widgets.SwitchRow(groups, "People you grouped with",
+		"Counts a group once you've been together 5 minutes, or in a dungeon",
+		function() return not (BT.settings and BT.settings.ledgerGroups == false) end,
+		function(on)
+			BT.EnsureBound()
+			BT.settings.ledgerGroups = on and true or false
+		end)
+	self.groupsRow.field = "ledgerGroups"
 	local find = CreateFrame("Frame", nil, parent)
 	find:SetPoint("TOPLEFT", 0, -(stack:Layout() + 8))
 	find:SetPoint("BOTTOMRIGHT", 0, 0)
@@ -242,8 +252,9 @@ function M:Cells()
 			if className then
 				bits[#bits + 1] = className
 			end
+			-- green, as the unit tooltip has it (Josh 2026-09-29)
 			if p and p.guild and p.guild ~= "" then
-				bits[#bits + 1] = "<" .. p.guild .. ">"
+				bits[#bits + 1] = "|cff40ff40<" .. p.guild .. ">|r"
 			end
 			local rating = p and p.rating
 			t:Header({ icon = false, name = U.Colorize(self.name or (p and p.name) or "", class),

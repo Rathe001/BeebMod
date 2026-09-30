@@ -5,6 +5,123 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **An enemy's page lists the abilities you've seen it cast.** Each spell
+  has its picture and how many times you saw it. BeebMod writes a spell
+  down when an enemy you can see starts casting it, through its nameplate,
+  your target or your focus. It doesn't look abilities up anywhere, so an
+  enemy you have only fought in melee says "You haven't seen it cast a
+  spell yet." The Testing page's Record button writes down how many casts
+  were kept and how many the game kept secret.
+
+- **A long note shows whole the first time you point at someone.** The
+  first hover could cut it to one line ending in "...", and a second hover
+  showed all of it.
+
+- **A note holds 140 characters**, about five lines on the card over a
+  tooltip. The note panel shows how many are left once 30 or fewer are. A
+  note written before the limit keeps its length, and you can shorten it.
+
+- **Saving a note with the Ledger's page closed skips redrawing its list.**
+  The list waits until you open the page. Each save also times its steps,
+  and the Testing page's Record button writes the last five into the saved
+  file.
+
+- **The Ledger remembers the people you grouped with.** A group counts once
+  you've been together 5 minutes, or at once in a dungeon or a raid. Their
+  tooltip and their card in the Ledger say "Grouped 3 times · last in The
+  Deadmines, 2 days ago". A switch on the Ledger's page turns it off.
+
+- **Guild names in chat are green.** A guild written in a line, such as
+  <New Horizon>, is in the guild chat's green. The game's own <AFK> and
+  <DND> are left as they are. Click the name to get /who g-"New Horizon"
+  in the chat box, and press Enter to send it. The game doesn't let an
+  addon send a /who itself. A switch on the Chat page turns it off.
+
+- **Web addresses in chat are links.** Click one to open a box with the
+  address in it, selected. Press Ctrl+C to copy it. This works for
+  addresses that start with http or www, and for a name with an ending
+  such as gofundme.com/f/... A switch on the Chat page turns it off.
+
+- **Chat opens in a large window.** The expand mark, at the left of the
+  marks in a chat window's corner, shows every line that window holds, and
+  new ones as they arrive. Its links work as they do in chat. Shift and the
+  wheel go to the top or the newest line, and Escape closes it. Its Select
+  text button shows the same lines as plain words that you can select and
+  copy with Ctrl+C.
+
+- **The game's chat scrollbar stays hidden.** It came back each time you
+  scrolled up, half outside the chat window, and went again when you
+  pointed at it. While you are scrolled up, a mark in the window's
+  bottom-right corner takes you to the newest line. It is an arrow down
+  onto a line, and so is the newest-line mark at the top.
+
+- **The Census's race chart says "Undead" and "Night Elf"**, where it
+  showed the game's own words, "Scourge" and "NightElf".
+
+- **A click on the dock's Reputation or PvP line opens that page** of the
+  character window; a second click closes it. It does nothing in a fight,
+  when the game will not let an addon open a window, and says so in chat.
+
+- **A player's guild is green on their tooltip**, straight after race and
+  class with no dot: "Dwarf Shaman <The Gnome Depot>", in the guild chat's
+  green. The Ledger's card for a character shows it the same way.
+
+- **A graph of the last two minutes in the frame rate and latency hover**:
+  frame rate, home latency and world latency, a line each, each on its own
+  scale, with a reading every two seconds, drawn again while the hover is
+  open. The gauge, the house, the globe and their figures are in their
+  line's colour, in the dock and in the hover, and a figure turns red only
+  when it is bad (below 30 fps, or 250 ms and over). Amber is gone.
+
+- **Frame rate and latency take two of the grid's three columns**, beside
+  the last row's other cell when there is room, with a gauge before the
+  frame rate: "45fps 39ms 93ms", each figure after its mark.
+
+- **Tracker's badge is a single bird track**, three toes from a heel, in
+  place of a trail of three paw prints that blurred at the dock's size.
+- **The Expedition's toasts wear hunter icons**: a rifle for a mastery, the
+  tracking eye for a new page in the journal, and a hunting horn for a
+  commendation, in place of the creature type's icon.
+- **The Testing page's Expedition preview reaches the Commendations page**:
+  its badge, rank and row of ranks show the previewed rank.
+
+- **The dock's Level, Reputation and PvP lines start with their titles**, as
+  the Expedition's does: "Level · 46%", "Reputation · Darnassus" with the
+  standing on the right, and "PvP · Sergeant" or "PvP · Civilian". The
+  Expedition's line drops its "(2/10)" to match: "Expedition · Tracker".
+  Each rank's number is on the line's hover.
+
+- **The Level shield's rim changes every ten levels**, in the item quality
+  colours: dark grey for 1-9, bright white for 10-19, green for 20-29, blue for 30-39,
+  purple for 40-49, orange for 50-59, and at 60 gold with a crown, a double
+  border and rivets.
+- **The Testing page can preview the dock's shields.** A stepper each for
+  Level, Reputation, PvP rank, PvP side and the Expedition steps through
+  what that shield can be, from your own; Clear puts them all back.
+
+- **The character sheet opens without an error.** The game now keeps some
+  stats, such as defense, as secret numbers, and refused to work them out
+  once BeebMod had changed how the stats list measures its lines. BeebMod
+  leaves that list's workings alone now. The stats keep BeebMod's colours,
+  sizes and resistance swatches, with the game's own spacing, and their
+  sections no longer fold.
+
+- **The Census no longer stalls the game.** A big book is counted a few
+  milliseconds a frame. While a count you asked for runs, the charts are
+  hidden and three dots pulse over "Counting 22,639 characters · 45%"; the
+  charts appear when it is done. The recount every ten seconds while the
+  window is open runs the same way, and swaps the charts when it is done.
+  Counting is about twice as fast, because it reads only the six things a
+  chart needs from each character. Switching between the Class, Race,
+  Level and other charts reuses the same count. The Census and BeebMod
+  windows count their characters from the list rather than reading each
+  one, which also made opening the BeebMod window stall on a big book.
+- **Your level on the dock's shield is easier to read**, in the game's own
+  narrow figures at a larger size, so "60" fits, on a dark slate shield
+  that no longer looks like the Expedition's leather badge.
+
 ## 0.1.0-beta.15
 
 - **Frame rate and latency share one row of the dock's grid**, under the

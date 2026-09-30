@@ -41,11 +41,25 @@ local function rowLabel(mode, key)
 	end
 	if mode == "class" then
 		return prettyClass(key)
+	elseif mode == "race" then
+		return C.RaceName(key)
 	elseif mode == "tag" then
 		local f = U.TagByKey(key)
 		return f and f.label or key
 	end
 	return key
+end
+
+-- A RACE BY THE NAME PLAYERS USE (Josh 2026-09-29: "Any idea how scourge and
+-- tauren show up on the census?"): the book keeps the game's own word for a
+-- race, which runs words together and calls the Undead "Scourge"; the chart
+-- says "Night Elf" and "Undead"
+local RACE_NAMES = { Scourge = "Undead" }
+function C.RaceName(key)
+	if type(key) ~= "string" then
+		return key
+	end
+	return RACE_NAMES[key] or (key:gsub("(%l)(%u)", "%1 %2"))
 end
 
 local function rowColor(mode, key)
@@ -238,21 +252,148 @@ function C.Filter(view)
 	return { bands = bandFilter(view), seen = view.seen, pick = pick }
 end
 
--- `census`, when given, is one already counted (the window's job, counted a
--- slice a frame - see UI/CensusWindow.lua); otherwise it is counted now
+-- what a filter is, as one string: two censuses of the same one are
+-- interchangeable
+function C.FilterKey(want)
+	local bands = {}
+	for k, on in pairs(want.bands or {}) do
+		if on then
+			bands[#bands + 1] = tostring(k)
+		end
+	end
+	table.sort(bands)
+	local p = want.pick
+	return table.concat({ p and (tostring(p.mode) .. ":" .. tostring(p.key)) or "-",
+		want.seen or "all", table.concat(bands, ",") }, "|")
+end
+
+-- NO LONG FRAME ON OPENING (Josh 2026-09-29: "I notice when I open the census
+-- the game lags"). A census of 22,600 characters is a tenth of a second in
+-- one go - a stutter you feel. A book more than two slices big is counted a
+-- slice a frame instead, the charts on screen staying until the new ones
+-- are ready; a small one is counted at once, which is quicker than waiting.
+local runner
+function C.Runner()
+	return runner
+end
+
+-- A FEW MILLISECONDS A FRAME, NOT A SLICE (Josh 2026-09-29, /bt cpu: a slice
+-- of 2,000 characters was 30 to 49 ms in the game, four times the desktop's
+-- figure). Each frame counts until this much time has gone, then stops.
+C.BUDGET = 4
+
+-- NOTHING UNTIL IT IS READY (Josh 2026-09-29: "Maybe we should add a loading
+-- spinner and not show anything until we finish"): while a count you asked
+-- for runs, the charts are put away and three dots pulse over how far it has
+-- got. The window's own recount, every ten seconds while it is open, keeps
+-- the charts up and swaps them when it is done.
+local DOTS = 3
+function C.Loading(view, on, share, size)
+	local l = view.loading
+	if not l then
+		l = CreateFrame("Frame", nil, view)
+		l:SetSize(220, 40)
+		l:SetPoint("TOP", view, "TOP", 0, ROWS_Y - 40)
+		l.dots = {}
+		local accent = BT.Widgets.ACCENT
+		for i = 1, DOTS do
+			local d = l:CreateTexture(nil, "ARTWORK")
+			d:SetSize(6, 6)
+			d:SetPoint("TOP", l, "TOP", (i - 2) * 12, 0)
+			d:SetColorTexture(accent[1], accent[2], accent[3], 1)
+			l.dots[i] = d
+		end
+		l.label = label(l, "", "small", 0.55, 0.6, 0.58)
+		l.label:SetPoint("TOP", l, "TOP", 0, -14)
+		l.t = 0
+		l:SetScript("OnUpdate", function(self, elapsed)
+			self.t = self.t + (elapsed or 0)
+			for i, d in ipairs(self.dots) do
+				local wave = math.sin(self.t * 6 - i * 0.9)
+				d:SetAlpha(0.25 + 0.75 * math.max(0, wave))
+			end
+		end)
+		view.loading = l
+	end
+	l:SetShown(on and true or false)
+	if on then
+		local n = size and (type(BreakUpLargeNumbers) == "function" and BreakUpLargeNumbers(size) or tostring(size)) or "the"
+		l.label:SetText(("Counting %s characters · %d%%"):format(n, math.floor((share or 0) * 100)))
+		for _, row in ipairs(view.rows or {}) do
+			row:Hide()
+		end
+		if view.footer then
+			view.footer:Hide()
+		end
+		view.subtitle:SetText("")
+	elseif view.footer then
+		view.footer:Show()
+	end
+end
+
+local function countSliced(view, step, key, size)
+	runner = runner or CreateFrame("Frame")
+	view.counting = key
+	C.Loading(view, true, 0, size)
+	runner:SetScript("OnUpdate", function(self)
+		local census, share = step(C.BUDGET)
+		if census then
+			self:SetScript("OnUpdate", nil)
+			view.counting = nil
+			census.key = key
+			C.Loading(view, false)
+			C.Refresh(view, census)
+		else
+			C.Loading(view, true, share, size)
+		end
+	end)
+end
+
+-- `census`, when given, is one already counted (a slice a frame - here, or
+-- the window's own job in UI/CensusWindow.lua); otherwise the view's last one
+-- is used if it counted the same thing and the book has not moved since, and
+-- only then is the book counted again.
 function C.Refresh(view, census)
 	if not (view and BT.db) then
 		return
 	end
 	local want = C.Filter(view)
 	local filter = want.bands
+	local key = C.FilterKey(want)
 	-- counted a slice at a time before a click changed what to count: that
-	-- census is of the wrong thing, so count the right one now
-	if census and (census.pick ~= want.pick or (census.seen or "all") ~= (want.seen or "all")) then
-		census = nil
+	-- census is of the wrong thing, so count the right one
+	if census then
+		if census.key and census.key ~= key then
+			census = nil
+		elseif not census.key and (census.pick ~= want.pick or (census.seen or "all") ~= (want.seen or "all")) then
+			census = nil
+		end
 	end
-	census = census or BT.Stats.Census(BT.db, nil, want)
-	view.census = census
+	-- ANOTHER CHART OF THE SAME COUNT (Class, Race, Level...): one census
+	-- holds every chart, so changing chart counts nothing
+	if not census and view.census and view.censusKey == key and not view.stale then
+		census = view.census
+	end
+	if not census then
+		local per = BT.Stats.JOB_SLICE
+		local step, size = BT.Stats.CensusJob(BT.db, nil, want, per)
+		if CreateFrame and (size or 0) > per * 2 then
+			countSliced(view, step, key, size)
+			return
+		end
+		repeat
+			census = step()
+		until census
+		census.key = key
+	end
+	view.census, view.censusKey, view.stale = census, key, nil
+	-- a slower count of something no longer wanted is left to finish unseen
+	if view.counting and view.counting ~= key then
+		view.counting = nil
+		if runner then
+			runner:SetScript("OnUpdate", nil)
+		end
+	end
 	-- lay the mode buttons out around whichever of them belong here today
 	local x = 0
 	for _, m in ipairs(MODES) do

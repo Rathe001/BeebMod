@@ -180,15 +180,13 @@ end
 -- The line and the bar
 -- ---------------------------------------------------------------------------
 
+-- A TITLE FIRST (Josh 2026-09-29: "we need some titles for these progress
+-- bars"): "Reputation · Darnassus", and the standing on the right, where
+-- nothing else is. NO AMOUNT (Josh 2026-09-22): "2,807 to Honored" took half
+-- the line, and the hover says it anyway.
 function M.Lines(f, rate)
-	local left = ("%s %s"):format(f.name, WORDS:format("· " .. M.StandingName(f.reaction)))
-	if f.reaction >= TOP or f.max <= 0 then
-		return left, ""
-	end
-	-- NO AMOUNT EITHER (Josh 2026-09-22). "2,807 to Honored" took half the
-	-- line from the faction's name, and the hover says it anyway. The name has
-	-- the whole line.
-	return left, ""
+	local left = ("Reputation %s"):format(WORDS:format("· " .. f.name))
+	return left, M.StandingName(f.reaction)
 end
 
 function M.Update()
@@ -213,7 +211,9 @@ function M.Update()
 
 	local c = M.StandingColour(f.reaction)
 	-- the shield's field wears the standing's colour, as the bar does
-	M.shield.field:SetVertexColor(c[1], c[2], c[3])
+	-- (or a standing previewed from the Testing page)
+	local shield = BT.Dock.preview.standing and M.StandingColour(BT.Dock.preview.standing) or c
+	M.shield.field:SetVertexColor(shield[1], shield[2], shield[3])
 	local w = BT.Dock.LineBarWidth(M.frame, INSET)
 	if w <= 0 then
 		return
@@ -259,6 +259,7 @@ function M.Tip()
 				t:Row(m.name, (m.gained > 0 and "+" or "-") .. big(math.abs(m.gained)), m.gained > 0 and "good" or "bad")
 			end
 		end
+		t:Foot({ { "Click", "open the reputation page" } })
 	end })
 end
 
@@ -277,6 +278,9 @@ function M.Build()
 	M.eta = BT.Widgets.Label(M.frame, "", "small")
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
 	M.eta:SetJustifyH("RIGHT")
+	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
+	-- the right side sat a pixel high, its height its own)
+	M.eta:SetHeight(TEXT_H - 2)
 	-- A LONG NAME STOPS SHORT OF THE RIGHT-HAND TEXT (Josh 2026-09-22):
 	-- "Gnomeregan Exiles · Friendly" ran straight into "2,807 to Honored".
 	-- The left text ends where the right one begins, and is cut short with
@@ -295,6 +299,12 @@ function M.Build()
 		M.Update()
 	end)
 	M.frame:EnableMouse(true)
+	-- a click opens the reputation page of the character window (Josh 2026-09-29)
+	M.frame:SetScript("OnMouseUp", function(_, button)
+		if button == "LeftButton" then
+			BT.Util.OpenCharacter("reputation")
+		end
+	end)
 	M.frame:SetScript("OnEnter", M.Tip)
 	M.frame:SetScript("OnLeave", function()
 		if GameTooltip then

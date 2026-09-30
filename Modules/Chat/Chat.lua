@@ -475,16 +475,40 @@ local function park(mb, frame, hide)
 	end
 end
 
+-- PUT AWAY FOR GOOD, NOT UNTIL THE NEXT SCROLL (Josh 2026-09-29: "The
+-- scrollbar and related buttons go outside of our chat box, and you cannot
+-- click them. They disappear as soon as you hover over them"). The client
+-- shows its scrollbar and its jump-to-bottom again whenever you scroll up,
+-- and only pointing at chat put them away - so they went as the mouse
+-- reached them. Each one is hidden again as it shows. What they told you,
+-- that newer lines are below, is a mark inside the panel now (M.Newest).
+local function keepStowed(thing)
+	if not (thing and thing.HookScript) or thing.beebsStowed then
+		return
+	end
+	thing.beebsStowed = true
+	thing:HookScript("OnShow", function(self)
+		if BT.Enabled("chat") and opt("buttons", true) then
+			self:Hide()
+		end
+	end)
+end
+
 local function styleButtons(frame, plain)
 	local name = frame.GetName and frame:GetName()
 	local hide = (not plain) and opt("buttons", true)
+	local pieces = { frame.buttonFrame, frame.ScrollBar, frame.ScrollToBottomButton }
 	for _, suffix in ipairs({ "ButtonFrame", "ButtonFrameUpButton",
 		"ButtonFrameDownButton", "ButtonFrameBottomButton", "ScrollBar", "ScrollToBottomButton" }) do
-		stow(name and _G[name .. suffix], hide)
+		pieces[#pieces + 1] = name and _G[name .. suffix]
 	end
-	stow(frame.buttonFrame, hide)
-	stow(frame.ScrollBar, hide)
-	stow(frame.ScrollToBottomButton, hide)
+	-- pairs, not ipairs: a piece this build has not got is a hole in the list
+	for _, thing in pairs(pieces) do
+		stow(thing, hide)
+		if hide then
+			keepStowed(thing)
+		end
+	end
 	if name == "ChatFrame1" then
 		park(_G.ChatFrameMenuButton, frame, hide)
 		stow(_G.QuickJoinToastButton, hide)
@@ -760,18 +784,104 @@ function M.OpenMenu(frame)
 	return mb.Click ~= nil and pcall(mb.Click, mb) or false
 end
 
+-- the third sheet: Art/chat.tga, two slots of 0.5 (scripts/make-icons.py)
+M.ART = "Interface\\AddOns\\BeebMod\\Art\\chat"
+function M.ExpandCoord(tex)
+	tex:SetTexture(M.ART)
+	tex:SetTexCoord(0, 0.5, 0, 1)
+end
+-- NEWEST LINE IS AN ARROW ONTO A LINE (Josh 2026-09-29, from a picture). It
+-- was the check mark, which reads as "done", not as "down to the newest".
+function M.NewestCoord(tex)
+	tex:SetTexture(M.ART)
+	tex:SetTexCoord(0.5, 1, 0, 1)
+end
+
+-- THE NEWEST LINE, WHILE YOU ARE SCROLLED UP (Josh 2026-09-29). The client's
+-- jump-to-bottom is hidden for good (keepStowed), and it was the only thing
+-- that said you were reading old lines. This mark says it from inside the
+-- panel's corner: it shows while there are newer lines below, and a click
+-- takes you to them. The large chat window has one too.
+--
+-- `wanted` says whether the mark may show at all, so the chat windows can
+-- follow their switch and the large window can ignore it.
+function M.Newest(smf, wanted)
+	if not smf then
+		return nil
+	end
+	local b = smf.beebsNewest
+	if not b then
+		b = CreateFrame("Button", nil, smf)
+		b:SetSize(CONTROL, CONTROL)
+		b:SetPoint("BOTTOMRIGHT", smf, "BOTTOMRIGHT", -4, 4)
+		b:SetFrameLevel((smf.GetFrameLevel and smf:GetFrameLevel() or 1) + 10)
+		b.back = b:CreateTexture(nil, "BACKGROUND")
+		b.back:SetPoint("TOPLEFT", -4, 3)
+		b.back:SetPoint("BOTTOMRIGHT", 3, -3)
+		b.back:SetColorTexture(FILL[1], FILL[2], FILL[3], 0.92)
+		b.icon = b:CreateTexture(nil, "ARTWORK")
+		b.icon:SetAllPoints()
+		M.NewestCoord(b.icon)
+		b.icon:SetVertexColor(MARK[1], MARK[2], MARK[3], 1)
+		b:SetScript("OnEnter", function(self)
+			BT.Widgets.Tint(self.icon)
+			if GameTooltip then
+				BT.Dock.Tip(self, function() GameTooltip:AddLine("Newest line", 1, 1, 1) end)
+			end
+		end)
+		b:SetScript("OnLeave", function(self)
+			self.icon:SetVertexColor(MARK[1], MARK[2], MARK[3], 1)
+			if GameTooltip then
+				GameTooltip:Hide()
+			end
+		end)
+		b:SetScript("OnClick", function()
+			smf:ScrollToBottom()
+		end)
+		b.wanted = wanted
+		b.Update = function()
+			local ok, at = false, nil
+			if smf.AtBottom then
+				ok, at = pcall(smf.AtBottom, smf)
+			end
+			local up = ok and at == false
+			b:SetShown(up and (not b.wanted or b.wanted()) and true or false)
+		end
+		smf.beebsNewest = b
+		-- every way the view moves: the wheel, the marks, Page Up and Down,
+		-- and the client's own calls
+		if hooksecurefunc then
+			for _, fn in ipairs({ "ScrollUp", "ScrollDown", "ScrollToTop", "ScrollToBottom",
+				"PageUp", "PageDown", "SetScrollOffset", "ScrollByAmount" }) do
+				if type(smf[fn]) == "function" then
+					pcall(hooksecurefunc, smf, fn, b.Update)
+				end
+			end
+		end
+	end
+	b.back:SetColorTexture(FILL[1], FILL[2], FILL[3], 0.92)
+	b.Update()
+	return b
+end
+
 function M.Controls(frame, plain)
 	if plain then
 		if frame.beebsControls then
 			frame.beebsControls:Hide()
 		end
+		if frame.beebsNewest then
+			frame.beebsNewest:Hide()
+		end
 		return true
 	end
+	M.Newest(frame, function()
+		return BT.Enabled("chat") and opt("buttons", true)
+	end)
 	local holder = frame.beebsControls
 	if not holder then
 		holder = CreateFrame("Frame", nil, frame)
 		holder.list = {}
-		holder:SetSize(CONTROL * 4 + CONTROL_GAP * 3, CONTROL)
+		holder:SetSize(CONTROL * 5 + CONTROL_GAP * 4, CONTROL)
 		holder:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
 		holder:EnableMouse(true)
 		-- above the text, on the panel's own fill
@@ -782,11 +892,18 @@ function M.Controls(frame, plain)
 		holder.back:SetColorTexture(FILL[1], FILL[2], FILL[3], 0.92)
 		frame.beebsControls = holder
 
-		-- reading right to left: the menu, the newest, down, up
+		-- reading right to left: the menu, the newest, down, up, and the
+		-- large window (Josh 2026-09-29: "Can we add a button that opens the
+		-- chat in a large modal?"), Modules/Chat/Reader.lua
+		controlButton(holder, 5, M.ExpandCoord, nil, function()
+			if BT.ChatReader then
+				BT.ChatReader.Toggle(frame)
+			end
+		end, "Open in a large window")
 		controlButton(holder, 1, BT.Dock.CogCoord, nil, function()
 			M.OpenMenu(frame)
 		end, "Chat menu")
-		controlButton(holder, 2, BT.Dock.CheckCoord, nil, function()
+		controlButton(holder, 2, M.NewestCoord, nil, function()
 			if frame.ScrollToBottom then
 				frame:ScrollToBottom()
 			end
@@ -994,10 +1111,24 @@ function M.HookMessages(frame, plain)
 		if BT.Enabled("chat") and opt("shortChannels", true) then
 			text = M.Shorten(text)
 		end
+		-- guild names in green and web addresses you can click
+		-- (Modules/Chat/Links.lua)
+		if BT.Enabled("chat") and M.Decorate then
+			text = M.Decorate(text)
+		end
 		if BT.Enabled("chat") then
 			text = M.Stamp(text)
 		end
-		return frame.beebsAdd(self, text, ...)
+		-- the line as the frame keeps it, so the large window can tell which
+		-- end of the frame's history is the newest
+		self.beebsLast = text
+		local r1, r2, r3, r4 = frame.beebsAdd(self, text, ...)
+		-- and a copy for the large window while it shows this frame
+		local reader = BT.ChatReader
+		if reader and reader.source == self and reader.Add then
+			reader.Add(text, ...)
+		end
+		return r1, r2, r3, r4
 	end
 	return true
 end
@@ -1216,6 +1347,13 @@ M.OnBind = M.OnEnable
 
 function M:OnDisable()
 	M.StyleAll(true)
+	if BT.ChatReader then
+		BT.ChatReader.Hide()
+	end
+	local copy = M.CopyBox and M.CopyBox()
+	if copy then
+		copy:Hide()
+	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -1241,6 +1379,8 @@ function M:BuildTab(panel)
 	row("Into the corner", "The main chat window sits in the bottom-left corner of the screen", "flush", true)
 	row("Short channel names", "[1. General - Dun Morogh] becomes [1.Gen]", "shortChannels", true)
 	row("Timestamps", "Puts the time in front of each new line. Off while the game's own timestamps are on.", "timestamps", false)
+	row("Guild names in green", "A guild written in a line, such as <New Horizon>, turns guild green. Click it to get its /who in the chat box.", "guilds", true)
+	row("Clickable links", "Click a web address in chat to get it in a box you can copy from", "links", true)
 	local size = BT.Widgets.Row(page:Section("Text"), "Text size", "Sets the game's own text size for every chat window")
 	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir)
 		local now = opt("size", 14) + dir

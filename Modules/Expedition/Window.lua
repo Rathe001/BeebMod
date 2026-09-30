@@ -762,6 +762,21 @@ function V.Facts(npc, kills)
 	if #f.lore == 0 then
 		f.lore[1] = { text = f.loreLine }
 	end
+	-- WHAT YOU HAVE SEEN IT CAST (Josh 2026-09-29: "only recording abilities
+	-- that have been seen... it kind of drives home 'I'm learning about this
+	-- enemy'"), under its own page's lore: each spell with its picture, and
+	-- how many times you have seen it
+	f.abilities = J.Abilities(npc)
+	local seen = {}
+	for _, a in ipairs(f.abilities) do
+		local icon = a.icon and ("|T%s:16:16:0:0|t "):format(tostring(a.icon)) or ""
+		seen[#seen + 1] = ("%s%s |cff8a948f· %s|r"):format(icon, a.name,
+			a.n == 1 and "once" or (big(a.n) .. " times"))
+	end
+	table.insert(f.lore, math.min(2, #f.lore + 1), {
+		head = "Abilities you've seen",
+		text = #seen > 0 and table.concat(seen, "\n") or "You haven't seen it cast a spell yet.",
+	})
 	-- EVERY PART, NOT UP TO THE FIRST GAP (Josh 2026-09-27: "The details dont
 	-- have any indicator if the enemy is rare or elite"). The parts were walked
 	-- with ipairs, which stops at the first nil: an enemy with no beast family -
@@ -2135,10 +2150,22 @@ function V.LadderTip(r)
 end
 
 -- the ranks at `points`: lit to yours, the rest faded, the line filled to it
+-- A RANK PREVIEWED FROM THE TESTING PAGE (Josh 2026-09-29: "can you hook up
+-- the testing previews to the commendations view as well?"): the points it
+-- begins at, so the page draws that rank as if you had just reached it; your
+-- own points when nothing is previewed
+function V.ShownPoints(points)
+	local J = BT.Expedition
+	local pv = BT.Dock and BT.Dock.preview and BT.Dock.preview.expedition
+	local r = pv and J.RANKS[pv]
+	return r and r[1] or points
+end
+
 local function drawLadder(a, points)
 	local J = BT.Expedition
 	local l = a.ladder
 	local accent = BT.Widgets.ACCENT
+	points = V.ShownPoints(points)
 	local n, title, at, nextAt, nextTitle = J.Rank(points)
 	l.points = points
 	l.note:SetText(nextAt and ("%s · %s points to %s"):format(title, big(nextAt - points), nextTitle)
@@ -2426,17 +2453,20 @@ local function drawRail(a, groups, earned, all, kills, feats)
 	local rail = a.rail
 	local accent = BT.Widgets.ACCENT
 	local points, _, _, uniquePoints, masteryPoints = J.Points(kills, feats)
-	local n, title, at, nextAt, nextTitle = J.Rank(points)
+	-- the rank, badge and bar as previewed (V.ShownPoints); the sums at the
+	-- foot stay your own
+	local shown = V.ShownPoints(points)
+	local n, title, at, nextAt, nextTitle = J.Rank(shown)
 	rail.badge:SetTexture(J.RankBadge(n))
 	rail.rank:SetText(title)
-	rail.rankOf:SetText(("Rank %d of %d · |cffffffff%s pts|r"):format(n, #J.RANKS, big(points)))
+	rail.rankOf:SetText(("Rank %d of %d · |cffffffff%s pts|r"):format(n, #J.RANKS, big(shown)))
 	rail.rankFill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
 	local w = COMMENDATION_RAIL_W - 24
 	if nextAt then
-		local share = math.min(1, (points - at) / math.max(1, nextAt - at))
+		local share = math.min(1, (shown - at) / math.max(1, nextAt - at))
 		rail.rankFill:SetShown(share > 0)
 		rail.rankFill:SetWidth(math.max(1, w * share))
-		rail.rankNext:SetText(("%s to %s"):format(big(nextAt - points), nextTitle))
+		rail.rankNext:SetText(("%s to %s"):format(big(nextAt - shown), nextTitle))
 	else
 		rail.rankFill:Show()
 		rail.rankFill:SetWidth(w)

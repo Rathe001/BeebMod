@@ -537,6 +537,8 @@ local function fresh(c)
 	c.earned = c.earned or {}
 	c.feats = c.feats or {}
 	c.recent = c.recent or {}
+	-- npc -> { [spell id] = times seen }: what you have seen each enemy cast
+	c.spells = c.spells or {}
 	return c
 end
 
@@ -630,6 +632,79 @@ function J.Learn(info, now)
 	return m
 end
 
+-- ---------------------------------------------------------------------------
+-- What an enemy casts (Modules/Expedition/Kills.lua, K.EnemyCast)
+-- ---------------------------------------------------------------------------
+
+-- one cast seen: on this character's page for the enemy, as a kill is
+function J.SawCast(info, spellID, now)
+	if not (info and info.npc and type(spellID) == "number") then
+		return false
+	end
+	local c = J.Mine()
+	if not c then
+		return false
+	end
+	local npc = J.PageOf(info) or info.npc
+	local t = c.spells[npc]
+	local new = not (t and t[spellID])
+	if not t then
+		t = {}
+		c.spells[npc] = t
+	end
+	t[spellID] = (t[spellID] or 0) + 1
+	if new then
+		J.rev = (J.rev or 0) + 1
+	end
+	return new
+end
+
+-- a spell's name and picture, however this build asks for them
+function J.SpellInfo(id)
+	local S = _G.C_Spell
+	if type(S) == "table" and type(S.GetSpellInfo) == "function" then
+		local ok, i = pcall(S.GetSpellInfo, id)
+		if ok and type(i) == "table" and type(i.name) == "string" then
+			return i.name, i.iconID or i.originalIconID
+		end
+	end
+	if type(GetSpellInfo) == "function" then
+		local ok, name, _, icon = pcall(GetSpellInfo, id)
+		if ok and type(name) == "string" then
+			return name, icon
+		end
+	end
+	return nil
+end
+
+-- every spell you have seen the enemy cast, the most seen first:
+-- { { id, n, name, icon }, ... }. Two ranks of one spell are two ids and one
+-- name, so they are one line, their counts added.
+function J.Abilities(npc)
+	local c = J.Mine()
+	local t = c and c.spells and c.spells[npc]
+	local byName, out = {}, {}
+	for id, n in pairs(t or {}) do
+		local name, icon = J.SpellInfo(id)
+		name = name or ("Spell " .. id)
+		local a = byName[name]
+		if a then
+			a.n = a.n + n
+		else
+			a = { id = id, n = n, name = name, icon = icon }
+			byName[name] = a
+			out[#out + 1] = a
+		end
+	end
+	table.sort(out, function(a, b)
+		if a.n ~= b.n then
+			return a.n > b.n
+		end
+		return a.name < b.name
+	end)
+	return out
+end
+
 -- ONE NAME, ONE PAGE (Josh 2026-09-28: "Getting duplicates" - two cards
 -- called Skyhopper). The game can give two enemies the same name and body under
 -- different ids: Zephras Isle's Enchanted Skyhopper is a Skyhopper to look
@@ -705,6 +780,14 @@ local function merge(s, to, from)
 			if first[from] then
 				first[to] = math.min(first[to] or first[from], first[from])
 				first[from] = nil
+			end
+			local spells = c.spells or {}
+			if spells[from] then
+				spells[to] = spells[to] or {}
+				for id, n in pairs(spells[from]) do
+					spells[to][id] = (spells[to][id] or 0) + n
+				end
+				spells[from] = nil
 			end
 			if c.last and c.last.npc == from then
 				c.last.npc = to

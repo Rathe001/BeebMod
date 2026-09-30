@@ -83,7 +83,7 @@ BT.SCHEMA = 13
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-09-28-testing"
+BT.BUILD = "2026-09-29-zones-groups"
 
 BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off

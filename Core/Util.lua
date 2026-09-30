@@ -354,6 +354,41 @@ function U.Credit(p)
 	return when
 end
 
+-- THE CHARACTER WINDOW ON ONE OF ITS PAGES (Josh 2026-09-29: "Can the pvp
+-- meter click open the pvp tab? and reputation click open the rep tab"). By
+-- the game's own ToggleCharacter, so a second click closes it; and if the
+-- window came up on another page, that page's side tab is pressed. Not the
+-- Character page: its stats hold secret numbers, which the game refuses to
+-- work out once an addon has opened the window (the error of 2026-09-29).
+-- Nothing in a fight: the game will not let an addon open a window then.
+U.CHARACTER_PAGES = {
+	reputation = { frame = "ReputationFrame", tab = 2 },
+	pvp = { frame = "PVPRankFrame", tab = 4 },
+}
+function U.OpenCharacter(page)
+	local p = U.CHARACTER_PAGES[page]
+	if not p or type(ToggleCharacter) ~= "function" then
+		return false
+	end
+	if InCombatLockdown and InCombatLockdown() then
+		U.Print("BeebMod can't open the character window during a fight.")
+		return false
+	end
+	pcall(ToggleCharacter, p.frame)
+	local sheet = _G.CharacterFrame
+	local target = _G[p.frame] or (type(sheet) == "table" and sheet[p.frame])
+	if type(sheet) == "table" and sheet.IsShown and sheet:IsShown()
+		and type(target) == "table" and target.IsShown and not target:IsShown() then
+		local tab = _G["CharacterFrameModeTab" .. p.tab]
+		local press = tab and tab.GetScript
+			and (tab:GetScript("OnClick") or tab:GetScript("OnMouseUp") or tab:GetScript("OnMouseDown"))
+		if press then
+			pcall(press, tab, "LeftButton")
+		end
+	end
+	return true
+end
+
 function U.Print(...)
 	print("|cff74c0fcBeebMod|r:", ...)
 end

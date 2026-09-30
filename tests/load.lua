@@ -42,6 +42,8 @@ SetStatusBarTexture SetStatusBarColor GetStatusBarTexture GetMinMaxValues
 SetOwner AddLine AddDoubleLine ClearLines GetOwner NumLines SetPadding
 GetCenter GetEffectiveScale SetIgnoreParentScale SetClipsChildren
 Raise SetToplevel CopyFontObject
+SetFading SetHyperlinksEnabled
+SetScrollChild SetVerticalScroll GetVerticalScroll GetVerticalScrollRange
 ]]):gmatch("%S+") do
 	METHODS[m] = true
 end
@@ -289,7 +291,29 @@ local function widget(kind, parent)
 		if k == "GetParent" then return function(s2) return s2._parent end end
 		-- text is state too: a search box that forgets what was typed cannot
 		-- be searched with
-		if k == "SetText" then return function(s2, v) s2._text = v end end
+		-- an edit box holds no more letters than its limit, as the client's does
+		if k == "SetMaxLetters" then return function(s2, n) s2._maxLetters = n end end
+		if k == "GetMaxLetters" then return function(s2) return s2._maxLetters or 0 end end
+		if k == "SetText" then
+			return function(s2, v)
+				local most = s2._maxLetters
+				if most and most > 0 and type(v) == "string" then
+					-- letters, not bytes: a byte from 128 to 191 carries on the letter before it
+					local n = 0
+					for i = 1, #v do
+						local b = v:byte(i)
+						if b < 128 or b >= 192 then
+							n = n + 1
+							if n > most then
+								v = v:sub(1, i - 1)
+								break
+							end
+						end
+					end
+				end
+				s2._text = v
+			end
+		end
 		if k == "GetText" then return function(s2) return s2._text end end
 		-- Enable/Disable is state the addon reasons about: a button that stays
 		-- live with nothing selected is the bug this guards
@@ -331,8 +355,36 @@ local function widget(kind, parent)
 	return w
 end
 
-_G.CreateFrame = function(_, name, parent)
+-- A SCROLLING MESSAGE FRAME KEEPS ITS LINES (2026-09-29): the large chat
+-- window copies a chat window's history and scrolls through it, so the stub
+-- holds the lines, oldest first, and how far up you are
+local function scrolling(w)
+	w._lines, w._offset = {}, 0
+	w.AddMessage = function(s2, text, r, g, b) s2._lines[#s2._lines + 1] = { text, r, g, b } end
+	w.Clear = function(s2) s2._lines, s2._offset = {}, 0 end
+	w.GetNumMessages = function(s2) return #s2._lines end
+	w.GetMessageInfo = function(s2, i)
+		local l = s2._lines[i]
+		if l then
+			return l[1], l[2], l[3], l[4]
+		end
+	end
+	local function to(s2, n) s2._offset = math.max(0, math.min(#s2._lines, n)) end
+	w.ScrollUp = function(s2) to(s2, s2._offset + 1) end
+	w.ScrollDown = function(s2) to(s2, s2._offset - 1) end
+	w.PageUp = function(s2) to(s2, s2._offset + 10) end
+	w.PageDown = function(s2) to(s2, s2._offset - 10) end
+	w.ScrollToTop = function(s2) to(s2, #s2._lines) end
+	w.ScrollToBottom = function(s2) s2._offset = 0 end
+	w.AtBottom = function(s2) return s2._offset == 0 end
+	return w
+end
+
+_G.CreateFrame = function(kind, name, parent)
 	local w = widget("frame", parent)
+	if kind == "ScrollingMessageFrame" then
+		scrolling(w)
+	end
 	if type(name) == "string" then
 		w._name = name
 		_G[name] = w
@@ -1121,6 +1173,57 @@ if ok then
 			good:GetScript("OnClick")(good)
 			assert(BT.Find.TagFilter() == nil, "and clicking it again clears the filter")
 		end },
+		{ "a note has a limit, and a save times itself", function()
+			-- A NOTE IS A FEW LINES (Josh 2026-09-29: "we still need to have
+			-- some kind of character limit on the notes")
+			local N = BT.Notes
+			assert(N.MAX_NOTE == 140, "140 characters")
+			assert(N.Length("Café") == 4, "counted in letters, not bytes")
+			assert(N.Clip("Cafés", 4) == "Café", "and cut between letters")
+			local long = string.rep("word ", 60)
+			N.SetNote("Trilly Lightbolt", long)
+			assert(N.Length(N.Get("Trilly Lightbolt").note) <= 140, "a note written longer is cut to the limit")
+			-- one written before the limit keeps its length
+			local old = string.rep("a", 200)
+			N.Get("Trilly Lightbolt").note = old
+			assert(N.Room(N.Get("Trilly Lightbolt")) == 200, "an older, longer note has room for itself")
+			N.SetNote("Trilly Lightbolt", old)
+			assert(#N.Get("Trilly Lightbolt").note == 200, "and saving it again doesn't cut it")
+			N.SetNote("Trilly Lightbolt", "short")
+			BT.Find.OpenEditorFor("Trilly Lightbolt", _G.BeebModDock)
+			local box = BT.Find.EditorNoteBox()
+			assert(box:GetMaxLetters() == 140, "the note panel's box holds 140")
+			box:SetText(string.rep("b", 300))
+			assert(#box:GetText() == 140, "and no more")
+
+			-- SAVING A NOTE LAGS (Josh 2026-09-29): each save is timed, step
+			-- by step, for the Testing page's record
+			if BT.Window.IsShown() then
+				BT.Window.Toggle()
+			end
+			box:SetText("a new note")
+			box:GetScript("OnEnterPressed")(box)
+			local last = BT.Find.saves[1]
+			assert(last and last.how == "Enter in the note panel" and last.total >= 0, "the save was timed")
+			local names = {}
+			for _, st in ipairs(last.steps) do
+				names[st[1]] = true
+			end
+			assert(names.write and names["let go"] and names.editor and names.dock,
+				"each step of it: the write, the box letting go, the redraws")
+			assert(not names.list, "and not the list, which nobody can see with the window closed")
+			assert(BT.Find.Dump() >= 1 and BeebModDB.ledgerDump.lines[1]:find("^Enter in the note panel"),
+				"the Record button writes them down: " .. tostring(BeebModDB.ledgerDump.lines[1]))
+			BT.Find.CloseEditor()
+			-- A LONG NOTE WRAPS ON THE FIRST HOVER (Josh 2026-09-29: the first
+			-- showed one line and "...", a second showed it whole): the text
+			-- has its width before it is measured
+			local tip = _G.CreateFrame("Frame", nil, _G.UIParent)
+			tip:SetWidth(260)
+			local card = BT.Tooltip.ShowNote(tip, N.Get("Trilly Lightbolt"))
+			assert(card and card.text._width == 260, "the quote's text is as wide as the tooltip: " .. tostring(card and card.text._width))
+			BT.Tooltip.HideNote()
+		end },
 		{ "find, then write on the row itself", function()
 			if not BT.Window.IsShown() then BT.Window.Toggle() end
 			BT.Window.SetView("ledger")
@@ -1343,6 +1446,27 @@ if ok then
 				assert(tbody[key], "a Show button: " .. key)
 				assert(click(tbody[key]) ~= "", "and it says something in chat: " .. key)
 			end
+			-- PREVIEW THE DOCK'S SHIELDS (Josh 2026-09-29): a stepper each, from
+			-- your own through what the shield can be, and a Clear
+			local steppers = tbody.previews
+			assert(steppers and steppers.level and steppers.standing and steppers.pvp and steppers.side
+				and steppers.expedition and tbody.clearPreviews, "a preview for each shield, and a Clear")
+			assert(steppers.level.value:GetText() == "Yours", "each starts at your own")
+			click(steppers.level.plus)
+			click(steppers.level.plus)
+			assert(BT.Dock.preview.level == 10 and steppers.level.value:GetText() == "Level 10", "a step shows the next")
+			click(steppers.level.minus)
+			click(steppers.level.minus)
+			click(steppers.level.minus)
+			assert(BT.Dock.preview.level == 60, "and steps round, backwards from yours to 60")
+			click(steppers.expedition.plus)
+			click(steppers.pvp.plus)
+			click(steppers.side.plus)
+			assert(BT.Dock.preview.expedition == 1 and BT.Dock.preview.pvp == 0 and BT.Dock.preview.side == "Alliance",
+				"the others step the same way")
+			click(tbody.clearPreviews)
+			assert(next(BT.Dock.preview) == nil and steppers.level.value:GetText() == "Yours"
+				and steppers.expedition.value:GetText() == "Yours", "Clear puts every shield back")
 			-- RECORD, CLEAR AND CPU: the dumps and the probes, from three buttons
 			assert(tbody.recordButton and tbody.clearButton and tbody.cpuButton, "the Record for Claude buttons")
 			local hadFrames, hadMenus = BT.Switched("unitframes"), BT.Switched("dropdowns")
@@ -1464,10 +1588,46 @@ if ok then
 			assert(BT.Census.Filter(view).seen == "today", "and the window's own counting with them")
 			view.seenButtons.all:GetScript("OnClick")(view.seenButtons.all)
 			assert(view.census.seen == nil, "and All is the whole book")
+			-- RACES BY THEIR NAMES (Josh 2026-09-29: "how scourge and tauren show up")
+			assert(BT.Census.RaceName("Scourge") == "Undead" and BT.Census.RaceName("NightElf") == "Night Elf"
+				and BT.Census.RaceName("Human") == "Human" and BT.Census.RaceName("Skyborne") == "Skyborne",
+				"the chart says Undead and Night Elf, and leaves one-word races alone")
 			view.modeButtons.guild:GetScript("OnClick")(view.modeButtons.guild)
 			assert(view.mode == "guild", "the guild chart draws")
 			view.modeButtons.zone:GetScript("OnClick")(view.modeButtons.zone)
 			assert(view.mode == "zone", "the zone chart draws")
+			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+			-- NO LONG FRAME (Josh 2026-09-29: "when I open the census the game
+			-- lags"): another chart of the same count counts nothing again
+			local counted = view.census
+			view.modeButtons.race:GetScript("OnClick")(view.modeButtons.race)
+			assert(view.census == counted, "changing chart reuses the count")
+			-- and a book bigger than two slices is counted a slice a frame,
+			-- with nothing drawn until it is done: the charts away, and dots
+			-- pulsing over how far it has got (Josh 2026-09-29)
+			local sliceWas = BT.Stats.JOB_SLICE
+			BT.Stats.JOB_SLICE = 1
+			view.seenButtons.today:GetScript("OnClick")(view.seenButtons.today)
+			assert(view.counting and view.loading and view.loading:IsShown()
+				and view.loading.label:GetText():find("^Counting"),
+				"a big book: counting begins, and says so: " .. tostring(view.loading and view.loading.label:GetText()))
+			assert(not view.rows[1]:IsShown(), "with the charts put away until it is done")
+			view.loading:GetScript("OnUpdate")(view.loading, 0.1)
+			assert(view.loading.dots[1]._alpha ~= nil, "the dots pulse")
+			local runner, turns = BT.Census.Runner(), 0
+			while runner:GetScript("OnUpdate") and turns < 10000 do
+				runner:GetScript("OnUpdate")(runner)
+				turns = turns + 1
+			end
+			assert(turns > 1 and view.census ~= counted and view.census.seen == "today" and not view.counting,
+				"counted over frames, then drawn: " .. turns .. " frames")
+			assert(not view.loading:IsShown() and view.rows[1]:IsShown(), "the dots go, and the charts come back")
+			-- a newer click while counting: the count of the old one is dropped
+			view.seenButtons.all:GetScript("OnClick")(view.seenButtons.all)
+			view.seenButtons.today:GetScript("OnClick")(view.seenButtons.today)
+			BT.Stats.JOB_SLICE = sliceWas
+			view.seenButtons.all:GetScript("OnClick")(view.seenButtons.all)
+			assert(view.census.seen == nil and not view.counting, "a small book counts at once again")
 			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
 			BT.CensusWindow.Hide()
 			assert(BT.CensusWindow.ticker == nil, "closing it stops the looking")
@@ -1612,6 +1772,9 @@ if ok then
 			assert(lines[2]:match("^%s*$"), "the second is the gap under the header: " .. lines[2])
 			assert(lines[3]:find("Orc Warrior", 1, true) and lines[3]:find("Nightwatch", 1, true),
 				"and everything else is on the third: " .. lines[3])
+			-- THE GUILD IN GREEN (Josh 2026-09-29): after race and class, no dot
+			assert(lines[3]:find("Orc Warrior |cff40ff40<Nightwatch>|r", 1, true),
+				"the guild green, straight after race and class: " .. lines[3])
 			assert(not tip.NineSlice:IsShown(), "the client's own border is hidden, not covered")
 			assert(tip.bmShadow and #tip.bmShadow == 16, "and a drop shadow under it, four rings")
 			assert(BT.Dock.Frame().bmShadow, "and the right panel wears the same one")
@@ -4355,6 +4518,94 @@ if ok then
 			_G.InCombatLockdown = function() return false end
 			_G.CreateFrame = realCF
 		end },
+		{ "the Ledger remembers the people you grouped with", function()
+			-- THE PEOPLE YOU GROUPED WITH (Josh 2026-09-29): five minutes
+			-- together, or a dungeon at once; one count a group, a person
+			local G, N = BT.LedgerGroups, BT.Notes
+			BT.SetEnabled("ledger", true)
+			local keep = {}
+			for _, k in ipairs({ "GetNumGroupMembers", "IsInRaid", "UnitIsUnit", "UnitExists", "UnitIsPlayer",
+				"GetUnitName", "UnitClass", "UnitRace", "UnitLevel", "GetGuildInfo", "UnitGUID",
+				"IsInInstance", "GetInstanceInfo", "GetRealZoneText" }) do
+				keep[k] = _G[k]
+			end
+			local party = { party1 = "Brakka Stonefist", party2 = "Lila Brightwhistle" }
+			local size = 3
+			local inside = false
+			_G.GetNumGroupMembers = function() return size end
+			_G.IsInRaid = function() return false end
+			_G.UnitIsUnit = function(a, b) return a == b end
+			_G.UnitExists = function(u) return party[u] ~= nil end
+			_G.UnitIsPlayer = function(u) return party[u] ~= nil end
+			_G.GetUnitName = function(u) return party[u] end
+			_G.UnitClass = function() return "Warrior", "WARRIOR" end
+			_G.UnitRace = function() return "Dwarf", "Dwarf" end
+			_G.UnitLevel = function() return 20 end
+			_G.GetGuildInfo = function() return nil end
+			_G.UnitGUID = function() return nil end
+			_G.IsInInstance = function() return inside, inside and "party" or "none" end
+			_G.GetInstanceInfo = function() return "The Deadmines" end
+			_G.GetRealZoneText = function() return "Westfall" end
+			BeebModDB.ledger.group = nil
+
+			local t = 1000000
+			assert(G.Update(t) == 0, "a group just made counts nobody yet")
+			local brakka = BT.Util.Key("Brakka Stonefist")
+			assert(N.Get(brakka) == nil or N.Get(brakka).grouped == nil, "and writes nothing")
+			assert(G.Update(t + 120) == 0, "two minutes is a quest's invite, not a group")
+			assert(G.Update(t + 300) == 2, "five minutes together counts both")
+			local p = N.Get(brakka)
+			assert(p and p.grouped == 1 and p.groupedWhere == "Westfall", "once each, in the zone you were in")
+			assert(N.IsMine(p), "and the row is kept, as a note would be")
+			assert(G.Update(t + 900) == 0 and p.grouped == 1, "however long the group lasts, it is one group")
+			inside = true
+			G.Update(t + 960)
+			assert(p.groupedWhere == "The Deadmines" and p.groupedAt == t + 960, "a dungeon you went into together is where you last were")
+			assert(G.Line(p, t + 960) == "Grouped once · last in The Deadmines, just now", "said on one line: " .. tostring(G.Line(p, t + 960)))
+
+			-- someone who leaves and is invited back is a new group, and a
+			-- dungeon counts them at once
+			party.party2 = nil
+			size = 2
+			G.Update(t + 1000)
+			party.party2 = "Lila Brightwhistle"
+			size = 3
+			assert(G.Update(t + 1010) == 1, "back in a dungeon, counted at once")
+			local lila = N.Get(BT.Util.Key("Lila Brightwhistle"))
+			assert(lila.grouped == 2, "a second group: " .. tostring(lila.grouped))
+			assert(G.Line(lila, t + 1010):find("^Grouped 2 times"), "twice is 2 times")
+
+			-- a /reload in the middle doesn't count it again
+			BT.LedgerGroups.Update(t + 1040)
+			assert(G.Update(t + 1100) == 0 and p.grouped == 1, "the group in progress is kept in the book")
+
+			-- its switch, on the Ledger's page
+			BT.settings.ledgerGroups = false
+			party.party3 = "Newt Fizzlebang"
+			size = 4
+			assert(G.Update(t + 2000) == 0 and N.Get(BT.Util.Key("Newt Fizzlebang")) == nil, "switched off, nobody is counted")
+			BT.settings.ledgerGroups = nil
+
+			-- on the tooltip, under the rating
+			local tip = _G.CreateFrame("Frame", nil, _G.UIParent)
+			local lines = {}
+			tip.AddLine = function(_, text) lines[#lines + 1] = text end
+			tip.NumLines = function() return #lines end
+			local hadTip = BT.settings.tooltip
+			BT.settings.tooltip = true
+			BT.Tooltip.Fill(tip, "party1")
+			BT.settings.tooltip = hadTip
+			local said = false
+			for _, l in ipairs(lines) do
+				said = said or tostring(l):find("^Grouped once") ~= nil
+			end
+			assert(said, "and the tooltip says it: " .. table.concat(lines, " / "))
+
+			for k, v in pairs(keep) do
+				_G[k] = v
+			end
+			BeebModDB.ledger.group = nil
+		end },
 		{ "the chat frames wear the toolkit's surface", function()
 			-- NOTHING HERE REIMPLEMENTS CHAT (Josh 2026-09-20). Not a message
 			-- is routed, filtered or rewritten - the client's frames do what
@@ -4618,7 +4869,7 @@ if ok then
 			-- back without giving the room back.
 			local holder = _G.ChatFrame1.beebsControls
 			assert(holder, "the controls come back as marks of our own")
-			assert(#holder.list == 4, "four of them: up, down, the newest, menu")
+			assert(#holder.list == 5, "five of them: up, down, the newest, menu, and the large window")
 			assert(not holder:IsShown(), "out of the way while you are reading")
 			_G.ChatFrame1.IsMouseOver = function() return true end
 			holder.Follow()
@@ -4665,6 +4916,36 @@ if ok then
 			assert(holder.back and holder.back:IsShown(), "and the marks sit on a strip of the panel's fill")
 			_G.ChatFrame1.IsMouseOver = function() return false end
 			holder.Follow()
+			-- PUT AWAY FOR GOOD (Josh 2026-09-29: "They disappear as soon as
+			-- you hover over them"). The client shows them again on a scroll;
+			-- each is hidden again as it shows, pointed at or not.
+			local bar = _G.ChatFrame1.ScrollBar
+			bar:Show()
+			bar:GetScript("OnShow")(bar)
+			assert(not bar:IsShown(), "the scrollbar the client shows on a scroll goes again")
+			-- and the newest line is a mark inside the panel while you are scrolled up
+			local newest = _G.ChatFrame1.beebsNewest
+			assert(newest and not newest:IsShown(), "no newest-line mark at the bottom")
+			-- NEWEST LINE IS AN ARROW ONTO A LINE (Josh 2026-09-29), here and
+			-- among the marks
+			assert(newest.icon._texture == mod.ART and newest.icon._texCoord[1] == 0.5
+				and holder.list[2].icon._texture == mod.ART and holder.list[2].icon._texCoord[1] == 0.5,
+				"both newest-line marks wear the arrow")
+			_G.ChatFrame1.AtBottom = function() return false end
+			newest.Update()
+			assert(newest:IsShown(), "and one while there are newer lines below")
+			assert(newest._points.BOTTOMRIGHT and newest._points.BOTTOMRIGHT.rel == _G.ChatFrame1
+				and newest._points.BOTTOMRIGHT.x < 0, "inside the window's bottom-right corner")
+			_G.ChatFrame1.ScrollToBottom = function() _G.ChatFrame1.AtBottom = function() return true end end
+			newest:GetScript("OnClick")(newest)
+			newest.Update()
+			assert(not newest:IsShown(), "a click takes you there, and the mark goes")
+			BT.settings.chat = BT.settings.chat or {}
+			BT.settings.chat.buttons = false
+			_G.ChatFrame1.AtBottom = function() return false end
+			newest.Update()
+			assert(not newest:IsShown(), "with the side buttons switch off, the client's own are back instead")
+			BT.settings.chat.buttons = nil
 
 			-- THE LINE PREFIX (Josh 2026-09-20). "[1. General - Dun Morogh]" is
 			-- thirty characters to say "this came from General", on EVERY
@@ -4697,6 +4978,114 @@ if ok then
 			f:AddMessage("[1. General - Dun Morogh] hello")
 			assert(said[2]:find("Dun Morogh", 1, true),
 				"and switching it off gives the client its own line back")
+
+			-- GUILD NAMES IN GREEN (Josh 2026-09-29: "Let's automatically
+			-- color guild names green, like <New Horizon>")
+			local line = "|Hplayer:Popo|h[Popo Non]|h: <New Horizon> is recruiting <3"
+			local green = mod.Decorate(line)
+			assert(green:find("|cff40ff40|Haddon:BeebMod:guild:New Horizon|h<New Horizon>|h|r is recruiting", 1, true),
+				"a guild in angle brackets turns guild green, as a link: " .. green)
+			-- A CLICK TYPES ITS /who (Josh 2026-09-29: "Can we make the guild
+			-- names clickable to open '/who Unbroken Titans'"): typed, not
+			-- sent, as this client won't let an addon send one
+			local typed
+			local hadOpen = _G.ChatFrame_OpenChat
+			_G.ChatFrame_OpenChat = function(text) typed = text end
+			assert(mod.Clicked("addon:BeebMod:guild:Unbroken Titans") and typed == '/who g-"Unbroken Titans"',
+				"a click on a guild puts its /who in the chat box: " .. tostring(typed))
+			_G.ChatFrame_OpenChat = hadOpen
+			assert(green:find("|Hplayer:Popo|h[Popo Non]|h", 1, true) and green:find("<3$"),
+				"and the name link and a heart are left as they came")
+			assert(mod.Decorate("<AFK> brb") == "<AFK> brb", "the game's own flags are not guilds")
+			assert(not mod.IsGuildName("a very long name that goes past twenty four")
+				and not mod.IsGuildName("- look") and mod.IsGuildName("Café Noir"),
+				"a guild name is 2 to 24 letters and spaces")
+			BT.settings.chat.guilds = false
+			assert(not mod.Decorate(line):find("40ff40", 1, true), "its switch turns it off")
+			BT.settings.chat.guilds = nil
+
+			-- LINKS YOU CAN CLICK (Josh 2026-09-29: "Can we make hyperlinks
+			-- clickable, and open them in a dialog box so the user can copy
+			-- them?")
+			local ad = mod.Decorate("look at www.gofundme.com/f/colinregenfund.")
+			assert(ad:find("|Haddon:BeebMod:url:www.gofundme.com/f/colinregenfund|hwww.gofundme.com/f/colinregenfund|h|r.", 1, true),
+				"an address becomes a link, and the full stop after it stays the sentence's: " .. ad)
+			assert(mod.IsAddress("https://example.org") and mod.IsAddress("gofundme.com/f/x")
+				and mod.IsAddress("Discord.gg/abc"), "with http, with www, or a bare name and ending")
+			assert(not mod.IsAddress("e.g.") and not mod.IsAddress("Tweak.lua") and not mod.IsAddress("1.5")
+				and not mod.IsAddress("bob@mail.com"), "and not an ordinary word with a dot in it")
+			local item = "|cff1eff00|Hitem:2589::::::::|h[www.cloth.com]|h|r"
+			assert(mod.Decorate(item) == item, "the words inside an item link are never touched")
+			assert(mod.Decorate("|cffffd000www.x.com|r"):find("|cffffd000|cff6fb7ff|Haddon", 1, true),
+				"a colour code in front of an address is not read as part of it")
+			local url = mod.LinkAddress("addon:BeebMod:url:www.x.com/a")
+			assert(url == "www.x.com/a" and mod.LinkAddress("item:2589") == nil, "our links are told from the game's")
+			assert(mod.Clicked("addon:BeebMod:url:www.x.com/a"), "a click on one is taken")
+			local copy = mod.CopyBox()
+			assert(copy and copy:IsShown() and copy.edit:GetText() == "www.x.com/a",
+				"and opens the copy box with the address in it")
+			copy.edit:SetText("oops")
+			copy.edit:GetScript("OnTextChanged")(copy.edit, true)
+			assert(copy.edit:GetText() == "www.x.com/a", "typing over it puts the address back")
+			copy.edit:GetScript("OnEscapePressed")(copy.edit)
+			assert(not copy:IsShown(), "and Escape closes the box")
+			assert(not mod.Clicked("item:2589", "[Linen Cloth]"), "an item's link is left to the game")
+
+			-- THE LARGE WINDOW (Josh 2026-09-29: "Can we add a button that
+			-- opens the chat in a large modal?")
+			local R = BT.ChatReader
+			local src = _G.CreateFrame("ScrollingMessageFrame", "ChatFrame7", _G.UIParent)
+			src:AddMessage("first", 1, 1, 1)
+			src:AddMessage("second", 1, 0.5, 0)
+			mod.HookMessages(src)
+			src:AddMessage("third", 0, 1, 0)
+			holder.list[5]:GetScript("OnClick")(holder.list[5])
+			assert(R.Frame() and R.Frame():IsShown() and R.source == _G.ChatFrame1,
+				"the expand mark opens the large window on its own chat window")
+			assert(R.Open(src) and R.source == src, "which can show any chat window")
+			local big = R.Frame().msgs
+			assert(big:GetNumMessages() == 3 and big:GetMessageInfo(1) == "first" and big:GetMessageInfo(3) == "third",
+				"every line the window holds, oldest at the top")
+			assert(select(3, big:GetMessageInfo(2)) == 0.5, "in the line's own colour")
+			src:AddMessage("fourth")
+			assert(big:GetNumMessages() == 4 and big:GetMessageInfo(4) == "fourth", "and a new line as it arrives")
+			-- a window whose first line is its newest reads the right way round
+			local back = { "newest", "middle", "oldest" }
+			local rev = { beebsLast = "newest", GetNumMessages = function() return 3 end,
+				GetMessageInfo = function(_, i) return back[i] end, GetName = function() return "ChatFrame8" end }
+			R.Open(rev)
+			assert(big:GetMessageInfo(1) == "oldest" and big:GetMessageInfo(3) == "newest",
+				"a history kept newest first is turned round")
+			local wheel = big:GetScript("OnMouseWheel")
+			wheel(big, 1)
+			-- the client's hooksecurefunc calls this after each scroll; the stub has none
+			big.beebsNewest.Update()
+			assert(big.beebsNewest:IsShown(), "scrolled up, the newest-line mark shows in it")
+			big.beebsNewest:GetScript("OnClick")(big.beebsNewest)
+			assert(big:AtBottom(), "and takes you back down")
+			-- SELECT TEXT (Josh 2026-09-29: "Big chat window should have
+			-- selectable text so the user can copy it")
+			assert(R.Plain("|cff40ff40|Hplayer:Bob|h[Bob]|h|r: a || b |T123:0|t")
+				== "[Bob]: a | b ", "a line as plain words: " .. tostring(R.Plain("|cff40ff40|Hplayer:Bob|h[Bob]|h|r: a || b |T123:0|t")))
+			local reader = R.Frame()
+			reader.select:GetScript("OnClick")(reader.select)
+			assert(R.selecting and reader.scroll:IsShown() and not reader.msgs:IsShown(),
+				"Select text swaps the lines for a box you can select in")
+			assert(reader.edit:GetText() == "oldest\nmiddle\nnewest", "holding the same lines: " .. tostring(reader.edit:GetText()))
+			assert(reader.hint:IsShown() and reader.select.pressed, "with the keys to copy, and the button pressed")
+			reader.edit:SetText("oops")
+			reader.edit:GetScript("OnTextChanged")(reader.edit, true)
+			assert(reader.edit:GetText() == "oldest\nmiddle\nnewest", "the words can't be typed over")
+			reader.select:GetScript("OnClick")(reader.select)
+			assert(not R.selecting and reader.msgs:IsShown() and not reader.scroll:IsShown(),
+				"pressed again, it brings the chat back")
+			R.SetSelecting(true)
+			R.Toggle(rev)
+			assert(not R.Frame():IsShown() and R.source == nil, "the mark again closes it")
+			assert(not R.selecting, "and it opens on the chat next time")
+			src:AddMessage("fifth")
+			assert(big:GetNumMessages() == 3, "and a closed window copies nothing")
+			mod.HookMessages(src, true)
 
 			-- OUT OF THE WAY UNTIL YOU ARE TYPING (Josh 2026-09-20). The box
 			-- lies over the tabs, and a frame over another frame takes the
@@ -6934,12 +7323,26 @@ if ok then
 			mod.Update()
 
 			local left, right = mod.Lines(level, cur, max, nil)
-			-- THE LEVEL IS ON THE SHIELD (Josh 2026-09-29): the line says how far
-			assert(left == "25%", "how far through the level: " .. left)
+			-- THE LEVEL IS ON THE SHIELD (Josh 2026-09-29): the line says how far,
+			-- after its title
+			assert(left:find("^Level ") and left:find("25%", 1, true) and not left:find("Level 8", 1, true),
+				"its title, and how far through the level: " .. left)
+			for _, key in ipairs({ "xp", "rep", "pvp", "expedition" }) do
+				local m = BT.GetModule(key)
+				m.Build()
+				assert(m.eta._height and m.eta._height == m.text._height,
+					key .. ": the right side as tall as the left, so both sit on one line")
+			end
 			assert(mod.shield.number:GetText() == "8" or mod.shield.number:GetText() == 8,
 				"and the level is on the shield: " .. tostring(mod.shield.number:GetText()))
-			assert(mod.shield.field._vertex and mod.shield.field._vertex[2] == BT.Widgets.ACCENT[2],
-				"which wears Experience's colour")
+			local tint = mod.shield.field._vertex
+			local _, wantG = mod.ShieldTint(BT.Widgets.ACCENT)
+			assert(tint and math.abs(tint[2] - wantG) < 1e-6 and tint[1] < 0.3 and tint[2] < 0.3 and tint[3] < 0.3,
+				"a dark shield, a trace of Experience's colour in it, so the level reads on it")
+			-- THE RIM BY TEN-LEVEL BRACKET (Josh 2026-09-29): 1-9 to 50-59, and 60
+			assert(mod.Bracket(1) == 1 and mod.Bracket(9) == 1 and mod.Bracket(10) == 2 and mod.Bracket(29) == 3
+				and mod.Bracket(50) == 6 and mod.Bracket(59) == 6 and mod.Bracket(60) == 7, "a bracket every ten levels")
+			assert(mod.shield.rim._texture == mod.RIMS[1], "level 8 wears the first rim: " .. tostring(mod.shield.rim._texture))
 			-- before there is a pace, nothing: the same grammar as reputation,
 			-- and what is left is on the hover
 			assert(right == "", "and nothing on the right before there is a pace: " .. right)
@@ -7442,10 +7845,10 @@ if ok then
 			local f = mod.Read()
 			assert(f.cur == 1200 and f.max == 6000, "1,200 of 6,000 into Friendly")
 			local left, right = mod.Lines(f, nil)
-			assert(left:find("Undercity", 1, true) and left:find("Friendly", 1, true), "the faction and standing: " .. left)
-			-- no amount and no time: the name has the whole line, and the hover
-			-- says how much is left
-			assert(right == "", "nothing on the right: " .. right)
+			-- a title and the faction; the standing on the right; no amount and
+			-- no time, the hover says how much is left
+			assert(left:find("^Reputation ") and left:find("Undercity", 1, true) and right == "Friendly",
+				"its title, the faction, and the standing on the right: " .. left .. " | " .. right)
 			-- the bar starts after the shield at the line's left
 			local barW = 212 - 12 - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP
 			assert(math.abs(mod.fill._width - barW / 5) < 0.01, "a fifth of the bar: " .. tostring(mod.fill._width))
@@ -7466,7 +7869,7 @@ if ok then
 			assert(math.abs(mod.Rate(t) - 9600) < 0.01, "per hour: " .. tostring(mod.Rate(t)))
 			-- NO TIME TO THE NEXT STANDING (Josh 2026-09-28), whatever the pace
 			local _, eta = mod.Lines(mod.Read(), mod.Rate(t))
-			assert(eta == "", "and no time to the next standing: " .. eta)
+			assert(eta == "Honored", "the standing on the right, and no time to the next: " .. eta)
 
 			-- another faction watched, then back: the first one's pace is kept
 			watched = { name = "Orgrimmar", reaction = 4, low = 0, high = 3000, value = 100 }
@@ -7478,8 +7881,8 @@ if ok then
 			-- exalted: a full bar, and nothing after it
 			watched = { name = "Undercity", reaction = 8, low = 42000, high = 42999, value = 42999 }
 			mod.Update()
-			local _, none = mod.Lines(mod.Read(), nil)
-			assert(none == "", "nothing comes after exalted")
+			local _, standing = mod.Lines(mod.Read(), nil)
+			assert(standing == "Exalted", "exalted says so, and nothing after it")
 			assert(mod.fill._width == 212 - 12 - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP, "and the bar is full")
 
 			-- a reload keeps the session; nothing watched puts the line away
@@ -7535,7 +7938,8 @@ if ok then
 			rank = 7
 			mod.Update()
 			left = mod.Lines(mod.Read())
-			assert(left:find("Sergeant", 1, true) and left:find("rank 3", 1, true), "the rank and its number: " .. left)
+			assert(left:find("^PvP ") and left:find("Sergeant", 1, true) and not left:find("/14", 1, true),
+				"its title and the rank, no count after it: " .. left)
 			assert(mod.insignia:IsShown() and mod.insignia._texture == "Interface\\PvPRankBadges\\PvPRank03"
 				and mod.shield.field:IsShown() == false, "the game's insignia in place of the shield")
 			-- the dock gave the line its width once it showed
@@ -7586,7 +7990,7 @@ if ok then
 			mod.Update()
 			assert(section:IsShown(), "the PvP tab says a rank: the line shows")
 			left, right = mod.Lines(mod.Read())
-			assert(left:find("Civilian", 1, true) and left:find("no rank yet", 1, true) and right:find("0 / 750", 1, true),
+			assert(left:find("^PvP ") and left:find("Civilian", 1, true) and right:find("0 / 750", 1, true),
 				"Civilian, no rank yet, and the points: " .. left .. " | " .. right)
 			assert(not mod.insignia:IsShown() and mod.shield.field._vertex[1] > mod.shield.field._vertex[3],
 				"a red shield with swords, for the Horde")
@@ -7594,7 +7998,7 @@ if ok then
 			info.CurrentRankField:SetText("Grunt")
 			info.CurrentRankProgressField:SetText("Rank Points: |cnHIGHLIGHT_FONT_COLOR:1,125 / 1,500|r")
 			left, right = mod.Lines(mod.Read())
-			assert(left:find("Grunt", 1, true) and left:find("rank 2", 1, true) and right:find("1,125 / 1,500", 1, true),
+			assert(left:find("Grunt", 1, true) and not left:find("/14", 1, true) and right:find("1,125 / 1,500", 1, true),
 				"Grunt is rank 2, with 1,125 of 1,500: " .. left .. " | " .. right)
 			assert(mod.insignia:IsShown() and mod.insignia._texture == "Interface\\PvPRankBadges\\PvPRank02",
 				"with the game's insignia for rank 2")
@@ -7615,6 +8019,45 @@ if ok then
 			mod.watching = nil
 			mod.Update()
 			assert(not section:IsShown(), "and with nothing kept and no tab, no line")
+		end },
+		-- A CLICK OPENS THE PAGE (Josh 2026-09-29: "Can the pvp meter click open
+		-- the pvp tab? and reputation click open the rep tab")
+		{ "a click on reputation or PvP opens that page of the character window", function()
+			local U = BT.Util
+			local asked, pressed = {}, 0
+			local wasToggle, wasSheet, wasCombat = _G.ToggleCharacter, _G.CharacterFrame, _G.InCombatLockdown
+			local wasTab, wasPvP, wasRep = _G.CharacterFrameModeTab4, _G.PVPRankFrame, _G.ReputationFrame
+			local sheet = _G.CreateFrame("Frame")
+			local rep = _G.CreateFrame("Frame", nil, sheet)
+			local pvp = _G.CreateFrame("Frame", nil, sheet)
+			_G.CharacterFrame, _G.ReputationFrame, _G.PVPRankFrame = sheet, rep, pvp
+			sheet:Hide()
+			-- the game's toggle: it knows the reputation page, not the PvP one
+			_G.ToggleCharacter = function(page)
+				asked[#asked + 1] = page
+				sheet:Show()
+				rep:SetShown(page == "ReputationFrame")
+				pvp:Hide()
+			end
+			local tab = _G.CreateFrame("Button")
+			tab:SetScript("OnClick", function() pressed = pressed + 1; pvp:Show() end)
+			_G.CharacterFrameModeTab4 = tab
+			_G.InCombatLockdown = function() return false end
+			assert(U.OpenCharacter("reputation") and asked[1] == "ReputationFrame" and rep:IsShown(),
+				"reputation: the game's toggle, on its page")
+			assert(U.OpenCharacter("pvp") and asked[2] == "PVPRankFrame" and pressed == 1 and pvp:IsShown(),
+				"PvP: asked for, and where the toggle left another page, its side tab pressed")
+			_G.InCombatLockdown = function() return true end
+			assert(not U.OpenCharacter("pvp") and #asked == 2, "and nothing in a fight")
+			assert(not U.OpenCharacter("character"), "the Character page is not one it opens")
+			_G.InCombatLockdown = function() return false end
+			-- the lines' clicks
+			local repMod, pvpMod = BT.GetModule("rep"), BT.GetModule("pvp")
+			repMod.Build():GetScript("OnMouseUp")(repMod.frame, "LeftButton")
+			pvpMod.Build():GetScript("OnMouseUp")(pvpMod.frame, "LeftButton")
+			assert(asked[3] == "ReputationFrame" and asked[4] == "PVPRankFrame", "a click on each line opens its page")
+			_G.ToggleCharacter, _G.CharacterFrame, _G.InCombatLockdown = wasToggle, wasSheet, wasCombat
+			_G.CharacterFrameModeTab4, _G.PVPRankFrame, _G.ReputationFrame = wasTab, wasPvP, wasRep
 		end },
 		{ "currency is a cell of the readout grid: what you have, and earned per hour", function()
 			local mod = BT.GetModule("currency")
@@ -7842,39 +8285,93 @@ if ok then
 			-- ONE CELL, NOT THREE (Josh 2026-09-29: "grouped together instead of
 			-- individual cells"): the three figures in one wide cell
 			assert(chips.all.wanted and chips.all.wide and chips.fps == nil, "one wide cell")
-			local text = chips.all.spec.text
-			local at60, at42, at310 = text:find("60", 1, true), text:find("42", 1, true), text:find("310", 1, true)
-			assert(at60 and at42 and at310 and at60 < at42 and at42 < at310,
-				"frame rate, then home, then world: " .. text)
+			-- three readouts in it, each an icon and its figure (Josh 2026-09-29:
+			-- the icons the size of the other cells', icons and words on the
+			-- same middle as theirs)
+			local segs = chips.all.spec.segments
+			assert(segs and #segs == 3 and segs[1].text:find("^60|c") and segs[2].text:find("^42|c")
+				and segs[3].text:find("^310|c"), "frame rate, then home, then world")
+			assert(segs[1].text:find("fps", 1, true) and segs[2].text:find("ms", 1, true)
+				and segs[3].text:find("ms", 1, true), "each with its unit, close up: 60fps 42ms 310ms")
+			assert(not segs[1].state and segs[3].state == "alert", "plain when fine, and the world red at 310")
+			assert(segs[1].coords == mod.MARKS.fps.coords and segs[1].coords[1] > 0.75 and segs[2].coords == mod.MARKS.home.coords,
+				"the gauge, the house and the globe, each cropped to its drawing")
+			local drawn = chips.all.segs
+			assert(drawn and #drawn >= 3 and drawn[1].icon:GetWidth() == 12 and drawn[1].icon:GetHeight() == 12,
+				"each mark an icon twelve pixels square, as any cell's is")
+			local iconAt, wordsAt = drawn[1].icon._points.LEFT, drawn[1].text._points.LEFT
+			assert(iconAt and iconAt.y == 0 and wordsAt and wordsAt.y == -1,
+				"on the cell's middle, the words a pixel low - as a one-reading cell's")
+			assert(drawn[2].icon._points.LEFT.x > iconAt.x and drawn[3].icon._points.LEFT.x > drawn[2].icon._points.LEFT.x,
+				"one after another")
+			assert(drawn[3].text._textColor and drawn[3].text._textColor[2] < 0.5, "the red figure is red")
 			local parts = chips.all.spec.parts
-			assert(not parts.fps.state and parts.world.state == "alert" and text:find("|cfff26659310", 1, true),
-				"plain when fine, and the world red at 310")
-			assert(select(2, text:gsub("Art\\net:", "")) == 2, "the house and the globe drawn in the line")
+			assert(not parts.fps.state and parts.world.state == "alert", "the three states kept for the hover")
 			assert(mod.FpsState(40) == "warn" and mod.MsState(150) == "warn" and mod.MsState(20) == nil,
 				"amber is worth noticing, plain is fine")
 
-			-- the grid: the row to itself, as wide as the grid, a height the
-			-- client will draw
+			-- the grid: two columns of the three (Josh 2026-09-29), after the
+			-- other cells - beside the last row's when it has one, else a row
+			-- of its own - and a height the client will draw
 			BT.Dock.Relayout()
 			local grid = chips.all:GetParent()
 			assert(grid.key == "readouts" and (grid.wantHeight or 0) > 0 and (grid._height or 0) > 0,
 				"one group, with a height")
 			local at = chips.all._points.TOPLEFT
-			local others = 0
-			for _, c in ipairs(BT.Dock.Cells()) do
-				if c ~= chips.all and c:IsShown() and c._points and c._points.TOPLEFT then
+			local others, narrowW = 0, nil
+			for _, c in ipairs(BT.Dock.Chips()) do
+				if c ~= chips.all and c:IsShown() and c:GetParent() == grid and c._points and c._points.TOPLEFT then
 					others = others + 1
-					assert(c._points.TOPLEFT.y > at.y, "under every other cell: " .. tostring(c.owner))
+					narrowW = c._width
+					assert(c._points.TOPLEFT.y >= at.y, "no cell under it: " .. tostring(c.owner))
 				end
 			end
-			assert(at and at.x <= 8 and (chips.all._width or 0) > (grid._width or 0) / 2,
-				"from the grid's left, across it: " .. tostring(chips.all._width))
+			if narrowW then
+				assert(math.abs(chips.all._width - (2 * (narrowW + 2) - 2)) < 0.01,
+					"two cells wide: " .. tostring(chips.all._width) .. " by cells of " .. tostring(narrowW))
+			end
+			if others % BT.Dock.Cols() == 1 then
+				assert(at.x > 8, "beside the last row's one cell")
+			else
+				assert(at.x <= 8, "at the start of a row of its own: " .. tostring(at.x))
+			end
 			-- EVERY ROW THE SAME: a cell and the pixel of line under it, from
 			-- the top of the grid, with the figures a pixel low in it
-			assert(chips.all._height == 18 and grid.wantHeight > 0 and grid.wantHeight % 19 == 0,
+			local rowsTall = grid.wantHeight
+			assert(chips.all._height == 18 and rowsTall > 0 and rowsTall % 19 == 0,
 				"a row is its cell and its line: " .. tostring(chips.all._height) .. "/" .. tostring(grid.wantHeight))
-			local words = chips.all.text._points.LEFT
+			local words = chips.all.segs[1].text._points.LEFT
 			assert(words and words.y == -1, "and the figures sit a pixel below the middle")
+
+			-- A GRAPH IN THE HOVER (Josh 2026-09-29: "I wanted the graph to be
+			-- placed in the tooltip, not as a separate dock row"): the last two
+			-- minutes, a line each, each figure and its mark in its line's colour
+			assert(segs[1].color == mod.COLORS.fps and segs[1].tint == mod.COLORS.fps
+				and drawn[1].text._textColor[2] == mod.COLORS.fps[2], "the frame rate in its line's colour")
+			assert(drawn[3].text._textColor[1] > 0.9 and drawn[3].text._textColor[2] < 0.5,
+				"and a bad figure red, over its colour")
+			for k in pairs(mod.history) do mod.history[k] = {} end
+			mod.sampledAt = nil
+			assert(mod.Sample(60, 40, 40, 100) and not mod.Sample(61, 41, 41, 101) and mod.Sample(62, 42, 42, 102),
+				"a reading every two seconds")
+			for t = 104, 300, 2 do mod.Sample(60, 40, 40, t) end
+			assert(#mod.history.fps == mod.SAMPLES, "and the last sixty kept: " .. #mod.history.fps)
+			mod.Tip(chips.all)
+			local marks, n = BT.Tip.Marks()
+			assert(n >= mod.SAMPLES * 3 - 3, "a mark in the hover for every reading of every line: " .. n)
+			assert(marks[1]._color and math.abs(marks[1]._color[1] - mod.COLORS.fps[1]) < 1e-6,
+				"the first line the frame rate's")
+			-- a steady figure is a steady line, not its noise at full height
+			local ys = {}
+			for i = 1, mod.SAMPLES - 1 do
+				local pt = marks[i]._points and marks[i]._points.CENTER
+				if pt then ys[#ys + 1] = pt.y end
+			end
+			assert(#ys == 0 or math.abs(ys[1] - ys[#ys]) < 1e-6, "a steady figure draws a flat line")
+			local said = table.concat(BT.Tip.Texts(), " | ")
+			assert(said:find("last two minutes", 1, true), "and the hover says what the graph is")
+			BT.Tip.Hide()
+			assert(#BT.Dock.Chips() > 0 and not BT.Dock.Graph, "and nothing of it in the dock")
 
 			-- a client that will not say still draws the cell rather than failing
 			_G.GetNetStats = nil
@@ -8044,6 +8541,7 @@ if ok then
 				GetElementExtent = function(_, i) return i == 1 and 40 or 23 end,
 				GetDataProvider = function() return provider end,
 			}
+			local ownExtent = statView.GetElementExtent
 			stats.ScrollBox.GetView = function() return statView end
 			stats.ScrollBox.FullUpdate = function(self) self.fulls = (self.fulls or 0) + 1 end
 			stats.ScrollBox.SetDataProvider = function() end
@@ -8152,63 +8650,24 @@ if ok then
 			assert(desc.BOTTOMRIGHT and desc.BOTTOMRIGHT.rel == rewards and desc.TOPLEFT,
 				"and the words fill the room above them")
 			assert(title._justify == "LEFT" and title._points.LEFT, "the name sits on the left of the title bar")
-			-- THE STATS, TIGHT: 15px lines, 18px headers, and a section folds
-			BT.settings.charsheet.folded = nil
+			-- THE GAME'S STATS LIST, LEFT ALONE (Josh 2026-09-29: "attempt to
+			-- perform arithmetic on ... a secret number value, while execution
+			-- tainted by 'BeebMod'"): its measuring is its own, its rows keep
+			-- their heights, and nothing of ours lays it out
+			BT.settings.charsheet.folded = { GENERAL = true }
+			local fullsBefore = stats.ScrollBox.fulls or 0
 			mod.Layout()
-			assert(health._height == 15 and general._height == 18,
-				"a stat line is 15, a header 18: " .. tostring(health._height) .. "/" .. tostring(general._height))
-			assert(statView.GetElementExtent(statView, 2) == 15, "and the list measures them so")
-			assert(general.beebsChevron and general:GetScript("OnMouseUp"), "a header has a chevron, and folds")
-			general:GetScript("OnMouseUp")(general)
-			assert(mod.Folded("GENERAL"), "a click folds it, remembered")
-			assert(statView.GetElementExtent(statView, 2) == 1,
-				"its lines measure a pixel - nothing at all stops the game's list laying out the rest")
-			assert(statView.GetElementExtent(statView, 1) == 18, "while the header itself stays")
+			assert(statView.GetElementExtent == ownExtent and not statView.beebsCompact,
+				"the list measures its rows with its own function")
+			assert(health._height == 23 and general._height == 40,
+				"a line and a header keep the game's heights: " .. tostring(health._height) .. "/" .. tostring(general._height))
 			mod.StatRow(health)
-			assert(health._alpha == 0 and health._height == 1,
-				"and the line is not drawn, and takes no room: " .. tostring(health._height))
-			general:GetScript("OnMouseUp")(general)
-			mod.StatRow(health)
-			assert(not mod.Folded("GENERAL") and health._alpha == 1, "another click opens it again")
-			assert(health._height == 15,
-				"and the line is its own height again, not the pixel it was folded to: "
-					.. tostring(health._height))
-			-- KNOWN BEFORE IT IS DRAWN: the game builds its list afresh (new
-			-- data), with GENERAL folded - the line under it is measured a pixel
-			-- before either row is drawn again
-			general:GetScript("OnMouseUp")(general)
-			assert(mod.Folded("GENERAL"), "folded again")
-			local fresh = { { header = true }, { stat = "Health" }, { header = true }, { stat = "Strength" } }
-			data = fresh
-			assert(statView.GetElementExtent(statView, 2) == 1,
-				"a new list's line under a folded header, never drawn, measures a pixel: "
-					.. tostring(statView.GetElementExtent(statView, 2)))
-			-- the second section's title is not known until one is drawn, so its
-			-- line stays open rather than guessing
-			assert(statView.GetElementExtent(statView, 4) == 15, "an unknown section stays open")
-			local second = _G.CreateFrame("Frame", nil, stats.ScrollBox.ScrollTarget)
-			second.Title = second:CreateFontString()
-			second.Title:SetText("Primary Attributes")
-			second.GetElementData = function() return fresh[3] end
-			mod.StatRow(second)
-			assert(mod.headerOrder[2] == "PRIMARY ATTRIBUTES", "the order is learned as headers are drawn")
-			second:GetScript("OnMouseUp")(second)
-			data = { { header = true }, { stat = "Health" }, { header = true }, { stat = "Strength" } }
-			assert(statView.GetElementExtent(statView, 4) == 1 and statView.GetElementExtent(statView, 2) == 1,
-				"and on the next fresh list, both folded sections close without a row drawn")
-			second:GetScript("OnMouseUp")(second)
-			general:GetScript("OnMouseUp")(general)
-			data = { { header = true }, { stat = "Health" } }
-			assert(not mod.Folded("GENERAL") and statView.GetElementExtent(statView, 2) == 15, "and open again")
-			-- LAID OUT AGAIN AFTER EVERY NEW LIST, a frame later, once its
-			-- headers have been drawn
-			local wasAfter = _G.C_Timer.After
-			_G.C_Timer.After = function(_, fn) fn() end
-			mod.relearn = false
-			local before = stats.ScrollBox.fulls or 0
+			assert(health._alpha ~= 0 and not general.beebsChevron, "no folds: every line drawn, no chevron")
+			mod.Refold()
 			stats.ScrollBox:SetDataProvider({})
-			assert((stats.ScrollBox.fulls or 0) > before, "the game's new list is laid out again")
-			_G.C_Timer.After = wasAfter
+			assert((stats.ScrollBox.fulls or 0) == fullsBefore,
+				"and neither a fold nor a new list makes us lay the game's list out")
+			BT.settings.charsheet.folded = nil
 			_G.hooksecurefunc = hadHook
 
 			-- A RESISTANCE IS A SWATCH: the spell icon off, the element's colour on
@@ -9749,7 +10208,8 @@ if ok then
 			local _, title = J.Rank(points)
 			assert(points >= 25 and title ~= "Greenhorn" and m.text:GetText():find(title),
 				("the dock's line says the rank (%s at %d): %s"):format(title, points, tostring(m.text:GetText())))
-			assert(m.text:GetText():find("%(%d+/10%)"), "and where that rank stands: " .. m.text:GetText())
+			assert(not m.text:GetText():find("/10", 1, true),
+				"and no count after it, as the other lines have none: " .. m.text:GetText())
 			assert(m.eta:GetText():find("pts"), "and says the points")
 			BT.Dock.Relayout()
 			assert(m.frame.beebsBand and m.frame.beebsBand:IsShown(),
@@ -10030,12 +10490,64 @@ if ok then
 			local lp = b.page.lorePieces
 			assert(not lp[1].rule:IsShown() and not lp[1].head:IsShown()
 				and lp[1].text:GetText() == "Bog beasts, Fel Moss and all.", "the best page first, bare, its links plain")
-			assert(lp[2].rule:IsShown() and lp[2].head:GetText() == "ELEMENTAL", "the next under its title, an ornament over it")
-			assert(lp[3].head:GetText() == "TIMBER WOLF", "a heading leaves off the wiki's \"(mob)\": " .. tostring(lp[3].head:GetText()))
+			-- the abilities you have seen come second, under the enemy's own page
+			assert(lp[2].rule:IsShown() and lp[2].head:GetText() == "ABILITIES YOU'VE SEEN",
+				"what you have seen it cast, under its own page: " .. tostring(lp[2].head:GetText()))
+			assert(lp[3].rule:IsShown() and lp[3].head:GetText() == "ELEMENTAL", "the next under its title, an ornament over it")
+			assert(lp[4].head:GetText() == "TIMBER WOLF", "a heading leaves off the wiki's \"(mob)\": " .. tostring(lp[4].head:GetText()))
 			assert(b.page.loreFrom == nil,
 				"and no credit under the enemy: it is on the Expedition's settings page")
 			MJ.WikiLore = wiki
 			V.Refresh()
+			-- ABILITIES YOU'VE SEEN (Josh 2026-09-29: "only recording abilities
+			-- that have been seen... it kind of drives home 'I'm learning
+			-- about this enemy'")
+			do
+				local EK = BT.ExpeditionKills
+				local npc = b.page.loreFor
+				local piece = b.page.lorePieces[2]
+				assert(piece.text:GetText() == "You haven't seen it cast a spell yet.",
+					"nothing seen yet, said plainly: " .. tostring(piece.text:GetText()))
+				local hadObserve, hadGUID, hadSpell, hadAttack = EK.Observe, _G.UnitGUID, _G.C_Spell, _G.UnitCanAttack
+				EK.Observe = function() return { npc = npc, name = "Test enemy" } end
+				_G.UnitGUID = function() return "Creature-0-1-2-3-" .. npc .. "-0001" end
+				_G.UnitCanAttack = function() return true end
+				_G.C_Spell = { GetSpellInfo = function(id)
+					return { name = (id == 133 or id == 143) and "Fireball" or "Frost Nova", iconID = 135812 }
+				end }
+				local before = EK.stats.casts
+				-- a Fireball with a cast time, seen through its nameplate and
+				-- your target, as it starts and as it lands: one cast
+				EK.EnemyCast("target", 133, "UNIT_SPELLCAST_START", 100)
+				EK.EnemyCast("focus", 133, "UNIT_SPELLCAST_START", 100.1)
+				EK.EnemyCast("target", 133, "UNIT_SPELLCAST_SUCCEEDED", 102.5)
+				EK.EnemyCast("focus", 133, "UNIT_SPELLCAST_SUCCEEDED", 102.6)
+				assert(EK.stats.casts == before + 1, "one cast, however many ways it is announced")
+				-- and a second Fireball, a rank higher, and an instant Frost Nova twice
+				EK.EnemyCast("target", 143, "UNIT_SPELLCAST_START", 110)
+				EK.EnemyCast("target", 122, "UNIT_SPELLCAST_SUCCEEDED", 120)
+				EK.EnemyCast("target", 122, "UNIT_SPELLCAST_SUCCEEDED", 130)
+				assert(EK.stats.casts == before + 4, "each new cast counts")
+				-- a secret spell, a friendly unit's, and one nobody is watching
+				_G.issecretvalue = function(v) return v == "hidden" end
+				EK.EnemyCast("target", "hidden", "UNIT_SPELLCAST_START", 140)
+				_G.issecretvalue = nil
+				_G.UnitCanAttack = function() return false end
+				EK.EnemyCast("target", 999, "UNIT_SPELLCAST_START", 150)
+				_G.UnitCanAttack = function() return true end
+				EK.EnemyCast("raid7", 999, "UNIT_SPELLCAST_START", 160)
+				assert(EK.stats.casts == before + 4, "and nothing else is kept")
+				local seen = MJ.Abilities(npc)
+				assert(#seen == 2 and seen[1].name == "Fireball" and seen[1].n == 2 and seen[2].n == 2,
+					"two ranks of Fireball are one line, and Frost Nova its own")
+				V.Refresh()
+				local said = piece.text:GetText()
+				assert(said:find("Fireball |cff8a948f· 2 times|r", 1, true) and said:find("|T135812:16:16:0:0|t", 1, true),
+					"each with its picture and how often you saw it: " .. said)
+				BT.GetModule("expedition").CastsDump()
+				assert(BeebModDB.expeditionDump.lines[1]:find("kept", 1, true), "and the Testing page's record says what was kept")
+				EK.Observe, _G.UnitGUID, _G.C_Spell, _G.UnitCanAttack = hadObserve, hadGUID, hadSpell, hadAttack
+			end
 			-- THE STAGE AS A MAP (Josh 2026-09-28): a switch in its corner, the
 			-- whole zone fitted with a dot for each kill, a dungeon's loading
 			-- screen, and a word when there is nothing to draw
@@ -10327,6 +10839,22 @@ if ok then
 			assert(em.badge and em.badge._texture == MJ.RankBadge(rankN)
 				and em.badge._texCoord and em.badge._texCoord[1] == BT.Dock.LINE_ICON_CROP[1],
 				"the dock's line starts with the rank's shield: " .. tostring(em.badge and em.badge._texture))
+			-- a preview from the Testing page shows another rank's, then yours again
+			BT.Dock.SetPreview("expedition", 10)
+			assert(em.badge._texture == MJ.RankBadge(10), "a previewed rank's badge")
+			-- and the Commendations page draws it too, as if just reached
+			assert(rail.badge._texture == MJ.RankBadge(10) and rail.rank:GetText() == "Expedition Leader"
+				and ach.ladder.rungs[10].glow:IsShown() and not ach.ladder.rungs[10].badge._grey,
+				"the page's badge, title and row of ranks follow the preview: " .. tostring(rail.rank:GetText()))
+			local xpMod = BT.GetModule("xp")
+			-- (the Level line is there only below the level cap)
+			if xpMod.shield and xpMod.frame:IsShown() then
+				BT.Dock.SetPreview("level", 60)
+				assert(tostring(xpMod.shield.number:GetText()) == "60" and xpMod.shield.rim._texture == xpMod.RIMS[7],
+					"the level previewed, on 60's rim")
+			end
+			BT.Dock.ClearPreviews()
+			assert(em.badge._texture == MJ.RankBadge(rankN), "and cleared, your own again")
 			-- and the ten ranks above the tiles: lit to yours, faded after it
 			local ladder = ach.ladder
 			assert(#ladder.rungs == 10 and ladder.rungs[10].name:GetText() == "Expedition Leader"
@@ -10377,8 +10905,20 @@ if ok then
 			BT.GetModule("expedition").SampleRankToast()
 			local shownSpec = toastFrame.spec
 			assert(shownSpec and shownSpec.badge == MJ.RankBadge(rankN) and shownSpec.text:find(rankTitle, 1, true)
-				and toastFrame.icon._texture == shownSpec.badge and toastFrame.icon:GetWidth() == TT.BADGE_SIZE,
-				"the rank toast shows the badge, larger than an icon")
+				and toastFrame.icon._texture == shownSpec.badge and toastFrame.icon:GetHeight() == TT.BADGE_H,
+				"the rank toast shows the badge, the shield alone, as tall as it has room for")
+			local c = BT.Dock.LINE_ICON_CROP
+			local at = toastFrame.icon._points and toastFrame.icon._points.CENTER
+			assert(toastFrame.icon._texCoord and toastFrame.icon._texCoord[3] == c[3]
+				and at and at.x == TT.SLOT_X,
+				"cropped to the shield, at its own place in the toast")
+			-- the next toast with an icon has the whole of it again, where icons go
+			TT.Next()
+			BT.GetModule("expedition").SampleToast()
+			assert(toastFrame.icon._texCoord and toastFrame.icon._texCoord[3] == 0
+				and toastFrame.icon:GetHeight() == TT.ICON_SIZE and toastFrame.icon._points.CENTER
+				and toastFrame.icon._points.CENTER.x == TT.SLOT_X,
+				"an ordinary icon whole again, its middle where the badge's was")
 			TT.Next()
 			assert(rail.earned:GetText() == ach.tally:GetText(), "and how many are earned of all")
 			assert(rail.sums[1]:GetText() == tostring(uniquePoints) and rail.sums[2]:GetText() == tostring(masteryPoints)

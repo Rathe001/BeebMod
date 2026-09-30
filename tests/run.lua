@@ -1467,6 +1467,54 @@ do
 	until census or calls > 100
 	check(census and census.matched == picked.matched and census.total == picked.total
 		and census.level[1].n == picked.level[1].n, "a filtered job counts what the filter says")
+	-- A FEW MILLISECONDS A FRAME (Josh 2026-09-29): given a budget and a
+	-- clock, a step counts until the time is gone and says how far it got
+	for i = 26, 400 do
+		DB.Note(db, "Walker " .. i, nil, { class = "MAGE", level = 10 }, 1000 + i)
+	end
+	whole = S.Census(db, 5000)
+	local clock = 0
+	_G.debugprofilestop = function() clock = clock + 2; return clock end
+	local size
+	step, size = S.CensusJob(db, 5000, nil, 4)
+	local first, share = step(3)
+	check(first == nil and share and share > 0 and share < 1 and size == 400,
+		("a step stops when its time is gone: %s of %s"):format(tostring(share), tostring(size)))
+	calls = 1
+	repeat
+		census = step(3)
+		calls = calls + 1
+	until census or calls > 1000
+	_G.debugprofilestop = nil
+	check(census and census.total == whole.total and census.class[1].n == whole.class[1].n and calls >= 2,
+		"and counted by the clock, it comes out the same: " .. calls .. " steps")
+	-- THE CENSUS'S SIX, READ STRAIGHT FROM A PACKED ROW (Core/Pack.lua,
+	-- P.CensusReader): the book packed, the census is the same
+	-- (a book of its own, seen this year: only a time after 2026 packs)
+	local pdb = newdb()
+	-- on a whole minute: a packed sighting is kept to the minute
+	local T = BT.Pack.EPOCH + 60 * 400000
+	for i = 1, 30 do
+		DB.Note(pdb, "Guilded " .. i, nil, { class = (i % 2 == 0) and "PRIEST" or "MAGE", race = "Dwarf",
+			level = 30 + (i % 20), guild = (i % 3 == 0) and "" or ("Guild " .. (i % 4)),
+			zone = "Zone " .. (i % 5) }, T + i * 60)
+	end
+	local before = S.Census(pdb, T + 100000)
+	local packed = DB.PackAll(pdb)
+	local after = S.Census(pdb, T + 100000)
+	local function rowsOf(rows)
+		local out = {}
+		for _, r in ipairs(rows or {}) do
+			out[#out + 1] = tostring(r.key) .. "=" .. r.n
+		end
+		table.sort(out)
+		return table.concat(out, ",")
+	end
+	check(packed > 0 and after.total == before.total, ("packed %d, and every character still counted"):format(packed))
+	check(rowsOf(after.class) == rowsOf(before.class) and rowsOf(after.race) == rowsOf(before.race)
+		and rowsOf(after.guild) == rowsOf(before.guild) and rowsOf(after.zone) == rowsOf(before.zone)
+		and rowsOf(after.level) == rowsOf(before.level) and after.age.median == before.age.median,
+		"and each chart the same, read from the packed rows: " .. rowsOf(after.guild) .. " / " .. rowsOf(before.guild))
 end
 
 -- SEEN WITHIN, CLICK A BAR, GUILD AND ZONE (Josh 2026-09-24): the census

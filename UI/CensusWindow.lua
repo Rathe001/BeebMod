@@ -77,7 +77,9 @@ local function subtitle()
 	end
 	local m = BT.GetModule("census")
 	local census = m and m.view and m.view.census
-	local total = census and (census.book or census.total) or BT.DB.Stats(BT.db).total
+	-- the list's length, not a reading of every character in it (Josh
+	-- 2026-09-29: opening the Census lagged)
+	local total = census and (census.book or census.total) or (BT.DB.Count(BT.db))
 	frame.subtitle:SetText(("%s · %s · %d characters")
 		:format(BT.scope and BT.scope.realm or "?", BT.scope and BT.scope.faction or "?", total))
 end
@@ -145,7 +147,8 @@ function C.Count(m)
 	end
 	counter = counter or CreateFrame("Frame")
 	counter:SetScript("OnUpdate", function(self)
-		local census = step()
+		-- a few milliseconds a frame, as a count you asked for (Chart.lua)
+		local census = step(BT.Census.BUDGET)
 		if census then
 			self:SetScript("OnUpdate", nil)
 			if frame and frame:IsShown() then

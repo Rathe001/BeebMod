@@ -86,9 +86,9 @@ M.RANKS = {
 		"Warlord", "High Warlord" },
 }
 
--- your side: "Alliance", "Horde" or nil
+-- your side: "Alliance", "Horde" or nil (or the Testing page's preview)
 function M.SideName()
-	local side = ask("UnitFactionGroup", "player")
+	local side = BT.Dock.preview.side or ask("UnitFactionGroup", "player")
 	return M.RANKS[side or ""] and side or nil
 end
 
@@ -329,11 +329,14 @@ end
 -- the rank on the left; on the right, rank points where the game has them,
 -- and this week's honor where it has that
 function M.Lines(p)
+	-- A TITLE FIRST (Josh 2026-09-29), as the Expedition's line has, and no
+	-- count after it: "PvP · Sergeant", or "PvP · Civilian" before the first
+	-- rank. Which of fourteen is on the hover.
 	local left
 	if p.name then
-		left = ("%s %s"):format(p.name, WORDS:format(("· rank %d"):format(p.number)))
+		left = ("PvP %s"):format(WORDS:format("· " .. p.name))
 	else
-		left = ("%s %s"):format(p.title or "PvP", WORDS:format("· no rank yet"))
+		left = ("PvP %s"):format(WORDS:format("· " .. (p.title or "no rank yet")))
 	end
 	local right = ""
 	if p.fromTab then
@@ -371,7 +374,12 @@ function M.Update()
 	M.eta:SetText(right)
 	-- the rank's insignia; before the first, your side's shield and swords
 	local c = M.Side()
-	local insignia = M.Insignia(p.number)
+	-- the rank's, or one previewed from the Testing page (0 for none)
+	local rank = BT.Dock.preview.pvp
+	if rank == nil then
+		rank = p.number
+	end
+	local insignia = M.Insignia(rank)
 	M.insignia:SetShown(insignia ~= nil)
 	if insignia then
 		M.insignia:SetTexture(insignia)
@@ -442,6 +450,7 @@ function M.Tip()
 		if p.fromTab then
 			t:Note("As your character window's PvP tab last showed them.")
 		end
+		t:Foot({ { "Click", "open the PvP page" } })
 	end })
 end
 
@@ -465,6 +474,9 @@ function M.Build()
 	M.eta = BT.Widgets.Label(M.frame, "", "small")
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
 	M.eta:SetJustifyH("RIGHT")
+	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
+	-- the right side sat a pixel high, its height its own)
+	M.eta:SetHeight(TEXT_H - 2)
 	-- a long rank name stops short of the honor on the right
 	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
 	M.text:SetHeight(TEXT_H - 2)
@@ -480,6 +492,12 @@ function M.Build()
 		M.Update()
 	end)
 	M.frame:EnableMouse(true)
+	-- a click opens the PvP page of the character window (Josh 2026-09-29)
+	M.frame:SetScript("OnMouseUp", function(_, button)
+		if button == "LeftButton" then
+			BT.Util.OpenCharacter("pvp")
+		end
+	end)
 	M.frame:SetScript("OnEnter", M.Tip)
 	M.frame:SetScript("OnLeave", function()
 		if GameTooltip then

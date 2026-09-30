@@ -322,6 +322,38 @@ function P.Unpack(db, key, s, into, light)
 	return into
 end
 
+-- THE CENSUS'S SIX (Josh 2026-09-29: the census still stuttered; /bt cpu had
+-- a slice of it at 49 ms in the game). A count wants a character's class,
+-- race, level, guild, zone and last sighting, and nothing else: not the
+-- name split out of the key, not the other times, not the flags. A reader
+-- for one book, made once a count, fills a table it is handed with those
+-- six, straight from their places in the string.
+function P.CensusReader(db)
+	local w = P.Words(db)
+	local classes, races, guilds, zones = w.class, w.race, w.guild, w.zone
+	return function(s, into)
+		local c = VALUE[byte(s, 1)]
+		into.class = c > 0 and classes[c] or nil
+		local r = VALUE[byte(s, 2)]
+		into.race = r > 0 and races[r] or nil
+		local l = VALUE[byte(s, 3)]
+		into.level = l > 0 and l or nil
+		local g = (VALUE[byte(s, 4)] * 64 + VALUE[byte(s, 5)]) * 64 + VALUE[byte(s, 6)]
+		if g == 0 then
+			into.guild = nil
+		elseif g == 1 then
+			into.guild = ""
+		else
+			into.guild = guilds[g - 1]
+		end
+		local z = VALUE[byte(s, 7)] * 64 + VALUE[byte(s, 8)]
+		into.zone = z > 0 and zones[z] or nil
+		local t = ((VALUE[byte(s, 9)] * 64 + VALUE[byte(s, 10)]) * 64 + VALUE[byte(s, 11)]) * 64 + VALUE[byte(s, 12)]
+		into.last = t > 0 and (P.EPOCH + (t - 1) * 60) or nil
+		return into
+	end
+end
+
 -- Just the last sighting, for sorting the book by age without unpacking it.
 function P.Last(s)
 	return at(dec(s, 9, 4), 60)

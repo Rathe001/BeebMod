@@ -17,21 +17,16 @@ local HOLD, FADE_IN, FADE_OUT = 5, 0.2, 0.6
 -- past this many waiting, the rest are said in one line of chat
 local QUEUE_MAX = 6
 
--- an icon per creature type, where the client has the file; the skull where not
-local TYPE_ICONS = {
-	Beast = "Ability_Hunter_BeastCall",
-	Humanoid = "INV_Misc_Head_Human_01",
-	Undead = "Spell_Shadow_RaiseDead",
-	Demon = "Spell_Shadow_SummonFelHunter",
-	Dragonkin = "INV_Misc_Head_Dragon_01",
-	Elemental = "Spell_Frost_SummonWaterElemental",
-	Mechanical = "INV_Misc_Gear_01",
-}
-
 -- a rank is knowledge: a book, where the client has one
 T.RANK_ICON = "Interface\\Icons\\INV_Misc_Book_09"
 -- a rank's badge in the toast, in place of the icon
-T.BADGE_SIZE = 72
+T.BADGE_H = 44
+-- WHERE THE ICON'S MIDDLE SITS, badge or icon, from the toast's left edge
+-- (Josh 2026-09-29, by eye in the game: 46 sat a little right, 34 a touch
+-- left, 37 "is perfect" for the badge; 34 sets the icon against the
+-- art's border, the badge with it), and an ordinary icon's size
+T.SLOT_X = 34
+T.ICON_SIZE = 40
 
 local known = {}
 local function exists(path)
@@ -42,15 +37,26 @@ local function exists(path)
 	return known[path]
 end
 
-function T.Icon(kind)
-	local name = kind and TYPE_ICONS[kind]
-	if name then
+-- A HUNTER'S ICON FOR EACH TOAST (Josh 2026-09-29: "Can we update the
+-- expidition toast icon to a more hunter oriented icon?"): the creature's
+-- type told you little the name did not. A rifle for a mastery - the weapon
+-- Nesingwary is known by - the tracking eye for a new page, a hunting horn
+-- for a commendation; each with others behind it, for a client without the
+-- file, and the beast call behind those.
+T.HUNTER = {
+	mastery = { "INV_Weapon_Rifle_01", "INV_Weapon_Rifle_02", "Ability_Hunter_SniperShot" },
+	discover = { "Ability_Tracking", "Ability_Hunter_EagleEye" },
+	commendation = { "INV_Misc_Horn_01", "Ability_Hunter_AspectOfTheMonkey" },
+}
+function T.HunterIcon(what)
+	for _, name in ipairs(T.HUNTER[what] or {}) do
 		local path = "Interface\\Icons\\" .. name
 		if exists(path) then
 			return path
 		end
 	end
-	return SKULL
+	local call = "Interface\\Icons\\Ability_Hunter_BeastCall"
+	return exists(call) and call or SKULL
 end
 
 -- the client's commendation sound, by whichever name this build gives it
@@ -122,8 +128,8 @@ function T.Build()
 	frame.bg:SetTexture(ART .. "UI-Achievement-Alert-Background")
 	frame.bg:SetTexCoord(0, 0.605, 0, 0.703)
 	frame.icon = frame:CreateTexture(nil, "ARTWORK")
-	frame.icon:SetSize(40, 40)
-	frame.icon:SetPoint("LEFT", frame, "LEFT", 26, 1)
+	frame.icon:SetSize(T.ICON_SIZE, T.ICON_SIZE)
+	frame.icon:SetPoint("CENTER", frame, "LEFT", T.SLOT_X, 1)
 	frame.shield = frame:CreateTexture(nil, "ARTWORK")
 	frame.shield:SetSize(52, 48)
 	frame.shield:SetPoint("RIGHT", frame, "RIGHT", -10, -4)
@@ -174,15 +180,29 @@ local function show(spec)
 	-- art leaves room round the shield. It is the addon's own file, which the
 	-- client's list of its files does not name, so it is not looked up there.
 	local icon = spec.badge
+	frame.icon:ClearAllPoints()
 	if icon then
-		frame.icon:SetSize(T.BADGE_SIZE, T.BADGE_SIZE)
+		-- CENTRED WHERE AN ICON IS (Josh 2026-09-29: "Rank toast icon is not
+		-- aligned properly"): hung by its left edge like a 40-pixel icon, a
+		-- larger badge's middle came out right of it; both hang by their
+		-- middles now, at T.SLOT_X
+		-- AND ONLY THE SHIELD (Josh 2026-09-29: "Still off"): drawn whole, the
+		-- art's room for antlers and tusks left the toast's gilt showing round
+		-- a small shield where an icon covers it; cropped as in the dock, the
+		-- shield fills the icon's height and covers the same corner
+		local c = BT.Dock and BT.Dock.LINE_ICON_CROP or { 0.25, 0.75, 0.2, 0.875 }
+		frame.icon:SetTexCoord(c[1], c[2], c[3], c[4])
+		frame.icon:SetSize(math.floor(T.BADGE_H * (c[2] - c[1]) / (c[4] - c[3]) + 0.5), T.BADGE_H)
+		frame.icon:SetPoint("CENTER", frame, "LEFT", T.SLOT_X, 1)
 	else
+		frame.icon:SetTexCoord(0, 1, 0, 1)
+		frame.icon:SetPoint("CENTER", frame, "LEFT", T.SLOT_X, 1)
 		-- an icon this client does not have is the skull, not a green square
 		icon = spec.icon
 		if icon ~= SKULL and not (icon and exists(icon)) then
 			icon = SKULL
 		end
-		frame.icon:SetSize(40, 40)
+		frame.icon:SetSize(T.ICON_SIZE, T.ICON_SIZE)
 	end
 	frame.icon:SetTexture(icon)
 	frame.head:SetText(spec.head or "")

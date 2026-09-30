@@ -8,7 +8,7 @@
 -- corner you were trying to look at.
 --
 --   Beeb Magus                8        name, in class colour, level on the right
---   Gnome Mage · <Nightwatch>          everything else, once
+--   Gnome Mage <Nightwatch>            everything else, once (the guild green)
 --
 -- WHAT IT KEEPS. Everything you would actually act on: who, how tough, what
 -- they are, who they run with. What it drops: the word "(Player)", the faction
@@ -606,6 +606,11 @@ end
 
 -- The second line: what they are, and who they run with, joined by a dot so it
 -- reads as one fact rather than a list.
+-- THE GUILD IN GREEN (Josh 2026-09-29: "Instead of the middle dot and guild
+-- name, can we remove the dot and make <guild name> green?"): the guild
+-- chat's green, straight after race and class - "Dwarf Shaman <The Gnome
+-- Depot>" - as a guild reads in the game's own chat
+M.GUILD = "|cff40ff40%s|r"
 local function detailLine(unit, isPlayer)
 	local bits = {}
 	-- everything this line SPEAKS FOR, whether it printed it or deliberately
@@ -624,7 +629,12 @@ local function detailLine(unit, isPlayer)
 			spoken["<" .. guild .. ">"] = true
 			spoken[guild] = true
 			if opt("guild", true) then
-				bits[#bits + 1] = "<" .. guild .. ">"
+				local green = M.GUILD:format("<" .. guild .. ">")
+				if #bits > 0 then
+					bits[#bits] = bits[#bits] .. " " .. green
+				else
+					bits[#bits + 1] = green
+				end
 			end
 		end
 		-- the faction only when it is the one you are not: yours is not news
@@ -1982,7 +1992,7 @@ local function preview(panel, y)
 	box.name:SetPoint("TOPLEFT", 10, -9)
 	box.level = BT.Widgets.Label(box, "8", "small", 0.35, 0.82, 0.45)
 	box.level:SetPoint("TOPRIGHT", -10, -10)
-	box.detail = BT.Widgets.Label(box, "Gnome Mage · <Nightwatch>", "small", DIM[1], DIM[2], DIM[3])
+	box.detail = BT.Widgets.Label(box, "Gnome Mage " .. M.GUILD:format("<Nightwatch>"), "small", DIM[1], DIM[2], DIM[3])
 	box.detail:SetPoint("TOPLEFT", 10, -30)
 	-- the tab shows the thing rather than describing it, spine and all
 	box.note = BT.Widgets.Label(box, '"held the door while I ran back"', nil, 0.90, 0.88, 0.80)

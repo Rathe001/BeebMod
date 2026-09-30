@@ -24,7 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 PAGE = os.path.join(HERE, "rank-badges.html")
 # each picture on the page, in order, and the file it becomes
-NAMES = [("Ranks", f"rank{i}") for i in range(1, 11)] + [("Dock", "field"), ("Dock", "rim"), ("Dock", "banner"), ("Dock", "swords")]
+NAMES = [("Ranks", f"rank{i}") for i in range(1, 11)] + [("Dock", "field"), ("Dock", "rim"), ("Dock", "banner"), ("Dock", "swords")] + [("Dock", f"level{i}") for i in range(1, 8)]
 COUNT, SIZE, SCALE = len(NAMES), 256, 2
 
 EDGES = [

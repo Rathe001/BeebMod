@@ -48,8 +48,8 @@ settings.
 
 | tab | what it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row across the foot of the backpack. Drag a bag onto a slot to put it on, or off one to take it out. Its page has the switch that hides the game's bag bar. |
-| **Character sheet** | Item level on every slot, short stat lists with sections that fold, and BeebMod's look. |
+| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row across the foot of the backpack. Drag a bag onto a slot to put it on, or off one to take it out. Its page has the switch that hides the game's bag bar. In chat, a guild written in a line, such as <New Horizon>, is guild green. Click it to get its /who in the chat box. Click a web address to get it in a box you can copy from. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
+| **Character sheet** | Item level on every slot, and BeebMod's look. |
 | **Menus** | The **Game menu** that Escape opens, and every **Dropdown menu**, a switch each. The game keeps some of its menu buttons from addons, so those keep the game's look. |
 | **Tooltips** | Unit tooltips rebuilt into two lines, in BeebMod's look. Elites and rares get a gold or silver border. |
 
@@ -63,11 +63,14 @@ on the person's tooltip and in the target row at the top of the dock. Its
 page searches the people you wrote about, and with the Census on, everyone
 the Census knows. The Ledger keeps what you write in its own book
 (`BeebModDB.ledger`), so it doesn't need the Census.
+It also remembers the people you grouped with. A group counts once you've
+been together 5 minutes, or at once in a dungeon.
 
 **Nesingwary's Expedition** is a journal of every enemy you have
 killed. Each has a card with its model, its lore from the Warcraft Wiki
 and its mastery. On its page, a Model · Map switch shows the zone's map with
-a dot for each place you killed it, or a dungeon's loading screen. Every unique kill and every commendation is worth points. The
+a dot for each place you killed it, or a dungeon's loading screen. The page also lists
+the abilities you have seen the enemy cast. Every unique kill and every commendation is worth points. The
 points set your rank, from Greenhorn to Expedition Leader. A line in the
 dock shows your points and rank. Click it to open the journal, or type
 `/bt expedition`.
@@ -146,7 +149,8 @@ lives in `Modules/Ledger`.
     Core/Tooltip.lua     one hook on the unit tooltip, shared by several modules
     Core/Furniture.lua   restyles the client's own frames by what each one is
     Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab,
-                         the notes on a tooltip
+                         the notes on a tooltip, and the people you grouped with
+                         (Groups.lua)
     Modules/Minimap/     the map in the dock; Modules/Buttons/ the addon buttons
     Modules/XP/, Rep/, PvP/
                          the experience, reputation and PvP lines of the dock
@@ -158,7 +162,9 @@ lives in `Modules/Ledger`.
     Modules/Tooltips/    the compact tooltip, and its switches
     Modules/Tracker/     the quest tracker in the dock (Quests.lua reads the log)
     Modules/Bars/, BagWindow/, Chat/, DamageMeter/, Dropdowns/, Micro/
-                         the client's own frames, drawn flat
+                         the client's own frames, drawn flat. Chat/ also has
+                         the guild names and web links in a line (Links.lua)
+                         and the large chat window (Reader.lua)
     Modules/CharSheet/   the character window
     Modules/ResourceDisplay/
                          the personal resource display
@@ -188,7 +194,8 @@ lives in `Modules/Ledger`.
                          scripts/make-badges.py (headless Edge and Pillow)
     Art/Dock/            the shields at the start of the Level, reputation and
                          PvP lines, in layers: a field the game tints, a rim,
-                         a banner and swords (the same script)
+                         a banner and swords, and a rim for each ten-level
+                         bracket (level1 to level7; the same script)
     Modules/Expedition/LoreData.lua
                          the cards' lore: short descriptions from Warcraft Wiki
                          pages (https://warcraft.wiki.gg) on every enemy of every

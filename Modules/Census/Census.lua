@@ -22,8 +22,12 @@ function M:BuildTab(parent)
 	self.view = BT.Census.Build(parent)
 end
 
+-- opened: the book has moved since it was last counted, very likely, so
+-- it is counted again - a slice a frame when it is big (Chart.lua), the
+-- last charts showing meanwhile
 function M:ShowTab()
 	if self.view then
+		self.view.stale = true
 		BT.Census.Refresh(self.view)
 	end
 end

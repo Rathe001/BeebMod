@@ -100,14 +100,13 @@ function M.Kill(info, how)
 		s.last = U.Now()
 	end
 
-	local icon = T.Icon(info.kind)
 	local name = info.name or ("#" .. info.npc)
 	-- ON UNLESS SWITCHED OFF (Josh 2026-09-27: "this should be enabled by
 	-- default for new players"): a new page in the journal says so
 	if new and on("expeditionDiscover", true) then
 		local _, worth = J.Worth(J.Store().enemies[info.npc])
 		-- minor: it gives way in a full queue (T.Push)
-		T.Push({ head = "New in the Field Journal", text = name, points = worth, icon = icon,
+		T.Push({ head = "New in the Field Journal", text = name, points = worth, icon = T.HunterIcon("discover"),
 			onClick = openOn(info.npc), minor = true })
 	end
 	for _, a in ipairs(news or {}) do
@@ -116,12 +115,12 @@ function M.Kill(info, how)
 				-- the milestone above, the enemy's name on a line of its own (Josh
 				-- 2026-09-28: "10 kills on Blackwood Pathfin..." was cut off)
 				head = ("%s mastery · %s %s"):format(a.name, big(a.need), a.need == 1 and "kill" or "kills"), text = name,
-				points = a.points, icon = icon, onClick = openOn(info.npc),
+				points = a.points, icon = T.HunterIcon("mastery"), onClick = openOn(info.npc),
 			})
 		else
 			T.Push({
 				head = "Expedition commendation", text = a.title, points = a.points,
-				icon = a.kind and T.Icon(a.kind) or icon,
+				icon = T.HunterIcon("commendation"),
 				onClick = function() BT.ExpeditionWindow.ShowCommendation(a.id) end,
 			})
 		end
@@ -137,17 +136,26 @@ end
 
 K.onKill = M.Kill
 
+-- a spell seen cast (K.EnemyCast): on the enemy's page, redrawn if it is open
+function M.Cast(info, spellID)
+	if J.SawCast(info, spellID) then
+		BT.ExpeditionWindow.Changed()
+	end
+end
+K.onCast = M.Cast
+
 -- ---------------------------------------------------------------------------
 -- The line and the bar
 -- ---------------------------------------------------------------------------
 
 -- THE RANK, NOT THE COUNT (Josh 2026-09-25): "Menagerie · Scholar", where
 -- it said how many unique kills; those are on the hover
--- and where that rank stands (Josh 2026-09-25: "Novice (1/10)", so a player
--- has an idea how far up it is)
+-- and no count after it (Josh 2026-09-29: "remove the '(2/10)' so
+-- expidition matches the format of the other meters"): "Expedition ·
+-- Tracker". Which of ten it is, is on the hover and the Commendations page.
 function M.Lines(points, st)
-	local rank, title = J.Rank(points)
-	local left = ("Expedition %s"):format(WORDS:format(("· %s (%d/%d)"):format(title, rank, #J.RANKS)))
+	local _, title = J.Rank(points)
+	local left = ("Expedition %s"):format(WORDS:format("· " .. title))
 	local right
 	if M.Shows() == "kills" then
 		right = ("%s %s"):format(big(st.total), WORDS:format("kills"))
@@ -165,7 +173,8 @@ function M.Update()
 	local left, right = M.Lines(points, st)
 	M.text:SetText(left)
 	M.eta:SetText(right)
-	M.badge:SetTexture(J.RankBadge((J.Rank(points))))
+	-- your rank's badge, or a rank previewed from the Testing page
+	M.badge:SetTexture(J.RankBadge(BT.Dock.preview.expedition or (J.Rank(points))))
 
 	local w = BT.Dock.LineBarWidth(M.frame, INSET)
 	if w <= 0 then
@@ -256,6 +265,9 @@ function M.Build()
 	M.eta = BT.Widgets.Label(M.frame, "", "small")
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
 	M.eta:SetJustifyH("RIGHT")
+	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
+	-- the right side sat a pixel high, its height its own)
+	M.eta:SetHeight(TEXT_H - 2)
 	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
 	M.text:SetHeight(TEXT_H - 2)
 	M.text:SetWordWrap(false)
@@ -435,6 +447,37 @@ do
 		pcall(M.events.RegisterEvent, M.events, "UNIT_SPELLCAST_SUCCEEDED")
 	end
 end
+-- EVERY UNIT'S CASTS, ON A FRAME OF THEIR OWN: the frame above hears only
+-- your own (a unit event for "player"), and an enemy's cast is any unit's.
+-- K.EnemyCast keeps the ones from a unit it is watching.
+M.casts = CreateFrame("Frame")
+for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_SUCCEEDED" }) do
+	pcall(M.casts.RegisterEvent, M.casts, event)
+end
+M.casts:SetScript("OnEvent", function(_, event, unit, _, spellID)
+	if unit ~= "player" and BT.Enabled("expedition") then
+		K.EnemyCast(unit, spellID, event)
+	end
+end)
+
+-- WHAT THE CLIENT SAYS OF AN ENEMY'S CASTS, for the Testing page's Record
+-- button: how many were kept, how many were secret, and the last few. If
+-- every one is secret, this client won't let the journal learn abilities.
+function M.CastsDump()
+	local st = K.stats
+	local lines = {
+		("kept %d · secret %d · the same cast again %d"):format(st.casts or 0, st.castSecret or 0, st.castRepeat or 0),
+	}
+	for _, c in ipairs(K.lastCasts) do
+		lines[#lines + 1] = ("%s (%s) · %s %s · %s"):format(tostring(c.name), tostring(c.npc),
+			tostring(c.spell), tostring((J.SpellInfo(c.spell))), tostring(c.event))
+	end
+	BT.EnsureBound()
+	BeebModDB.expeditionDump = { at = U.Now(), lines = lines }
+	return #lines
+end
+BT.Record("expeditionDump", M.CastsDump, "expedition")
+
 M.events:SetScript("OnEvent", function(_, event, a, b, c, d, e)
 	if not BT.Enabled("expedition") then
 		return
@@ -611,7 +654,7 @@ function M.SampleToast()
 	local last = c and c.last and J.Store().enemies[c.last.npc]
 	T.Push({
 		head = "Platinum mastery · 500 kills", text = last and last.name or "Barn Owl",
-		points = 10, icon = T.Icon(last and last.kind),
+		points = 10, icon = T.HunterIcon("mastery"),
 	})
 end
 

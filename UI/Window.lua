@@ -778,6 +778,56 @@ local function testingPage(body)
 			m.SampleRankToast()
 		end
 	end)
+	-- THE DOCK'S SHIELDS, ONE AT A TIME (Josh 2026-09-29: "I'd like to be
+	-- able to preview the different icons for all 4 of these rows"). Each
+	-- steps through what its shield can be, starting from your own; only the
+	-- shields change, and a reload puts them back (BT.Dock.preview).
+	local prev = st:Section("Preview the dock's shields")
+	local STANDINGS = { "Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted" }
+	local previews = {
+		{ key = "level", title = "Level", blurb = "Each ten-level bracket's rim, with the level on it",
+			values = { 1, 10, 20, 30, 40, 50, 60 }, say = function(v) return "Level " .. v end },
+		{ key = "standing", title = "Reputation", blurb = "The shield in each standing's colour",
+			values = { 1, 2, 3, 4, 5, 6, 7, 8 }, say = function(v) return STANDINGS[v] end },
+		{ key = "pvp", title = "PvP rank", blurb = "No rank, then the game's insignia for ranks 1 to 14",
+			values = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 },
+			say = function(v) return v == 0 and "None" or ("Rank " .. v) end },
+		{ key = "side", title = "PvP side", blurb = "The side's colour on the shield before the first rank",
+			values = { "Alliance", "Horde" }, say = function(v) return v end },
+		{ key = "expedition", title = "Expedition", blurb = "Each Expedition rank's badge",
+			values = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, say = function(v) return "Rank " .. v end },
+	}
+	body.previews = {}
+	for _, p in ipairs(previews) do
+		local row = Wd.Row(prev, p.title, p.blurb)
+		-- 0 is your own; 1 onwards, the values in turn
+		local at = 0
+		local stepper
+		stepper = row:SetControl(Wd.Stepper(row, function(dir)
+			at = (at + dir) % (#p.values + 1)
+			local v = at > 0 and p.values[at] or nil
+			stepper:Say(v ~= nil and p.say(v) or "Yours")
+			if BT.Dock and BT.Dock.SetPreview then
+				BT.Dock.SetPreview(p.key, v)
+			end
+		end))
+		stepper:Say("Yours")
+		stepper.reset = function()
+			at = 0
+			stepper:Say("Yours")
+		end
+		body.previews[p.key] = stepper
+	end
+	local clear = Wd.Row(prev, "Your own again", "Every shield back to what you have")
+	body.clearPreviews = clear:SetControl(Wd.Button(clear, "Clear", 62, 20))
+	body.clearPreviews:SetScript("OnClick", function()
+		for _, s in pairs(body.previews) do
+			s.reset()
+		end
+		if BT.Dock and BT.Dock.ClearPreviews then
+			BT.Dock.ClearPreviews()
+		end
+	end)
 	-- BUTTONS, NOT COMMANDS (Josh 2026-09-28: "We don't need hundreds of
 	-- slash commands for debugging. I'd actually prefer to use the 'Testing'
 	-- module with buttons/toggles going forward"). The reports that were
@@ -1453,7 +1503,9 @@ function W.UpdateSubtitle()
 	-- the realm and side always; how many characters only with a census
 	local where = ("%s · %s"):format(BT.scope and BT.scope.realm or "?", BT.scope and BT.scope.faction or "?")
 	if BT.DB and BT.db then
-		where = ("%s · %d characters"):format(where, BT.DB.Stats(BT.db).total)
+		-- counted from the list alone: reading each character to count them
+		-- was a long frame on a big book every time the window opened
+		where = ("%s · %d characters"):format(where, (BT.DB.Count(BT.db)))
 	end
 	frame.subtitle:SetText(where)
 end

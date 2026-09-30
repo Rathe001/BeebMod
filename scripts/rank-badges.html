@@ -38,7 +38,7 @@ Change a badge here, then run the script again. -->
   };
   const SPEC = [
     { metal: "leather", field: "rawhide", mark: "paw",     stitch: true, adds: "Rawhide, stitched, one paw print" },
-    { metal: "leather", field: "rawhide", mark: "trail",   stitch: true, adds: "A trail of paw prints" },
+    { metal: "leather", field: "rawhide", mark: "track",   stitch: true, adds: "A bird's track" },
     { metal: "iron",    field: "rawhide", mark: "trap",    adds: "An iron rim and a steel trap" },
     { metal: "iron",    field: "jungle",  mark: "sight",   adds: "Jungle green and a rifle sight" },
     { metal: "bronze",  field: "jungle",  mark: "compass", adds: "Bronze and a compass star" },
@@ -66,7 +66,12 @@ Change a badge here, then run the script again. -->
   function mark(kind, fill, id) {
     switch (kind) {
       case "paw": return paw(60, 58, 1.15, fill);
-      case "trail": return paw(47, 74, .62, fill) + paw(60, 58, .62, fill) + paw(73, 42, .62, fill);
+      // TRACKER: ONE BIRD TRACK (Josh 2026-09-29: "The 3 paws shield doesn't
+      // read very well when very small"): three thick toes from a heel, the
+      // sign a tracker reads in mud - bold enough for the dock's 17 pixels
+      case "track": return `<g fill="none" stroke="${fill}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M60 78 L60 40"/><path d="M60 70 L42 46"/><path d="M60 70 L78 46"/>
+          <path d="M60 78 L60 86"/></g>`;
       case "trap": return `<g fill="none" stroke="${fill}" stroke-linecap="round">
           <path d="M38 60 A22 18 0 0 0 82 60" stroke-width="4"/>
           <path d="M38 60 A22 18 0 0 1 82 60" stroke-width="4"/>
@@ -167,6 +172,17 @@ Change a badge here, then run the script again. -->
   // Each is in layers the client puts together: a white field it tints (the
   // Experience colour, or the standing's), a steel rim over it, and a banner
   // for reputation - the level is the client's own text.
+  // light, middle and shadow of each level bracket's rim
+  const LEVEL_RIMS = {
+    level1: ["#7a7a7a", "#484848", "#1c1c1c"],  // 1-9, poor: dark, well apart from 10-19
+    level2: ["#ffffff", "#dfe4ea", "#454b53"],  // 10-19, common: bright, with the same dark edge as the others
+    level3: ["#b6ff9e", "#2fbf20", "#0f4a0a"],  // 20-29, uncommon
+    level4: ["#9fd0ff", "#1f78d6", "#0b2f5c"],  // 30-39, rare
+    level5: ["#e3b8ff", "#9a3fe0", "#3d145e"],  // 40-49, epic
+    level6: ["#ffd19a", "#f07f10", "#6a3004"],  // 50-59, legendary
+    level7: ["#fff3cc", "#e2c275", "#6b5421"],  // 60, artifact, crowned
+  };
+
   function piece(kind) {
     const m = METAL.iron, id = "p" + (uid++);
     const svg = (inner) => `<svg viewBox="-12 -16 144 144" width="100%" height="100%">${inner}</svg>`;
@@ -175,7 +191,28 @@ Change a badge here, then run the script again. -->
           <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#7a7a7a"/></radialGradient></defs>
         <path d="${SHIELD}" transform="${around(.84)}" fill="url(#f${id})"/>`);
     }
-    if (kind === "rim") {
+    if (kind === "rim" || kind.startsWith("level")) {
+      // THE LEVEL'S RIM (Josh 2026-09-29: ten-level brackets, "1-9, 10-19 ...
+      // 60"): the item quality colours, poor grey to artifact gold, each
+      // bracket its own; the plain rim is steel
+      const m = LEVEL_RIMS[kind] || METAL.iron;
+      // 60: A CROWNED SHIELD (Josh 2026-09-29: "The 60 gem is not readable.
+      // Instead, can we add some embellishments to the shield border?"). A
+      // pixel in the dock is four units here, so everything is bold: a crown
+      // of three points on the top edge (the Level line draws this shield
+      // with a taller crop, so the crown shows), a heavy second gold line
+      // inside the rim, and four large rivets.
+      const gem = kind === "level7"
+        ? `<path d="${SHIELD}" transform="${around(.76)}" fill="none" stroke="#6b5421" stroke-width="7"/>
+           <path d="${SHIELD}" transform="${around(.76)}" fill="none" stroke="#f6dc8e" stroke-width="4.5"/>
+           ${[[30, 30], [90, 30], [34, 74], [86, 74]].map(([x, y]) =>
+             `<circle cx="${x}" cy="${y}" r="5" fill="#fff4cf" stroke="#5a4418" stroke-width="2"/>`).join("")}
+           <path d="M38 18 L40 2 L50 11 L60 -2 L70 11 L80 2 L82 18 Q60 11 38 18 Z"
+             fill="#f2cf6e" stroke="#5a4418" stroke-width="3" stroke-linejoin="round"/>
+           <circle cx="60" cy="-2" r="4" fill="#fff4cf" stroke="#5a4418" stroke-width="2"/>
+           <circle cx="40" cy="2" r="3" fill="#fff4cf" stroke="#5a4418" stroke-width="1.6"/>
+           <circle cx="80" cy="2" r="3" fill="#fff4cf" stroke="#5a4418" stroke-width="1.6"/>`
+        : "";
       return svg(`<defs>
           <linearGradient id="r${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${m[0]}"/><stop offset=".45" stop-color="${m[1]}"/><stop offset="1" stop-color="${m[2]}"/></linearGradient>
           <mask id="m${id}"><rect x="-12" y="-16" width="144" height="144" fill="#fff"/>
@@ -184,7 +221,7 @@ Change a badge here, then run the script again. -->
         <path d="${SHIELD}" fill="url(#r${id})" stroke="${m[2]}" stroke-width="2" mask="url(#m${id})"/>
         <path d="${SHIELD}" transform="${around(.84)}" fill="none" stroke="${m[2]}" stroke-width="1.5"/>
         <path d="${SHIELD}" transform="${around(.84)}" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="1"/>
-        <path clip-path="url(#c${id})" d="M20 14 H100 V40 Q60 30 20 44 Z" fill="#ffffff" opacity=".10"/>`);
+        <path clip-path="url(#c${id})" d="M20 14 H100 V40 Q60 30 20 44 Z" fill="#ffffff" opacity=".10"/>${gem}`);
     }
     // two swords crossed: PvP, before the first rank
     if (kind === "swords") {
@@ -203,7 +240,8 @@ Change a badge here, then run the script again. -->
   }
 
   const row = document.getElementById("row");
-  const cells = RANKS.map((_, i) => badge(i)).concat([piece("field"), piece("rim"), piece("banner"), piece("swords")]);
+  const cells = RANKS.map((_, i) => badge(i)).concat([piece("field"), piece("rim"), piece("banner"), piece("swords")])
+    .concat([1, 2, 3, 4, 5, 6, 7].map((n) => piece("level" + n)));
   cells.forEach((html) => {
     const cell = document.createElement("div");
     cell.innerHTML = html;

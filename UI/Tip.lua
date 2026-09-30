@@ -315,6 +315,88 @@ function Builder:Bar(value, color, ticks, extra)
 	self.y = y + 6
 end
 
+-- A GRAPH (Josh 2026-09-29: "I wanted the graph to be placed in the tooltip,
+-- not as a separate dock row"): lines across the tooltip, each scaled to its
+-- own range - frames a second and milliseconds share no scale - with at
+-- least `span` of room, so a steady figure is a steady line and not its
+-- noise at full height. The newest reading at the right; a line drawn with
+-- the client's lines where it has them, a dot a reading where not.
+-- series = { { values = { ... }, slots = n, span = s, color = { r, g, b } } }
+local GRAPH_PAD = 3
+function Builder:Graph(series, tall)
+	tall = tall or 40
+	local top = self.y + 8
+	local w = WIDTH - PAD * 2
+	local back = rect("BACKGROUND", 2)
+	place(back, PAD, top)
+	back:SetSize(w, tall)
+	back:SetColorTexture(1, 1, 1, 0.04)
+	local lines = frame.body.CreateLine ~= nil
+	-- SMOOTH AND EVEN (Josh 2026-09-29: "The lines have a weird thickness"):
+	-- two screen pixels at any scale, and not snapped to the pixel grid, which
+	-- stepped each slanting piece and joined them thick-thin-thick
+	local px = BT.Pill.PixelOf and BT.Pill.PixelOf(frame) or 1
+	local thick = 2 * px
+	local function mark()
+		local m = take(lines and "line" or "dot", function()
+			local made
+			if lines then
+				made = frame.body:CreateLine(nil, "ARTWORK")
+			else
+				made = frame.body:CreateTexture(nil, "ARTWORK")
+			end
+			if made.SetSnapToPixelGrid then
+				pcall(made.SetSnapToPixelGrid, made, false)
+			end
+			if made.SetTexelSnappingBias then
+				pcall(made.SetTexelSnappingBias, made, 0)
+			end
+			return made
+		end)
+		if lines then
+			m:SetThickness(thick)
+		else
+			m:SetSize(thick, thick)
+		end
+		return m
+	end
+	for _, s in ipairs(series or {}) do
+		local vals = s.values or {}
+		local lo, hi = math.huge, -math.huge
+		for _, v in ipairs(vals) do
+			lo, hi = math.min(lo, v), math.max(hi, v)
+		end
+		if #vals > 0 then
+			local span = s.span or 1
+			if hi - lo < span then
+				local mid = (hi + lo) / 2
+				lo, hi = mid - span / 2, mid + span / 2
+			end
+			local step = w / (math.max(2, s.slots or #vals) - 1)
+			-- a reading's place, down from the tooltip's top
+			local function at(i)
+				local x = PAD + w - (#vals - i) * step
+				local y = top + tall - GRAPH_PAD - (vals[i] - lo) / (hi - lo) * (tall - GRAPH_PAD * 2)
+				return x, y
+			end
+			local c = colourOf(s.color)
+			for i = (lines and 2 or 1), #vals do
+				local m = mark()
+				m:SetColorTexture(c[1], c[2], c[3], 0.95)
+				local x1, y1 = at(i)
+				if lines then
+					local x0, y0 = at(i - 1)
+					m:SetStartPoint("TOPLEFT", frame.body, x0, -y0)
+					m:SetEndPoint("TOPLEFT", frame.body, x1, -y1)
+				else
+					m:SetPoint("CENTER", frame.body, "TOPLEFT", x1, -y1)
+				end
+			end
+		end
+	end
+	self.y = top + tall
+end
+
 -- a short bar for each of several things side by side (a bag each):
 -- { { share, color }, ... }
 function Builder:Segments(list)
@@ -634,6 +716,12 @@ end
 
 function T.IsShown()
 	return frame ~= nil and frame:IsShown()
+end
+
+-- the last one's graph, for the tests: its marks, and how many are drawn
+function T.Marks()
+	local kind = pools.line and "line" or "dot"
+	return pools[kind] or {}, used[kind] or 0
 end
 
 -- what the last one said, for the tests: every piece of text in it, in order

@@ -386,6 +386,33 @@ B.SHIELD_RIM = "Interface\\AddOns\\BeebMod\\Art\\Dock\\rim"
 B.SHIELD_BANNER = "Interface\\AddOns\\BeebMod\\Art\\Dock\\banner"
 B.SHIELD_SWORDS = "Interface\\AddOns\\BeebMod\\Art\\Dock\\swords"
 
+-- PREVIEWS FROM THE TESTING PAGE (Josh 2026-09-29: "I'd like to be able to
+-- preview the different icons for all 4 of these rows"). Each is nil for
+-- your own, or what to show instead: a level, a standing (1 Hated to 8
+-- Exalted), a PvP rank (0 for none) and side, an Expedition rank. Only the
+-- shields follow them; nothing is saved, and a reload puts them back.
+B.preview = {}
+local PREVIEWED = { "xp", "rep", "pvp", "expedition" }
+function B.SetPreview(key, value)
+	B.preview[key] = value
+	for _, k in ipairs(PREVIEWED) do
+		local m = BT.GetModule and BT.GetModule(k)
+		if m and m.Update then
+			pcall(m.Update)
+		end
+	end
+	-- and the Commendations page, if it is open (Josh 2026-09-29)
+	if BT.ExpeditionWindow and BT.ExpeditionWindow.Refresh then
+		pcall(BT.ExpeditionWindow.Refresh)
+	end
+end
+function B.ClearPreviews()
+	for k in pairs(B.preview) do
+		B.preview[k] = nil
+	end
+	B.SetPreview("level", nil)
+end
+
 -- one layer of a line's shield, at the line's top left; `sub` orders layers
 function B.LineIcon(f, inset, sub, file)
 	local t = f:CreateTexture(nil, "ARTWORK", nil, sub or 0)
@@ -414,15 +441,26 @@ end
 
 -- a number on a line's shield, such as your level (Josh 2026-09-29: "put the
 -- number level inside the icon - it would save some room")
-B.SHIELD_FONT = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\JosefinSans-Bold.ttf"
+-- THE GAME'S FIGURES (Josh 2026-09-29: "The font here is a bit hard to read
+-- ... We just need to make sure '60' fits in it"). Josefin's thin, round
+-- figures blurred at 10. Arial Narrow is the face the game draws its own
+-- numbers in - on buttons, on unit frames - tall and narrow, so two figures
+-- fit the shield's field at 12 and read at a glance.
+B.SHIELD_FONT = "Fonts\\ARIALN.TTF"
+B.SHIELD_FONT_SIZE = 12
 function B.LineNumber(f, s)
-	local n = f:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")
-	pcall(n.SetFont, n, B.SHIELD_FONT, 10, "")
+	-- no font object behind it: the face chosen on the General page is for
+	-- words, and must not reach the figures on a shield
+	local n = f:CreateFontString(nil, "OVERLAY")
+	local ok, loaded = pcall(n.SetFont, n, B.SHIELD_FONT, B.SHIELD_FONT_SIZE, "")
+	if not ok or loaded == false then
+		n:SetFontObject("BeebModFontHighlightSmall")
+	end
 	n:SetPoint("CENTER", s.icon, "CENTER", 0, 1)
 	n:SetJustifyH("CENTER")
 	n:SetTextColor(1, 1, 1)
 	if n.SetShadowColor then
-		n:SetShadowColor(0, 0, 0, 0.9)
+		n:SetShadowColor(0, 0, 0, 1)
 		n:SetShadowOffset(1, -1)
 	end
 	s.number = n
@@ -547,15 +585,71 @@ function B.SpecKey(s)
 		return nil
 	end
 	local t, c = s.tint, s.coords
-	return table.concat({
+	local parts = {
 		tostring(s.icon), tostring(text), tostring(s.state),
 		t and ("%s,%s,%s,%s"):format(t[1], t[2], t[3], tostring(t[4])) or "-",
 		c and ("%s,%s,%s,%s"):format(c[1], c[2], c[3], c[4]) or "-",
-	}, "|")
+	}
+	for _, seg in ipairs(s.segments or {}) do
+		parts[#parts + 1] = tostring(seg.text) .. "/" .. tostring(seg.state) .. "/" .. tostring(seg.icon)
+	end
+	return table.concat(parts, "|")
+end
+
+-- SEVERAL READOUTS IN ONE CELL (Josh 2026-09-29: the frame rate and latency's
+-- marks "match the other metrics", icons and words "centered like the other
+-- metrics"). `spec.segments` = { { icon, coords, tint, text, state } ... }:
+-- each an icon the size of any cell's and its words, the same distance
+-- apart and on the same middle as a one-reading cell's, one after another.
+local SEG_GAP = 6
+local function paintSegments(c, segs)
+	c.segs = c.segs or {}
+	local drop = -(BT.Pill.PixelOf(c) or 1)
+	local x = 1
+	for i, seg in ipairs(segs) do
+		local p = c.segs[i]
+		if not p then
+			p = { icon = c:CreateTexture(nil, "ARTWORK"), text = BT.Widgets.Label(c, "", "small") }
+			p.icon:SetSize(12, 12)
+			p.text:SetJustifyH("LEFT")
+			p.text:SetWordWrap(false)
+			c.segs[i] = p
+		end
+		p.icon:ClearAllPoints()
+		p.icon:SetPoint("LEFT", c, "LEFT", x, 0)
+		p.icon:SetTexture(seg.icon)
+		local k = seg.coords
+		if k then
+			p.icon:SetTexCoord(k[1], k[2], k[3], k[4])
+		end
+		local t = seg.tint
+		p.icon:SetVertexColor(t and t[1] or 1, t and t[2] or 1, t and t[3] or 1, t and t[4] or 1)
+		p.icon:Show()
+		p.text:ClearAllPoints()
+		p.text:SetPoint("LEFT", p.icon, "RIGHT", 4, drop)
+		p.text:SetText(seg.text or "")
+		local col = CHIP_STATE[seg.state or ""] or seg.color or CHIP_TEXT
+		p.text:SetTextColor(col[1], col[2], col[3])
+		p.text:Show()
+		local w = BT.Pill.Number(p.text.GetStringWidth and p.text:GetStringWidth(), 0)
+		x = x + 12 + 4 + math.ceil(w) + SEG_GAP
+	end
+	for i = #segs + 1, #c.segs do
+		c.segs[i].icon:Hide()
+		c.segs[i].text:Hide()
+	end
 end
 
 local function paintChip(c)
 	local s = c.spec or {}
+	if s.segments then
+		c.icon:Hide()
+		c.text:SetText("")
+		paintSegments(c, s.segments)
+		return
+	elseif c.segs then
+		paintSegments(c, {})
+	end
 	-- A PIXEL LOW (Josh 2026-09-24): a line of figures has no descenders, and
 	-- centred by its box it read a pixel high in every row of the grid
 	local drop = -(BT.Pill.PixelOf(c) or 1)
@@ -590,7 +684,8 @@ end
 -- A readout cell, one per (module, id): made once, filled in with :Set.
 -- `order` places it among its own module's cells. A WIDE one (Josh
 -- 2026-09-29: "The performance/latency metrics should be grouped together
--- instead of individual cells") has a row of its own, under the others.
+-- instead of individual cells") spans `wide` columns (true: the whole row),
+-- after the others: beside the last row's cells if it fits, else a row.
 function B.Chip(owner, id, order, wide)
 	B.Create()
 	local key = owner .. ":" .. tostring(id)
@@ -607,7 +702,8 @@ function B.Chip(owner, id, order, wide)
 	c.text:SetJustifyH("LEFT")
 	c.text:SetWordWrap(false)
 	c.owner, c.id, c.order = owner, id, order or 0
-	c.wide = wide and true or false
+	-- true for the whole row, or how many columns it spans
+	c.wide = wide or false
 	c.wanted = false
 	c:Hide()
 	-- spec = { icon, coords, tint, text, state }
@@ -692,51 +788,69 @@ local function layoutChips(width, rank)
 		return B.Snap(n * ROW_H)
 	end
 	local cw = (width - INSET * 2) / COLS
-	-- the cells three across, then each wide one on a row of its own
+	-- the cells three across, then each wide one: beside the last row's cells
+	-- when it fits in what they leave, on a row of its own when not
 	local narrow, wide = {}, {}
 	for _, c in ipairs(shown) do
 		local into = c.wide and wide or narrow
 		into[#into + 1] = c
 	end
-	for i, c in ipairs(narrow) do
-		local col, rowN = (i - 1) % COLS, math.floor((i - 1) / COLS)
+	local placed = {}
+	local function put(c, col, rowN, span)
 		c:ClearAllPoints()
 		c:SetPoint("TOPLEFT", grid, "TOPLEFT", INSET + col * cw, -edge(rowN))
-		c:SetWidth(cw - 2)
+		c:SetWidth(cw * span - 2)
 		c:SetHeight(edge(rowN + 1) - px - edge(rowN))
 		c:Show()
+		placed[#placed + 1] = { col = col, row = rowN }
 	end
-	local narrowRows = math.ceil(#narrow / COLS)
-	for i, c in ipairs(wide) do
-		local rowN = narrowRows + i - 1
-		c:ClearAllPoints()
-		c:SetPoint("TOPLEFT", grid, "TOPLEFT", INSET, -edge(rowN))
-		c:SetWidth(width - INSET * 2 - 2)
-		c:SetHeight(edge(rowN + 1) - px - edge(rowN))
-		c:Show()
+	for i, c in ipairs(narrow) do
+		put(c, (i - 1) % COLS, math.floor((i - 1) / COLS), 1)
 	end
-	local rows = narrowRows + #wide
+	local rows = math.ceil(#narrow / COLS)
+	local used = #narrow % COLS -- columns taken on the last row
+	for _, c in ipairs(wide) do
+		local span = math.min(COLS, c.wide == true and COLS or c.wide)
+		if rows > 0 and used > 0 and COLS - used >= span then
+			put(c, used, rows - 1, span)
+			used = used + span
+		else
+			put(c, 0, rows, span)
+			rows = rows + 1
+			used = span
+		end
+		if used >= COLS then
+			used = 0
+		end
+	end
 	grid.wantHeight = edge(rows)
 	grid:SetHeight(grid.wantHeight)
 	-- A GRID YOU CAN SEE (Josh 2026-09-22). The dividers were there at half
 	-- the rule's strength, which on this fill is nothing at all. They are the
-	-- same rule every section ends on now: one between columns, as tall as
-	-- the rows that are there, and one between rows.
+	-- same rule every section ends on now: one before every cell that does
+	-- not start its row - so a cell two columns wide has none through it -
+	-- and one between rows.
 	grid.lines = grid.lines or {}
-	for n = 1, COLS - 1 do
-		local line = grid.lines[n]
-		if not line then
-			line = grid:CreateTexture(nil, "ARTWORK")
-			line:SetWidth(1)
-			BT.Widgets.Rule(line, nil, "v")
-			grid.lines[n] = line
+	local gap = B.Snap(COLUMN_GAP)
+	local n = 0
+	for _, at in ipairs(placed) do
+		if at.col > 0 then
+			n = n + 1
+			local line = grid.lines[n]
+			if not line then
+				line = grid:CreateTexture(nil, "ARTWORK")
+				line:SetWidth(1)
+				BT.Widgets.Rule(line, nil, "v")
+				grid.lines[n] = line
+			end
+			line:ClearAllPoints()
+			line:SetPoint("TOPLEFT", grid, "TOPLEFT", math.floor(INSET + at.col * cw - 4), -(edge(at.row) + gap))
+			line:SetHeight(math.max(1, edge(at.row + 1) - edge(at.row) - px - gap * 2))
+			line:Show()
 		end
-		line:ClearAllPoints()
-		local gap = B.Snap(COLUMN_GAP)
-		line:SetPoint("TOPLEFT", grid, "TOPLEFT", math.floor(INSET + n * cw - 4), -gap)
-		-- only as far down as the rows of three go
-		line:SetHeight(math.max(1, edge(narrowRows) - px - gap * 2))
-		line:SetShown(#narrow > n)
+	end
+	for i = n + 1, #grid.lines do
+		grid.lines[i]:Hide()
 	end
 	grid.rowLines = grid.rowLines or {}
 	for r = 1, math.max(rows - 1, #grid.rowLines) do
@@ -1420,6 +1534,8 @@ function B.Header() return dock and dock.header end
 function B.Cog() return dock and dock.cog end
 function B.Sections() return ordered or {} end
 function B.Cells() return cells end
+-- the readout grid's cells, every module's
+function B.Chips() return chips end
 
 -- ---------------------------------------------------------------------------
 -- Tooltips, clear of the dock

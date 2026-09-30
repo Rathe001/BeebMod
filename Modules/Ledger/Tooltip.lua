@@ -221,6 +221,13 @@ function T.ShowNote(tip, p)
 	-- quote, and measuring it against the previous tooltip's width gave a
 	-- two-line note a one-line card
 	n.quote:SetWidth(width)
+	-- AND THE TEXT ITSELF, NOT ONLY ITS ANCHORS (Josh 2026-09-29: the first
+	-- hover cut a long note to one line and "...", a second hover showed it
+	-- whole). A width that comes from anchors is worked out when the frame
+	-- is next drawn, so on the card's first showing the text was measured
+	-- as one unwrapped line and the quote sized to it. Given outright, the
+	-- width is there to wrap against now.
+	n.text:SetWidth(width)
 	n.text:SetText(p.note and ('"%s"'):format(p.note) or "")
 	n.text:SetShown(p.note ~= nil)
 	local credit = p.note and U.Credit(p) or nil
@@ -283,6 +290,24 @@ function T.ShowNote(tip, p)
 	end
 	q:Show()
 
+	-- and measured again once the frame is drawn, in case the client had not
+	-- laid the text out yet: a height that changed redraws the card, once
+	n.textH = textH
+	if C_Timer and C_Timer.After and not n.remeasuring and n.redoneFor ~= p then
+		n.remeasuring = true
+		C_Timer.After(0, function()
+			n.remeasuring = nil
+			if n.forTip ~= tip or n.forPlayer ~= p or not n:IsShown() then
+				return
+			end
+			local now = BT.Pill.Number(n.text.GetStringHeight and n.text:GetStringHeight(), 0)
+			if math.abs(now - (n.textH or 0)) >= 1 then
+				n.redoneFor = p
+				T.ShowNote(tip, p)
+			end
+		end)
+	end
+
 	return n
 end
 
@@ -334,6 +359,11 @@ function T.Fill(tip, unit)
 	end
 	if p.rating then
 		tip:AddLine(("Rated %d/5"):format(p.rating), 1, 0.82, 0.25)
+	end
+	-- how often you grouped with them, and the last time and place
+	local grouped = BT.LedgerGroups and BT.LedgerGroups.Line(p)
+	if grouped then
+		tip:AddLine(grouped, 0.62, 0.68, 0.65)
 	end
 	-- the note AND the tags are a card above the tooltip now. They are the two
 	-- things on there that you wrote rather than the client; keeping them

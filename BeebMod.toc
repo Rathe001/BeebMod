@@ -67,6 +67,7 @@ Modules\Ledger\Tags.lua
 Modules\Ledger\Find.lua
 Modules\Ledger\Tooltip.lua
 Modules\Ledger\Ledger.lua
+Modules\Ledger\Groups.lua
 Modules\Ledger\Demo.lua
 Modules\Census\Stats.lua
 Modules\Census\Chart.lua
@@ -109,6 +110,8 @@ Modules\Expedition\Stage.lua
 Modules\Expedition\Expedition.lua
 Modules\Expedition\Demo.lua
 Modules\Chat\Chat.lua
+Modules\Chat\Links.lua
+Modules\Chat\Reader.lua
 Modules\DamageMeter\DamageMeter.lua
 Modules\ResourceDisplay\ResourceDisplay.lua
 Modules\GameMenu\GameMenu.lua

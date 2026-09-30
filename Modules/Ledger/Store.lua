@@ -70,8 +70,11 @@ function N.People(scopeKey)
 end
 
 -- anything of yours on it: a row with none of these is not kept
+-- A GROUP IS YOURS TOO (Josh 2026-09-29, the people you grouped with,
+-- Modules/Ledger/Groups.lua): a row that holds only how often you grouped
+-- with someone is kept, and not swept away as an empty one
 function N.IsMine(p)
-	return p ~= nil and (p.note ~= nil or p.tags ~= nil or p.rating ~= nil)
+	return p ~= nil and (p.note ~= nil or p.tags ~= nil or p.rating ~= nil or p.grouped ~= nil)
 end
 
 function N.Get(key)
@@ -197,12 +200,52 @@ function N.Open(key, info)
 	return p
 end
 
+-- A NOTE IS A FEW LINES (Josh 2026-09-29: "we still need to have some kind of
+-- character limit on the notes"). 140 characters is about five lines on the
+-- card over a tooltip; a longer one covered the screen above it. A note
+-- written before the limit keeps its length: it can be shortened, and
+-- opening it and pressing Enter doesn't cut it.
+N.MAX_NOTE = 140
+
+-- characters, not bytes: an accented letter is two bytes and one letter
+function N.Length(text)
+	if type(text) ~= "string" then
+		return 0
+	end
+	return #(text:gsub("[\128-\191]", ""))
+end
+
+-- the most a note on this row may hold: the limit, or the old note's length
+function N.Room(p)
+	return math.max(N.MAX_NOTE, N.Length(p and p.note))
+end
+
+-- `text` cut to `most` characters, never through the middle of one
+function N.Clip(text, most)
+	if N.Length(text) <= most then
+		return text
+	end
+	local n, cut = 0, #text
+	for i = 1, #text do
+		local b = text:byte(i)
+		if b < 128 or b >= 192 then
+			n = n + 1
+			if n > most then
+				cut = i - 1
+				break
+			end
+		end
+	end
+	return text:sub(1, cut)
+end
+
 function N.SetNote(key, text, info)
 	local p = N.Open(key, info)
 	if not p then
 		return nil
 	end
 	text = text and text:match("^%s*(.-)%s*$") or ""
+	text = N.Clip(text, N.Room(p)):match("^(.-)%s*$")
 	p.note = text ~= "" and text or nil
 	p.noted = p.note and U.Now() or nil
 	-- and by whom: every character on this realm and side writes in the same

@@ -219,12 +219,62 @@ circle(RX, RY, RR, 2.2)
 for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
     line(RX + dx * 4, RY + dy * 4, RX + dx * 13, RY + dy * 13, 2.4)
 
+# ---- the gauge (Josh 2026-09-29: "Is there an fps icon we could add?"): the
+# frame rate beside the house and the globe - an arc over the top, its needle
+# well round to the right, and the hub it turns on
+FX, FY, FR = 96 + 16, 21, 11
+steps = 18
+for i in range(steps):
+    a0 = math.pi + math.pi * i / steps
+    a1 = math.pi + math.pi * (i + 1) / steps
+    line(FX + math.cos(a0) * FR, FY + math.sin(a0) * FR,
+         FX + math.cos(a1) * FR, FY + math.sin(a1) * FR, 2.4)
+line(FX, FY, FX + 7, FY - 7, 2.6)
+circle(FX, FY, 1.6, 2.6)
+line(FX - FR, FY + 3, FX + FR, FY + 3, 2.2)
+
 pixels = bytearray()
 for y in range(H):
     for x in range(W):
         pixels += bytes((255, 255, 255, int(round(buf[y][x] * 255))))
 header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, W, H, 32, 0x28)
 path = os.path.join(dest, "net.tga")
+with open(path, "wb") as f:
+    f.write(header)
+    f.write(pixels)
+print("wrote", path, os.path.getsize(path), "bytes")
+for y in range(0, H, 2):
+    print("".join("#" if buf[y][x] > 0.6 else ("+" if buf[y][x] > 0.2 else ".") for x in range(W)))
+
+
+# ---------------------------------------------------------------------------
+# Art/chat.tga: a third sheet (Josh 2026-09-29), for the chat window's marks.
+# Both sheets above are full. 64x32, two slots of 0.5.
+#
+#   0  expand      four corners pointing out: open chat in a large window
+#   1  newest      an arrow down onto a line: jump to the newest line
+# ---------------------------------------------------------------------------
+W, H = 64, 32
+buf = [[0.0] * W for _ in range(H)]
+
+# ---- the expand mark: an L at each corner, its point outwards
+for cx, cy, dx, dy in ((5, 5, 1, 1), (27, 5, -1, 1), (5, 27, 1, -1), (27, 27, -1, -1)):
+    line(cx, cy, cx + dx * 6, cy, 2.6)
+    line(cx, cy, cx, cy + dy * 6, 2.6)
+
+# ---- the newest line (Josh 2026-09-29, from a picture): an arrow pointing
+# down onto a bar, the bar being the bottom of the chat
+NX = 32 + 16
+line(NX, 4, NX, 16, 3.0)
+poly([(NX - 7, 13), (NX + 7, 13), (NX, 21)])
+line(NX - 10, 26, NX + 10, 26, 3.0)
+
+pixels = bytearray()
+for y in range(H):
+    for x in range(W):
+        pixels += bytes((255, 255, 255, int(round(buf[y][x] * 255))))
+header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, W, H, 32, 0x28)
+path = os.path.join(dest, "chat.tga")
 with open(path, "wb") as f:
     f.write(header)
     f.write(pixels)

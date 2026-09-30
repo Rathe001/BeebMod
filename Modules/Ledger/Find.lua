@@ -90,6 +90,24 @@ local seenRev = -1
 -- the noteRev the unit tooltip was last redrawn at
 local restackedAt = -1
 
+-- a note save, timed step by step (B.Timed, further down)
+local function clock()
+	return (type(debugprofilestop) == "function" and debugprofilestop()) or os.clock() * 1000
+end
+B.saves = {}
+local timing
+
+-- `fn`, timed as step `name` of the save being measured, if one is
+local function step(name, fn, ...)
+	if not timing then
+		return fn(...)
+	end
+	local t0 = clock()
+	local a, b = fn(...)
+	timing.steps[#timing.steps + 1] = { name, clock() - t0 }
+	return a, b
+end
+
 local function paint(f, r, g, b, a)
 	local t = f:CreateTexture(nil, "BACKGROUND")
 	t:SetAllPoints()
@@ -248,21 +266,42 @@ local function buildEditor(parent, anchor, label, paint)
 	end
 	e.note:SetTextColor(0.90, 0.88, 0.80)
 	e.note:SetScript("OnEnterPressed", function(self)
-		B.SaveNote()
-		self:ClearFocus()
-		B.Refresh()
+		B.Timed("Enter in the note panel", function()
+			B.SaveNote()
+			step("let go", self.ClearFocus, self)
+			B.Refresh()
+		end)
 	end)
 	e.note:SetScript("OnEscapePressed", function(self)
-		B.SaveNote()
-		self:ClearFocus()
-		B.CloseEditor()
+		B.Timed("Escape in the note panel", function()
+			B.SaveNote()
+			step("let go", self.ClearFocus, self)
+			step("close", B.CloseEditor)
+		end)
 	end)
 	-- what the field is for, in the field, until there is something in it
 	e.ghost = editorLine(e, 11, 0.38, 0.43, 0.41)
 	e.ghost:SetText("Write a note")
+	-- HOW MUCH ROOM IS LEFT (Josh 2026-09-29: a note has a limit now,
+	-- N.MAX_NOTE): the count at the field's right end, once 30 or fewer
+	-- characters are left, and the text kept clear of it
+	e.left = editorLine(e, 10, 0.50, 0.56, 0.53)
+	e.left:SetPoint("RIGHT", e.field, "RIGHT", -6, 0)
+	e.left:SetJustifyH("RIGHT")
+	e.left:Hide()
 	local function ghost()
 		local text = e.note:GetText()
 		e.ghost:SetShown((text == nil or text == "") and not e.note:HasFocus())
+		-- the client says 0 for a box with no limit
+		local most = BT.Pill.Number(e.note.GetMaxLetters and e.note:GetMaxLetters(), 0)
+		if most <= 0 then
+			most = N.MAX_NOTE
+		end
+		local left = most - N.Length(text)
+		local near = e.note:HasFocus() and left <= 30
+		e.left:SetText(near and (left == 1 and "1 left" or ("%d left"):format(left)) or "")
+		e.left:SetShown(near)
+		e.note:SetTextInsets(2, near and 46 or 2, 0, 0)
 	end
 	e.note:SetScript("OnTextChanged", ghost)
 	e.note:SetScript("OnEditFocusGained", function()
@@ -548,6 +587,7 @@ local function refreshEditor()
 	local typed = editor.note:GetText()
 	if editor.noteFor ~= selected
 		or (not editor.note:HasFocus() and (typed == nil or typed == editor.noteLoaded)) then
+		editor.note:SetMaxLetters(N.Room(p))
 		editor.note:SetText(p.note or "")
 		editor.noteFor, editor.noteLoaded = selected, p.note or ""
 	end
@@ -705,7 +745,7 @@ function B.SaveText(key, text)
 	local info = editor and editor.info
 	local p = face(key, info)
 	if p and (p.note or "") ~= text then
-		N.SetNote(key, text, key == selected and info or nil)
+		step("write", N.SetNote, key, text, key == selected and info or nil)
 		return true
 	end
 	return false
@@ -895,7 +935,11 @@ local function fillCard(card, row)
 	card.key = row.key
 	card.name:SetText(U.Colorize(p.name, p.class))
 	-- the level rides with the name rather than heading a line of small print
-	card.level:SetText(p.level and ("|cff6b7a74" .. U.LevelText(p) .. "|r") or "")
+	-- and how often you grouped with them, after it (Modules/Ledger/Groups.lua)
+	local small = {}
+	small[#small + 1] = p.level and U.LevelText(p) or nil
+	small[#small + 1] = BT.LedgerGroups and BT.LedgerGroups.Line(p) or nil
+	card.level:SetText(#small > 0 and ("|cff6b7a74" .. table.concat(small, " · ") .. "|r") or "")
 	local open = row.key == selected
 	local tagged, rows = layTags(card, p, open)
 	card.sel:SetShown(open)
@@ -909,6 +953,7 @@ local function fillCard(card, row)
 		card.noteBox:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -30 - rows * TAG_ROW_H - 4)
 		card.noteBox:SetPoint("TOPRIGHT", card, "TOPRIGHT", -14, -30 - rows * TAG_ROW_H - 4)
 		if not card.noteBox:HasFocus() then
+			card.noteBox:SetMaxLetters(N.Room(p))
 			card.noteBox:SetText(p.note or "")
 		end
 		card.noteBox:Show()
@@ -1058,19 +1103,75 @@ function B.Tick()
 	return true
 end
 
+-- ---------------------------------------------------------------------------
+-- How long a save takes
+-- ---------------------------------------------------------------------------
+
+-- SAVING A NOTE LAGS (Josh 2026-09-29: "saving notes causes some lag. I ran
+-- the CPU debug tool"). The CPU row times what runs on its own, and a save
+-- runs from a key or a click, so it never showed there. Each save times its
+-- own steps instead - the write, the box letting go, and each part of the
+-- redraw after it - and the last few go into the saved file when the
+-- Testing page's Record button runs (ledgerDump).
+
+-- a whole save, from the key or the click to the last redraw
+function B.Timed(how, fn)
+	if timing then
+		return fn()
+	end
+	timing = { how = how, steps = {} }
+	local t0 = clock()
+	local ok, err = pcall(fn)
+	local done = timing
+	timing = nil
+	done.total = clock() - t0
+	table.insert(B.saves, 1, done)
+	B.saves[6] = nil
+	if not ok then
+		error(err, 0)
+	end
+	return done
+end
+
+function B.Dump()
+	local lines = {}
+	for _, s in ipairs(B.saves) do
+		local parts = {}
+		for _, st in ipairs(s.steps) do
+			parts[#parts + 1] = ("%s %.1f"):format(st[1], st[2])
+		end
+		lines[#lines + 1] = ("%s · %.1f ms · %s"):format(s.how, s.total, table.concat(parts, " · "))
+	end
+	if #lines == 0 then
+		lines[1] = "no note saved since the last /reload"
+	end
+	BT.EnsureBound()
+	BeebModDB.ledgerDump = { at = U.Now(), lines = lines }
+	return #lines
+end
+BT.Record("ledgerDump", B.Dump, "ledger")
+
 function B.Refresh()
 	-- THE PANEL IS REFRESHED WHATEVER THE WINDOW IS DOING (Josh 2026-09-19).
 	-- This used to return early whenever the window's last view was the
 	-- census - even with the window CLOSED - so tags toggled from the bar
 	-- changed the book and never repainted the panel you clicked them on.
-	refreshFind()
-	refreshEditor()
+	-- THE LIST WAITS WHILE NOBODY CAN SEE IT (Josh 2026-09-29, the lag on a
+	-- save): the editor is repainted either way, but the cards under the
+	-- search box only when the Ledger's page is up. Refilling them runs the
+	-- search again, through the whole Census with a search typed, and
+	-- B.Tick catches them up the moment the page shows (seenRev is left
+	-- behind for it).
+	if BT.Window.IsShown() and BT.Window.View() == "ledger" then
+		step("list", refreshFind)
+	end
+	step("editor", refreshEditor)
 	-- THE DOCK SHOWS THESE TAGS AS WELL (Josh 2026-09-19). Tagging somebody in
 	-- the panel changed the book and repainted the panel, and the row of dots
 	-- on the dock - the same tags, on the same character - went on showing
 	-- what it showed a minute ago.
 	if BT.Dock and BT.Dock.Update then
-		BT.Dock.Update()
+		step("dock", BT.Dock.Update)
 	end
 	-- A UNIT TOOLTIP IS ONLY REDRAWN WHEN IT WOULD SAY SOMETHING ELSE (Josh
 	-- 2026-09-19). Restack re-sets the unit, which tears the tooltip down and
@@ -1079,7 +1180,7 @@ function B.Refresh()
 	-- your cursor jumped the whole time the window was open.
 	if N.noteRev ~= restackedAt and BT.Tooltip and BT.Tooltip.Restack then
 		restackedAt = N.noteRev
-		BT.Tooltip.Restack()
+		step("tooltip", BT.Tooltip.Restack)
 	end
 end
 
@@ -1251,9 +1352,11 @@ function B.Build(parent)
 		-- Enter saves and leaves; leaving saves too, and a save that changes
 		-- nothing is not one, so the note is written once
 		card.noteBox:SetScript("OnEnterPressed", function(self)
-			B.SaveText(self.forKey or card.key, self:GetText())
-			self:ClearFocus()
-			B.Refresh()
+			B.Timed("Enter on a card", function()
+				B.SaveText(self.forKey or card.key, self:GetText())
+				step("let go", self.ClearFocus, self)
+				B.Refresh()
+			end)
 		end)
 		card.noteBox:SetScript("OnEscapePressed", function(self)
 			self:ClearFocus()
