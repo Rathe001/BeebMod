@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.16
 
 - **An enemy's page lists the abilities you've seen it cast.** Each spell
   has its picture and how many times you saw it. BeebMod writes a spell
