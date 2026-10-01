@@ -4,9 +4,8 @@
 #
 # Where it goes:
 #   GitHub Releases   always - the zip, with this version's notes
-#   CurseForge        once the repo has a CF_API_KEY secret and BeebMod.toc
-#                     has an X-Curse-Project-ID line; until then the packager
-#                     skips it and the GitHub release is the download
+#   CurseForge        project 1711982, from the X-Curse-Project-ID line in
+#                     BeebMod.toc, signed in with the CF_API_KEY secret
 #
 # A tag with "beta" in it is published as a beta file, "alpha" as an alpha.
 name: Release

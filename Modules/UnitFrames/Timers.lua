@@ -554,6 +554,10 @@ end
 -- every button that wears lanes, to lay them out again when a choice changes
 local wearing = setmetatable({}, { __mode = "k" })
 local pending, regen
+-- the frame over the resource display (made below, by displayFrame): declared
+-- here so T.Rebuild reads this and not a global of the same name, which is
+-- always nil
+local display
 
 local function afterFight()
 	pending = true
@@ -596,7 +600,7 @@ function T.Build(b, remake)
 			c = laneFor(b, set, lane)
 			if c then
 				set.list[#set.list + 1] = c
-				pcall(c.SetEnabled, c, not set.off)
+				pcall(c.SetEnabled, c, not set.off and not set.paused)
 			end
 			set.timers[key] = c
 		end
@@ -624,11 +628,19 @@ function T.Rebuild(remake)
 		return
 	end
 	ids = nil
-	if display and not T.OnDisplay() then
+	local off = display and not T.OnDisplay()
+	if off then
 		display:Hide()
+		F.Auras.Pause(display, true)
 	end
 	for b in pairs(wearing) do
-		T.Build(b, remake)
+		if b == display and off then
+			-- a display that is off is not built for: it is built again when
+			-- it is back (T.OnResourceDisplay builds what is not worn)
+			wearing[b] = nil
+		else
+			T.Build(b, remake)
+		end
 	end
 end
 
@@ -798,8 +810,7 @@ end
 -- the target changes, as the target frame's are. The Resource display module
 -- says where the bars are (T.OnResourceDisplay) whenever it lays them out;
 -- the frame is ours and unprotected, so it may follow them in a fight.
-
-local display
+-- (`display` itself is declared with the lanes above, which hide it.)
 
 local function displayFrame()
 	if display then
@@ -822,6 +833,12 @@ function T.OnResourceDisplay(anchor)
 	if not T.OnDisplay() or not anchor then
 		if display then
 			display:Hide()
+			-- switched off, its lanes stop reading your target (A.Pause in
+			-- Auras.lua). Not for a plate gone for the moment: one that comes
+			-- back in a fight could not have them switched on again.
+			if not T.OnDisplay() then
+				F.Auras.Pause(display, true)
+			end
 		end
 		return false
 	end
@@ -851,6 +868,7 @@ function T.OnResourceDisplay(anchor)
 	d.bmSpec.w = w
 	d:SetWidth(w)
 	d:Show()
+	F.Auras.Pause(d, false)
 	if remake or not wearing[d] then
 		T.Build(d, remake)
 	end

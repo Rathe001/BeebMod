@@ -41,10 +41,10 @@ local function face(key, info)
 	return (C and C.Get(BT.db, key)) or info
 end
 
--- both books' changes, as one number that only rises
-local function rev()
+-- the census's changes: a number that only rises
+local function bookRev()
 	local C = census()
-	return N.rev + (C and C.rev or 0)
+	return C and C.rev or 0
 end
 local B = {}
 BT.Find = B
@@ -86,7 +86,9 @@ local state = { mineOnly = false, tagFilter = nil }
 -- declared here because the panel's open and close paths use them before the
 -- file gets round to defining them
 local editorTop, fitWindow, shownCards, cardsHeight = nil, nil, 0, 0
-local seenRev = -1
+-- what the tick last drew: the Ledger's rev, the census's, and when the
+-- census's was last drawn (B.Tick)
+local seenNotes, seenBook, bookAt = -1, -1, nil
 -- the noteRev the unit tooltip was last redrawn at
 local restackedAt = -1
 
@@ -939,6 +941,8 @@ local function fillCard(card, row)
 	local small = {}
 	small[#small + 1] = p.level and U.LevelText(p) or nil
 	small[#small + 1] = BT.LedgerGroups and BT.LedgerGroups.Line(p) or nil
+	-- and your duels with them (Modules/Ledger/Duels.lua)
+	small[#small + 1] = BT.LedgerDuels and BT.LedgerDuels.Line(p) or nil
 	card.level:SetText(#small > 0 and ("|cff6b7a74" .. table.concat(small, " · ") .. "|r") or "")
 	local open = row.key == selected
 	local tagged, rows = layTags(card, p, open)
@@ -1053,10 +1057,14 @@ local function refreshFind()
 		end
 	end
 	if not asked then
+		-- COUNTED, NOT READ (Josh 2026-09-30, review): DB.Stats is kept until
+		-- the book changes, and in a city it changes every second, so each
+		-- tick unpacked every row in the book to say how many there are.
+		-- DB.Count only counts them, as the window's subtitle does.
 		local C = census()
 		emptyLine:SetText(C
-			and ("%d characters · %d you've noted"):format(C.Stats(BT.db).total, N.Count())
-			or ("%d characters you've noted"):format(N.Count()))
+			and ("%s characters · %s you've noted"):format(U.Commas((C.Count(BT.db))), U.Commas(N.CountNoted()))
+			or ("%s characters you've noted"):format(U.Commas(N.CountNoted())))
 		emptyLine:Show()
 	elseif #results == 0 then
 		emptyLine:SetText("Nobody matches that.")
@@ -1078,11 +1086,22 @@ end
 -- Called on a timer while the window is open: the book fills up as you play,
 -- and a window that shows what it showed a minute ago is worse than one you
 -- have to reopen. Cheap when nothing has changed, which is most ticks.
+-- A SIGHTING IS NOT A NOTE (Josh 2026-09-30, review). Both books' changes
+-- were one number, so every sighting ran the whole refresh, and in a city
+-- that is one a second. The refresh searches the census when a search is
+-- typed, and lays out the dock and the editor again. Only the list can show
+-- a sighting, so a census change redraws the list alone, at most every ten
+-- seconds, as the Census window does. While a tag or "My notes" leaves the
+-- census out of the list, a census change redraws nothing. Something you
+-- wrote still redraws everything on the next tick.
+B.BOOK_EVERY = 10
+
 function B.Tick()
 	if not (panel and BT.Enabled("ledger") and BT.Window.IsShown() and BT.Window.View() == "ledger") then
 		return false
 	end
-	if rev() == seenRev then
+	local notes, book = N.rev, bookRev()
+	if notes == seenNotes and book == seenBook then
 		return false
 	end
 	-- NOT UNDER THE POINTER (Josh 2026-09-23, audit): the list is sorted by
@@ -1093,7 +1112,20 @@ function B.Tick()
 	if panel.IsMouseOver and panel:IsMouseOver() then
 		return false
 	end
-	seenRev = rev()
+	local now = (type(GetTime) == "function" and GetTime()) or 0
+	if notes == seenNotes then
+		if state.tagFilter or state.mineOnly then
+			seenBook = book
+			return false
+		end
+		if bookAt and now - bookAt < B.BOOK_EVERY then
+			return false
+		end
+		seenBook, bookAt = book, now
+		refreshFind()
+		return true
+	end
+	seenNotes, seenBook, bookAt = notes, book, now
 	-- never overwrite a note you are in the middle of typing
 	if B.EditorShown() then
 		refreshFind()
@@ -1160,7 +1192,7 @@ function B.Refresh()
 	-- save): the editor is repainted either way, but the cards under the
 	-- search box only when the Ledger's page is up. Refilling them runs the
 	-- search again, through the whole Census with a search typed, and
-	-- B.Tick catches them up the moment the page shows (seenRev is left
+	-- B.Tick catches them up the moment the page shows (seenNotes is left
 	-- behind for it).
 	if BT.Window.IsShown() and BT.Window.View() == "ledger" then
 		step("list", refreshFind)
@@ -1303,6 +1335,7 @@ function B.Build(parent)
 		self:SetPressed(state.mineOnly)
 		refreshFind()
 	end)
+	findView.mineButton = mine
 	buildFilters()
 
 	-- the cards: five is what fits, and more than five means "search better"
@@ -1426,6 +1459,11 @@ end
 
 function B.TagFilter()
 	return state.tagFilter
+end
+
+-- the "My notes" button, for the tests
+function B.MineButton()
+	return findView and findView.mineButton
 end
 
 -- who the panel is open on

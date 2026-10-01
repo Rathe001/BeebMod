@@ -259,23 +259,28 @@ function ST.Build(page, stage, model)
 		self.fit = ST.ZoomAt(self.art, self.fit, by, px, py)
 		place(self)
 	end)
-	map:SetScript("OnMouseDown", function(self)
-		if self.art and self.fit then
-			self.dragging = { cursor(self) }
-		end
-	end)
-	map:SetScript("OnMouseUp", function(self)
-		self.dragging = nil
-	end)
-	map:SetScript("OnUpdate", function(self)
+	-- the drag follows the pointer every frame, and only while the button is
+	-- down (Josh 2026-09-30, review: it ran every frame the popup was open)
+	local function drag(self)
 		local d = self.dragging
 		if not (d and self.art and self.fit) then
+			self:SetScript("OnUpdate", nil)
 			return
 		end
 		local px, py = cursor(self)
 		self.fit = ST.Move(self.art, self.fit, px - d[1], py - d[2])
 		d[1], d[2] = px, py
 		place(self)
+	end
+	map:SetScript("OnMouseDown", function(self)
+		if self.art and self.fit then
+			self.dragging = { cursor(self) }
+			self:SetScript("OnUpdate", drag)
+		end
+	end)
+	map:SetScript("OnMouseUp", function(self)
+		self.dragging = nil
+		self:SetScript("OnUpdate", nil)
 	end)
 	map:Hide()
 	page.map = map
@@ -346,7 +351,7 @@ function ST.Paint(page, m)
 			page.reset:Hide()
 		end
 		if page.hint then
-			page.hint:SetText("Met in a dungeon. There is no map of it.")
+			page.hint:SetText(("Met in a %s. There is no map of it."):format(m.instance == "raid" and "raid" or "dungeon"))
 		end
 		return "screen"
 	end
@@ -357,7 +362,7 @@ function ST.Paint(page, m)
 	local spots = J.Spots(m)
 	if not a or #spots == 0 or pw <= 0 or ph <= 0 then
 		map.note:SetText(#spots == 0 and "No kill spot on record yet. Your next kill of it marks one."
-			or "This client has no map of that place.")
+			or "The game has no map of that place.")
 		if page.reset then
 			page.reset:Hide()
 		end

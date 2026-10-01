@@ -43,6 +43,12 @@ local function note(name, info)
 		return false
 	end
 	info.vouch = true
+	-- ONE SIDE'S LISTS (Josh 2026-09-30): /who, your friends, your mail and a
+	-- channel's members are all your own faction's; a battleground's
+	-- scoreboard says each player's own
+	if info.faction == nil and BT.Collect and BT.Collect.Side then
+		info.faction = BT.Collect.Side("player")
+	end
 	return DB.Note(BT.db, name, nil, info) ~= nil
 end
 
@@ -129,11 +135,13 @@ function R.Battleground()
 	end
 	local wrote = 0
 	for i = 1, (GetNumBattlefieldScores() or 0) do
-		local name, _, _, _, _, _, _, _, _, classToken = GetBattlefieldScore(i)
+		local name, _, _, _, _, side, _, _, _, classToken = GetBattlefieldScore(i)
 		if name then
 			-- the class only when it is a real token (the scoreboard's layout
-			-- differs between clients), and no race: it is given in words
-			if note(name, { src = "bg", class = R.ClassToken(classToken) }) then
+			-- differs between clients), and no race: it is given in words.
+			-- The side is 0 for the Horde, 1 for the Alliance.
+			local faction = (side == 0 and "Horde") or (side == 1 and "Alliance") or false
+			if note(name, { src = "bg", class = R.ClassToken(classToken), faction = faction }) then
 				wrote = wrote + 1
 			end
 		end

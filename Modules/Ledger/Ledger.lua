@@ -32,6 +32,12 @@ local M = BT.Module({
 -- still BT.settings.tooltip, where Modules/Ledger/Tooltip.lua reads it.
 function M:BuildTab(parent)
 	local stack = BT.Widgets.Stack(parent)
+	-- the feature's picture first, as every feature's page has (UI/Window.lua)
+	local art
+	art, parent.picture = BT.Window.FeatureArt(parent, "ledger")
+	if art then
+		stack:Add(art)
+	end
 	local tips = stack:Section("Tooltips")
 	self.notesRow = BT.Widgets.SwitchRow(tips, "Notes on tooltips", "Your note above the tooltip, tags and rating below it",
 		function() return BT.settings and BT.settings.tooltip ~= false end,
@@ -50,10 +56,41 @@ function M:BuildTab(parent)
 			BT.settings.ledgerGroups = on and true or false
 		end)
 	self.groupsRow.field = "ledgerGroups"
+	-- DUEL SCORES (Josh 2026-09-30), Modules/Ledger/Duels.lua
+	local duels = stack:Section("Duels")
+	self.duelsRow = BT.Widgets.SwitchRow(duels, "Duel scores",
+		"Counts the duels you win and lose against each player",
+		function() return not (BT.settings and BT.settings.ledgerDuels == false) end,
+		function(on)
+			BT.EnsureBound()
+			BT.settings.ledgerDuels = on and true or false
+		end)
+	self.duelsRow.field = "ledgerDuels"
+	-- THE PAGE SCROLLS BY ITS PICTURE (Josh 2026-09-30: the picture on top,
+	-- and the page scrolls). The search fills the room under the settings, so
+	-- the page is made as much taller as the picture takes, and the search
+	-- keeps the room it had. How much that is, is measured: the settings laid
+	-- out without the picture, then with it.
+	local extra = 0
+	if art then
+		art:Hide()
+		local without = stack:Layout()
+		art:Show()
+		extra = stack:Layout() - without
+	end
 	local find = CreateFrame("Frame", nil, parent)
 	find:SetPoint("TOPLEFT", 0, -(stack:Layout() + 8))
 	find:SetPoint("BOTTOMRIGHT", 0, 0)
 	BT.Find.Build(find)
+	local view = parent.beebsScroller
+	if view and extra > 0 then
+		-- the window's room is known once the client has sized the strip
+		local function fit()
+			view:SetContentHeight(view:Room() + extra)
+		end
+		fit()
+		view:HookScript("OnSizeChanged", fit)
+	end
 end
 
 -- THE TARGET ROW (Josh 2026-09-24): who you are pointing at, their tags and

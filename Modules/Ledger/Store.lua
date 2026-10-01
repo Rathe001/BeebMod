@@ -10,10 +10,12 @@
 --
 --   BeebModDB.ledger = {
 --     moved = 1,                                   the census rows' notes taken
---     realms = { ["Whitemane|Alliance"] = { people = { [key] = row } } },
+--     realms = { ["Whitemane|All"] = { people = { [key] = row } } },
 --   }
---   row = { name, realm, class, race, level, guild, guid, last,
---           note, noted, notedBy, rating, tags = { [tag] = true } }
+--   row = { name, realm, class, race, level, guild, guid, faction, last,
+--           note, noted, notedBy, rating, tags = { [tag] = true },
+--           grouped, groupedAt, groupedWhere          (Groups.lua)
+--           duelsWon, duelsLost, duelAt }             (Duels.lua)
 --
 -- (It is filed inside BeebModDB until the Ledger is an addon of its own,
 -- which takes it into a saved variable of its own once.)
@@ -60,6 +62,11 @@ function N.People(scopeKey)
 	if not (root and scopeKey) then
 		return nil
 	end
+	-- one book for both sides (BT.ScopeKey): a key that names a side is the
+	-- realm's book all the same
+	if BT.ALL_SIDES then
+		scopeKey = scopeKey:gsub("|[^|]*$", "|" .. BT.ALL_SIDES)
+	end
 	local book = root.realms[scopeKey]
 	if type(book) ~= "table" then
 		book = { people = {} }
@@ -73,8 +80,18 @@ end
 -- A GROUP IS YOURS TOO (Josh 2026-09-29, the people you grouped with,
 -- Modules/Ledger/Groups.lua): a row that holds only how often you grouped
 -- with someone is kept, and not swept away as an empty one
+-- AND SO IS A DUEL (Josh 2026-09-30, Modules/Ledger/Duels.lua)
 function N.IsMine(p)
-	return p ~= nil and (p.note ~= nil or p.tags ~= nil or p.rating ~= nil or p.grouped ~= nil)
+	return p ~= nil and (p.note ~= nil or p.tags ~= nil or p.rating ~= nil or p.grouped ~= nil
+		or p.duelsWon ~= nil or p.duelsLost ~= nil)
+end
+
+-- WRITTEN ON, NOT ONLY GROUPED WITH (Josh 2026-09-30, review): a note, a tag
+-- or a rating. A row that holds only how often you grouped with someone is
+-- kept (IsMine), but "My notes" and "you've noted" are about what you wrote,
+-- and they listed and counted everyone you had grouped with.
+function N.Noted(p)
+	return p ~= nil and (p.note ~= nil or p.tags ~= nil or p.rating ~= nil)
 end
 
 function N.Get(key)
@@ -95,8 +112,19 @@ function N.Count()
 	return n
 end
 
+-- the people you wrote a note, a tag or a rating on (N.Noted)
+function N.CountNoted()
+	local n = 0
+	for _, p in N.Each() do
+		if N.Noted(p) then
+			n = n + 1
+		end
+	end
+	return n
+end
+
 -- what a row keeps of who they are, whoever is telling us
-local FACE = { "name", "realm", "class", "race", "level", "guild", "guid" }
+local FACE = { "name", "realm", "class", "race", "level", "guild", "guid", "faction", "sex" }
 
 -- A row for `key`, made if there is none, its face brought up to date from
 -- `info` (a census row, or what a unit says). A level only rises.
@@ -160,7 +188,113 @@ function N.Face(unit)
 	info.guild = okG and guild or nil
 	local okU, guid = pcall(UnitGUID, unit)
 	info.guid = okU and guid or nil
+	info.faction = BT.Collect and BT.Collect.Side and BT.Collect.Side(unit) or nil
+	info.sex = BT.Collect and BT.Collect.Sex and BT.Collect.Sex(unit) or nil
 	return key, info
+end
+
+-- TWO ROWS FOR ONE PERSON BECOME ONE (Josh 2026-09-30): counts added, tags
+-- joined, notes joined as the census joins them, the latest times kept.
+local COUNTS = { "grouped", "duelsWon", "duelsLost" }
+local LATEST = { "groupedAt", "duelAt", "last", "noted" }
+function N.Fold(to, from)
+	for _, f in ipairs(COUNTS) do
+		if from[f] then
+			to[f] = (to[f] or 0) + from[f]
+		end
+	end
+	for _, f in ipairs(LATEST) do
+		if from[f] and (to[f] or 0) < from[f] then
+			to[f] = from[f]
+			if f == "groupedAt" then
+				to.groupedWhere = from.groupedWhere
+			end
+		end
+	end
+	if from.note and from.note ~= "" then
+		to.note = (to.note and to.note ~= "" and to.note ~= from.note)
+			and (to.note .. " / " .. from.note) or from.note
+	end
+	if from.tags then
+		to.tags = to.tags or {}
+		for k in pairs(from.tags) do
+			to.tags[k] = true
+		end
+	end
+	for f, v in pairs(from) do
+		if to[f] == nil then
+			to[f] = v
+		end
+	end
+	return to
+end
+
+-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30, U.Key): the
+-- people of this realm's books keyed "Name@Realm", whatever the realm,
+-- folded back under the name alone. At every login, as the census's are.
+-- Returns how many it folded.
+-- ONE BOOK FOR BOTH SIDES (Josh 2026-09-30, BT.JoinSides): the people of a
+-- book of one side folded into the realm's one book. Returns how many.
+function N.Join(fromScope, toScope)
+	local root = N.Root()
+	local from = root and root.realms[fromScope]
+	if not (from and fromScope ~= toScope) then
+		return 0
+	end
+	root.realms[fromScope] = nil
+	local into = N.People(toScope)
+	local n = 0
+	for key, p in pairs(type(from.people) == "table" and from.people or {}) do
+		if type(p) == "table" then
+			if into[key] then
+				N.Fold(into[key], p)
+			else
+				into[key] = p
+			end
+			n = n + 1
+		end
+	end
+	if n > 0 then
+		touched(true)
+	end
+	return n
+end
+
+function N.FoldRealms(realm)
+	local root = N.Root()
+	if not (root and realm) then
+		return 0
+	end
+	realm = realm:gsub("%s+", "")
+	local n = 0
+	for scopeKey, book in pairs(root.realms) do
+		local r = type(scopeKey) == "string" and scopeKey:match("^(.-)|")
+		local people = type(book) == "table" and book.people
+		if r == realm and type(people) == "table" then
+			local moves = {}
+			for key in pairs(people) do
+				local name = key:match("^(.*)@.*$")
+				if name then
+					moves[key] = name
+				end
+			end
+			for from, to in pairs(moves) do
+				local p = people[from]
+				people[from] = nil
+				p.realm = realm
+				if people[to] then
+					N.Fold(people[to], p)
+				else
+					people[to] = p
+				end
+				n = n + 1
+			end
+		end
+	end
+	if n > 0 then
+		touched(true)
+	end
+	return n
 end
 
 -- A person seen again (the tooltip, the target): the face on their row
@@ -293,14 +427,22 @@ function N.SetRating(key, rating, info)
 end
 
 -- a name, caseless, for matching: "bob" -> "[bB][oO][bB]"
+-- ESCAPED FIRST (Josh 2026-09-30, review). The letters were mapped first, and
+-- a bracket typed in the search was never escaped. Typing "[" in the
+-- Ledger's search made a malformed pattern and a Lua error, and "b[o"
+-- matched the wrong names. Everything that means something to a pattern is
+-- escaped first, brackets too, and then the letters are mapped, as
+-- Core/DB.lua does.
 local function caseless(text)
-	return (text:gsub("%a", function(c) return ("[%s%s]"):format(c:lower(), c:upper()) end)
-		:gsub("[%(%)%.%%%+%-%*%?%^%$]", "%%%0"))
+	return (text:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+		:gsub("%a", function(c) return "[" .. c:lower() .. c:upper() .. "]" end))
 end
+N.Caseless = caseless
 
 -- The people written on, found: a prefix of either half of the name, or the
 -- words anywhere in a guild or a note, as the census's search reads them.
--- query = { text, class, guild, tag, minLevel, maxLevel, limit }
+-- query = { text, class, guild, tag, mineOnly, limit, minLevel, maxLevel }
+-- (mineOnly: only the people you wrote on, not the ones you only grouped with)
 -- Returns { { key, p } }, the latest written first.
 function N.Search(query)
 	query = query or {}
@@ -316,6 +458,7 @@ function N.Search(query)
 				or (p.guild ~= nil and p.guild ~= "" and p.guild:lower():find(text, 1, true) ~= nil)
 				or (p.note ~= nil and p.note:lower():find(text, 1, true) ~= nil)
 		end
+		if ok and query.mineOnly and not N.Noted(p) then ok = false end
 		if ok and query.class and p.class ~= query.class then ok = false end
 		if ok and query.tag and not (p.tags and p.tags[query.tag]) then ok = false end
 		if ok and query.guild and p.guild ~= query.guild then ok = false end

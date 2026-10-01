@@ -12,18 +12,18 @@ local S = {}
 BT.Settings = S
 
 local W = BT.Widgets
-local rows, extras, panel, stack
+local panel, stack
 
 function S.Build(parent)
 	panel = parent
-	rows, extras = {}, {}
 	stack = W.Stack(parent)
 	S.appearance = {}
 
 	-- WHICH FEATURES (Josh 2026-09-27): the question the first login asks -
 	-- six cards, a switch each - asked again
 	local layout = stack:Section("Features")
-	local again = W.Row(layout, "Choose again", "The six cards from your first login, one for each feature · /bt setup")
+	local again = W.Row(layout, "Choose again",
+		"The six cards from your first login, one for each feature. Type /bt setup to show them from chat.")
 	local ask = again:SetControl(W.Button(again, "Choose", 70, 20))
 	ask:SetScript("OnClick", function()
 		if BT.Welcome then
@@ -209,12 +209,7 @@ end
 
 function S.Refresh()
 	refreshAppearance()
-	for _, r in ipairs(extras or {}) do
-		r.switch:SetOn(r.get())
-	end
 end
 
 -- the tests want the rows without going through frames
 function S.Appearance() return S.appearance end
-function S.Rows() return rows end
-function S.Extras() return extras end

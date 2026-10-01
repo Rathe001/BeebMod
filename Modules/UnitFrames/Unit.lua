@@ -1079,20 +1079,19 @@ local function writeName(fs, text)
 end
 F.WriteName = writeName
 
--- The whole button, from its source. Cheap enough to run on any event: every
--- call is a setter, and nothing is laid out except the combo row.
-function F.Paint(b, src)
-	if not (b and b.bmDressed and src) then
-		return
-	end
-	local k = b.bmSpec
-	b.bmSrc = src
-	if not src:Exists() then
-		return
-	end
-	local gone = src:Gone()
+-- whether the bars slide to their new value or jump there: a preview's
+-- made-up numbers, a frame just given somebody new, or one not on screen go
+-- straight there
+local function easeOf(b, src)
+	local now = type(GetTime) == "function" and GetTime() or 0
+	local ease = F.Opt("animate", true) and not (b.bmFresh or src.d) and now >= (b.bmJumpUntil or 0)
+		and b.IsVisible and b:IsVisible() and true or false
+	b.bmFresh = nil
+	return ease
+end
 
-	-- health, and the heal and shield past its end
+-- health, and the heal and shield past its end
+local function paintHealth(b, src, gone, ease)
 	local r, g, bl = deepen(F.HealthColour(src))
 	b.health:SetStatusBarColor(r, g, bl, 1)
 	local max = src:HealthMax()
@@ -1104,15 +1103,9 @@ function F.Paint(b, src)
 	-- the frame's own width, not a measurement: before the client has laid
 	-- the bar out it measures nothing, and the heal came out zero wide
 	local width = BT.Pill.Number(b:GetWidth(), 0)
-	width = (width > 0 and width or k.w) - 4
+	width = (width > 0 and width or b.bmSpec.w) - 4
 	b.heals:SetWidth(width)
 	b.shield:SetWidth(width)
-	-- a preview's made-up numbers, a frame just given somebody new, or one
-	-- not on screen: straight there
-	local now = type(GetTime) == "function" and GetTime() or 0
-	local ease = F.Opt("animate", true) and not (b.bmFresh or src.d) and now >= (b.bmJumpUntil or 0)
-		and b.IsVisible and b:IsVisible() and true or false
-	b.bmFresh = nil
 	if gone then
 		setBar(b.health, 0, ease)
 		b.heals:SetValue(0)
@@ -1123,28 +1116,38 @@ function F.Paint(b, src)
 		b.heals:SetValue(src:Heals() or 0)
 		b.shield:SetValue(src:Shield() or 0)
 	end
+end
 
-	-- power: under the health, for everyone on a single frame and for mana
-	-- users only in a party - a warrior's rage bar in a party cell is noise
-	if b.power then
-		local pt = src:PowerType()
-		-- YOUR OWN, WHATEVER IT IS (Josh 2026-09-24: "is the energy bar
-		-- missing from the player frame?"). Your frame sits in the party
-		-- column and took its rule; the rule is about other people's cells.
-		local show = not gone and (not k.manaOnly or pt == "MANA" or b.bmUnit == "player")
-		b.power:SetShown(show and true or false)
-		if show then
-			local c = POWER[pt or ""] or POWER.MANA
-			b.power:SetStatusBarColor(c[1], c[2], c[3], 1)
-			local pmax = src:PowerMax()
-			if pmax ~= nil then
-				b.power:SetMinMaxValues(0, pmax)
-			end
-			setBar(b.power, src:Power() or 0, ease)
-		end
+-- power: under the health, for everyone on a single frame and for mana
+-- users only in a party - a warrior's rage bar in a party cell is noise
+local function paintPower(b, src, gone, ease)
+	if not b.power then
+		return
 	end
+	local pt = src:PowerType()
+	-- YOUR OWN, WHATEVER IT IS (Josh 2026-09-24: "is the energy bar
+	-- missing from the player frame?"). Your frame sits in the party
+	-- column and took its rule; the rule is about other people's cells.
+	local show = not gone and (not b.bmSpec.manaOnly or pt == "MANA" or b.bmUnit == "player")
+	b.power:SetShown(show and true or false)
+	if show then
+		local c = POWER[pt or ""] or POWER.MANA
+		b.power:SetStatusBarColor(c[1], c[2], c[3], 1)
+		local pmax = src:PowerMax()
+		if pmax ~= nil then
+			b.power:SetMinMaxValues(0, pmax)
+		end
+		setBar(b.power, src:Power() or 0, ease)
+	end
+	if b.power.text then
+		b.power.text:SetText((not gone and b.power:IsShown()) and (src:PowerText() or "") or "")
+		b.power.text:SetShown(not gone)
+	end
+end
 
-	-- the words
+-- the name, with the level in front of it where there is room
+local function paintName(b, src, gone)
+	local k = b.bmSpec
 	local name
 	if k.short then
 		name = src:Name()
@@ -1175,12 +1178,20 @@ function F.Paint(b, src)
 	else
 		b.name:SetText("")
 	end
-	local status = src:Offline() and "Offline" or (src:Ghost() and "Ghost") or (src:Dead() and "Dead")
+end
+
+-- what is said in place of the health, from plain answers only: offline, a
+-- ghost, dead, or (in a group) charmed
+local function statusOf(src, k)
+	return src:Offline() and "Offline" or (src:Ghost() and "Ghost") or (src:Dead() and "Dead")
 		or (k.group and src:Charmed() and "Charmed") or nil
-	-- the health in words, as the frame's setting says (F.HealthMode): on the
-	-- target the number to the left and the share to the right; elsewhere
-	-- one corner, both joined when both are wanted
-	local mode = F.HealthMode(b.bmKind, k)
+end
+
+-- the health in words, as the frame's setting says (F.HealthMode): on the
+-- target the number to the left and the share to the right; elsewhere
+-- one corner, both joined when both are wanted
+local function paintValue(b, src, status)
+	local mode = F.HealthMode(b.bmKind, b.bmSpec)
 	local left, right = "", ""
 	if status == nil and mode ~= "none" then
 		local pct = (mode == "percent" or mode == "both") and (src:PercentText() or "") or nil
@@ -1198,14 +1209,47 @@ function F.Paint(b, src)
 	if b.hpText then
 		b.hpText:SetText(left)
 	end
-	if b.power and b.power.text then
-		b.power.text:SetText((not gone and b.power:IsShown()) and (src:PowerText() or "") or "")
-		b.power.text:SetShown(not gone)
-	end
 	b.status:SetText(status or "")
 	b.status:SetShown(status ~= nil)
 	b.value:SetShown(status == nil and mode ~= "none")
 	b.value:SetText(right)
+end
+
+-- range and target, which may be secret: onto alpha, never tested
+local function paintRange(b, src)
+	local k = b.bmSpec
+	if k.group then
+		alphaFrom(b, src:InRange(), 1, F.Far(true))
+		b.outline:Show()
+		alphaFrom(b.outline, src:IsTarget(), 1, 0)
+	elseif not k.mini then
+		-- a single frame fades less than a cell: a target you are walking
+		-- towards is still read
+		alphaFrom(b, src:InRange(), 1, F.Far(false))
+	end
+end
+
+-- The whole button, from its source. Every call is a setter, and nothing is
+-- laid out except the combo row. An event about one thing paints that thing
+-- alone (F.OnUnitEvent); this is everything else, and a frame's first paint.
+function F.Paint(b, src)
+	if not (b and b.bmDressed and src) then
+		return
+	end
+	local k = b.bmSpec
+	b.bmSrc = src
+	if not src:Exists() then
+		return
+	end
+	local gone = src:Gone()
+	local ease = easeOf(b, src)
+	paintHealth(b, src, gone, ease)
+	paintPower(b, src, gone, ease)
+	paintName(b, src, gone)
+	local status = statusOf(src, k)
+	-- what stood in for the health at the last whole paint (F.PaintHealth)
+	b.bmStatus = status or false
+	paintValue(b, src, status)
 
 	-- the rank: gold for elite and world boss, silver for rare, crested elites
 	if b.rank then
@@ -1313,16 +1357,7 @@ function F.Paint(b, src)
 		b.ready:Hide()
 	end
 
-	-- range and target, which may be secret: onto alpha, never tested
-	if k.group then
-		alphaFrom(b, src:InRange(), 1, F.Far(true))
-		b.outline:Show()
-		alphaFrom(b.outline, src:IsTarget(), 1, 0)
-	elseif not k.mini then
-		-- a single frame fades less than a cell: a target you are walking
-		-- towards is still read
-		alphaFrom(b, src:InRange(), 1, F.Far(false))
-	end
+	paintRange(b, src)
 
 	F.PaintCast(b, src)
 	F.PaintCombo(b, src)
@@ -1369,6 +1404,16 @@ function F.UsesCombo()
 	return cls == "ROGUE" or cls == "DRUID"
 end
 
+-- A POWER TICK THAT IS NOT A POINT (Josh 2026-09-30, review). Energy, mana,
+-- rage and focus come on the same event as combo points, many times a
+-- second, and the event names which power moved. Only these known others are
+-- passed over, so a client that names its points some other way still has
+-- them counted. (The resource display keeps the same list.)
+F.NOT_COMBO = { ENERGY = true, MANA = true, RAGE = true, FOCUS = true }
+function F.NotCombo(powerType)
+	return type(powerType) == "string" and not secret(powerType) and F.NOT_COMBO[powerType] == true
+end
+
 function F.PaintCombo(b, src)
 	if not (b and b.combo) then
 		return
@@ -1407,8 +1452,10 @@ end
 -- ---------------------------------------------------------------------------
 
 -- the events a unit's own frame listens to; the shared ones are in UnitFrames.lua
+-- (UNIT_POWER_FREQUENT alone: it comes with every change, and
+-- UNIT_POWER_UPDATE only says it again, so the two painted a frame twice)
 F.UNIT_EVENTS = {
-	"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER",
+	"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER",
 	"UNIT_DISPLAYPOWER", "UNIT_NAME_UPDATE", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION",
 	"UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_THREAT_SITUATION_UPDATE",
 	"UNIT_THREAT_LIST_UPDATE", "UNIT_HAPPINESS",
@@ -1423,8 +1470,7 @@ F.UNIT_EVENTS = {
 -- was painted in full for every mana tick and every cast of its member.
 -- Power only where there is a power bar, casts only where there is a cast
 -- bar, a pet's mood only on a pet.
-local POWER = { UNIT_POWER_UPDATE = true, UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true,
-	UNIT_DISPLAYPOWER = true }
+local POWER = { UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true, UNIT_DISPLAYPOWER = true }
 function F.EventsFor(b)
 	local out = {}
 	for _, event in ipairs(F.UNIT_EVENTS) do
@@ -1441,6 +1487,67 @@ function F.EventsFor(b)
 		end
 	end
 	return out
+end
+
+-- ONE EVENT, ONE PIECE (Josh 2026-09-30, review). Every event a frame heard
+-- painted all of it: a raid cell's health moving in a fight wrote its name,
+-- marks, threat and range again too - some forty calls into the client for
+-- each tick of each cell. An event now paints what it is about. Health is its
+-- bars and its words; a death or a disconnect changes more than those (the
+-- name greys, the power goes), so a different word in place of the health
+-- than the last whole paint wrote is a whole paint again. Dead, ghost and
+-- offline are plain answers: nothing here asks a secret anything.
+local function painted(b, src)
+	return b and b.bmDressed and src and src:Exists()
+end
+
+function F.PaintHealth(b, src)
+	if not painted(b, src) then
+		return
+	end
+	local status = statusOf(src, b.bmSpec)
+	if (status or false) ~= b.bmStatus then
+		return F.Paint(b, src)
+	end
+	b.bmSrc = src
+	paintHealth(b, src, src:Gone(), easeOf(b, src))
+	paintValue(b, src, status)
+end
+
+function F.PaintPower(b, src)
+	if not painted(b, src) then
+		return
+	end
+	b.bmSrc = src
+	paintPower(b, src, src:Gone(), easeOf(b, src))
+end
+
+function F.PaintRange(b, src)
+	if painted(b, src) then
+		paintRange(b, src)
+	end
+end
+
+-- which painter each event goes to, by name; any other event paints it all
+local PIECE = { UNIT_HEALTH = "PaintHealth", UNIT_MAXHEALTH = "PaintHealth", UNIT_HEAL_PREDICTION = "PaintHealth",
+	UNIT_ABSORB_AMOUNT_CHANGED = "PaintHealth", UNIT_IN_RANGE_UPDATE = "PaintRange" }
+for event in pairs(POWER) do
+	PIECE[event] = "PaintPower"
+end
+for _, event in ipairs(F.UNIT_EVENTS) do
+	if event:find("^UNIT_SPELLCAST") then
+		PIECE[event] = "PaintCast"
+	end
+end
+F.PIECE = PIECE
+
+-- not while it cannot be seen: a party cell hidden in a raid, a boss frame
+-- switched off, your own target mini - they are painted as they appear (the
+-- OnShow hook in F.Dress)
+function F.OnUnitEvent(self, event)
+	if self.bmUnit and self.bmDressed and self:IsVisible() then
+		F[PIECE[event] or "Paint"](self, F.Source(self.bmUnit))
+	end
 end
 
 -- Point a button at a unit: its events, its clicks (out of combat only - they
@@ -1494,14 +1601,7 @@ function F.Bind(b, unit)
 			end
 		end
 	end
-	-- not while it cannot be seen: a party cell hidden in a raid, a boss
-	-- frame switched off, your own target mini - they are painted as they
-	-- appear (the OnShow hook in F.Dress)
-	b:SetScript("OnEvent", function(self)
-		if self.bmUnit and self:IsVisible() then
-			F.Paint(self, F.Source(self.bmUnit))
-		end
-	end)
+	b:SetScript("OnEvent", F.OnUnitEvent)
 	if unit then
 		F.Paint(b, F.Source(unit))
 	end

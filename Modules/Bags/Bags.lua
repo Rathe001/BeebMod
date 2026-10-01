@@ -264,15 +264,25 @@ function M.Tip(owner)
 		return
 	end
 	local b = M.Bags()
+	-- ONE SET OF BAGS ON THE TOP HALF (Josh 2026-09-30, review). The count
+	-- of bags and their segments took in a soul bag or a herb bag, and the
+	-- free slots under them did not: a warlock read "5 bags" over the room in
+	-- four. Those bags are the Reagent bags row's.
+	local ordinary = {}
+	for _, bag in ipairs(b.each) do
+		if not bag.special then
+			ordinary[#ordinary + 1] = bag
+		end
+	end
 	BT.Tip.Show(owner or M.chip, { build = function(t)
 		local free = b.bags.total - b.bags.used
 		local st = state(free)
-		t:Header({ icon = BACKPACK, name = "Bags", sub = ("%d %s"):format(#b.each, #b.each == 1 and "bag" or "bags"),
+		t:Header({ icon = BACKPACK, name = "Bags", sub = ("%d %s"):format(#ordinary, #ordinary == 1 and "bag" or "bags"),
 			pill = st == "alert" and "Full" or (st == "warn" and "Nearly full" or nil),
 			pillState = st == "alert" and "bad" or "warn" })
 		t:Headline(free, ("free of %d"):format(b.bags.total), st == "alert" and "bad" or (st == "warn" and "warn" or nil))
 		local segs = {}
-		for _, bag in ipairs(b.each) do
+		for _, bag in ipairs(ordinary) do
 			local share = bag.total > 0 and bag.used / bag.total or 0
 			local left = bag.total - bag.used
 			segs[#segs + 1] = { share, left <= 0 and "bad" or (left <= 2 and "warn" or nil) }

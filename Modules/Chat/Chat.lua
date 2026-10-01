@@ -81,12 +81,33 @@ end
 -- the background up - so a frame we had merely made transparent came back as a
 -- second panel under the window the moment the mouse arrived. Hidden as well
 -- as transparent, it has nothing to fade.
+-- BACK AS IT WAS, NOT SHOWN (Josh 2026-09-30, review). Switching the side
+-- buttons or the module off called Show on every piece. That brought up a
+-- scrollbar, a jump-to-bottom with nothing below it, and a button this
+-- client never shows. Each piece goes back to what it was when BeebMod put
+-- it away, and a piece BeebMod never put away is left to the client.
 local function stow(thing, hidden)
-	fade(thing, hidden)
-	if thing and thing.SetShown then
-		thing:SetShown(not hidden)
+	if not thing then
+		return
 	end
-
+	if hidden then
+		if thing.beebsWasShown == nil and thing.IsShown then
+			thing.beebsWasShown = thing:IsShown() and true or false
+		end
+		fade(thing, true)
+		if thing.SetShown then
+			thing:SetShown(false)
+		end
+		return
+	end
+	if thing.beebsWasShown == nil then
+		return
+	end
+	fade(thing, false)
+	if thing.SetShown then
+		thing:SetShown(thing.beebsWasShown)
+	end
+	thing.beebsWasShown = nil
 end
 
 -- PAINTED EVERY TIME, NOT ONCE (Josh 2026-09-21). The colours were set where
@@ -1108,15 +1129,20 @@ function M.HookMessages(frame, plain)
 	end
 	frame.beebsAdd = frame.AddMessage
 	frame.AddMessage = function(self, text, ...)
-		if BT.Enabled("chat") and opt("shortChannels", true) then
-			text = M.Shorten(text)
-		end
-		-- guild names in green and web addresses you can click
-		-- (Modules/Chat/Links.lua)
-		if BT.Enabled("chat") and M.Decorate then
-			text = M.Decorate(text)
-		end
-		if BT.Enabled("chat") then
+		-- NOT THE COMBAT LOG (Josh 2026-09-30, review). Its tab is a chat
+		-- window too, and in a raid it writes hundreds of lines a second.
+		-- Each was read for channel names, guilds and web addresses it never
+		-- has. The combat log keeps its own time stamps, and its lines still
+		-- reach the large window.
+		if BT.Enabled("chat") and self ~= _G.COMBATLOG then
+			if opt("shortChannels", true) then
+				text = M.Shorten(text)
+			end
+			-- guild names in green and web addresses you can click
+			-- (Modules/Chat/Links.lua)
+			if M.Decorate then
+				text = M.Decorate(text)
+			end
 			text = M.Stamp(text)
 		end
 		-- the line as the frame keeps it, so the large window can tell which

@@ -365,6 +365,11 @@ function T.Fill(tip, unit)
 	if grouped then
 		tip:AddLine(grouped, 0.62, 0.68, 0.65)
 	end
+	-- and your duels with them (Modules/Ledger/Duels.lua)
+	local duels = BT.LedgerDuels and BT.LedgerDuels.Line(p)
+	if duels then
+		tip:AddLine(duels, 0.62, 0.68, 0.65)
+	end
 	-- the note AND the tags are a card above the tooltip now. They are the two
 	-- things on there that you wrote rather than the client; keeping them
 	-- together and out of the tooltip leaves the tooltip saying only what the

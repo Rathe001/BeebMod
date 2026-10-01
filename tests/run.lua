@@ -82,7 +82,10 @@ do
 	U.LearnRealm("Whitemane")
 	U.LearnRealm("Faerlina")
 	check(U.Key("Beeb Bob-Whitemane") == a, "the realm suffix of a known realm is stripped")
-	check(U.Key("Beeb Bob-Faerlina") == "Beeb Bob@Faerlina", "a character from another realm is another row")
+	-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30: "There should
+	-- just be a single realm, and if not, we need to just combine them")
+	check(U.Key("Beeb Bob-Faerlina") == a and U.Key("Beeb Bob", "Faerlina") == a,
+		"a character named with another realm is the same row")
 	local given, surname = U.SplitName("Beeb Bob")
 	check(given == "Beeb" and surname == "Bob", "a name splits into its two halves")
 	local only = select(2, U.SplitName("Beeb"))
@@ -95,8 +98,8 @@ end
 do
 	local db = newdb()
 	DB.Note(db, "Beeb Bob", nil, { class = "WARRIOR", level = 60, guild = "Nightwatch" }, 1000)
-	-- a unit sighting hands over faction and sex as well, and neither may land
-	-- on the row: DB.Note used to strip them and then copy them straight back
+	-- a unit sighting hands over faction and sex as well, and both are kept
+	-- (Josh 2026-09-30)
 	DB.Note(db, "Beeb Bob", nil, { zone = "Orgrimmar", faction = "Alliance", sex = 2 }, 2000)
 	local p = DB.Get(db, "Beeb Bob")
 	check(p.class == "WARRIOR" and p.level == 60 and p.guild == "Nightwatch",
@@ -109,8 +112,8 @@ do
 	-- row carries the name; the search index splits it.
 	check(p.given == nil and p.surname == nil, "the halves are not stored on the row")
 	check(p.srcName == nil and p.src == nil, "nor which handler wrote it")
-	check(p.faction == nil, "nor the faction, which the whole book shares")
-	check(p.sex == nil, "nor anything nothing has ever shown")
+	check(p.faction == "Alliance", "the faction is kept: a book can hold the other side too")
+	check(p.sex == 2, "and the sex is kept too (Josh 2026-09-30: \"Are we able to track gender as well?\")")
 	check(U.SplitName(p.name) == "Beeb", "the name still splits when it is asked to")
 
 	-- and rows written by an older version are slimmed once, on the login
@@ -119,8 +122,9 @@ do
 	p.given, p.surname, p.srcName = "Beeb", "Bob", "Beeb Bob"
 	p.src, p.faction, p.sex = "unit:target", "Alliance", 2
 	check(DB.Slim(db) == 1, "an old row is found")
-	check(p.given == nil and p.srcName == nil and p.faction == nil and p.sex == nil,
+	check(p.given == nil and p.srcName == nil and p.src == nil,
 		"and stripped of every one of them")
+	check(p.faction == "Alliance" and p.sex == 2, "but not of the faction or the sex, which are kept again")
 	check(p.name == "Beeb Bob" and p.class == "WARRIOR",
 		"while everything that says something is left alone")
 	check(DB.Slim(db) == 0, "and it only happens once")
@@ -184,6 +188,24 @@ do
 		and #N.Search({ text = "night" }) == 1 and #N.Search({ tag = "good" }) == 1
 		and #N.Search({ text = "nobody" }) == 0, "the Ledger finds its own by name, note, guild and tag")
 	check(N.Count() == 1, "and counts them")
+	-- ESCAPED FIRST (Josh 2026-09-30, review): a bracket typed in the search
+	-- was a malformed pattern, and a Lua error from the search's timer
+	local okBracket, found = pcall(N.Search, { text = "[" })
+	check(okBracket and #found == 0, "a bracket in the search is a character, not an error")
+	local okMid, mid = pcall(N.Search, { text = "j[u" })
+	check(okMid and #mid == 0, "and matches only what it says")
+	check(("Ju[st"):find("^" .. N.Caseless("ju[s")) == 1 and not ("Just"):find("^" .. N.Caseless("j.st")),
+		"a caseless pattern escapes brackets and dots before it maps letters")
+	-- WRITTEN ON, NOT ONLY GROUPED WITH (Josh 2026-09-30, review): a row that
+	-- only counts your groups is kept, but it is not a note
+	local people = N.People()
+	people["Grouped Once"] = { name = "Grouped Once", grouped = { n = 1 } }
+	check(N.IsMine(people["Grouped Once"]) and not N.Noted(people["Grouped Once"]),
+		"a row that only says you grouped is kept, and is not noted")
+	check(#N.Search({ mineOnly = true }) == 1 and #N.Search({}) == 2,
+		"\"My notes\" leaves it out; a plain search still finds it")
+	check(N.CountNoted() == 1 and N.Count() == 2, "and \"you've noted\" does not count it")
+	people["Grouped Once"] = nil
 end
 
 -- 5. Search: a prefix of EITHER half of the name, substrings in guilds and
@@ -226,6 +248,23 @@ do
 		and not DB.Get(db, "Stranger One"),
 		"the noted one and the recent one stay")
 	check(DB.Prune(db, 0, now) == 0, "pruning is off at zero days")
+
+	-- a packed book is pruned by the age in the string, without unpacking it
+	-- (Josh 2026-09-30, review): only the last sighting is wanted
+	local packed = newdb()
+	local t = BT.Pack.EPOCH + 200 * 86400
+	DB.Note(packed, "Old Packed", nil, { class = "MAGE" }, t - 120 * 86400)
+	DB.Note(packed, "New Packed", nil, { class = "PRIEST" }, t - 86400)
+	DB.PackAll(packed)
+	check(type(packed.players["Old Packed"]) == "string" and type(packed.players["New Packed"]) == "string",
+		"both rows are packed")
+	check(DB.Prune(packed, 90, t) == 1 and packed.players["Old Packed"] == nil,
+		"the one not seen in the window goes")
+	check(type(packed.players["New Packed"]) == "string", "and the one kept is still a string")
+	check(BT.Pack.HasClass(packed.players["New Packed"]), "a packed row says it has a class")
+	DB.Note(packed, "No Class", nil, {}, t)
+	DB.PackAll(packed)
+	check(not BT.Pack.HasClass(packed.players["No Class"]), "and one without says so too")
 end
 
 -- 6b. Nothing refreshes an observation but meeting the character again, so
@@ -280,13 +319,14 @@ do
 	local alt = BT.Bind("Whitemane", "Alliance")
 	check(alt == ally and N.Get("Beeb Straffe").note == "my main",
 		"an alt on the same realm and faction reads the same notes")
-	-- the other faction, and another realm, do not
+	-- ONE BOOK FOR BOTH SIDES (Josh 2026-09-30: "combine the alliance and
+	-- horde books"): the other side reads the same book; another realm does not
 	local horde = BT.Bind("Whitemane", "Horde")
-	check(DB.Get(horde, "Beeb Straffe") == nil and N.Get("Beeb Straffe") == nil,
-		"the other faction keeps its own book, and its own notes")
+	check(horde == ally and DB.Get(horde, "Beeb Straffe") and N.Get("Beeb Straffe").note == "my main",
+		"the other faction reads the same book, and the same notes")
 	local other = BT.Bind("Faerlina", "Alliance")
 	check(DB.Get(other, "Beeb Straffe") == nil, "so does another realm")
-	check(#BT.OtherBooks() == 2, ("the books you are not in are listed (%d)"):format(#BT.OtherBooks()))
+	check(#BT.OtherBooks() == 1, ("the book you are not in is listed (%d)"):format(#BT.OtherBooks()))
 	-- settings are account-wide, not per book
 	BT.settings.collect = false
 	BT.Bind("Whitemane", "Alliance")
@@ -463,17 +503,12 @@ do
 	check(c.age.buckets[1].key == "today" and c.age.buckets[1].n == 1
 		and c.age.buckets[2].n == 1 and c.age.buckets[3].n == 0 and c.age.buckets[4].n == 2,
 		"sightings fall into today, this week, this month, older")
-	check(BT.Stats.AgeLine(c):find("Median", 1, true) ~= nil, "the age line reads as a sentence")
-	-- the subtitle says what the chart covers, and mentions the unidentified
-	-- only when there are some
-	check(BT.Stats.Subtitle("class", c, 4) == "All 4 · 1 unknown",
-		"the class chart owns up to its gap")
-	check(BT.Stats.Subtitle("race", c, 3) == "3 of 4 · 1 no race",
-		"a chart that leaves people out says how many")
-	local clean = { total = 9, unknown = { class = 0, race = 0, level = 0, tag = 0 } }
-	check(BT.Stats.Subtitle("class", clean, 9) == "All 9",
-		"and with nothing unidentified, there is no caveat at all")
-	check(BT.Stats.Subtitle("tag", clean, 2) == "2 of 9 tagged", "tags read their own way")
+	check(BT.Stats.AgeLine(c):find("^Half were last seen in the past") ~= nil, "the age line reads as a sentence")
+	-- the line under a chart says how many are not on it: the census
+	-- redesign's "1 with no class on file" (Modules/Census/Chart.lua)
+	check(c.unknown.class == 1, "the class chart owns up to its gap")
+	check(c.unknown.race == 1, "a chart that leaves people out says how many")
+	check(c.shown == c.total, "and the count is everybody every filter keeps")
 
 	-- with brackets switched off, the chart says what it is leaving out
 	local db2 = newdb()
@@ -485,10 +520,8 @@ do
 		"a bracket filter narrows the class chart to those levels")
 	check(only60.level[7].n == 1 and only60.level[1].n == 1,
 		"but the level chart still counts everybody, filter or no filter")
-	check(only60.filtered and BT.Stats.Subtitle("class", only60, 1):find("in these levels", 1, true),
-		("and says so (%s)"):format(BT.Stats.Subtitle("class", only60, 1)))
-	check(BT.Stats.Subtitle("class", only60, 1):find("1 no level", 1, true) ~= nil,
-		"including who has no level to filter by")
+	check(only60.filtered and only60.shown == 1, "and the count is the one at those levels")
+	check(only60.unknown.level == 1, "with who has no level to filter by counted apart")
 	check(BT.Stats.AgeLine(BT.Stats.Census(newdb(), now)) == "Nobody in the book yet. Characters you see go in it.",
 		"an empty book says so")
 end
@@ -543,6 +576,14 @@ do
 	DB.Note(db, "[1. General - Teldrassil] [3. LocalDefense - Teldrassil]", nil,
 		{ vouch = true, src = "channel" }, 1000)
 	check(DB.Cleanup(db) == 1, "a line of channel names is not a character")
+	-- an accent is a letter, and a length is counted in letters (Josh
+	-- 2026-09-30, review)
+	check(U.LooksLikeName("Zo\195\171 Ashfall") and U.LooksLikeName("\195\137lune Moon")
+		and U.LooksLikeName(("\195\137"):rep(10) .. " Bob")
+		and not U.LooksLikeName(("\195\137"):rep(15) .. " Bob")
+		and not U.LooksLikeName("[1. General - Teldrassil] [3. LocalDefense - Teldrassil]")
+		and not U.LooksLikeName("\195\137"),
+		"a name with accents is a name; the channel list still is not")
 	check(U.LooksLikeName("Beeb Straffe") and U.LooksLikeName("Totem")
 		and not U.LooksLikeName("1. General - Teldrassil")
 		and not U.LooksLikeName("Three Word Name") and not U.LooksLikeName("x"),
@@ -666,6 +707,25 @@ do
 	check(pass("a", 200), "the window reopens")
 end
 
+-- 7b. A file's C_Timer is made once, not at every read (Josh 2026-09-30,
+-- review): the usual guard reads it twice for every timer it sets.
+do
+	local wasTimer = _G.C_Timer
+	local asked = 0
+	_G.C_Timer = { After = function(_, fn) asked = asked + 1 fn() end }
+	local _, T = BT.Cpu.For("Tests/Timer.lua")
+	check(T.After ~= nil and T.After == T.After, "two reads are the same function")
+	local ran = false
+	T.After(0, function() ran = true end)
+	check(asked == 1 and ran, "and it still calls the client's, with the callback")
+	_G.C_Timer.After = function(_, fn) asked = asked + 10 end
+	T.After(0, function() end)
+	check(asked == 11, "the client's function as it is now, if a test swaps it")
+	_G.C_Timer = {}
+	check(T.After == nil, "and nothing when the client has none")
+	_G.C_Timer = wasTimer
+end
+
 -- 8. Ago, which is the only thing the tooltip says about time.
 do
 	check(U.Ago(1000, 1030) == "just now" and U.Ago(1000, 2200) == "20 min"
@@ -704,7 +764,7 @@ do
 	local db = BT.Bind("Whitemane", "Alliance")
 	check(BT.boot.type == "table" and BT.boot.total == 2 and #BT.boot.books == 1,
 		"the witness reports what the file held, before we touched it")
-	check(BT.boot.bound == "Whitemane|Alliance" and BT.boot.boundCount == 0,
+	check(BT.boot.bound == "Whitemane|All" and BT.boot.boundCount == 0,
 		"and that this login bound an empty book")
 
 	local books = BT.Books()
@@ -716,10 +776,12 @@ do
 	oldNote(db, "Beeb Bob", "met again")
 
 	local done = BT.AdoptBook("OldRealm Alliance")
-	check(done and done.added == 2 and done.folded == 0,
-		"adopting brings the characters across under the name you were shown")
-	check(DB.Get(db, "Beeb Bob@OldRealm") and DB.Get(db, "Arch Droob@OldRealm"), "and they are in this book now")
-	check(DB.ByGuid(db, "Player-1-AAA") == "Beeb Bob@OldRealm", "with their GUIDs indexed here")
+	-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30): another
+	-- realm's book comes across by name, and a name already here is one row
+	check(done and done.added == 1 and done.folded == 1,
+		"adopting brings the characters across under their names, one of them folded into its row here")
+	check(DB.Get(db, "Arch Droob") and not DB.Get(db, "Arch Droob@OldRealm"), "and they are in this book now")
+	check(DB.ByGuid(db, "Player-1-BBB") == "Beeb Bob", "with their GUIDs indexed here")
 	check(DB.Get(db, "Beeb Bob").note == "met again", "and what was already here is untouched")
 	check(db.stats.sightings >= 40, "the sightings count carries over too")
 	check(BT.AdoptBook("no such book") == nil, "a book that is not there is not adopted")
@@ -729,7 +791,7 @@ do
 		seen = 2, class = "MAGE", note = "ninja" } } }
 	local added, folded = DB.Adopt(db, other)
 	check(added == 0 and folded == 1, "a character in both books is folded, not duplicated")
-	local arch = DB.Get(db, "Arch Droob@OldRealm")
+	local arch = DB.Get(db, "Arch Droob")
 	check(arch.first == 5 and arch.last == 500 and arch.seen == 3 and arch.class == "MAGE",
 		"the better informed half of each field wins")
 	check(arch.note == "ninja", "and the note comes with it")
@@ -756,7 +818,8 @@ do
 	check(BT.AcceptLateBook() == true, "a book that lands late is taken")
 	check(DB.Get(BT.db, "Old Timer"), "its characters are the ones we write in now")
 	check(DB.Get(BT.db, "Seen Whilewaiting"), "and what we saw while waiting is kept")
-	check(BT.db == _G.BeebModDB.realms["Whitemane|Alliance"], "and we write into the delivered table, not a copy")
+	check(BT.db == _G.BeebModDB.realms["Whitemane|All"] and _G.BeebModDB.realms["Whitemane|Alliance"] == nil,
+		"and the delivered side's book is folded into the realm's one book")
 	check(BT.AcceptLateBook() == false, "taking it twice does nothing")
 
 	-- THE BAKED BOOK. When the client hands over nothing, the history is read
@@ -843,7 +906,7 @@ do
 	}
 	-- the old spelling AND this realm's own name come off the key: a
 	-- character of the book's realm is keyed by name alone (Josh 2026-09-24)
-	check(DB.FoldRealms(two, "ClassicBetaPvE2") == 3, "every row of this realm, either spelling, is folded")
+	check(DB.FoldRealms(two, "ClassicBetaPvE2") == 4, "every row of this realm, either spelling, is folded")
 	check(DB.Get(two, "Ola Bard@ClassicBetaPvE") == nil and DB.Get(two, "Ola Bard@ClassicBetaPvE2") == nil,
 		"the old keys are gone")
 	local ola = DB.Get(two, "Ola Bard")
@@ -852,7 +915,9 @@ do
 		"and the two halves of what we knew are one character, under the name alone")
 	check(DB.Get(two, "Solo Act"), "a row with nothing to merge into just moves")
 	check(DB.Get(two, "Solo Act").realm == "ClassicBetaPvE2", "and is told where it lives")
-	check(DB.Get(two, "Far Away@Faerlina"), "another realm entirely is left alone")
+	-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30: "if not, we
+	-- need to just combine them")
+	check(DB.Get(two, "Far Away") and not DB.Get(two, "Far Away@Faerlina"), "and another realm's, into the one book")
 	check(two.realm == "ClassicBetaPvE2", "and the book knows its realm")
 	check(DB.FoldRealms(two, "ClassicBetaPvE2") == 0, "and running it again does nothing")
 
@@ -1540,8 +1605,8 @@ do
 	check(all.book == 6 and all.total == 6 and all.matched == 6, "with no filter, everybody counts")
 	local today = S.Census(db, now, { seen = "today" })
 	check(today.book == 6 and today.total == 3, "seen today counts the three seen in the last day")
-	check(S.Subtitle("class", today, 3):find("seen today", 1, true) ~= nil,
-		("and the caption says so (%s)"):format(S.Subtitle("class", today, 3)))
+	check(today.seen == "today" and today.shown == today.total,
+		"and the count is those seen today (its chip says so: Modules/Census/Chart.lua)")
 	local week = S.Census(db, now, { seen = "week" })
 	check(week.total == 4, "this week adds the one seen two days ago")
 	check(S.Census(db, now, { seen = "month" }).total == 4, "the month leaves out forty days ago and never")
@@ -1556,8 +1621,6 @@ do
 	check(all.guild[#all.guild].key == S.UNGUILDED and all.guild[#all.guild].n == 1,
 		"then those seen with no guild, last")
 	check(all.unknown.guild == 2, "and no guild line at all is not the same as no guild")
-	check(S.Subtitle("guild", all, 4) == "4 of 6 · 2 no guild on file",
-		("the guild chart says who it left out (%s)"):format(S.Subtitle("guild", all, 4)))
 	check(all.zone[1].key == "Ironforge" and all.zone[1].n == 2 and all.unknown.zone == 3,
 		"the zone chart counts where each was last seen")
 
@@ -1582,8 +1645,7 @@ do
 	check(races.Dwarf == 1 and races["Night Elf"] == 1 and races.Gnome == nil and races.Human == nil,
 		"the race chart counts only the hunters")
 	check(hunters.unknown.race == 1, "and the hunter with no race is its caveat")
-	check(S.Subtitle("race", hunters, 2) == "2 of 3 · 1 no race",
-		("out of the hunters, not the realm (%s)"):format(S.Subtitle("race", hunters, 2)))
+	check(hunters.shown == 3, ("the count is the hunters, not the realm (%d)"):format(hunters.shown))
 	check(hunters.level[7].n == 1 and hunters.level[1].n == 1 and hunters.level[3].n == 1,
 		"the level chart counts only the hunters")
 
@@ -1628,7 +1690,7 @@ do
 	check(type(db.players["Old Timer"]) == "table", "a time before 2026 stays a table")
 	check(type(db.players["Noted Person"]) == "table", "so does a character you wrote on")
 	check(type(db.players["Odd Field"]) == "table", "and one with a field the packing does not know")
-	check(type(db.players["Far Away@Faerlina"]) == "string", "a visitor from another realm packs too")
+	check(type(db.players["Far Away"]) == "string", "a visitor from another realm is one of the book's, and packs too")
 	local guilds = table.concat(db.words and db.words.guild or {}, ",")
 	check(#db.words.guild == 2 and guilds:find("House Fortemps", 1, true) and guilds:find("Night Watch", 1, true),
 		"the words are listed once, on the book: " .. guilds)
@@ -1653,8 +1715,8 @@ do
 	check(p.zoneAt == nil, "a zone keeps no time of its own")
 	check(DB.ByGuid(db, "Player-4620-007246A3") == "Drae Moreweth", "and its GUID is known this session")
 	check(P.Pack(db, "Drae Moreweth", p) == s, "packed again, it is the same string")
-	local far = DB.Get(db, "Far Away@Faerlina")
-	check(far.name == "Far Away" and far.realm == "Faerlina", "the visitor keeps their realm")
+	local far = DB.Get(db, "Far Away")
+	check(far.name == "Far Away" and far.realm == "Whitemane", "the visitor is filed as the book's own")
 	local lone = DB.Get(db, "Lone Wolf")
 	check(lone.guild == "" and lone.guilds == nil, "no guild is not an unknown guild")
 
@@ -1734,9 +1796,9 @@ do
 	DB.Note(into, "Some One", nil, { class = "PRIEST", guild = "Home Guild" }, T)
 	DB.PackAll(into)
 	local added = DB.Adopt(into, other)
-	local zed = DB.Get(into, "Zed Zoo@OldRealm")
-	check(added == 1 and zed and zed.class == "HUNTER" and zed.guild == "Far Guild" and zed.realm == "OldRealm",
-		"adopted, it keeps its class and guild, and its realm goes back on its key")
+	local zed = DB.Get(into, "Zed Zoo")
+	check(added == 1 and zed and zed.class == "HUNTER" and zed.guild == "Far Guild" and zed.realm == "Whitemane",
+		"adopted, it keeps its class and guild, filed under its name in this book")
 	check(DB.Get(into, "Some One").guild == "Home Guild", "and this book's own words are untouched")
 end
 
@@ -1794,6 +1856,24 @@ do
 	J.Store().enemies[5003].lore = nil
 	J.Learn({ npc = 5003, name = "Ridge Stalker" })
 	check(J.Store().enemies[5003].lore and J.Store().enemies[5003].lore.questID == 901, "an enemy met after its quest still finds it")
+	-- ONCE, NOT EVERY KILL (Josh 2026-09-30, review): an enemy no quest
+	-- names is looked for once, and again only under another name or once
+	-- another quest is kept
+	do
+		local book = J.Store()
+		local kept, looks = book.quests, 0
+		book.quests = setmetatable({}, { __index = function(_, k) looks = looks + 1 return kept[k] end })
+		J.Learn({ npc = 5006, name = "Lonely Boar" })
+		check(looks > 0 and not book.enemies[5006].lore, "an enemy new to the book looks through the quests kept")
+		looks = 0
+		J.Learn({ npc = 5006, name = "Lonely Boar" })
+		J.Learn({ npc = 5006, name = "Lonely Boar" })
+		check(looks == 0, "and a kill of it after that does not search them again")
+		J.Learn({ npc = 5006, name = "Lonely Sow" })
+		check(looks > 0, "but a new name is looked for")
+		book.quests = kept
+		book.enemies[5006] = nil
+	end
 	-- and one no quest names keeps the journal's own line, made only of facts
 	J.Learn({ npc = 5004, name = "Vuldren", kind = "Beast", family = "Fox", zone = "Zephras Isle", level = 6 })
 	check(J.LoreLine(J.Store().enemies[5004]) == "A fox of Zephras Isle, first met at level 6.", "with no quest, a line of facts")
@@ -2064,6 +2144,60 @@ do
 			book.enemies[npc], me.kills[npc], me.first[npc] = nil, nil, nil
 		end
 		me.earned["mastery:251314:1"], book.same = nil, nil
+		-- ONE NAME AT A TIME (Josh 2026-09-30, review): only pages of one name
+		-- are compared, any case, the lowest id keeping the page - and every
+		-- mastery earned on the other comes across
+		book.enemies[251601] = { name = "Gloomwing", kind = "Beast" }
+		book.enemies[251602] = { name = "gloomwing", kind = "Beast" }
+		book.enemies[251603] = { name = "Gloomwing", kind = "Humanoid" }
+		book.enemies[251604] = { name = "Duskwing", kind = "Beast" }
+		book.enemies[251605] = { kind = "Beast" }
+		me.kills[251601], me.kills[251602] = 4, 30
+		for tier = 1, 2 do
+			me.earned["mastery:251602:" .. tier] = T - 10 * tier
+		end
+		check(J.MergeSame() == 1 and book.enemies[251602] == nil and me.kills[251601] == 34
+			and book.enemies[251603] and book.enemies[251604] and book.enemies[251605],
+			"one name's pages are made one, another type and another name are not")
+		check(me.earned["mastery:251601:1"] == T - 10 and me.earned["mastery:251601:2"] == T - 20
+			and me.earned["mastery:251602:1"] == nil and me.earned["mastery:251602:2"] == nil,
+			"and both masteries it had earned come across")
+		for npc = 251601, 251605 do
+			book.enemies[npc], me.kills[npc], me.first[npc] = nil, nil, nil
+		end
+		for tier = 1, 2 do
+			me.earned["mastery:251601:" .. tier] = nil
+		end
+		book.same = nil
+	end
+
+	-- A WORLD BOSS IS ONE MET IN THE WORLD (Josh 2026-09-30, review): a raid's
+	-- bosses wear the same skull, and are raid bosses - not Worldbreaker
+	do
+		J.Learn({ npc = 777101, name = "Ragnaros", rank = "worldboss", instance = "raid", zone = "Molten Core" })
+		J.Learn({ npc = 777102, name = "Azuregos", rank = "worldboss", zone = "Azshara" })
+		check(J.Stats({ [777101] = 1 }).bosses == 0, "a raid boss is not a world boss")
+		check(J.Stats({ [777101] = 1, [777102] = 1 }).bosses == 1, "a world boss met in the world is")
+		J.Store().enemies[777101], J.Store().enemies[777102] = nil, nil
+	end
+
+	-- MADE ONCE, NOT EVERY DRAW (Josh 2026-09-30, review): an enemy's search
+	-- fields are kept, and made again when the enemy changes
+	do
+		local made, real = 0, J.SearchFields
+		J.SearchFields = function(m)
+			made = made + 1
+			return real(m)
+		end
+		local fox = { name = "Ridge Fox", kind = "Beast", zone = "Elwynn Forest" }
+		local list = { { npc = 1, m = fox } }
+		check(#J.Search(list, "ridge") == 1 and #J.Search(list, "elwynn fox") == 1 and made == 1,
+			"two searches of one enemy make its fields once: " .. made)
+		fox.zone = "Duskwood"
+		check(J.Match("duskwood", fox) and not J.Match("elwynn", fox) and made == 2,
+			"and a zone moved is searched by the new one")
+		check(#J.Search(list, "") == 1, "an empty search is still everything")
+		J.SearchFields = real
 	end
 
 	-- WHERE IT WAS KILLED, NOT ONLY FIRST (Josh 2026-09-28): up to J.SPOTS
@@ -2198,6 +2332,20 @@ do
 	K.plates.nameplate1 = true
 	K.Scan(T + 4)
 	check(#got == 5, "a corpse counted before a reload is not counted again")
+	-- A CORPSE NOBODY WATCHED HAS A NAME TOO (Josh 2026-09-30, review): one
+	-- counted from its loot alone is named from its token, where it has one
+	local named = {}
+	K.onKill = function(info, how)
+		got[#got + 1] = info.guid .. ":" .. how
+		named[info.guid] = info.name
+	end
+	sources[1] = "Creature-0-1-2-3-3099-K"
+	units.mouseover = enemy(sources[1], "Tusked Boar", { dead = true })
+	_G.UnitTokenFromGUID = function(guid) return guid == sources[1] and "mouseover" or nil end
+	K.Loot(T + 40)
+	check(got[6] == sources[1] .. ":loot" and named[sources[1]] == "Tusked Boar",
+		"a corpse counted from its loot alone is named from its token: " .. tostring(named[sources[1]]))
+	units.mouseover = nil
 	check(K.XPName("Vuldren dies, you gain 50 experience. (25 exp Rested bonus)") == "Vuldren",
 		"the rested form of the XP line names the enemy too")
 	K.plates.nameplate1 = nil
@@ -2206,6 +2354,138 @@ do
 		"UnitAffectingCombat", "GetNumLootItems", "GetLootSourceInfo", "UnitTokenFromGUID", "GetUnitName" }) do
 		_G[g] = nil
 	end
+end
+
+-- ONE REALM, AND WHICH SIDE (Josh 2026-09-30). A version read the realm
+-- number in a GUID, and the game's other spelling of this realm, as other
+-- realms, and filed nearly everyone under "Name@ClassicBetaPvE": "there is
+-- only a single realm per ruleset". Its rows fold back, and the faction it
+-- began keeping stays.
+do
+	local P = BT.Pack
+	-- (a packed time is from 2026 on: anything older stays a table)
+	local T = 1790000000
+	-- A SURNAME IS NOT A REALM (Josh 2026-09-30): the game began handing back
+	-- "Scotty", "Forever" for Scotty Forever
+	check(U.Key("Scotty Forever", "Forever") == "Scotty Forever", "a surname in the realm's place keys as home")
+	local hadGUN, hadUFN = _G.GetUnitName, _G.UnitFullName
+	_G.GetUnitName = function() return "Scotty Forever" end
+	_G.UnitFullName = function() return "Scotty", "Forever" end
+	local fn, fr = U.UnitFullName("target")
+	check(fn == "Scotty Forever" and fr == nil, "and a unit whose realm is its surname has none")
+	_G.GetUnitName, _G.UnitFullName = hadGUN, hadUFN
+
+	-- what the split left in a saved file: rows and people under a realm
+	-- name it had written down, and the list of those names
+	_G.BeebModDB = { schema = 14, settings = {}, servers = { ["4620"] = "Whitemane", ["4618"] = "Elsewhere" },
+		realms = { ["Whitemane|Alliance"] = { players = {
+			["Erisa Moonblade@Elsewhere"] = { name = "Erisa Moonblade", realm = "Elsewhere", class = "DRUID",
+				first = T, last = T, seen = 2 },
+			["Hanz Cout@Elsewhere"] = { name = "Hanz Cout", realm = "Elsewhere", class = "PALADIN", level = 18, first = T, last = T, seen = 1 },
+			["Hanz Cout"] = { name = "Hanz Cout", realm = "Whitemane", class = "PALADIN", level = 12, first = T - 60, last = T - 60, seen = 3 },
+			["Scotty Forever@Forever"] = { name = "Scotty Forever", realm = "Forever", class = "MAGE", first = T, last = T, seen = 1 },
+			["Scotty Forever"] = { name = "Scotty Forever", realm = "Whitemane", race = "Human", first = T - 60, last = T - 60, seen = 2 },
+		}, stats = { sightings = 0 } } },
+		ledger = { realms = { ["Whitemane|Alliance"] = { people = {
+			["Rend Mcgoon@Elsewhere"] = { name = "Rend Mcgoon", realm = "Elsewhere", note = "owes me 5g", grouped = 1 },
+			["Rend Mcgoon"] = { name = "Rend Mcgoon", grouped = 2, tags = { friend = true } },
+		} } } } }
+	_G.BeebModKeep, _G.BeebModChar = nil, nil
+	BT.boot = nil
+	local db = BT.Bind("Whitemane", "Alliance")
+	local players = DB.Players(db)
+	check(players["Erisa Moonblade"] and not players["Erisa Moonblade@Elsewhere"], "a row the split moved comes home")
+	check(not players["Hanz Cout@Elsewhere"] and DB.Get(db, "Hanz Cout").level == 18 and DB.Get(db, "Hanz Cout").seen == 4,
+		"two rows of one character become one")
+	local scotty = DB.Get(db, "Scotty Forever")
+	check(not players["Scotty Forever@Forever"] and scotty.class == "MAGE" and scotty.race == "Human" and scotty.seen == 3,
+		"a row filed under its own surname comes home, into the row already there")
+	check(BeebModDB.servers == nil, "and the list of names it kept is gone")
+	local rend = N.People()["Rend Mcgoon"]
+	check(rend and not N.People()["Rend Mcgoon@Elsewhere"] and rend.note == "owes me 5g" and rend.grouped == 3
+		and rend.tags.friend, "a Ledger row comes home too: the note kept, the groups added, the tags joined")
+	local n = DB.Count(db)
+	local stray = 0
+	for key in pairs(players) do
+		if key:find("@", 1, true) then stray = stray + 1 end
+	end
+	check(n == 3 and stray == 0, "one book, no realm in any key: " .. n .. " rows, " .. stray .. " with a realm")
+
+	-- THE FACTION, packed in the flags: no letter more
+	local row = P.Pack(db, "Side Kick", { name = "Side Kick", realm = "Whitemane", race = "Orc", faction = "Horde",
+		last = T, first = T, seen = 1, vouch = true })
+	check(#row == P.HEAD and P.Unpack(db, "Side Kick", row).faction == "Horde" and P.Unpack(db, "Side Kick", row).vouch,
+		"a faction is packed with the flags, and the row is no longer")
+	check(P.Unpack(db, "Side Kick", P.WithFaction(row, "Alliance")).faction == "Alliance", "and can be written in alone")
+	-- the rows already on file, from the race; a Skyborne waits for a sighting
+	local back = { players = {} }
+	back.players["Old Orc"] = P.Pack(back, "Old Orc", { name = "Old Orc", race = "Orc", last = T, first = T, seen = 1 })
+	back.players["Old Sky"] = P.Pack(back, "Old Sky", { name = "Old Sky", race = "Skyborne", last = T, first = T, seen = 1 })
+	back.players["Old Gnome"] = { name = "Old Gnome", race = "Gnome" }
+	check(DB.BackfillFaction(back) == 2, "two of the three are settled by their race")
+	check(P.Faction(back.players["Old Orc"]) == "Horde" and back.players["Old Gnome"].faction == "Alliance"
+		and P.Faction(back.players["Old Sky"]) == nil, "the Orc Horde, the Gnome Alliance, the Skyborne unknown")
+
+	check(U.Commas(26210) == "26,210" and U.Commas(999) == "999" and U.Commas(1234567) == "1,234,567",
+		"big numbers have commas")
+end
+
+-- ONE BOOK FOR BOTH SIDES, AND A CENSUS BY SIDE AND SEX (Josh 2026-09-30:
+-- "combine the alliance and horde books, and add alliance/horde/all faction
+-- filters", "We should also add a gender filter as part of this")
+do
+	local T = 1790000000
+	local function row(name, race, extra)
+		local r = { name = name, realm = "Whitemane", race = race, first = T, last = T, seen = 1 }
+		for k, v in pairs(extra or {}) do r[k] = v end
+		return r
+	end
+	_G.BeebModDB = { schema = BT.SCHEMA, settings = {}, realms = {
+		["Whitemane|Alliance"] = { players = {
+			["Ally Gnome"] = row("Ally Gnome", "Gnome", { sex = 3 }),
+			["Sky Ally"] = row("Sky Ally", "Skyborne"),
+			["Both Sides"] = row("Both Sides", "Human", { seen = 2 }),
+		}, stats = { sightings = 3 } },
+		["Whitemane|Horde"] = { players = {
+			["Sky Horde"] = row("Sky Horde", "Skyborne", { sex = 2 }),
+			["Both Sides"] = row("Both Sides", "Human", { first = T - 60 }),
+		}, stats = { sightings = 2 } },
+		["Faerlina|Horde"] = { players = { ["Far Orc"] = row("Far Orc", "Orc") } },
+	}, ledger = { moved = 1, realms = {
+		["Whitemane|Alliance"] = { people = { ["Both Sides"] = { name = "Both Sides", note = "ally note" } } },
+		["Whitemane|Horde"] = { people = { ["Both Sides"] = { name = "Both Sides", grouped = 1 },
+			["Sky Horde"] = { name = "Sky Horde", note = "horde note" } } },
+	} } }
+	_G.BeebModKeep, _G.BeebModChar = nil, nil
+	BT.boot = nil
+	local db = BT.Bind("Whitemane", "Horde")
+	check(BT.scope.key == "Whitemane|All" and BT.scope.faction == "Horde",
+		"one book for the realm, and your own side still known")
+	check(BeebModDB.realms["Whitemane|Alliance"] == nil and BeebModDB.realms["Whitemane|Horde"] == nil
+		and BeebModDB.realms["Faerlina|Horde"] ~= nil, "the realm's two books are one; another realm's is its own")
+	check(DB.Count(db) == 4 and db.stats.sightings == 5, "every character of both, and both counts of sightings")
+	check(DB.Get(db, "Sky Ally").faction == "Alliance" and DB.Get(db, "Sky Horde").faction == "Horde",
+		"a Skyborne takes the side of the book it was in")
+	local both = DB.Get(db, "Both Sides")
+	check(both.faction == "Alliance" and both.seen == 3 and both.first == T - 60,
+		"a race says the side first, and one character in both books is one row")
+	check(N.Get("Both Sides").note == "ally note" and N.Get("Both Sides").grouped == 1
+		and N.Get("Sky Horde").note == "horde note", "and the Ledger's two books are one, nothing lost")
+	check(N.People("Whitemane|Alliance") == N.People(), "a key that names a side is the realm's one book")
+	-- the census, by side and by sex, from tables and then from strings
+	local function counts()
+		local now = T + 60
+		return BT.Stats.Census(db, now).total, BT.Stats.Census(db, now, { faction = "Alliance" }).total,
+			BT.Stats.Census(db, now, { faction = "Horde" }).total, BT.Stats.Census(db, now, { sex = 3 }).total,
+			BT.Stats.Census(db, now, { sex = 2, faction = "Horde" }).total
+	end
+	local all, ally, horde, women, hordeMen = counts()
+	check(all == 4 and ally == 3 and horde == 1 and women == 1 and hordeMen == 1,
+		("all, Alliance, Horde, female, Horde male: %d %d %d %d %d"):format(all, ally, horde, women, hordeMen))
+	DB.PackAll(db)
+	local all2, ally2, horde2, women2, hordeMen2 = counts()
+	check(all2 == all and ally2 == ally and horde2 == horde and women2 == women and hordeMen2 == hordeMen,
+		"and the same, read straight from the packed book")
 end
 
 print("")

@@ -92,6 +92,9 @@ function M.Update()
 	if not M.frame then
 		return
 	end
+	if M.session then
+		M.session.last = U.Now()
+	end
 	M.time:SetText(M.Label())
 	-- as wide as what it says, so the header can lay it against its edge
 	-- through Pill.Number: a measurement can come back secret on this client
@@ -104,8 +107,28 @@ function M.Label(which)
 	return M.Text(which) .. " " .. M.MARK[which]
 end
 
--- when this session began: the login, or the last reload
-M.since = type(time) == "function" and time() or nil
+-- WHEN THIS SESSION BEGAN (Josh 2026-09-30, review): the login, carried
+-- through a /reload as every other "this session" is (Core/Session.lua). It
+-- was the moment this file loaded, so after a /reload the clock said two
+-- minutes played while Currency said two hours.
+local function store()
+	if not BT.settings then
+		return nil
+	end
+	BT.settings.clock = BT.settings.clock or {}
+	return BT.settings.clock
+end
+
+function M.Start(initial, reloading)
+	local all = store()
+	if not all then
+		return nil
+	end
+	M.session = BT.Session.Open(all, initial, reloading, function(now)
+		return { start = now }
+	end)
+	return M.session
+end
 
 -- (Josh 2026-09-27, the dock's tooltips redrawn) both clocks side by side,
 -- the header's lit, the date, and how long you have played
@@ -121,8 +144,9 @@ function M.Tip()
 			{ M.Text("local"), which == "local" and "local, in the header" or "local", nil, which == "local" },
 			{ M.Text("server"), which == "server" and "server, in the header" or "server", nil, which == "server" },
 		}, 16)
-		if M.since and type(time) == "function" then
-			t:Note(("Played this session: %s."):format(BT.Session.Duration(time() - M.since)))
+		local s = M.session
+		if s and s.start then
+			t:Note(("Played this session: %s."):format(BT.Session.Duration(U.Now() - s.start)))
 		end
 		t:Foot({ { "Click", which == "local" and "show server time instead" or "show local time instead" } })
 	end })
@@ -179,12 +203,26 @@ function M.Show(on)
 	BT.Dock.Relayout()
 end
 
+-- the load: which kind it was says whether the session carries on
+M.events = CreateFrame("Frame")
+M.events:RegisterEvent("PLAYER_ENTERING_WORLD")
+M.events:SetScript("OnEvent", function(_, _, initial, reloading)
+	if BT.Enabled("clock") then
+		BT.Session.OnWorld(M, initial, reloading)
+	end
+end)
+
 function M:OnEnable()
 	M.Show(true)
+	-- switched on mid-session (Core/Session.lua)
+	BT.Session.Ensure(M)
 end
 
--- a book bound (a login, a loading screen) is the same setup
-M.OnBind = M.OnEnable
+-- a book bound (a login, a loading screen): the session is the loading
+-- screen's to begin, which knows whether this was a /reload
+function M:OnBind()
+	M.Show(true)
+end
 
 function M:OnDisable()
 	M.Show(false)

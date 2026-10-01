@@ -126,23 +126,17 @@ function M.Kill(info, how)
 		end
 	end
 	-- a new rank last, once everything that earned it has been shown
-	local rank, title = J.Rank((J.Score()))
+	-- (the score worked out once, and the dock's line drawn from it)
+	local points, _, st = J.Score()
+	local rank, title = J.Rank(points)
 	if rank > rankBefore then
 		M.RankToast(rank, title)
 	end
-	M.Update()
+	M.Update(points, st)
 	BT.ExpeditionWindow.Changed()
 end
 
 K.onKill = M.Kill
-
--- a spell seen cast (K.EnemyCast): on the enemy's page, redrawn if it is open
-function M.Cast(info, spellID)
-	if J.SawCast(info, spellID) then
-		BT.ExpeditionWindow.Changed()
-	end
-end
-K.onCast = M.Cast
 
 -- ---------------------------------------------------------------------------
 -- The line and the bar
@@ -165,11 +159,14 @@ function M.Lines(points, st)
 	return left, right
 end
 
-function M.Update()
+-- `points` and `st` where the caller has just worked them out (M.Kill)
+function M.Update(points, st)
 	if not (M.frame and J.Store()) then
 		return
 	end
-	local points, _, st = J.Score()
+	if type(points) ~= "number" or type(st) ~= "table" then
+		points, _, st = J.Score()
+	end
 	local left, right = M.Lines(points, st)
 	M.text:SetText(left)
 	M.eta:SetText(right)
@@ -389,10 +386,11 @@ function M.ReadQuests()
 	s.quests = s.quests or {}
 	local was = GetQuestLogSelection and select(2, pcall(GetQuestLogSelection))
 	local wasID = C_QuestLog and C_QuestLog.GetSelectedQuest and select(2, pcall(C_QuestLog.GetSelectedQuest))
-	local read, lore = 0, 0
+	local read, lore, moved = 0, 0, false
 	for i = 1, questCount() do
 		local title, isHeader, questID = questEntry(i)
 		if title and not isHeader and questID and not s.quests[questID] and select_(i, questID) then
+			moved = true
 			local ok, text = pcall(GetQuestLogQuestText, i)
 			if ok and type(text) == "string" and text ~= "" then
 				lore = lore + J.QuestSeen({ id = questID, title = title, text = text,
@@ -401,8 +399,9 @@ function M.ReadQuests()
 			end
 		end
 	end
-	-- the selection put back as it was
-	if read > 0 then
+	-- the selection put back as it was: whenever it moved, a quest whose
+	-- story came back empty too
+	if moved then
 		if type(was) == "number" and SelectQuestLogEntry then
 			pcall(SelectQuestLogEntry, was)
 		elseif type(wasID) == "number" and C_QuestLog and C_QuestLog.SetSelectedQuest then
@@ -434,49 +433,35 @@ end
 -- ---------------------------------------------------------------------------
 
 M.events = CreateFrame("Frame")
-for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "UNIT_FLAGS",
-	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "CHAT_MSG_COMBAT_XP_GAIN", "LOOT_READY", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE",
-	"PLAYER_ENTERING_WORLD", "ENCOUNTER_END" }) do
-	pcall(M.events.RegisterEvent, M.events, event)
-end
--- your own casts, for Pick Pocket (Modules/Expedition/Kills.lua, K.Cast)
-do
-	local ok = M.events.RegisterUnitEvent
-		and pcall(M.events.RegisterUnitEvent, M.events, "UNIT_SPELLCAST_SUCCEEDED", "player")
-	if not ok then
-		pcall(M.events.RegisterEvent, M.events, "UNIT_SPELLCAST_SUCCEEDED")
-	end
-end
--- EVERY UNIT'S CASTS, ON A FRAME OF THEIR OWN: the frame above hears only
--- your own (a unit event for "player"), and an enemy's cast is any unit's.
--- K.EnemyCast keeps the ones from a unit it is watching.
-M.casts = CreateFrame("Frame")
-for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_SUCCEEDED" }) do
-	pcall(M.casts.RegisterEvent, M.casts, event)
-end
-M.casts:SetScript("OnEvent", function(_, event, unit, _, spellID)
-	if unit ~= "player" and BT.Enabled("expedition") then
-		K.EnemyCast(unit, spellID, event)
-	end
-end)
+-- the loading screen is heard whatever the switch says: it opens the session
+pcall(M.events.RegisterEvent, M.events, "PLAYER_ENTERING_WORLD")
 
--- WHAT THE CLIENT SAYS OF AN ENEMY'S CASTS, for the Testing page's Record
--- button: how many were kept, how many were secret, and the last few. If
--- every one is secret, this client won't let the journal learn abilities.
-function M.CastsDump()
-	local st = K.stats
-	local lines = {
-		("kept %d · secret %d · the same cast again %d"):format(st.casts or 0, st.castSecret or 0, st.castRepeat or 0),
-	}
-	for _, c in ipairs(K.lastCasts) do
-		lines[#lines + 1] = ("%s (%s) · %s %s · %s"):format(tostring(c.name), tostring(c.npc),
-			tostring(c.spell), tostring((J.SpellInfo(c.spell))), tostring(c.event))
+-- QUIET WHILE OFF (Josh 2026-09-30, review). Every unit's health reached
+-- this frame whether the Expedition was on or not, to be turned away one by one. They are heard while it is
+-- on: from its OnBind or OnEnable, until its OnDisable.
+local HEARD = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "UNIT_FLAGS",
+	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "CHAT_MSG_COMBAT_XP_GAIN", "LOOT_READY", "QUEST_ACCEPTED",
+	"QUEST_LOG_UPDATE", "ENCOUNTER_END" }
+function M.Listen(on)
+	on = on and true or false
+	if M.listening == on then
+		return
 	end
-	BT.EnsureBound()
-	BeebModDB.expeditionDump = { at = U.Now(), lines = lines }
-	return #lines
+	M.listening = on
+	local ev = M.events
+	for _, event in ipairs(HEARD) do
+		pcall(on and ev.RegisterEvent or ev.UnregisterEvent, ev, event)
+	end
+	-- your own casts, for Pick Pocket (Modules/Expedition/Kills.lua, K.Cast)
+	if on then
+		local ok = ev.RegisterUnitEvent and pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player")
+		if not ok then
+			pcall(ev.RegisterEvent, ev, "UNIT_SPELLCAST_SUCCEEDED")
+		end
+	else
+		pcall(ev.UnregisterEvent, ev, "UNIT_SPELLCAST_SUCCEEDED")
+	end
 end
-BT.Record("expeditionDump", M.CastsDump, "expedition")
 
 M.events:SetScript("OnEvent", function(_, event, a, b, c, d, e)
 	if not BT.Enabled("expedition") then
@@ -540,6 +525,7 @@ function M.Show(show)
 end
 
 function M:OnEnable()
+	M.Listen(true)
 	K.Reset(J.Counted())
 	M.Show(true)
 	BT.Session.Ensure(M)
@@ -548,6 +534,7 @@ end
 -- a book was bound: the GUIDs this character counted before a reload are
 -- still counted, and the enemies in view are looked at afresh
 function M:OnBind()
+	M.Listen(true)
 	-- two pages for one enemy, from before they were one (J.MergeSame)
 	J.MergeSame()
 	K.Reset(J.Counted())
@@ -555,6 +542,7 @@ function M:OnBind()
 end
 
 function M:OnDisable()
+	M.Listen(false)
 	M.Show(false)
 end
 
@@ -565,6 +553,12 @@ end
 function M:BuildTab(panel)
 	local W = BT.Widgets
 	local page = W.Stack(panel)
+	-- the feature's picture first, as every feature's page has (UI/Window.lua)
+	local art
+	art, panel.picture = BT.Window.FeatureArt(panel, "expedition")
+	if art then
+		page:Add(art)
+	end
 	page:Note("Every enemy you kill goes in the journal, with its kill count and a model of it. "
 		.. "Unique kills, masteries and commendations are worth points. Your points set your Expedition rank.")
 	page:Note("A kill counts when an enemy you tagged and fought dies in view, or when the game gives you "

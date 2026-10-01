@@ -68,6 +68,7 @@ Modules\Ledger\Find.lua
 Modules\Ledger\Tooltip.lua
 Modules\Ledger\Ledger.lua
 Modules\Ledger\Groups.lua
+Modules\Ledger\Duels.lua
 Modules\Ledger\Demo.lua
 Modules\Census\Stats.lua
 Modules\Census\Chart.lua

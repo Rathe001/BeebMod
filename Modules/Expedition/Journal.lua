@@ -370,18 +370,39 @@ function J.LoreSentence(text, name)
 	return pick
 end
 
--- does the quest name the enemy? in an objective, or in its story
+-- A QUEST'S WORDS IN LOWER CASE, ONCE (Josh 2026-09-30, review). Each look
+-- for an enemy's name made a lower-case copy of every kept quest's story, and
+-- a kill of an enemy no quest names looked through all of them - a few
+-- milliseconds a kill with a full log. The copies are made once a session,
+-- held by the quest's own table (a quest read again is a new table), and
+-- never saved.
+local lowered = setmetatable({}, { __mode = "k" })
+local function lowerOf(q)
+	local l = lowered[q]
+	if not l then
+		l = { text = type(q.text) == "string" and q.text:lower() or "", objectives = {} }
+		for i, o in ipairs(q.objectives or {}) do
+			l.objectives[i] = type(o) == "string" and o:lower() or ""
+		end
+		lowered[q] = l
+	end
+	return l
+end
+
+-- does the quest name the enemy (`name` in lower case)? in an objective, or
+-- in its story - "the prideclaws have grown bold" names Prideclaw too, the
+-- name being inside its plural
 local function names(q, name)
-	for _, o in ipairs(q.objectives or {}) do
-		if lowerFind(o, name) then
+	if name == "" then
+		return nil
+	end
+	local l = lowerOf(q)
+	for _, o in ipairs(l.objectives) do
+		if o:find(name, 1, true) then
 			return "objective"
 		end
 	end
-	if lowerFind(q.text, name) then
-		return "text"
-	end
-	-- "the prideclaws have grown bold": the plural in the story
-	if lowerFind(q.text, name .. "s") or lowerFind(q.text, name .. "es") then
+	if l.text:find(name, 1, true) then
 		return "text"
 	end
 	return nil
@@ -389,10 +410,10 @@ end
 
 -- an enemy's lore from a quest, if the quest names it
 local function loreFrom(q, m)
-	if not (m and m.name and not m.lore) then
+	if not (m and type(m.name) == "string" and not m.lore) then
 		return false
 	end
-	if not names(q, m.name) then
+	if not names(q, m.name:lower()) then
 		return false
 	end
 	local line = J.LoreSentence(q.text, m.name)
@@ -401,10 +422,15 @@ local function loreFrom(q, m)
 	end
 	-- whether the line itself names the enemy, or is only the quest's first
 	-- sentence: only the first kind goes on a card
-	local named = lowerFind(line, m.name) or lowerFind(line, m.name .. "s") or lowerFind(line, m.name .. "es")
+	local named = lowerFind(line, m.name)
 	m.lore = { line = line, text = q.text, quest = q.title, questID = q.id, named = named or nil }
 	return true
 end
+
+-- the quests kept so far, as a count that moves whenever one is kept
+local questsRev = 0
+-- enemy -> the name it was looked up by, and the quests then (J.FindLore)
+local looked = setmetatable({}, { __mode = "k" })
 
 -- A quest the log showed us: kept, and handed to every enemy that has no lore
 -- yet. Returns how many enemies it gave lore to.
@@ -422,6 +448,7 @@ function J.QuestSeen(q)
 		end
 	end
 	s.quests[q.id] = { id = q.id, title = q.title, text = q.text, objectives = q.objectives }
+	questsRev = questsRev + 1
 	local n = 0
 	for _, m in pairs(s.enemies) do
 		if loreFrom(s.quests[q.id], m) then
@@ -433,11 +460,21 @@ end
 
 -- An enemy new to the book looks through the quests already kept - newest
 -- first, the likeliest to be about it.
+-- ONCE, NOT EVERY KILL (Josh 2026-09-30, review). J.Learn asks this on every
+-- kill of an enemy with no lore, which is most of them, and the answer only
+-- changes when a quest is kept - and J.QuestSeen hands each new one to every
+-- enemy itself. So an enemy is looked up again only under another name, or
+-- once more quests have been kept.
 function J.FindLore(m)
 	local s = J.Store()
 	if not (s and m and not m.lore and s.quests) then
 		return false
 	end
+	local l = looked[m]
+	if l and l.rev == questsRev and l.name == m.name and l.quests == s.quests then
+		return false
+	end
+	looked[m] = { rev = questsRev, name = m.name, quests = s.quests }
 	local order = s.questOrder or {}
 	for i = #order, 1, -1 do
 		local q = s.quests[order[i]]
@@ -537,8 +574,9 @@ local function fresh(c)
 	c.earned = c.earned or {}
 	c.feats = c.feats or {}
 	c.recent = c.recent or {}
-	-- npc -> { [spell id] = times seen }: what you have seen each enemy cast
-	c.spells = c.spells or {}
+	-- the abilities list, gone (2026-09-30): the game keeps an enemy's
+	-- spells from addons
+	c.spells = nil
 	return c
 end
 
@@ -632,78 +670,6 @@ function J.Learn(info, now)
 	return m
 end
 
--- ---------------------------------------------------------------------------
--- What an enemy casts (Modules/Expedition/Kills.lua, K.EnemyCast)
--- ---------------------------------------------------------------------------
-
--- one cast seen: on this character's page for the enemy, as a kill is
-function J.SawCast(info, spellID, now)
-	if not (info and info.npc and type(spellID) == "number") then
-		return false
-	end
-	local c = J.Mine()
-	if not c then
-		return false
-	end
-	local npc = J.PageOf(info) or info.npc
-	local t = c.spells[npc]
-	local new = not (t and t[spellID])
-	if not t then
-		t = {}
-		c.spells[npc] = t
-	end
-	t[spellID] = (t[spellID] or 0) + 1
-	if new then
-		J.rev = (J.rev or 0) + 1
-	end
-	return new
-end
-
--- a spell's name and picture, however this build asks for them
-function J.SpellInfo(id)
-	local S = _G.C_Spell
-	if type(S) == "table" and type(S.GetSpellInfo) == "function" then
-		local ok, i = pcall(S.GetSpellInfo, id)
-		if ok and type(i) == "table" and type(i.name) == "string" then
-			return i.name, i.iconID or i.originalIconID
-		end
-	end
-	if type(GetSpellInfo) == "function" then
-		local ok, name, _, icon = pcall(GetSpellInfo, id)
-		if ok and type(name) == "string" then
-			return name, icon
-		end
-	end
-	return nil
-end
-
--- every spell you have seen the enemy cast, the most seen first:
--- { { id, n, name, icon }, ... }. Two ranks of one spell are two ids and one
--- name, so they are one line, their counts added.
-function J.Abilities(npc)
-	local c = J.Mine()
-	local t = c and c.spells and c.spells[npc]
-	local byName, out = {}, {}
-	for id, n in pairs(t or {}) do
-		local name, icon = J.SpellInfo(id)
-		name = name or ("Spell " .. id)
-		local a = byName[name]
-		if a then
-			a.n = a.n + n
-		else
-			a = { id = id, n = n, name = name, icon = icon }
-			byName[name] = a
-			out[#out + 1] = a
-		end
-	end
-	table.sort(out, function(a, b)
-		if a.n ~= b.n then
-			return a.n > b.n
-		end
-		return a.name < b.name
-	end)
-	return out
-end
 
 -- ONE NAME, ONE PAGE (Josh 2026-09-28: "Getting duplicates" - two cards
 -- called Skyhopper). The game can give two enemies the same name and body under
@@ -713,11 +679,23 @@ end
 -- name and creature type the journal already has goes on that page, its
 -- kills added to that page's. A type not yet read matches on the name alone.
 -- expedition.same[npc] = the npc whose page it is, so each id is looked up once.
+-- An enemy's name in lower case is made once per name and held for the
+-- session: J.PageOf compares every enemy's for each new id, and J.MergeSame
+-- the names of the whole book on each loading screen.
+local lowerNames, lowerFrom = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+local function lowerName(m)
+	local name = m.name
+	if lowerFrom[m] ~= name then
+		lowerFrom[m], lowerNames[m] = name, name:lower()
+	end
+	return lowerNames[m]
+end
+
 local function sameName(a, b)
 	if type(a.name) ~= "string" or a.name == "" or type(b.name) ~= "string" then
 		return false
 	end
-	if a.name:lower() ~= b.name:lower() then
+	if lowerName(a) ~= lowerName(b) then
 		return false
 	end
 	local ka, kb = J.KindOf(a), J.KindOf(b)
@@ -781,14 +759,6 @@ local function merge(s, to, from)
 				first[to] = math.min(first[to] or first[from], first[from])
 				first[from] = nil
 			end
-			local spells = c.spells or {}
-			if spells[from] then
-				spells[to] = spells[to] or {}
-				for id, n in pairs(spells[from]) do
-					spells[to][id] = (spells[to][id] or 0) + n
-				end
-				spells[from] = nil
-			end
 			if c.last and c.last.npc == from then
 				c.last.npc = to
 			end
@@ -798,13 +768,19 @@ local function merge(s, to, from)
 				end
 			end
 			-- a mastery earned on either is earned on the page, when it first was
+			-- (gathered first: a key added to a table while it is walked can
+			-- cut the walk short)
+			local moved = {}
 			for id, at in pairs(c.earned or {}) do
 				local npc, tier = tostring(id):match("^mastery:(%d+):(%d+)$")
 				if tonumber(npc) == from then
-					local mine = ("mastery:%d:%s"):format(to, tier)
-					c.earned[mine] = math.min(c.earned[mine] or at, at)
-					c.earned[id] = nil
+					moved[#moved + 1] = { id, ("mastery:%d:%s"):format(to, tier), at }
 				end
+			end
+			for _, mv in ipairs(moved) do
+				local id, mine, at = mv[1], mv[2], mv[3]
+				c.earned[mine] = math.min(c.earned[mine] or at, at)
+				c.earned[id] = nil
 			end
 		end
 	end
@@ -827,20 +803,40 @@ function J.MergeSame()
 		end
 	end
 	table.sort(ids)
+	-- ONE NAME AT A TIME (Josh 2026-09-30, review). Every pair of enemies in
+	-- the book was compared on each loading screen - nearly half a second for
+	-- two thousand. Enemies of two names are never one page, so the ids are
+	-- put with their name first, and only those of one name are compared, in
+	-- the same order as before: the lowest id keeps the page.
+	local byName, order = {}, {}
+	for _, npc in ipairs(ids) do
+		local m = s.enemies[npc]
+		if type(m.name) == "string" and m.name ~= "" then
+			local key = lowerName(m)
+			local list = byName[key]
+			if not list then
+				list = {}
+				byName[key] = list
+				order[#order + 1] = key
+			end
+			list[#list + 1] = npc
+		end
+	end
 	local n = 0
-	for i, to in ipairs(ids) do
-		if s.enemies[to] then
-			for k = i + 1, #ids do
-				local from = ids[k]
-				if s.enemies[from] and sameName(s.enemies[to], s.enemies[from]) then
-					merge(s, to, from)
-					n = n + 1
+	for _, key in ipairs(order) do
+		local list = byName[key]
+		for i = 1, #list - 1 do
+			local to = list[i]
+			if s.enemies[to] then
+				for k = i + 1, #list do
+					local from = list[k]
+					if s.enemies[from] and sameName(s.enemies[to], s.enemies[from]) then
+						merge(s, to, from)
+						n = n + 1
+					end
 				end
 			end
 		end
-	end
-	if n > 0 then
-		J.rev = (J.rev or 0) + 1
 	end
 	return n
 end
@@ -982,7 +978,6 @@ function J.Kill(info, now)
 			c.feats.up5 = c.feats.up5 or now
 		end
 	end
-	J.rev = (J.rev or 0) + 1
 	return was == 0, J.Check(c, now, npc, was)
 end
 
@@ -1029,7 +1024,9 @@ function J.Stats(kills, feats)
 		if J.IsElite(m.rank) then
 			st.elites = st.elites + 1
 		end
-		if m.rank == "worldboss" then
+		-- a world boss by its category, not the client's rank: a raid's bosses
+		-- wear the world boss's skull too, and are raid bosses (J.Category)
+		if J.Category(m) == "worldboss" then
 			st.bosses = st.bosses + 1
 		end
 		if m.zone and not zone[m.zone] then
@@ -1415,13 +1412,14 @@ local function wordScore(q, text, ws, loose)
 	return best
 end
 
--- what an enemy is searched by: { text, weight, loose }, the name first
+-- what an enemy is searched by: { text, weight, loose, words }, the name
+-- first (the words only of a loose field: only those are matched word by word)
 function J.SearchFields(m)
 	local fields = {}
 	local function add(text, weight, loose)
 		if type(text) == "string" and text ~= "" then
 			local f = fold(text)
-			fields[#fields + 1] = { f, weight, loose, words(f) }
+			fields[#fields + 1] = { f, weight, loose, loose and words(f) or nil }
 		end
 	end
 	add(m.name, 3, true)
@@ -1447,14 +1445,41 @@ function J.SearchFields(m)
 	return fields
 end
 
--- How well `query` matches enemy `m`: a score, or nil when some word typed is
--- found nowhere. An empty query matches everything, at nothing.
-function J.Match(query, m)
-	local qs = words(fold(query))
-	if #qs == 0 then
-		return 0
+-- MADE ONCE, NOT EVERY DRAW (Josh 2026-09-30, review). An enemy's fields fold
+-- its wiki pages and quest whole, and a search typed in drew them all again
+-- for every enemy on every redraw - each arrow key, each burst of kills: over
+-- twenty milliseconds and ten megabytes of strings with a full journal. They
+-- are kept for the session, by the enemy's own table, and made again when
+-- anything they are made from has moved.
+local searched = setmetatable({}, { __mode = "k" })
+local SEARCHED_BY = { "name", "rank", "kind", "family", "zone", "instance", "boss", "skull", "lo", "hi", "body", "lore" }
+local function fieldsOf(m)
+	local c = searched[m]
+	-- (the data itself: loreData() is a new empty table each time without it)
+	local data, bodies = BT.ExpeditionLoreData, BT.ExpeditionBodies
+	if c and c.data == data and c.bodies == bodies and c.wiki == J.WikiLore then
+		local same = true
+		for _, key in ipairs(SEARCHED_BY) do
+			if c[key] ~= m[key] then
+				same = false
+				break
+			end
+		end
+		if same then
+			return c.fields
+		end
 	end
-	local fields = J.SearchFields(m or {})
+	c = { data = data, bodies = bodies, wiki = J.WikiLore, fields = J.SearchFields(m) }
+	for _, key in ipairs(SEARCHED_BY) do
+		c[key] = m[key]
+	end
+	searched[m] = c
+	return c.fields
+end
+
+-- the score of the typed words `qs` against enemy `m`, or nil
+local function matchWords(qs, m)
+	local fields = fieldsOf(m)
 	local total = 0
 	for _, q in ipairs(qs) do
 		local best = 0
@@ -1472,12 +1497,23 @@ function J.Match(query, m)
 	return total
 end
 
+-- How well `query` matches enemy `m`: a score, or nil when some word typed is
+-- found nowhere. An empty query matches everything, at nothing.
+function J.Match(query, m)
+	local qs = words(fold(query))
+	if #qs == 0 then
+		return 0
+	end
+	return matchWords(qs, m or {})
+end
+
 -- the enemies of `list` ({ npc, n, m }) that `query` matches, the best first and
 -- the rest in the order they came
 function J.Search(list, query)
 	local out = {}
+	local qs = words(fold(query))
 	for i, e in ipairs(list) do
-		local score = J.Match(query, e.m)
+		local score = #qs == 0 and 0 or matchWords(qs, e.m or {})
 		if score then
 			out[#out + 1] = { e = e, score = score, i = i }
 		end

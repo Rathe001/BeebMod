@@ -315,6 +315,22 @@ local function whereStanding()
 	return nil
 end
 
+-- the client's own caption colour where nobody holds the ground
+local UNCLAIMED = { 1.0, 0.82, 0.0 }
+
+-- where you are standing, written only when it has changed
+function M.Coords()
+	if not M.coordText then
+		return
+	end
+	local x, y = whereStanding()
+	local text = x and ("%.1f, %.1f"):format(x, y) or ""
+	if text ~= M.coordsSaid then
+		M.coordsSaid = text
+		M.coordText:SetText(text)
+	end
+end
+
 function M.Caption()
 	if not (M.zoneText and M.coordText) then
 		return
@@ -324,10 +340,9 @@ function M.Caption()
 	M.coordText:SetShown(opt("coords", true) and true or false)
 	local zone = call(_G.GetMinimapZoneText) or call(_G.GetZoneText) or ""
 	M.zoneText:SetText(zone)
-	local c = GROUND[call(_G.GetZonePVPInfo) or ""] or { 1.0, 0.82, 0.0 }
+	local c = GROUND[call(_G.GetZonePVPInfo) or ""] or UNCLAIMED
 	M.zoneText:SetTextColor(c[1], c[2], c[3])
-	local x, y = whereStanding()
-	M.coordText:SetText(x and ("%.1f, %.1f"):format(x, y) or "")
+	M.Coords()
 end
 
 -- REMEMBERED PER MAP, NOT ONCE EVER (Josh 2026-09-21). Keying this on "have
@@ -1003,8 +1018,10 @@ function M.Keepers(frame, map, plain)
 			local f = entry.f
 			-- an addon's minimap button belongs to the Addon buttons line
 			-- while that is on, not to the row along the bottom of the map
-			local claimed = BT.MapButtons and BT.MapButtons.Claims(f)
-			if entry.ours and leftover[f] and isFrame(f) and not claimed
+			-- (asked last: the walk of the whole UI puts thousands of frames
+			-- in the pool that the cheap tests turn away first)
+			if entry.ours and leftover[f] and isFrame(f)
+				and not (BT.MapButtons and BT.MapButtons.Claims(f))
 				and f.IsShown and f:IsShown() then
 				candidate[f] = true
 			end
@@ -1307,10 +1324,13 @@ function M.Apply(plain)
 	M.Caption()
 	-- the coordinates change as you walk, so they are read a few times a
 	-- second while the map is in the panel
+	-- ONLY THE COORDINATES, ONLY WHERE THEY ARE SEEN (Josh 2026-09-30, review).
+	-- The whole caption was drawn four times a second, the zone line as well,
+	-- which has events of its own, and with the panel hidden too.
 	if not M.ticker and C_Timer and C_Timer.NewTicker then
 		M.ticker = C_Timer.NewTicker(0.25, function()
-			if BT.Enabled("minimap") then
-				M.Caption()
+			if BT.Enabled("minimap") and opt("coords", true) and M.frame and M.frame:IsVisible() then
+				M.Coords()
 			end
 		end)
 	end
@@ -1409,13 +1429,7 @@ function M.Fit()
 	local size = math.floor(math.max(60, w - PAD * 2) + 0.5)
 	local before = BT.Pill.Number(map.GetWidth and map:GetWidth(), 0)
 	pcall(map.SetSize, map, size, size)
-	-- where the map is in this section, for the dock to leave clear under it
-	-- while it is see-through; a solid map needs no hole
-	if M.Opacity() < 1 then
-		frame.hole = { x = PAD, y = PAD + ZONE_H, w = size, h = size }
-	else
-		frame.hole = nil
-	end
+	-- (no hole in the dock under it: the map is always solid, M.Opacity)
 	-- A RESIZED MAP KEEPS THE PICTURE IT HAD (Josh 2026-09-21). The client
 	-- draws the ground again when the zoom changes, not when the size does,
 	-- so a step in and back out makes it draw at the new size.
@@ -1498,8 +1512,11 @@ function M.Watch()
 	end
 	if not M.events then
 		M.events = CreateFrame("Frame")
+		-- NOT THE LOADING SCREEN (Josh 2026-09-30, review): every loading
+		-- screen already lays it out through OnBind, and hearing it here as
+		-- well made two full layouts of the panel, three with the new area
 		for _, event in ipairs({
-			"PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
+			"ZONE_CHANGED_NEW_AREA",
 			"MINIMAP_UPDATE_ZOOM", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED",
 			-- walking into a new district changes the caption and nothing else
 			"ZONE_CHANGED", "ZONE_CHANGED_INDOORS",

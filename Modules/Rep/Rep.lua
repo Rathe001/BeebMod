@@ -15,7 +15,7 @@
 -- batch of kills - so an hour's pace said little ("11h 57m to Honored"). The
 -- line is the faction and its standing; the hover says what is left.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Rep/Rep.lua")
+local CreateFrame = BT.Cpu.For("Modules/Rep/Rep.lua")
 
 local U = BT.Util
 
@@ -24,7 +24,7 @@ local M = BT.Module({
 	feature = "dock",
 	onPage = "progress",
 	title = "Reputation",
-	blurb = "The faction you watch, and time to the next standing",
+	blurb = "The faction you watch, and where you stand with it",
 	order = 37.5,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -34,7 +34,6 @@ local TEXT_H = 16
 local BAR_H = 4
 local LINE_H = TEXT_H + BAR_H + 9
 local INSET = 6
-local EVERY = 10
 -- exalted is the top of the ladder: nothing comes after it
 local TOP = 8
 
@@ -155,15 +154,6 @@ function M.Gain()
 	M.Update()
 end
 
--- reputation per hour for a faction this session, or nil while it is too soon
-function M.Rate(t, now)
-	if not t then
-		return nil
-	end
-	return BT.Session.Rate(t.gained, t.since, now)
-end
-
-
 local function big(n)
 	n = math.floor(n or 0)
 	if type(BreakUpLargeNumbers) == "function" then
@@ -184,7 +174,7 @@ end
 -- bars"): "Reputation · Darnassus", and the standing on the right, where
 -- nothing else is. NO AMOUNT (Josh 2026-09-22): "2,807 to Honored" took half
 -- the line, and the hover says it anyway.
-function M.Lines(f, rate)
+function M.Lines(f)
 	local left = ("Reputation %s"):format(WORDS:format("· " .. f.name))
 	return left, M.StandingName(f.reaction)
 end
@@ -204,8 +194,7 @@ function M.Update()
 	if not f then
 		return
 	end
-	local t = M.session and M.session.factions and M.session.factions[f.name]
-	local left, right = M.Lines(f, M.Rate(t))
+	local left, right = M.Lines(f)
 	M.text:SetText(left)
 	M.eta:SetText(right)
 
@@ -342,6 +331,10 @@ function M.SetHideClient(on)
 	BT.StatusBars.Set("rep", BT.Enabled("rep") and on)
 end
 
+-- NO TICKER (Josh 2026-09-30, review). It read the faction again every ten
+-- seconds, and nothing on the line changes with time: a gain or another
+-- faction watched is UPDATE_FACTION, a new width is OnSizeChanged, and a
+-- standing previewed from the Testing page calls M.Update itself.
 function M.Show(on)
 	-- switched off, the client's bar comes back whatever the switch says
 	BT.StatusBars.Set("rep", on and M.HideClient())
@@ -350,19 +343,8 @@ function M.Show(on)
 		M.shownFor = nil
 		frame:Show()
 		M.Update()
-		if not M.ticker and C_Timer and C_Timer.NewTicker then
-			M.ticker = C_Timer.NewTicker(EVERY, function()
-				if BT.Enabled("rep") then
-					M.Update()
-				end
-			end)
-		end
 	else
 		frame:Hide()
-		if M.ticker then
-			M.ticker:Cancel()
-			M.ticker = nil
-		end
 	end
 	BT.Dock.Relayout()
 end

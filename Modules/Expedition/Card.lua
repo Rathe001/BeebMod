@@ -612,8 +612,8 @@ local function sweep(c, on)
 end
 Card.Sweep = sweep
 
--- one enemy: { npc, name, kind (the type line), lore, kills, points, tier (0 to
--- 4), rank, nameColor }
+-- one enemy: { npc, name, kind (the type line), kills, points, tier (0 to 4),
+-- rank, nameColor }
 function Card.Dress(c, d)
 	local t = d.tier or 0
 	local metal = Card.TIERS[t]

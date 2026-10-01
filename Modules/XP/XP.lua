@@ -131,8 +131,18 @@ function M.Gain()
 	end
 	local level, cur, max = M.Read()
 	local was, wasCur, wasMax = M.level or level, M.cur or cur, M.max or max
+	-- A LEVEL READ HALF NEW (Josh 2026-09-30, review). The client can answer
+	-- the new level's experience while UnitLevel still says the old one, or
+	-- the new level with the old experience. Read as it came, the next gain
+	-- was nearly a whole level, and the pace jumped for an hour. Experience
+	-- going down without a new level is a level gained; a new level with the
+	-- bar unmoved waits for the bar.
+	if level > was and cur == wasCur and max == wasMax then
+		return
+	end
+	local levelled = level > was or (level == was and cur < wasCur)
 	local gained
-	if level > was then
+	if levelled then
 		gained = math.max(0, wasMax - wasCur) + cur
 	else
 		gained = cur - wasCur
@@ -141,7 +151,10 @@ function M.Gain()
 		s.gained = (s.gained or 0) + gained
 		M.Note(gained, U.Now())
 	end
-	M.level, M.cur, M.max = level, cur, max
+	-- a level never goes down in a session, so a late read of the old one
+	-- is not a level to gain again
+	M.level = levelled and math.max(level, was + 1) or math.max(level, was)
+	M.cur, M.max = cur, max
 	s.last = U.Now()
 	M.Update()
 end
@@ -501,6 +514,12 @@ function M.Show(on)
 end
 
 function M:OnEnable()
+	-- WHAT THE BAR SAYS NOW (Josh 2026-09-30, review): experience gained
+	-- while this was off is not one gain. Booked as one, it made the pace
+	-- for the next hour, as Currency's purse once did (Currency.lua, M.Show).
+	if M.session then
+		M.level, M.cur, M.max = M.Read()
+	end
 	M.Show(true)
 	-- switched on mid-session (Core/Session.lua)
 	BT.Session.Ensure(M)

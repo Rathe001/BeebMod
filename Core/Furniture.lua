@@ -85,20 +85,35 @@ function F.New(opts)
 	return setmetatable(d, Dresser)
 end
 
+-- EVERY KIND OF CHANGE KEPT ON ITS OWN (Josh 2026-09-30, review). A piece
+-- can be changed twice in two ways: a glyph inked and later, its size read as
+-- nothing, put away as art; or art put away and later inked as a glyph. Only
+-- the first change was remembered, so undressing gave back the colour and
+-- left the piece invisible. Each kind is now kept once, in its own field, and
+-- each is given back.
+local function was(self, r)
+	local w = self.was[r]
+	if not w then
+		w = {}
+		self.was[r] = w
+	end
+	return w
+end
+
 function Dresser:Hide(r)
-	if not self.was[r] then
-		self.was[r] = { alpha = N(call(r, "GetAlpha"), 1) }
+	local w = was(self, r)
+	if w.alpha == nil then
+		w.alpha = N(call(r, "GetAlpha"), 1)
 	end
 	call(r, "SetAlpha", 0)
 end
 
 function Dresser:Ink(r)
-	if not self.was[r] then
+	local w = was(self, r)
+	if w.vertex == nil then
 		local vr, vg, vb, va = call(r, "GetVertexColor")
-		self.was[r] = {
-			vertex = { N(vr, 1), N(vg, 1), N(vb, 1), N(va, 1) },
-			desat = call(r, "IsDesaturated") and true or false,
-		}
+		w.vertex = { N(vr, 1), N(vg, 1), N(vb, 1), N(va, 1) }
+		w.desat = call(r, "IsDesaturated") and true or false
 	end
 	local ink = self.opts.ink or F.INK
 	call(r, "SetDesaturated", true)
@@ -117,8 +132,9 @@ function Dresser:Retext(fs)
 	if not (r > 0.85 and g > 0.6 and b < 0.35) then
 		return
 	end
-	if not self.was[fs] then
-		self.was[fs] = { text = { r, g, b } }
+	local w = was(self, fs)
+	if w.text == nil then
+		w.text = { r, g, b }
 	end
 	local text = self.opts.text or F.TEXT
 	call(fs, "SetTextColor", text[1], text[2], text[3])
@@ -155,11 +171,13 @@ function Dresser:DressRegion(r)
 	if self.opts.keep and self.opts.keep(r) then
 		return
 	end
+	-- a glyph that an earlier pass put away as art is given its alpha back
+	-- before it is inked, or it would be inked and still not be seen
+	local w = self.was[r]
 	if r.beebsGlyph then
-		local w = self.was[r]
 		if w and w.alpha then
 			call(r, "SetAlpha", w.alpha)
-			self.was[r] = nil
+			w.alpha = nil
 		end
 		self:Ink(r)
 		return
@@ -168,6 +186,10 @@ function Dresser:DressRegion(r)
 	if kind == "Texture" then
 		local what = self:Classify(r)
 		if what == "glyph" then
+			if w and w.alpha then
+				call(r, "SetAlpha", w.alpha)
+				w.alpha = nil
+			end
 			self:Ink(r)
 		elseif what == "art" then
 			self:Hide(r)
@@ -185,13 +207,14 @@ function Dresser:DressBar(bar)
 	if t then
 		t.beebsKeep = true
 		if self.opts.flatBars ~= false then
-			if not self.was[bar] then
+			local w = was(self, bar)
+			if w.bar == nil then
 				local atlas = call(t, "GetAtlas")
 				local file = call(t, "GetTexture")
-				self.was[bar] = { bar = {
+				w.bar = {
 					atlas = (type(atlas) == "string" and atlas ~= "") and atlas or nil,
 					file = (type(file) == "number" or type(file) == "string") and file or nil,
-				} }
+				}
 			end
 			call(bar, "SetStatusBarTexture", FLAT)
 		end
@@ -255,12 +278,15 @@ function Dresser:Undress()
 	for r, w in pairs(self.was) do
 		if w.alpha then
 			call(r, "SetAlpha", w.alpha)
-		elseif w.vertex then
+		end
+		if w.vertex then
 			call(r, "SetVertexColor", w.vertex[1], w.vertex[2], w.vertex[3], w.vertex[4])
 			call(r, "SetDesaturated", w.desat)
-		elseif w.text then
+		end
+		if w.text then
 			call(r, "SetTextColor", w.text[1], w.text[2], w.text[3])
-		elseif w.bar then
+		end
+		if w.bar then
 			if w.bar.atlas then
 				call(call(r, "GetStatusBarTexture"), "SetAtlas", w.bar.atlas)
 			elseif w.bar.file then

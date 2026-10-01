@@ -875,30 +875,40 @@ function W.Scroller(parent, gutter)
 			lit(false)
 		end
 	end)
-	grip:SetScript("OnMouseDown", function(self)
-		self.dragging = { y = cursorY(), offset = view.offset }
-	end)
-	grip:SetScript("OnMouseUp", function(self)
-		self.dragging = nil
-		lit(self.IsMouseOver and self:IsMouseOver() or false)
-		-- a strip that rests only in certain places goes to the nearest
-		if view.Settle then
-			view:Settle()
-		end
-	end)
-	grip:SetScript("OnUpdate", function(self)
+	-- the thumb's travel is the strip's: a pixel of one is this much of the other
+	-- ONLY WHILE IT IS HELD (Josh 2026-09-30, review): it ran every frame the
+	-- window was open, to find nothing held and return
+	local function follow(self)
 		local d = self.dragging
 		if not d then
 			return
 		end
-		-- the thumb's travel is the strip's: a pixel of one is this much of the other
 		local room, max = view:Room(), view:Max()
 		local travel = room - BT.Pill.Number(view.thumb:GetHeight(), 0)
 		if max <= 0 or travel <= 0 then
 			return
 		end
 		view:ScrollTo(d.offset + (d.y - cursorY()) * max / travel)
+	end
+	local function letGo(self)
+		self.dragging = nil
+		self:SetScript("OnUpdate", nil)
+	end
+	grip:SetScript("OnMouseDown", function(self)
+		self.dragging = { y = cursorY(), offset = view.offset }
+		self:SetScript("OnUpdate", follow)
 	end)
+	grip:SetScript("OnMouseUp", function(self)
+		letGo(self)
+		lit(self.IsMouseOver and self:IsMouseOver() or false)
+		-- a strip that rests only in certain places goes to the nearest
+		if view.Settle then
+			view:Settle()
+		end
+	end)
+	-- the window closed mid-drag lets go: the strip must not follow the
+	-- pointer when it opens again
+	grip:SetScript("OnHide", letGo)
 	-- the gutter: a click above the thumb goes up a window, below it down one
 	local track = CreateFrame("Button", nil, view)
 	track:SetPoint("TOPRIGHT", view, "TOPRIGHT", 0, 0)

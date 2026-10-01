@@ -11,10 +11,13 @@ local U = BT.Util
 local C = {}
 BT.Census = C
 
-local ROWS, ROW_H, BAR_X, BAR_W = 12, 22, 150, 380
--- the brackets, how recently, the charts, the caption, then the bars
-local SEEN_Y, MODE_Y, SUB_Y, ROWS_Y = -24, -50, -76, -96
-local COUNT_W = 78 -- the column the counts are right-aligned in
+local ROWS, ROW_H = 12, 22
+-- the tiles, the tabs, the count and its chips, then the bars
+local TILE_H, TAB_Y, CAP_Y, ROWS_Y = 62, -72, -106, -134
+-- where a bar starts, the count's column and the share's, and a bar's room
+-- before the window has been laid out (UI/CensusWindow.lua: 640 less padding)
+local BAR_X, COUNT_W, PCT_W = 150, 58, 38
+local BAR_W = 612 - BAR_X - COUNT_W - PCT_W
 
 local MODES = {
 	{ key = "class", label = "Class" },
@@ -84,75 +87,188 @@ end
 -- now, so it is built from the same pieces as every other page.
 local label, paint = BT.Widgets.Label, BT.Widgets.Paint
 
+-- THE SUMMARY THAT FILTERS (Josh 2026-09-30: "I really like the summary with
+-- filters"). Four rows of buttons said nothing until they were pressed. Four
+-- tiles across the top say who is in the book first - how many, which side,
+-- which sex, which levels - and each is the filter for what it shows: a click
+-- on Alliance, on female, on a level's column narrows every chart, and the
+-- filters that are on line up as chips beside the count, each with its x.
+-- Seen sits at the end of the chart's tabs, and the bars' hover card says
+-- what a click on one does.
+local SIDE_COLOUR = { Alliance = { 0.25, 0.50, 0.88 }, Horde = { 0.79, 0.26, 0.23 } }
+local SEX_COLOUR = { [2] = { 0.42, 0.62, 0.84 }, [3] = { 0.83, 0.50, 0.69 } }
+local NONE = { 0.30, 0.31, 0.30 }
+local TILE_W, TILE_GAP = { 128, 147, 147, 166 }, 8
+C.SEX_WORD = { [2] = "Male", [3] = "Female" }
+
+local function tile(view, i, title)
+	local x = 0
+	for k = 1, i - 1 do
+		x = x + TILE_W[k] + TILE_GAP
+	end
+	local t = CreateFrame("Frame", nil, view)
+	t:SetPoint("TOPLEFT", x, 0)
+	t:SetSize(TILE_W[i], TILE_H)
+	BT.Pill.Panel(t, BT.Widgets.RAISED, BT.Widgets.RIM)
+	t.cap = label(t, string.upper(title), "small", 0.42, 0.47, 0.45)
+	t.cap:SetPoint("TOPLEFT", 9, -7)
+	t.w = TILE_W[i]
+	return t
+end
+
+-- a bar of shares, and the words under its two ends; each half of the tile
+-- is the click for its side
+local function splitTile(view, i, title, keys, colours, onPick)
+	local t = tile(view, i, title)
+	t.keys = keys
+	t.track = t:CreateTexture(nil, "ARTWORK")
+	t.track:SetPoint("TOPLEFT", 9, -24)
+	t.track:SetSize(t.w - 18, 10)
+	t.track:SetColorTexture(NONE[1], NONE[2], NONE[3], 0.6)
+	t.parts, t.buttons = {}, {}
+	for n, k in ipairs(keys) do
+		local c = colours[k]
+		local part = t:CreateTexture(nil, "ARTWORK", nil, 1)
+		part:SetHeight(10)
+		part:SetColorTexture(c[1], c[2], c[3], 1)
+		t.parts[k] = part
+		local b = CreateFrame("Button", nil, t)
+		b:SetSize(t.w / 2, TILE_H - 18)
+		b:SetPoint(n == 1 and "BOTTOMLEFT" or "BOTTOMRIGHT", 0, 0)
+		b.key = k
+		b.words = label(b, "", "small", 0.72, 0.76, 0.74)
+		b.words:SetPoint(n == 1 and "BOTTOMLEFT" or "BOTTOMRIGHT", n == 1 and 9 or -9, 8)
+		b.words:SetJustifyH(n == 1 and "LEFT" or "RIGHT")
+		b:SetScript("OnClick", function(self)
+			if self.live then
+				onPick(self.key)
+			end
+		end)
+		b:SetScript("OnEnter", function(self)
+			self.hovered = true
+			if t.paint then t.paint() end
+			if BT.Tip and t.tip then
+				BT.Tip.Show(self, { near = true, build = function(card) t.tip(card, self.key) end })
+			end
+		end)
+		b:SetScript("OnLeave", function(self)
+			self.hovered = false
+			if t.paint then t.paint() end
+			if BT.Tip then BT.Tip.Hide() end
+		end)
+		t.buttons[k] = b
+	end
+	t.none = label(t, "Not seen yet", "small", 0.42, 0.47, 0.45)
+	t.none:SetPoint("BOTTOMLEFT", 9, 8)
+	t.none:Hide()
+	return t
+end
+
+-- a tab: its word, and a line under the one you are on
+local TAB_W = 64
+local function tab(view, text)
+	local b = CreateFrame("Button", nil, view)
+	b:SetSize(TAB_W, 24)
+	b.label = label(b, text, nil, 0.62, 0.66, 0.64)
+	b.label:SetPoint("CENTER", 0, 1)
+	b.line = b:CreateTexture(nil, "ARTWORK")
+	b.line:SetPoint("BOTTOMLEFT", 6, 0)
+	b.line:SetPoint("BOTTOMRIGHT", -6, 0)
+	b.line:SetHeight(2)
+	local function paintTab(self)
+		local a = BT.Widgets.ACCENT
+		self.line:SetColorTexture(a[1], a[2], a[3], 1)
+		self.line:SetShown(self.pressed and true or false)
+		if self.pressed then
+			self.label:SetTextColor(0.93, 0.95, 0.94)
+		elseif self.hovered then
+			self.label:SetTextColor(0.82, 0.86, 0.84)
+		else
+			self.label:SetTextColor(0.55, 0.60, 0.58)
+		end
+	end
+	b.SetPressed = function(self, on)
+		self.pressed = on and true or false
+		paintTab(self)
+	end
+	b:SetScript("OnEnter", function(self) self.hovered = true; paintTab(self) end)
+	b:SetScript("OnLeave", function(self) self.hovered = false; paintTab(self) end)
+	paintTab(b)
+	return b
+end
+
 function C.Build(parent)
 	local view = CreateFrame("Frame", nil, parent)
 	view:SetAllPoints()
 	view.mode = "class"
-
-	-- LEVEL BRACKETS, EACH ITS OWN SWITCH (Josh 2026-09-19). On a realm this
-	-- young the starting zones drown every chart; turning 1-10 off is the
-	-- difference between "what does the realm look like" and "what does the
-	-- realm that matters to me look like". There is no "all" button: every
-	-- bracket lit already means all of them.
+	view.seen, view.faction, view.sex = "all", "all", "all"
 	view.bands = {}
-	view.bandButtons = {}
-	local bx = 0
-	local bandLabel = label(view, string.upper("Levels"), "small", 0.42, 0.47, 0.45)
-	bandLabel:SetPoint("TOPLEFT", 0, -3)
-	bx = 52
-	for _, band in ipairs(BT.Stats.BANDS) do
-		local b = BT.Widgets.Button(view, band.key, band.key == "60" and 36 or 54, 20)
-		b:SetPoint("TOPLEFT", bx, 0)
-		b:SetScript("OnClick", function()
-			view.bands[band.key] = not view.bands[band.key]
-			C.Refresh(view)
-		end)
-		view.bandButtons[band.key] = b
-		bx = bx + (band.key == "60" and 40 or 58)
-	end
 
-	-- SEEN WITHIN (Josh 2026-09-24): the book remembers everyone who ever
-	-- passed through; these narrow every chart to who is about lately. One
-	-- of them is always on, and All is the whole book.
-	view.seen = "all"
-	view.seenButtons = {}
-	local seenLabel = label(view, string.upper("Seen"), "small", 0.42, 0.47, 0.45)
-	seenLabel:SetPoint("TOPLEFT", 0, SEEN_Y - 3)
-	local sx = 52
-	for _, s in ipairs(BT.Stats.SEEN) do
-		local b = BT.Widgets.Button(view, s.label, 54, 20)
-		b:SetPoint("TOPLEFT", sx, SEEN_Y)
-		b:SetScript("OnClick", function()
-			view.seen = s.key
-			C.Refresh(view)
-		end)
-		view.seenButtons[s.key] = b
-		sx = sx + 58
-	end
+	-- THE TILES
+	local count = tile(view, 1, "Characters")
+	count.num = count:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
+	count.num:SetPoint("TOPLEFT", 9, -22)
+	count.sub = label(count, "", "small", 0.55, 0.6, 0.58)
+	count.sub:SetPoint("BOTTOMLEFT", 9, 8)
+	view.countTile = count
 
-	-- CLICK A BAR (Josh 2026-09-24): a class, race, guild, zone or tag picked
-	-- here narrows every other chart to it - "what races are the hunters",
-	-- "what levels is this guild". Its button, on the right, puts it back.
-	view.clear = BT.Widgets.Button(view, "", 190, 20)
-	view.clear:SetPoint("TOPRIGHT", -4, SEEN_Y)
-	view.clear:SetScript("OnClick", function()
-		view.pick = nil
+	-- a side, or a sex: a click picks it, and a click on the one picked lets go
+	view.sideTile = splitTile(view, 2, "Faction", { "Alliance", "Horde" }, SIDE_COLOUR, function(k)
+		view.faction = view.faction == k and "all" or k
 		C.Refresh(view)
 	end)
-	-- a guild's name can be longer than the button
-	view.clear.label:SetWidth(178)
-	view.clear.label:SetWordWrap(false)
-	view.clear:Hide()
-	view.hint = label(view, "Click a bar to count only those", "small", 0.42, 0.47, 0.45)
-	view.hint:SetPoint("TOPRIGHT", -6, SEEN_Y - 3)
-	view.hint:SetJustifyH("RIGHT")
+	view.factionButtons = view.sideTile.buttons
+	view.sexTile = splitTile(view, 3, "Gender", { 2, 3 }, SEX_COLOUR, function(k)
+		view.sex = view.sex == k and "all" or k
+		C.Refresh(view)
+	end)
+	view.sexButtons = view.sexTile.buttons
 
-	-- THE CHARTS THE TOOLKIT CAN ACTUALLY DRAW (Josh 2026-09-19). Tags are the
-	-- Ledger's vocabulary; with the Ledger switched off there is nothing to
-	-- chart and the button would be a promise we cannot keep, so it goes.
+	-- LEVEL BRACKETS, EACH ITS OWN SWITCH (Josh 2026-09-19), as a column each
+	-- of how many are in it: none lit is every level, as it always was
+	local levels = tile(view, 4, "Level")
+	view.levelTile = levels
+	view.bandButtons = {}
+	local n = #BT.Stats.BANDS
+	local colW = (levels.w - 18 - (n - 1) * 3) / n
+	for i, band in ipairs(BT.Stats.BANDS) do
+		local b = CreateFrame("Button", nil, levels)
+		b:SetSize(colW, 36)
+		b:SetPoint("BOTTOMLEFT", 9 + (i - 1) * (colW + 3), 4)
+		b.key = band.key
+		b.bar = b:CreateTexture(nil, "ARTWORK")
+		b.bar:SetPoint("BOTTOM", b, "BOTTOM", 0, 12)
+		b.bar:SetWidth(colW)
+		b.bar:SetHeight(2)
+		b.num = label(b, tostring(band.min), "small", 0.42, 0.47, 0.45)
+		b.num:SetPoint("BOTTOM", 0, 0)
+		b:SetScript("OnClick", function(self)
+			if self.live then
+				view.bands[self.key] = not view.bands[self.key] or nil
+				C.Refresh(view)
+			end
+		end)
+		b:SetScript("OnEnter", function(self)
+			if BT.Tip and self.n then
+				BT.Tip.Show(self, { near = true, build = function(t)
+					t:Header({ name = "Level " .. self.key:gsub("%-", "–"), sub = U.Commas(self.n) })
+					if self.live then
+						t:Foot({ { "Click", view.bands[self.key] and "count these levels again" or "count only these levels" } })
+					end
+				end })
+			end
+		end)
+		b:SetScript("OnLeave", function()
+			if BT.Tip then BT.Tip.Hide() end
+		end)
+		view.bandButtons[band.key] = b
+	end
+
+	-- THE CHARTS THE TOOLKIT CAN ACTUALLY DRAW (Josh 2026-09-19), as tabs:
+	-- Tags are the Ledger's, so with the Ledger off there is no Tags tab
 	view.modeButtons = {}
 	for _, m in ipairs(MODES) do
-		local b = BT.Widgets.Button(view, m.label, 80, 22)
+		local b = tab(view, m.label)
 		b:SetScript("OnClick", function()
 			view.mode = m.key
 			C.Refresh(view)
@@ -161,22 +277,39 @@ function C.Build(parent)
 		b.needsLedger = m.key == "tag"
 		view.modeButtons[m.key] = b
 	end
+	view.tabRule = view:CreateTexture(nil, "BACKGROUND")
+	view.tabRule:SetPoint("TOPLEFT", 0, TAB_Y - 24)
+	view.tabRule:SetPoint("TOPRIGHT", 0, TAB_Y - 24)
+	view.tabRule:SetHeight(1)
+	view.tabRule:SetColorTexture(1, 1, 1, 0.08)
 
-	-- A LINE OF ITS OWN (Josh 2026-09-19). The caption sat to the right of the
-	-- chart buttons, in whatever space they happened to leave, and "2043 of
-	-- 2527 characters; 484 have no level on file" ran off the end of the
-	-- window. It is a sentence about the whole chart, so it gets the width of
-	-- the whole chart.
+	-- SEEN WITHIN (Josh 2026-09-24), at the end of the tabs
+	local seenOptions = {}
+	for _, s in ipairs(BT.Stats.SEEN) do
+		seenOptions[#seenOptions + 1] = { s.key, s.short or s.label }
+	end
+	view.seenControl = BT.Widgets.Segmented(view, seenOptions, function(k)
+		view.seen = k
+		C.Refresh(view)
+	end, 48)
+	view.seenControl:SetPoint("TOPRIGHT", 0, TAB_Y - 2)
+	view.seenButtons = {}
+	for _, b in ipairs(view.seenControl.buttons) do
+		view.seenButtons[b.key] = b
+	end
+
+	-- THE COUNT, AND WHAT IT IS OF: every filter that is on, a chip with its x
+	view.count = view:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
+	view.count:SetPoint("TOPLEFT", 2, CAP_Y)
 	view.subtitle = label(view, "", "small", 0.55, 0.6, 0.58)
+	view.subtitle:SetPoint("BOTTOMLEFT", view.count, "BOTTOMRIGHT", 6, 1)
 	view.subtitle:SetJustifyH("LEFT")
-	view.subtitle:SetWordWrap(true)
+	view.chips = {}
 
 	view.rows = {}
 	for i = 1, ROWS do
-		-- A ROW IS AS WIDE AS THE PANEL (Josh 2026-09-19). Rows were a fixed
-		-- 560 with the count hung 538 pixels along, which ran off the edge of
-		-- the window and took the percentage with it. The count is pinned to
-		-- the right instead, and the bar stretches to meet it.
+		-- A ROW IS AS WIDE AS THE PANEL (Josh 2026-09-19): the count and its
+		-- share pinned to the right, and the bar stretching to meet them
 		local row = CreateFrame("Button", nil, view)
 		row:SetHeight(ROW_H)
 		row:SetPoint("TOPLEFT", 0, ROWS_Y - (i - 1) * ROW_H)
@@ -185,10 +318,31 @@ function C.Build(parent)
 		row.hover:SetAllPoints()
 		row.hover:SetColorTexture(1, 1, 1, 0.04)
 		row.hover:Hide()
+		-- the bar picked: lit, with an edge
+		row.pickBg = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+		row.pickBg:SetAllPoints()
+		row.pickEdge = row:CreateTexture(nil, "ARTWORK", nil, 2)
+		row.pickEdge:SetPoint("TOPLEFT")
+		row.pickEdge:SetPoint("BOTTOMLEFT")
+		row.pickEdge:SetWidth(2)
 		row:SetScript("OnEnter", function(self)
-			if self.pickable then self.hover:Show() end
+			if self.pickable then
+				self.hover:Show()
+			end
+			if BT.Tip and self.n then
+				BT.Tip.Show(self, { near = true, build = function(t)
+					t:Header({ name = self.name:GetText(), sub = U.Commas(self.n) })
+					t:Note(("%d%% of these %s."):format(self.share or 0, U.Commas(self.of or 0)))
+					if self.pickable then
+						t:Foot({ { "Click", self.picked and "count everyone again" or "count only these" } })
+					end
+				end })
+			end
 		end)
-		row:SetScript("OnLeave", function(self) self.hover:Hide() end)
+		row:SetScript("OnLeave", function(self)
+			self.hover:Hide()
+			if BT.Tip then BT.Tip.Hide() end
+		end)
 		row:SetScript("OnClick", function(self)
 			if not self.pickable then
 				return
@@ -202,28 +356,35 @@ function C.Build(parent)
 			C.Refresh(view)
 		end)
 		row.name = label(row, "", "small")
-		row.name:SetPoint("LEFT", 4, 0)
-		row.name:SetWidth(BAR_X - 12)
+		row.name:SetPoint("LEFT", 8, 0)
+		row.name:SetWidth(BAR_X - 16)
 		row.name:SetJustifyH("LEFT")
 		row.name:SetWordWrap(false)
-		row.track = row:CreateTexture(nil, "BACKGROUND")
+		row.track = row:CreateTexture(nil, "BACKGROUND", nil, 2)
 		row.track:SetPoint("LEFT", BAR_X, 0)
-		row.track:SetPoint("RIGHT", row, "RIGHT", -COUNT_W, 0)
+		row.track:SetPoint("RIGHT", row, "RIGHT", -(COUNT_W + PCT_W), 0)
 		row.track:SetHeight(12)
 		row.track:SetColorTexture(1, 1, 1, 0.05)
 		row.bar = row:CreateTexture(nil, "ARTWORK")
 		row.bar:SetPoint("LEFT", BAR_X, 0)
 		row.bar:SetSize(1, 12)
-		row.count = label(row, "", "small", 0.65, 0.7, 0.67)
-		row.count:SetPoint("RIGHT", -2, 0)
-		row.count:SetWidth(COUNT_W - 8)
+		row.count = label(row, "", "small", 0.86, 0.89, 0.87)
+		row.count:SetPoint("RIGHT", -PCT_W, 0)
+		row.count:SetWidth(COUNT_W - 6)
 		row.count:SetJustifyH("RIGHT")
 		row.count:SetWordWrap(false)
+		row.pct = label(row, "", "small", 0.43, 0.48, 0.46)
+		row.pct:SetPoint("RIGHT", -4, 0)
+		row.pct:SetWidth(PCT_W - 6)
+		row.pct:SetJustifyH("RIGHT")
 		view.rows[i] = row
 	end
 
 	view.footer = label(view, "", "small", 0.5, 0.55, 0.52)
-	view.footer:SetPoint("TOPLEFT", 4, ROWS_Y - 6 - ROWS * ROW_H)
+	view.footer:SetPoint("TOPLEFT", 4, ROWS_Y - 8 - ROWS * ROW_H)
+	view.note = label(view, "", "small", 0.42, 0.47, 0.45)
+	view.note:SetPoint("TOPRIGHT", view, "TOPRIGHT", -4, ROWS_Y - 8 - ROWS * ROW_H)
+	view.note:SetJustifyH("RIGHT")
 	return view
 end
 
@@ -249,7 +410,9 @@ function C.Filter(view)
 	if pick and pick.mode == "tag" and not BT.Enabled("ledger") then
 		view.pick, pick = nil, nil
 	end
-	return { bands = bandFilter(view), seen = view.seen, pick = pick }
+	return { bands = bandFilter(view), seen = view.seen, pick = pick,
+		faction = view.faction ~= "all" and view.faction or nil,
+		sex = view.sex ~= "all" and view.sex or nil }
 end
 
 -- what a filter is, as one string: two censuses of the same one are
@@ -264,7 +427,7 @@ function C.FilterKey(want)
 	table.sort(bands)
 	local p = want.pick
 	return table.concat({ p and (tostring(p.mode) .. ":" .. tostring(p.key)) or "-",
-		want.seen or "all", table.concat(bands, ",") }, "|")
+		want.seen or "all", table.concat(bands, ","), want.faction or "all", tostring(want.sex or "all") }, "|")
 end
 
 -- NO LONG FRAME ON OPENING (Josh 2026-09-29: "I notice when I open the census
@@ -324,10 +487,12 @@ function C.Loading(view, on, share, size)
 		end
 		if view.footer then
 			view.footer:Hide()
+			view.note:Hide()
 		end
 		view.subtitle:SetText("")
 	elseif view.footer then
 		view.footer:Show()
+		view.note:Show()
 	end
 end
 
@@ -365,7 +530,8 @@ function C.Refresh(view, census)
 	if census then
 		if census.key and census.key ~= key then
 			census = nil
-		elseif not census.key and (census.pick ~= want.pick or (census.seen or "all") ~= (want.seen or "all")) then
+		elseif not census.key and (census.pick ~= want.pick or (census.seen or "all") ~= (want.seen or "all")
+			or want.faction or want.sex) then
 			census = nil
 		end
 	end
@@ -375,6 +541,16 @@ function C.Refresh(view, census)
 		census = view.census
 	end
 	if not census then
+		-- ALREADY BEING COUNTED (Josh 2026-09-30, review). A click on Race or
+		-- Level while the count you were waiting for ran started it again
+		-- from nothing. It is left to finish, and it draws whichever chart is
+		-- picked when it does.
+		if view.counting == key then
+			for k, b in pairs(view.modeButtons) do
+				b:SetPressed(k == view.mode)
+			end
+			return
+		end
 		local per = BT.Stats.JOB_SLICE
 		local step, size = BT.Stats.CensusJob(BT.db, nil, want, per)
 		if CreateFrame and (size or 0) > per * 2 then
@@ -387,14 +563,22 @@ function C.Refresh(view, census)
 		census.key = key
 	end
 	view.census, view.censusKey, view.stale = census, key, nil
-	-- a slower count of something no longer wanted is left to finish unseen
+	-- a slower count of something no longer wanted is stopped
 	if view.counting and view.counting ~= key then
 		view.counting = nil
 		if runner then
 			runner:SetScript("OnUpdate", nil)
 		end
 	end
-	-- lay the mode buttons out around whichever of them belong here today
+	-- A CHART DRAWN IS A COUNT DONE (Josh 2026-09-30: "If I quickly switch
+	-- filters, the loading indicator and 'Counting...' aren't removed"). Only
+	-- a count that finished put the dots away, so going back to a filter
+	-- already counted, while another count ran, drew its chart under dots
+	-- frozen at that count's last share.
+	if view.loading and view.loading:IsShown() then
+		C.Loading(view, false)
+	end
+	-- the tabs: the charts there are today
 	local x = 0
 	for _, m in ipairs(MODES) do
 		local b = view.modeButtons[m.key]
@@ -405,33 +589,22 @@ function C.Refresh(view, census)
 			end
 		else
 			b:ClearAllPoints()
-			b:SetPoint("TOPLEFT", x, MODE_Y)
+			b:SetPoint("TOPLEFT", x, TAB_Y)
 			b:Show()
-			x = x + 84
+			x = x + TAB_W
 		end
 	end
-	view.subtitle:ClearAllPoints()
-	view.subtitle:SetPoint("TOPLEFT", 1, SUB_Y)
-	view.subtitle:SetPoint("TOPRIGHT", -4, SUB_Y)
-	for key, b in pairs(view.modeButtons) do
-		b:SetPressed(key == view.mode)
+	for k, b in pairs(view.modeButtons) do
+		b:SetPressed(k == view.mode)
 	end
-	for key, b in pairs(view.bandButtons) do
-		-- with no filter every bracket counts, so every button reads as on
-		b:SetPressed(filter == nil or view.bands[key] == true)
-	end
-	for key, b in pairs(view.seenButtons) do
-		b:SetPressed(key == (view.seen or "all"))
-	end
+	view.seenControl:Select(view.seen or "all")
+
+	C.PaintTiles(view, census)
+	view.count:SetText(U.Commas(census.shown or census.total or 0))
+	view.subtitle:SetText(("of %s characters"):format(U.Commas(census.book or 0)))
+	C.PaintChips(view)
+
 	local pick = view.pick
-	if pick then
-		view.clear:SetLabel(("Only %s · clear"):format(rowLabel(pick.mode, pick.key)))
-		view.clear:Show()
-		view.hint:Hide()
-	else
-		view.clear:Hide()
-		view.hint:Show()
-	end
 	local rows = census[view.mode] or {}
 	-- On the level chart the brackets are a highlight, not a filter; on the
 	-- chart a bar was picked from, every bar but that one is quiet.
@@ -450,9 +623,12 @@ function C.Refresh(view, census)
 	for _, r in ipairs(rows) do
 		counted = counted + r.n
 	end
+	local accent = BT.Widgets.ACCENT
+	local shown = 0
 	for i, row in ipairs(view.rows) do
 		local r = rows[i]
 		if r then
+			shown = shown + 1
 			row.name:SetText(rowLabel(view.mode, r.key))
 			-- the track stretches with the panel, so the bar is a fraction of
 			-- whatever it actually came out as
@@ -466,6 +642,11 @@ function C.Refresh(view, census)
 			-- the pile of the rest is not one thing, so it cannot be picked
 			row.key = r.key
 			row.pickable = pickable and r.key ~= BT.Stats.OTHER
+			row.picked = pick ~= nil and pick.mode == view.mode and pick.key == r.key
+			row.pickBg:SetColorTexture(accent[1], accent[2], accent[3], 0.10)
+			row.pickEdge:SetColorTexture(accent[1], accent[2], accent[3], 1)
+			row.pickBg:SetShown(row.picked)
+			row.pickEdge:SetShown(row.picked)
 			if muted(r) then
 				row.bar:SetColorTexture(0.35, 0.4, 0.38, 0.5)
 				row.name:SetTextColor(0.42, 0.47, 0.45)
@@ -476,13 +657,184 @@ function C.Refresh(view, census)
 			-- share of everyone counted in THIS chart, not of the whole book:
 			-- percentages that do not add to 100 are worse than no percentages
 			local pct = counted > 0 and math.floor(r.n / counted * 100 + 0.5) or 0
-			row.count:SetText(("%d  |cff6e7b75%d%%|r"):format(r.n, pct))
+			row.n, row.share, row.of = r.n, pct, counted
+			row.count:SetText(U.Commas(r.n))
+			row.pct:SetText(pct .. "%")
 			row:Show()
 		else
-			row.key, row.pickable = nil, nil
+			row.key, row.pickable, row.picked, row.n = nil, nil, nil, nil
 			row:Hide()
 		end
 	end
-	view.subtitle:SetText(BT.Stats.Subtitle(view.mode, census, counted))
+	-- THE WINDOW AS TALL AS ITS ROWS (the census redesign): the footer under
+	-- the last bar, and the window told how tall that makes it
+	local bottom = ROWS_Y - math.max(shown, 1) * ROW_H - 8
+	view.footer:ClearAllPoints()
+	view.footer:SetPoint("TOPLEFT", 4, bottom)
 	view.footer:SetText(BT.Stats.AgeLine(census))
+	view.note:ClearAllPoints()
+	view.note:SetPoint("TOPRIGHT", view, "TOPRIGHT", -4, bottom)
+	local unknown = census.unknown and census.unknown[view.mode] or 0
+	view.note:SetText(unknown > 0 and C.NOTE[view.mode]
+		and ("%s with no %s on file"):format(U.Commas(unknown), C.NOTE[view.mode]) or "")
+	view.height = -bottom + 16
+	if view.onHeight then
+		view.onHeight(view.height)
+	end
+end
+
+-- what the line under the bars calls a chart's gap in the book
+C.NOTE = { class = "class", race = "race", level = "level", guild = "guild", zone = "zone" }
+
+-- the tiles, from the census: its count, both splits, and the level columns
+function C.PaintTiles(view, census)
+	local accent = BT.Widgets.ACCENT
+	local count = view.countTile
+	count.num:SetText(U.Commas(census.book or 0))
+	count.sub:SetText(("%s seen today"):format(U.Commas(census.today or 0)))
+
+	-- each half says its share of those whose side (or sex) is on file -
+	-- "94% Alliance" fits a half-tile where "27,353 Alliance" does not - and
+	-- its card says how many, and how many are not known yet
+	local function paintSplit(t, counts, chosen, words, noun)
+		local total, known = counts.unknown or 0, 0
+		for _, k in ipairs(t.keys) do
+			total = total + (counts[k] or 0)
+			known = known + (counts[k] or 0)
+		end
+		t.tip = function(card, k)
+			local n = counts[k] or 0
+			card:Header({ name = words[k]:gsub("^%l", string.upper), sub = U.Commas(n) })
+			if (counts.unknown or 0) > 0 then
+				card:Note(("%s of %s have a %s on file so far."):format(U.Commas(known), U.Commas(total), noun))
+			end
+			if n > 0 or chosen == k then
+				card:Foot({ { "Click", chosen == k and "count everyone again" or "count only these" } })
+			end
+		end
+		local w = t.w - 18
+		local x = 0
+		for _, k in ipairs(t.keys) do
+			local part = t.parts[k]
+			local share = total > 0 and (counts[k] or 0) / total or 0
+			part:ClearAllPoints()
+			part:SetPoint("TOPLEFT", t.track, "TOPLEFT", x, 0)
+			part:SetWidth(math.max(share * w, 1))
+			part:SetShown(share > 0)
+			part:SetAlpha((chosen == nil or chosen == k) and 1 or 0.3)
+			x = x + share * w
+		end
+		local any = known > 0
+		t.paint = function()
+			for _, k in ipairs(t.keys) do
+				local b = t.buttons[k]
+				local n = counts[k] or 0
+				b.live = n > 0 or chosen == k
+				b.words:SetText(("%d%% %s"):format(any and math.floor(n / known * 100 + 0.5) or 0, words[k]))
+				b.words:SetShown(any)
+				if chosen == k then
+					b.words:SetTextColor(accent[1], accent[2], accent[3])
+				elseif b.hovered and b.live then
+					b.words:SetTextColor(0.93, 0.95, 0.94)
+				else
+					b.words:SetTextColor(0.72, 0.76, 0.74)
+				end
+			end
+			t.none:SetShown(not any)
+		end
+		t.paint()
+	end
+	local sides = census.sides or {}
+	paintSplit(view.sideTile, sides, view.faction ~= "all" and view.faction or nil,
+		{ Alliance = "Alliance", Horde = "Horde" }, "faction")
+	local sexes = census.sexes or {}
+	paintSplit(view.sexTile, { [2] = sexes.male or 0, [3] = sexes.female or 0, unknown = sexes.unknown or 0 },
+		view.sex ~= "all" and view.sex or nil, { [2] = "male", [3] = "female" }, "gender")
+
+	-- the level columns, each as tall as its share of the tallest
+	local most = 0
+	for _, r in ipairs(census.level or {}) do
+		if r.n > most then most = r.n end
+	end
+	local filtering = bandFilter(view) ~= nil
+	for _, r in ipairs(census.level or {}) do
+		local b = view.bandButtons[r.key]
+		if b then
+			local on = view.bands[r.key] == true
+			b.n = r.n
+			b.live = r.n > 0 or on
+			b.bar:SetHeight(math.max(2, (most > 0 and r.n / most or 0) * 22))
+			if r.n == 0 then
+				b.bar:SetColorTexture(NONE[1], NONE[2], NONE[3], 0.6)
+			elseif on then
+				b.bar:SetColorTexture(accent[1], accent[2], accent[3], 1)
+			else
+				b.bar:SetColorTexture(0.18, 0.62, 0.48, filtering and 0.45 or 1)
+			end
+		end
+	end
+end
+
+-- THE FILTERS THAT ARE ON, AS CHIPS (the census redesign): each one named,
+-- and a click on it lets it go. Right to left from the window's edge.
+local SEEN_WORDS = { today = "Seen today", week = "Seen this week", month = "Seen this month" }
+function C.Chips(view)
+	local out = {}
+	if view.faction and view.faction ~= "all" then
+		out[#out + 1] = { text = view.faction, clear = function() view.faction = "all" end }
+	end
+	if view.sex and view.sex ~= "all" then
+		out[#out + 1] = { text = C.SEX_WORD[view.sex] or "?", clear = function() view.sex = "all" end }
+	end
+	local bands = {}
+	for _, b in ipairs(BT.Stats.BANDS) do
+		if view.bands[b.key] then
+			bands[#bands + 1] = (b.key:gsub("%-", "–"))
+		end
+	end
+	if #bands > 0 then
+		out[#out + 1] = { text = (#bands == 1 and "Level " or "Levels ") .. table.concat(bands, ", "),
+			clear = function() view.bands = {} end }
+	end
+	if SEEN_WORDS[view.seen] then
+		out[#out + 1] = { text = SEEN_WORDS[view.seen], clear = function() view.seen = "all" end }
+	end
+	if view.pick then
+		out[#out + 1] = { text = rowLabel(view.pick.mode, view.pick.key), clear = function() view.pick = nil end }
+	end
+	return out
+end
+
+function C.PaintChips(view)
+	local list = C.Chips(view)
+	local x = 0
+	for i = 1, math.max(#list, #view.chips) do
+		local c = list[i]
+		local b = view.chips[i]
+		if c and not b then
+			b = BT.Widgets.Button(view, "", 60, 18)
+			b:SetScript("OnClick", function(self)
+				if self.clear then
+					self.clear()
+					C.Refresh(view)
+				end
+			end)
+			view.chips[i] = b
+		end
+		if c then
+			b.clear = c.clear
+			b.text = c.text
+			b:SetLabel(c.text .. "  |cff8a9894x|r")
+			b:SetPressed(true)
+			local w = BT.Pill.Width(b.label, c.text .. "  x", 8)
+			b:SetWidth(w)
+			b:ClearAllPoints()
+			b:SetPoint("TOPRIGHT", view, "TOPRIGHT", -x, CAP_Y + 1)
+			b:Show()
+			x = x + w + 4
+		elseif b then
+			b.clear, b.text = nil, nil
+			b:Hide()
+		end
+	end
 end

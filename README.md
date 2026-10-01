@@ -31,7 +31,7 @@ settings.
 | **Dock** | The panel itself: its size, and the **Clock** in its header. The clock shows local or server time; click it to switch. |
 | **Minimap** | The client's map, moved into the dock, and **Addon buttons**: other addons' minimap buttons in one line, a switch each. |
 | **Progress** | **Experience** (the XP bar, and time to level at your current pace), **Reputation** (the watched faction, and your standing with it) and **PvP** (your PvP rank with its insignia, how far to the next, and this week's honor), a switch each. Each line starts with a shield: your level on it, a banner, or your rank. |
-| **Metrics** | A grid of readouts, each with its own switch: gold and gold per hour, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
+| **Metrics** | A grid of readouts, each with its own switch: gold, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
 | **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
 | **Micro menu** | The game's menu buttons, in the dock. |
 
@@ -56,7 +56,10 @@ settings.
 **Census** is a record of every character you see, with charts of the realm
 by class, race, level, guild and zone, in a window of its own. Open it from
 the dock's header, or type `/bt census`. BeebMod never shares it. It holds
-only the people you saw.
+only the people you saw. It keeps one book for each realm, and so for each
+ruleset, with both factions in it. Tiles across the top show the faction,
+gender and level split, and a click on any part of one narrows every chart
+to it.
 
 **Ledger** keeps notes, tags and a rating on the people you meet. They show
 on the person's tooltip and in the target row at the top of the dock. Its
@@ -64,13 +67,13 @@ page searches the people you wrote about, and with the Census on, everyone
 the Census knows. The Ledger keeps what you write in its own book
 (`BeebModDB.ledger`), so it doesn't need the Census.
 It also remembers the people you grouped with. A group counts once you've
-been together 5 minutes, or at once in a dungeon.
+been together 5 minutes, or at once in a dungeon. It keeps your duel
+scores too: how many duels you won and lost against each player.
 
 **Nesingwary's Expedition** is a journal of every enemy you have
 killed. Each has a card with its model, its lore from the Warcraft Wiki
 and its mastery. On its page, a Model · Map switch shows the zone's map with
-a dot for each place you killed it, or a dungeon's loading screen. The page also lists
-the abilities you have seen the enemy cast. Every unique kill and every commendation is worth points. The
+a dot for each place you killed it, or a dungeon's loading screen. Every unique kill and every commendation is worth points. The
 points set your rank, from Greenhorn to Expedition Leader. A line in the
 dock shows your points and rank. Click it to open the journal, or type
 `/bt expedition`.
@@ -149,8 +152,8 @@ lives in `Modules/Ledger`.
     Core/Tooltip.lua     one hook on the unit tooltip, shared by several modules
     Core/Furniture.lua   restyles the client's own frames by what each one is
     Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab,
-                         the notes on a tooltip, and the people you grouped with
-                         (Groups.lua)
+                         the notes on a tooltip, the people you grouped with
+                         (Groups.lua) and your duel scores (Duels.lua)
     Modules/Minimap/     the map in the dock; Modules/Buttons/ the addon buttons
     Modules/XP/, Rep/, PvP/
                          the experience, reputation and PvP lines of the dock
@@ -222,7 +225,7 @@ lives in `Modules/Ledger`.
                          drips), so you can tell a dispel mark by its shape as
                          well as its colour
     Art/Rank/            the Art Deco corner and crest round an elite or rare
-                         mob's frame, gold or silver (scripts/make-rank.py)
+                         enemy's frame, gold or silver (scripts/make-rank.py)
 
 ## Tests
 
@@ -252,11 +255,11 @@ its notes.
 
 It goes to:
 
-- **GitHub Releases**, always.
-- **CurseForge**, once it is set up. Create the project, put its id in
-  `BeebMod.toc` as `## X-Curse-Project-ID: <id>`, and add a CurseForge API
-  token as the repository secret `CF_API_KEY`. Until then the packager skips
-  it. A tag with `beta` in it goes up as a beta file.
+- **GitHub Releases**.
+- **CurseForge**, project 1711982. The packager finds the project by the
+  `## X-Curse-Project-ID` line in `BeebMod.toc`, and signs in with the
+  repository secret `CF_API_KEY`. A tag with `beta` in it goes up as a beta
+  file.
 
 `.github/workflows/tests.yml` runs both suites on every push to `main`.
 

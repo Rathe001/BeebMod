@@ -15,6 +15,8 @@ local PAD, TITLE_H = 14, 40
 local WIDTH, HEIGHT = 640, 500
 
 local frame
+-- the frame that counts a slice a frame (C.Count)
+local counter
 
 function C.Build()
 	if frame then
@@ -22,7 +24,9 @@ function C.Build()
 	end
 	frame = CreateFrame("Frame", "BeebModCensus", UIParent)
 	frame:SetSize(WIDTH, HEIGHT)
-	frame:SetPoint("CENTER", 60, -30)
+	-- by its top, where it was when centred: its height follows its rows
+	-- (Chart.lua), and the top stays put while the bottom moves
+	frame:SetPoint("TOP", UIParent, "TOP", 60, -150)
 	frame:SetFrameStrata("HIGH")
 	-- ONE WINDOW IN FRONT OF THE OTHER, NOT THROUGH IT (Josh 2026-09-22). This
 	-- and the main window share a strata and a frame level, so opened together
@@ -62,6 +66,12 @@ function C.Build()
 			C.ticker:Cancel()
 			C.ticker = nil
 		end
+		-- and a count still going stops with it (Josh 2026-09-30, review):
+		-- it ran to the end for a window nobody could see, and opening the
+		-- window again started a second beside it
+		if counter then
+			counter:SetScript("OnUpdate", nil)
+		end
 	end)
 
 	frame:Hide()
@@ -80,8 +90,8 @@ local function subtitle()
 	-- the list's length, not a reading of every character in it (Josh
 	-- 2026-09-29: opening the Census lagged)
 	local total = census and (census.book or census.total) or (BT.DB.Count(BT.db))
-	frame.subtitle:SetText(("%s · %s · %d characters")
-		:format(BT.scope and BT.scope.realm or "?", BT.scope and BT.scope.faction or "?", total))
+	-- the realm's: its book holds both sides, and the Faction row filters them
+	frame.subtitle:SetText(("%s · %s characters"):format(BT.scope and BT.scope.realm or "?", BT.Util.Commas(total)))
 end
 
 -- UP TO DATE WHILE IT IS OPEN (Josh 2026-09-22). As a tab of the main window
@@ -123,7 +133,6 @@ end
 -- of fourteen thousand was one long frame every ten seconds in a city. The
 -- window's own redraws count it a slice a frame instead and draw when it is
 -- done; opening it, or a click on a bracket, still draws at once.
-local counter
 function C.Counter()
 	return counter
 end
@@ -177,6 +186,16 @@ function C.Show()
 	C.Build()
 	if not m.view then
 		BT.CallHook(m, "BuildTab", frame.body)
+	end
+	-- AS TALL AS ITS ROWS (Josh 2026-09-30, the census redesign): the chart
+	-- says how much room it took, and the window fits round it
+	if m.view and not m.view.onHeight then
+		m.view.onHeight = function(h)
+			frame:SetHeight(TITLE_H + 10 + h + PAD)
+		end
+		if m.view.height then
+			m.view.onHeight(m.view.height)
+		end
 	end
 	frame:Show()
 	frame:Raise()

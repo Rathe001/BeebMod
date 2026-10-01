@@ -157,10 +157,15 @@ local function watch()
 	end
 end
 
+-- NOT ON A LOADING SCREEN (Josh 2026-09-30, review). Every loading screen
+-- binds the book and runs OnBind, which is OnEnable below: the same setup
+-- this did on PLAYER_ENTERING_WORLD, and a dressing besides. The two ran it
+-- twice.
 M.events = CreateFrame("Frame")
-for _, event in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED", "PLAYER_ENTERING_WORLD" }) do
+for _, event in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
+local queued = false
 M.events:SetScript("OnEvent", function(_, event)
 	if BT.Enabled("charsheet") then
 		-- GET_ITEM_INFO_RECEIVED fires for every item anything asks the
@@ -168,9 +173,22 @@ M.events:SetScript("OnEvent", function(_, event)
 		-- dressed again for each one
 		-- and only while the sheet is open: it comes by the hundred at an
 		-- auction house, and opening the sheet refreshes them anyway
+		-- and once a frame, however many arrive in it (Josh 2026-09-30,
+		-- review: each one read all seventeen slots again)
 		if event == "GET_ITEM_INFO_RECEIVED" then
 			local sheet = _G.CharacterFrame
-			if sheet and sheet.IsShown and sheet:IsShown() then
+			if queued or not (sheet and sheet.IsShown and sheet:IsShown()) then
+				return
+			end
+			if C_Timer and C_Timer.After then
+				queued = true
+				C_Timer.After(0, function()
+					queued = false
+					if BT.Enabled("charsheet") then
+						M.UpdateAll()
+					end
+				end)
+			else
 				M.UpdateAll()
 			end
 			return
@@ -179,8 +197,13 @@ M.events:SetScript("OnEvent", function(_, event)
 		M.UpdateAll()
 		M.WatchTheme()
 		M.WatchPosition()
+		-- A SET IS ONE DRESSING (Josh 2026-09-30, review). Equipping a set
+		-- from the sheet sends this once for every slot it changes, all in
+		-- one frame, and each one dressed and laid out the whole window. The
+		-- theme's own once-a-frame pass (watchTheme) takes them as one; each
+		-- slot is redrawn by the game's own hook either way.
 		if M.Themed() and _G.CharacterFrame and _G.CharacterFrame:IsShown() then
-			M.Dress()
+			(M.DressSoon or M.Dress)()
 		end
 	end
 end)
@@ -2346,6 +2369,31 @@ function M.Layout()
 	return err and true or false
 end
 
+-- THE PAGES AND THEIR PANES, NOT THE WHOLE WINDOW (Josh 2026-09-30, review).
+-- A list on one of the four pages updates on every frame of a scroll and when
+-- a row is picked; what that can move is the list and the details pane beside
+-- it, which is all layoutPages places. The doll, the side pane, the tabs and
+-- the title stay where the last whole layout put them.
+function M.LayoutPages()
+	local frame = _G.CharacterFrame
+	if laying or not (frame and M.Themed()) then
+		return false
+	end
+	local left = pick(frame, "CharacterFrameLeftPaneHost")
+	if not left then
+		return false
+	end
+	local right = pick(frame, "CharacterFrameRightPaneHost")
+	laying = true
+	local ok, err = pcall(layoutPages, frame, left, right or left)
+	laying = false
+	if not ok then
+		BT.Err("charsheet.LayoutPages: " .. tostring(err))
+		return false
+	end
+	return true
+end
+
 function M.Unlayout()
 	M.Unfold()
 	unplace()
@@ -2636,6 +2684,9 @@ local function watchTheme()
 		end
 	end
 	frame:HookScript("OnShow", again)
+	-- and anything else that would dress the whole window several times in
+	-- one frame (the equipment event above)
+	M.DressSoon = again
 	-- NO LARGE FRAME FIRST (Josh 2026-09-24: "it is very briefly large before
 	-- resizing... kind of causing a flashing"). The game sizes the window
 	-- itself as it opens - its pages do it in their own OnShow, after ours -
@@ -2701,19 +2752,42 @@ local function watchTheme()
 				-- apart is faster than anyone picks a faction. The last of a
 				-- burst still gets one, a moment late - a pick inside the tenth
 				-- was left in the game's layout (Josh 2026-09-23, audit).
+				-- A page's list lays out only the pages (M.LayoutPages); any
+				-- other list - the stats, the titles, the sets - the whole window.
+				local page = false
+				for _, key in ipairs({ "ReputationFrame", "SkillsFrame", "StatisticsFrame", "TokenFrame" }) do
+					local p = pick(_G.CharacterFrame, key)
+					if p and p.ScrollBox == self then
+						page = true
+					end
+				end
 				local now = (type(GetTime) == "function" and GetTime()) or 0
 				if now - (M.laidAt or 0) > 0.1 then
 					M.laidAt = now
-					M.Layout()
-				elseif not M.layLate and C_Timer and C_Timer.After then
-					M.layLate = true
-					C_Timer.After(0.1, function()
-						M.layLate = false
-						if M.Themed() then
-							M.laidAt = (type(GetTime) == "function" and GetTime()) or 0
-							M.Layout()
-						end
-					end)
+					if page then
+						M.LayoutPages()
+					else
+						M.Layout()
+					end
+				elseif C_Timer and C_Timer.After then
+					-- the late one is the whole window if any list in the burst
+					-- needed it
+					M.layLateAll = M.layLateAll or not page
+					if not M.layLate then
+						M.layLate = true
+						C_Timer.After(0.1, function()
+							local all = M.layLateAll
+							M.layLate, M.layLateAll = false, false
+							if M.Themed() then
+								M.laidAt = (type(GetTime) == "function" and GetTime()) or 0
+								if all then
+									M.Layout()
+								else
+									M.LayoutPages()
+								end
+							end
+						end)
+					end
 				end
 			end)
 		end

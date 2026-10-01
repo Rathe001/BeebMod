@@ -431,8 +431,37 @@ function A.TargetBuffs(b)
 		return false
 	end
 	local on = F.Opt("targetBuffs", true) and true or false
-	pcall(row.SetEnabled, row, on and not set.off)
+	pcall(row.SetEnabled, row, on and not set.off and not set.paused)
 	row:SetShown(on)
+	return true
+end
+
+-- PUT AWAY, NOT READING (Josh 2026-09-30, review). A hidden container still
+-- reads its unit's auras and lays them out (see Attach), so the rows of the
+-- frames put away with their switch - a raid's cells, the target's, the
+-- bosses', the lanes over the resource display - went on reading behind
+-- frames nobody could see. They are switched off with the frame and on again
+-- with it; out of combat only, as the client will not have one switched in a
+-- fight. True when it was done (or there was nothing to do).
+function A.Pause(b, paused)
+	local set = b and b.bmAuras
+	if not set then
+		return true
+	end
+	paused = paused and true or nil
+	if set.paused == paused then
+		return true
+	end
+	if inCombat() then
+		return false
+	end
+	set.paused = paused
+	for _, c in ipairs(set.list) do
+		pcall(c.SetEnabled, c, not set.off and not paused)
+	end
+	if set.kind == "target" then
+		A.TargetBuffs(b)
+	end
 	return true
 end
 
@@ -547,7 +576,7 @@ function A.SetUnit(b, unit)
 	for _, c in ipairs(set.list) do
 		pcall(c.SetUnit, c, unit)
 		if set.off then
-			pcall(c.SetEnabled, c, true)
+			pcall(c.SetEnabled, c, not set.paused)
 		end
 	end
 	set.off = false

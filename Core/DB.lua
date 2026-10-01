@@ -60,7 +60,8 @@ end
 
 -- The fields that no longer earn their place. Dropped from rows written by an
 -- older version, once, on the login after this one (Josh 2026-09-20).
-local DEAD_FIELDS = { "given", "surname", "srcName", "src", "faction", "sex" }
+-- (Not the faction or the sex any more: both are kept again, see DB.Note.)
+local DEAD_FIELDS = { "given", "surname", "srcName", "src" }
 
 -- Returns how many rows it slimmed, which is what the login report prints.
 -- (A packed row was slimmed on its way into the string.)
@@ -195,7 +196,7 @@ local function absorb(to, from)
 	to.first = math.min(to.first or from.first or 0, from.first or to.first or 0)
 	to.last = math.max(to.last or 0, from.last or 0)
 	to.seen = (to.seen or 0) + (from.seen or 0)
-	for _, f in ipairs({ "class", "race", "guid", "vouch" }) do
+	for _, f in ipairs({ "class", "race", "guid", "vouch", "faction", "sex" }) do
 		if to[f] == nil then to[f] = from[f] end
 	end
 	if (from.level or 0) > (to.level or 0) then
@@ -258,15 +259,14 @@ function DB.Adopt(db, from)
 		-- a packed row is only readable with its OWN book's words, so it
 		-- crosses as the table it stands for
 		local p = DB.Get(from, fromKey)
-		-- and under the key it has HERE: "Beeb Bob" in an OldRealm book is
-		-- "Beeb Bob@OldRealm" in this one, and "Beeb Bob@Whitemane" there is
-		-- "Beeb Bob" in Whitemane's
-		local name, realm = P.Split(from, fromKey)
-		local key = (realm == nil or realm == db.realm) and name or (name .. "@" .. realm)
+		-- under its name alone, as every key now is (U.Key), and of this
+		-- book's realm, or it could not be packed again
+		local key = (P.Split(from, fromKey))
 		if DB.Get(db, key) then
 			absorb(db.players[key], p)
 			folded = folded + 1
 		else
+			p.realm = db.realm or p.realm
 			db.players[key] = p
 			added = added + 1
 		end
@@ -281,35 +281,73 @@ function DB.Adopt(db, from)
 	return added, folded
 end
 
--- ONE BOOK, ONE REALM (Josh 2026-09-19). The realm was renamed from "Classic
--- Beta PvE" to "Classic Beta PvE 2" between builds, and 308 characters stayed
--- filed under the old spelling: the same people, counted twice in the census
--- and found twice in a search. A book belongs to one realm, so a row keyed to
--- a name that is this realm's name with something added or taken off the end
--- IS this realm's row, and the two become one.
---
--- Deliberately narrow: only a name that contains the other as a prefix, and
--- only when there is enough of it to mean something. "Whitemane" and
--- "Faerlina" are two realms and always will be.
-local function sameRealm(a, b)
-	if not (a and b) then
-		return false
+-- THE FACTION OF THE ROWS ALREADY ON FILE (Josh 2026-09-30), from the race,
+-- for the eight that belong to one side. A Skyborne is played on both, so it
+-- waits for a sighting of its own. Once, on the login after this was added.
+-- Returns how many rows it gave one.
+DB.SIDE_OF_RACE = {
+	Human = "Alliance", Dwarf = "Alliance", NightElf = "Alliance", Gnome = "Alliance",
+	Orc = "Horde", Scourge = "Horde", Tauren = "Horde", Troll = "Horde",
+}
+function DB.BackfillFaction(db)
+	if not (db and db.players) then
+		return 0
 	end
-	if a == b then
-		return true
+	local n = 0
+	for key, row in pairs(db.players) do
+		if type(row) == "string" then
+			local side = not P.Faction(row) and DB.SIDE_OF_RACE[P.Race(db, row) or ""]
+			if side then
+				db.players[key] = P.WithFaction(row, side)
+				n = n + 1
+			end
+		elseif type(row) == "table" and not row.faction and DB.SIDE_OF_RACE[row.race or ""] then
+			row.faction = DB.SIDE_OF_RACE[row.race]
+			n = n + 1
+		end
 	end
-	local long, short = a, b
-	if #short > #long then
-		long, short = short, long
-	end
-	return #short >= 6 and long:sub(1, #short) == short
+	return n
 end
 
+-- A ROW THAT STILL SAYS NO SIDE, THE SIDE OF THE BOOK IT WAS IN (Josh
+-- 2026-09-30: "combine the alliance and horde books"). A book was one side's,
+-- and every way into it but a unit you saw - /who, the guild, friends, a
+-- channel - lists only your own side; of the 20,103 rows of the 2026-09-29
+-- Alliance book whose race says a side, 5 were the Horde's. So before the two
+-- books become one, a row with no side takes its book's: a Skyborne above all,
+-- who is played on both. Returns how many it gave one.
+function DB.FillFaction(db, side)
+	if not (db and db.players and (side == "Alliance" or side == "Horde")) then
+		return 0
+	end
+	local n = 0
+	for key, row in pairs(db.players) do
+		if type(row) == "string" then
+			if not P.Faction(row) then
+				db.players[key] = P.WithFaction(row, side)
+				n = n + 1
+			end
+		elseif type(row) == "table" and not row.faction then
+			row.faction = side
+			n = n + 1
+		end
+	end
+	return n
+end
+
+-- ONE BOOK, ONE REALM (Josh 2026-09-19). The realm was renamed from "Classic
+-- Beta PvE" to "Classic Beta PvE 2" between builds, and 308 characters stayed
+-- filed under the old spelling: the same people, counted twice.
 --
 -- AND THE REALM COMES OFF THE KEY (Josh 2026-09-24): a character of the
 -- book's own realm is keyed by name alone (U.Key), so "Beeb Bob@Whitemane" in
--- the Whitemane book becomes "Beeb Bob" here too - which is how every book
--- written before that change comes across, on its first login after it.
+-- the Whitemane book becomes "Beeb Bob" here too.
+--
+-- EVERY REALM, NOW (Josh 2026-09-30: "There should just be a single realm,
+-- and if not, we need to just combine them (keep rulesets separate
+-- though)"). A book is a ruleset's one realm, and no key carries a realm at
+-- all: every "Name@Anything" folds into "Name", at every login. Returns how
+-- many rows it folded.
 function DB.FoldRealms(db, realm)
 	db = db or BT.db
 	if not (db and realm and realm ~= "" and db.players) then
@@ -319,10 +357,18 @@ function DB.FoldRealms(db, realm)
 	-- collect first, then edit: re-keying the table you are walking is an
 	-- "invalid key to next" error, not a warning
 	local rekey = {}
-	for key in pairs(db.players) do
+	for key, row in pairs(db.players) do
+		-- a row in a table says the book's realm, or it cannot be packed (a
+		-- string's realm is its book's already)
+		if type(row) == "table" and row.realm ~= realm then
+			row.realm = realm
+		end
 		if key:find("@", 1, true) then
 			local name, r = key:match("^(.*)@(.*)$")
-			if name and r and sameRealm(r, realm) then
+			-- EVERY ONE, NOW (Josh 2026-09-30: "There should just be a single
+			-- realm, and if not, we need to just combine them"): one book a
+			-- realm, and no realm in a key (U.Key)
+			if name and r then
 				rekey[key] = name
 			end
 		end
@@ -428,8 +474,13 @@ function DB.Note(db, name, realm, info, now)
 	-- names themselves another two hundred. Dropping them is not a feature
 	-- being removed: `given` and `surname` are computed where they are wanted,
 	-- which is the search index, and that was already being built.
+	-- THE FACTION AND THE SEX COME BACK (Josh 2026-09-30: "Let's also store
+	-- faction so we can work with it in the future", "Are we able to track
+	-- gender as well?"). The faction went because a book was one side's, and
+	-- the sex because nothing showed it; one book holds both sides now, and
+	-- packed, the two cost no letter (Core/Pack.lua).
 	p.given, p.surname = nil, nil
-	p.srcName, p.src, p.faction, p.sex = nil, nil, nil, nil
+	p.srcName, p.src = nil, nil
 	-- a list the client only builds for real characters (a /who answer, the
 	-- friends list, a battleground scoreboard) vouches for a row that has no
 	-- GUID to prove itself with
@@ -444,13 +495,17 @@ function DB.Note(db, name, realm, info, now)
 	if type(info.level) == "number" and info.level > 0 and info.level > (p.level or 0) then
 		p.level, p.levelAt = info.level, now
 	end
-	-- and not `sex` or `faction`, however the caller came by them: the two
-	-- lines above have just taken those off the row, and copying them back in
-	-- here put them on every row again, one sighting at a time
 	for _, f in ipairs({ "class", "race", "guid" }) do
 		if info[f] ~= nil then
 			p[f] = info[f]
 		end
+	end
+	if P.FACTION_CODE[info.faction or ""] then
+		p.faction = info.faction
+	end
+	-- the game's own numbers: 2 male, 3 female (1 is "not known")
+	if info.sex == 2 or info.sex == 3 then
+		p.sex = info.sex
 	end
 	if info.zone ~= nil then
 		p.zone, p.zoneAt = info.zone, now
@@ -682,8 +737,18 @@ function DB.DropHeard(realms)
 	return gone
 end
 
+-- a row's last sighting, read straight off a packed one
+local function lastOf(p)
+	if type(p) == "string" then
+		return P.Last(p) or 0
+	end
+	return p.last or 0
+end
+
 -- Someone you saw once in Ironforge two months ago and never wrote on is
 -- noise. Never touches a record you have written on. Returns how many went.
+-- (Only the last sighting is wanted, so a packed row is never unpacked: a
+-- string cannot carry a note, a tag or a rating, so it is never yours.)
 function DB.Prune(db, days, now)
 	db = db or BT.db
 	if not (db and days and days > 0) then
@@ -692,9 +757,10 @@ function DB.Prune(db, days, now)
 	now = now or U.Now()
 	local cutoff = now - days * 86400
 	local gone = 0
-	for key, p in DB.Each(db) do
-		if not DB.IsMine(p) and (p.last or 0) < cutoff then
-			db.players[key] = nil
+	local players = DB.Players(db)
+	for key, p in pairs(players) do
+		if not (type(p) == "table" and DB.IsMine(p)) and lastOf(p) < cutoff then
+			players[key] = nil
 			gone = gone + 1
 		end
 	end
@@ -734,13 +800,6 @@ end
 -- covers "everybody seen since" some day - and anything you have written on
 -- stays, whatever its age.
 local DAY = 86400
-
-local function lastOf(p)
-	if type(p) == "string" then
-		return P.Last(p) or 0
-	end
-	return p.last or 0
-end
 
 -- LOW LEVELS FIRST (Josh 2026-09-25: "level 1-10 are typically bank alts,
 -- and throwaway toons. After that, I think it makes sense to remove the

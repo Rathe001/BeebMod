@@ -193,6 +193,16 @@ local function region(tex)
 		l, rt = math.min(ulx, llx), math.max(urx, lrx)
 		t, b = math.min(uly, ury), math.max(lly, lry)
 	end
+	-- OUR CROP IS NOT THE CLIENT'S CORNERS (Josh 2026-09-30, review). A new
+	-- atlas brings corners of its own, but a new file keeps whatever was set
+	-- last, and that was our crop: read as the new picture's corners, it was
+	-- cropped again inside itself, and the picture grew with every change.
+	-- Corners still at our crop are the client's last ones.
+	local cut = tex.beebsCut
+	if r and cut and math.abs(l - cut[1]) < 1e-4 and math.abs(rt - cut[2]) < 1e-4
+		and math.abs(t - cut[3]) < 1e-4 and math.abs(b - cut[4]) < 1e-4 then
+		l, rt, t, b = r.l, r.r, r.t, r.b
+	end
 	r = { key = key, l = l, r = rt, t = t, b = b }
 	tex.beebsRegion = r
 	return r
@@ -210,6 +220,7 @@ local function dress(tex, plain, button)
 		if tex.SetTexCoord then
 			local r = region(tex)
 			tex:SetTexCoord(r.l, r.r, r.t, r.b)
+			tex.beebsCut = nil
 		end
 		if tex.SetVertexColor then
 			tex:SetVertexColor(1, 1, 1, 1)
@@ -225,7 +236,9 @@ local function dress(tex, plain, button)
 	if tex.SetTexCoord then
 		local r = region(tex)
 		local w, h = r.r - r.l, r.b - r.t
-		tex:SetTexCoord(r.l + w * CROP, r.r - w * CROP, r.t + h * CROP, r.b - h * CROP)
+		local cut = { r.l + w * CROP, r.r - w * CROP, r.t + h * CROP, r.b - h * CROP }
+		tex:SetTexCoord(cut[1], cut[2], cut[3], cut[4])
+		tex.beebsCut = cut
 	end
 
 	-- THE ICONS KEEP THEIR OWN COLOUR (Josh 2026-09-21). Draining them and
@@ -469,8 +482,10 @@ end
 function M.Watch()
 	if not M.events then
 		M.events = CreateFrame("Frame")
+		-- (not the loading screen: OnBind dresses them on every one already -
+		-- Josh 2026-09-30, review)
 		for _, event in ipairs({
-			"PLAYER_ENTERING_WORLD", "UPDATE_BINDINGS", "PLAYER_LEVEL_UP",
+			"UPDATE_BINDINGS", "PLAYER_LEVEL_UP",
 			"PLAYER_SPECIALIZATION_CHANGED", "UPDATE_SHAPESHIFT_FORMS",
 			"PORTRAITS_UPDATED",
 		}) do

@@ -527,25 +527,29 @@ function P.Run(why)
 end
 
 -- and once more a moment into the next fight, where the secrets are
+-- (one frame, made the first time: every press of Record armed a new one)
 function P.Arm()
 	if P.armed then
 		return
 	end
-	P.armed = CreateFrame("Frame")
-	P.armed:RegisterEvent("PLAYER_REGEN_DISABLED")
-	P.armed:SetScript("OnEvent", function(self)
-		self:UnregisterAllEvents()
-		P.armed = nil
-		local function go()
-			local n = P.Run("two seconds into a fight")
-			U.Print(("Unit probe: %d lines from the fight. Type /reload after it to save them."):format(n))
-		end
-		if C_Timer and C_Timer.After then
-			C_Timer.After(2, go)
-		else
-			go()
-		end
-	end)
+	P.armed = true
+	if not P.armFrame then
+		P.armFrame = CreateFrame("Frame")
+		P.armFrame:SetScript("OnEvent", function(self)
+			self:UnregisterAllEvents()
+			P.armed = nil
+			local function go()
+				local n = P.Run("two seconds into a fight")
+				U.Print(("Unit probe: %d lines from the fight. Type /reload after it to save them."):format(n))
+			end
+			if C_Timer and C_Timer.After then
+				C_Timer.After(2, go)
+			else
+				go()
+			end
+		end)
+	end
+	P.armFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 end
 
 -- now, and armed for the next fight

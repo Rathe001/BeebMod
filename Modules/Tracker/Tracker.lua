@@ -147,6 +147,29 @@ function M.ClientFrame()
 	return nil
 end
 
+-- NOT IN A FIGHT IF IT IS PROTECTED (Josh 2026-09-30, review). The client's
+-- tracker puts itself back on quest progress, which is often mid-fight, and
+-- one that holds the game's secure item buttons is protected: hiding or
+-- showing it then is "action blocked". In a fight it only goes see-through
+-- (alpha is never locked), and is hidden or shown for real when it ends.
+local function locked(f)
+	return type(InCombatLockdown) == "function" and InCombatLockdown()
+		and f.IsProtected and f:IsProtected() and true or false
+end
+
+local function hideNow(f)
+	if locked(f) then
+		pcall(f.SetAlpha, f, 0)
+		M.clientFaded, M.clientLater = true, true
+		return
+	end
+	f:Hide()
+	if M.clientFaded then
+		M.clientFaded = nil
+		f:SetAlpha(1)
+	end
+end
+
 local function hideClient()
 	local f = M.ClientFrame()
 	if not f then
@@ -156,19 +179,42 @@ local function hideClient()
 		-- it puts itself back whenever a quest changes, so we have to mean it
 		f:HookScript("OnShow", function(self)
 			if BT.Enabled("tracker") then
-				self:Hide()
+				hideNow(self)
 			end
 		end)
 		M.clientHooked = true
 	end
-	f:Hide()
+	hideNow(f)
 	return true
 end
 
 local function showClient()
 	local f = M.ClientFrame()
-	if f then
-		f:Show()
+	if not f then
+		return
+	end
+	if M.clientFaded then
+		M.clientFaded = nil
+		pcall(f.SetAlpha, f, 1)
+	end
+	if locked(f) then
+		M.clientLater = true
+		return
+	end
+	f:Show()
+end
+
+-- what a fight held back, done when it ends: the client's tracker hidden
+-- while ours is on, and shown while it is not
+local function settleClient()
+	if not M.clientLater then
+		return
+	end
+	M.clientLater = nil
+	if BT.Enabled("tracker") then
+		hideClient()
+	else
+		showClient()
 	end
 end
 
@@ -815,6 +861,21 @@ function M.TickClocks()
 	return any
 end
 
+-- THE CLOCK STOPS WITH THE LIST (Josh 2026-09-30, review). A row keeps its
+-- own shown flag while the list is hidden around it, so a clock left on one
+-- kept the ticker writing to a list nobody could see, once a second, for the
+-- rest of the session: after the last quest went with "Hide when empty" on,
+-- or with the tracker switched off. Drawing the list again starts it.
+local function stopClocks()
+	for _, row in ipairs(rows or {}) do
+		row.endsAt = nil
+	end
+	if M.clockTicker then
+		M.clockTicker:Cancel()
+		M.clockTicker = nil
+	end
+end
+
 function M.QuestTip(owner, q)
 	if not (BT.Tip and q) then
 		return
@@ -870,6 +931,7 @@ function M.Update()
 		return 0
 	end
 	if not BT.Enabled("tracker") then
+		stopClocks()
 		frame:Hide()
 		BT.Dock.Relayout()
 		return 0
@@ -879,6 +941,7 @@ function M.Update()
 	M.lastCount = #quests
 	if #quests == 0 and opt("hideEmpty", true) then
 		band(nil)
+		stopClocks()
 		frame:Hide()
 		BT.Dock.Relayout()
 		return 0
@@ -1028,6 +1091,10 @@ function M.Fit(height)
 	else
 		band(nil)
 	end
+	-- THE WHEEL IS THE CAMERA'S WHEN THE LIST FITS (Josh 2026-09-30, review):
+	-- a frame that takes the wheel keeps it even when it does nothing with
+	-- it, so over a short list the camera would not zoom
+	frame:EnableMouseWheel(over > 0)
 	-- A THUMB, SO IT READS AS A LIST THAT GOES ON (Josh 2026-09-23). The
 	-- wheel was the only sign there was more: a list cut off at a quest
 	-- title looks like the whole list.
@@ -1074,8 +1141,9 @@ function M.Build()
 	-- THE WHEEL, AND ONLY WHEN THERE IS SOMEWHERE TO GO (Josh 2026-09-20).
 	-- Three rows a notch, which is the same as the client's own lists, and
 	-- nothing happens at all when the whole list already fits - a panel that
-	-- scrolls when it does not need to feels broken.
-	frame:EnableMouseWheel(true)
+	-- scrolls when it does not need to feels broken. (Taken only while the
+	-- list does not fit: M.Fit.)
+	frame:EnableMouseWheel(false)
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		local over = math.max(0, (M.contentHeight or 0) - (M.maxHeight or 0))
 		if over <= 0 then
@@ -1215,10 +1283,12 @@ function M.Watch()
 		return
 	end
 	M.events = CreateFrame("Frame")
+	-- (not the loading screen: OnBind draws the list on every one already -
+	-- Josh 2026-09-30, review)
 	for _, event in ipairs({
 		"QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_WATCH_LIST_CHANGED",
 		"QUEST_ACCEPTED", "QUEST_REMOVED",
-		"ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD",
+		"ZONE_CHANGED_NEW_AREA",
 	}) do
 		pcall(M.events.RegisterEvent, M.events, event)
 	end
@@ -1238,7 +1308,17 @@ function M.Watch()
 		pcall(M.events.RegisterEvent, M.events, event)
 	end
 	M.events:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_REGEN_ENABLED" then
+			settleClient()
+		end
 		if not BT.Enabled("tracker") then
+			-- SWITCHED OFF IN A FIGHT (Josh 2026-09-30, review): an item button
+			-- could only go see-through then, and is the screen's, so it still
+			-- took clicks after the list had gone. Put away when the fight ends.
+			if event == "PLAYER_REGEN_ENABLED" and M.itemsPending then
+				M.itemsPending = false
+				M.PlaceItems()
+			end
 			return
 		end
 		if event == "BAG_UPDATE_COOLDOWN" then
@@ -1267,6 +1347,7 @@ function M:OnEnable()
 end
 
 function M:OnDisable()
+	stopClocks()
 	if frame then
 		frame:Hide()
 		BT.Dock.Relayout()

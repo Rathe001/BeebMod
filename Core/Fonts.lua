@@ -182,14 +182,14 @@ function Fo.Apply()
 	return made
 end
 
--- Choose a face by key: saved, and put on everything now.
+-- A face by key, put on everything again now. Nothing is saved: since there
+-- is one face (Fo.Current), a choice written to the settings was a line in
+-- the saved file that nothing read.
 function Fo.Choose(key)
 	local face = byKey(key)
 	if not face then
 		return false
 	end
-	BT.EnsureBound()
-	BT.settings.font = key
 	Fo.broken = nil
 	Fo.Apply()
 	return true

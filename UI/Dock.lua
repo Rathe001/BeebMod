@@ -297,6 +297,10 @@ local function wantsMarks()
 	return false
 end
 
+-- what the last full layout was given by the row: its width and whether it
+-- was wanted (see the end of layout)
+local laid = {}
+
 local function layout()
 	local top, marks, right = INSET, INSET, INSET
 	-- the right-hand end first, and backwards: the last cell in the list is
@@ -349,7 +353,18 @@ local function layout()
 		end
 	end
 	rowWidth = math.max(MIN_W, top + right + 2, marks + INSET)
-	B.Relayout()
+	-- THE ROW ALONE, MOST OF THE TIME (Josh 2026-09-30, review). Every
+	-- target change laid the whole dock out again: every section stacked and
+	-- fitted, every readout placed, the quest list's rows anchored anew - and
+	-- tab-targeting in a fight does that several times a second. All the rest
+	-- of the dock learns from the row is how wide it is and whether it is
+	-- there, so only a change in one of those lays the rest out; the cells
+	-- themselves were placed above. A section that changes says so itself
+	-- (B.Relayout), as every one already does.
+	local w, want = math.max(B.Width(), rowWidth, MIN_W), B.RowWanted()
+	if w ~= laid.w or want ~= laid.want then
+		B.Relayout()
+	end
 end
 
 -- EACH BAND IN ITS OWN ROW'S COLOUR (Josh 2026-09-26: "you added the same
@@ -531,11 +546,15 @@ end
 -- the same key, and the modules are in whatever order you dragged the tabs
 -- into - so the sections stack in that order too. A section with no module
 -- behind it keeps the number it asked for, after the ones that have one.
-local function sortSections()
+local function moduleRank()
 	local rank = {}
 	for i, m in ipairs((BT.Modules and BT.Modules()) or {}) do
 		rank[m.key] = i
 	end
+	return rank
+end
+
+local function sortSections(rank)
 	table.sort(ordered, function(a, b)
 		local ra = rank[a.key] or (1000 + a.order)
 		local rb = rank[b.key] or (1000 + b.order)
@@ -922,7 +941,10 @@ function B.Relayout()
 	if not dock then
 		return
 	end
-	sortSections()
+	-- the modules in your order, worked out once for the sections, the
+	-- readouts and the stack
+	local rank = moduleRank()
+	sortSections(rank)
 	local wantRow = B.RowWanted()
 	-- the dock's own width; only a row or a header that could not fit in it
 	-- (a setting narrower than its cells) makes it wider
@@ -938,16 +960,9 @@ function B.Relayout()
 		end
 	end
 	width = math.max(width, headerNeed())
-	local chipRank
-	do
-		local rank = {}
-		for i, m in ipairs((BT.Modules and BT.Modules()) or {}) do
-			rank[m.key] = i
-		end
-		chipRank = layoutChips(width, rank)
-		if chipRank then
-			live = true
-		end
+	local chipRank = layoutChips(width, rank)
+	if chipRank then
+		live = true
 	end
 	local y = 0
 	local rowTall = BAR_H + (wantsMarks() and MARKS_H or 0)
@@ -964,10 +979,6 @@ function B.Relayout()
 	-- pinned second, so dragging either tab moved nothing. The row is the
 	-- Ledger's - its cells are who you are pointing at and what you wrote - so
 	-- it takes the Ledger's place, and every section takes its module's.
-	local rank = {}
-	for i, m in ipairs((BT.Modules and BT.Modules()) or {}) do
-		rank[m.key] = i
-	end
 	local stack = {}
 	if wantRow then
 		stack[#stack + 1] = { row = true, rank = rank.ledger or 0 }
@@ -1133,6 +1144,7 @@ function B.Relayout()
 	-- ALWAYS THERE (Josh 2026-09-27): the logo and the cog are the way back
 	-- in, whatever is switched off, and nothing switches them off
 	dock:Show()
+	laid.w, laid.want = math.max(B.Width(), rowWidth or MIN_W, MIN_W), wantRow
 end
 
 -- THE DOCK STOPS AT THE BOTTOM OF THE SCREEN (Josh 2026-09-23). It grows
@@ -1204,6 +1216,17 @@ end
 -- Ask every enabled module what it wants on the dock, in module order. Called
 -- again whenever a module is switched on or off, so the dock is never showing a
 -- cell belonging to something that is no longer running.
+-- A MODULE'S CELLS ARE MADE ONCE (Josh 2026-09-30, review). Every rebuild
+-- asked again, and the Ledger made a new name cell and a new row of tags each
+-- time: the game never frees a frame, so every switch flicked and every tab
+-- dragged left one more hidden copy behind. What a module hands over the
+-- first time is handed back on every rebuild after; its Update says whether
+-- it is wanted, as it always did.
+-- ONLY THE ROW'S OWN CELLS (same review). Unit frames calls its list of group
+-- cells `Cells` too, and the rebuild took those in: the next layout hid your
+-- own frame and your party's, on every target change after, and in a fight
+-- the client refused it. A cell is something B.Cell made.
+local made = {}
 function B.Rebuild()
 	if not dock then
 		return
@@ -1215,15 +1238,27 @@ function B.Rebuild()
 	cells = { dock.mark }
 	for _, m in ipairs(BT.Live()) do
 		if m.Cells then
-			local ok, list = pcall(m.Cells, m)
-			if ok and type(list) == "table" then
-				for _, c in ipairs(list) do
-					cells[#cells + 1] = c
+			local list = made[m.key]
+			if not list then
+				local ok, got = pcall(m.Cells, m)
+				if ok and type(got) == "table" then
+					list = {}
+					for _, c in ipairs(got) do
+						if type(c) == "table" and c.cellKey ~= nil then
+							list[#list + 1] = c
+						end
+					end
+					made[m.key] = list
 				end
+			end
+			for _, c in ipairs(list or {}) do
+				cells[#cells + 1] = c
 			end
 		end
 	end
 	cells[#cells + 1] = dock.cog -- always last: it is the way out of everything
+	-- a new set of cells is laid out in full, whatever width it comes to
+	laid.w = nil
 	B.Update()
 end
 

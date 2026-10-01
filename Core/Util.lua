@@ -37,12 +37,28 @@ end
 -- CHANNELS rather than a list of members. Anything read out of free text gets
 -- checked here first: one or two words, letters only, the length a name can
 -- actually be.
+-- AN ACCENT IS A LETTER (Josh 2026-09-30, review). %a knows only the
+-- unaccented ones, so "Zoë Ashfall" was junk: dropped from every list it came
+-- in on, and swept out of the book at the next schema bump. A byte of a
+-- longer letter (128 and up) counts as part of a letter, and lengths are
+-- counted in letters: a byte from 128 to 191 carries on the letter before it.
+local function letters(s)
+	local n = 0
+	for i = 1, #s do
+		local b = s:byte(i)
+		if b < 128 or b >= 192 then
+			n = n + 1
+		end
+	end
+	return n
+end
+
 function U.LooksLikeName(name)
 	if type(name) ~= "string" then
 		return false
 	end
 	name = name:match("^%s*(.-)%s*$")
-	if name == "" or #name > 25 then
+	if name == "" or letters(name) > 25 then
 		return false
 	end
 	local words = 0
@@ -52,7 +68,8 @@ function U.LooksLikeName(name)
 			return false
 		end
 		-- letters only: no digits, no punctuation, no brackets
-		if not word:match("^[%a][%a']*$") or #word < 2 or #word > 14 then
+		local n = letters(word)
+		if not word:match("^[%a\128-\255][%a'\128-\255]*$") or n < 2 or n > 14 then
 			return false
 		end
 	end
@@ -76,6 +93,27 @@ function U.HomeRealm()
 	return home and (home:gsub("%s+", "")) or nil
 end
 
+-- A SURNAME IS NOT A REALM (Josh 2026-09-30: "pretty much everyone is
+-- showing as belonging to the Olympus guild"). From the evening of
+-- 2026-09-30 the game handed back a two-part name split in two, the surname
+-- where the realm goes, and 1,163 characters were filed as "Scotty
+-- Forever@Forever" in an evening. A realm that is the name's own surname is
+-- no realm: the character is home.
+function U.SurnameIsRealm(name, realm)
+	local surname = type(name) == "string" and select(2, U.SplitName(name))
+	return surname ~= nil and type(realm) == "string"
+		and surname:gsub("%s+", ""):lower() == realm:gsub("%s+", ""):lower()
+end
+
+-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30: "There should
+-- just be a single realm, and if not, we need to just combine them (keep
+-- rulesets separate though)"). Each ruleset is one realm with a book of its
+-- own (BT.ScopeKey); inside it a character is keyed by name alone, whatever
+-- realm the client names beside them. The realm the client named was wrong
+-- three ways in one evening - the realm's other spelling, a number in the
+-- GUID, a surname in the realm's place - and every wrong one split the book.
+-- A "-Realm" on the end of a name is still taken off; the realm returned is
+-- the book's own.
 function U.Key(name, realm)
 	if type(name) ~= "string" then
 		return nil
@@ -86,12 +124,12 @@ function U.Key(name, realm)
 	end
 	-- a trailing "-Something" is a realm only when we were not handed one and
 	-- the tail looks like a realm (one word, no space): "Beeb Bob-Whitemane"
-	-- splits, and a typed "Beeb-Bob" becomes the name "Beeb Bob"
+	-- loses it, and a typed "Beeb-Bob" becomes the name "Beeb Bob"
 	if not realm then
 		local base, tail = name:match("^(.*)%-([^%-%s]+)$")
 		if base and base ~= "" then
 			if U.realms and U.realms[tail:lower()] then
-				name, realm = base, tail
+				name = base
 			else
 				-- not a realm we know: it was a hyphen standing in for the
 				-- space between the two halves of the name
@@ -99,16 +137,7 @@ function U.Key(name, realm)
 			end
 		end
 	end
-	if not realm or realm == "" then
-		realm = U.realm or (GetRealmName and GetRealmName()) or "?"
-	end
-	-- Blizzard writes realm names with and without their spaces depending on
-	-- where you read them; one spelling, or one character lands under two keys
-	realm = realm:gsub("%s+", "")
-	if realm == U.HomeRealm() then
-		return name, name, realm
-	end
-	return name .. SEP .. realm, name, realm
+	return name, name, U.HomeRealm() or "?"
 end
 
 -- Remember every realm name we meet, so U.Key can tell "Beeb Bob-Whitemane"
@@ -120,6 +149,13 @@ function U.LearnRealm(realm)
 	U.realms = U.realms or {}
 	U.realms[realm:gsub("%s+", ""):lower()] = true
 	U.realms[realm:lower()] = true
+end
+
+-- 26210 -> "26,210": digits, with commas from a thousand
+function U.Commas(n)
+	n = math.floor(tonumber(n) or 0)
+	local s = tostring(math.abs(n)):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+	return (n < 0 and "-" or "") .. s
 end
 
 function U.Now()
@@ -239,26 +275,37 @@ end
 -- is the same character twice. Whichever of these calls this build answers
 -- with both halves, we take: the longest answer wins, and a GUID stitches the
 -- halves together anyway (Core/DB.lua).
+-- one answer weighed against the best so far (no table of answers: every
+-- nameplate and mouseover asks this)
+local function longer(best, realm, n, r)
+	if type(n) == "string" and n ~= "" and n ~= UNKNOWNOBJECT then
+		n = n:match("^([^%-]+)") or n -- GetUnitName can append "-Realm"
+		if not best or #n > #best then
+			best = n
+		end
+		realm = realm or r
+	end
+	return best, realm
+end
+
 function U.UnitFullName(unit)
 	-- On 1.60.1.69893: GetUnitName -> "Febbys Stormseeker", UnitName and
 	-- UnitFullName -> "Febbys". GetUnitName leads for that reason; the others
 	-- stay as a fallback, and the longest answer wins if a build changes its
 	-- mind (Josh 2026-09-18, /bt names).
 	local best, realm
-	local candidates = {
-		{ GetUnitName and GetUnitName(unit, false) },
-		{ UnitFullName and UnitFullName(unit) },
-		{ UnitName and UnitName(unit) },
-	}
-	for _, got in ipairs(candidates) do
-		local n, r = got[1], got[2]
-		if type(n) == "string" and n ~= "" and n ~= UNKNOWNOBJECT then
-			n = n:match("^([^%-]+)") or n -- GetUnitName can append "-Realm"
-			if not best or #n > #best then
-				best = n
-			end
-			realm = realm or r
-		end
+	if GetUnitName then
+		best, realm = longer(best, realm, GetUnitName(unit, false))
+	end
+	if UnitFullName then
+		best, realm = longer(best, realm, UnitFullName(unit))
+	end
+	if UnitName then
+		best, realm = longer(best, realm, UnitName(unit))
+	end
+	-- (and a "realm" that is the surname is none: U.SurnameIsRealm)
+	if not (issecretvalue and (issecretvalue(best) or issecretvalue(realm))) and U.SurnameIsRealm(best, realm) then
+		realm = nil
 	end
 	return best, realm
 end

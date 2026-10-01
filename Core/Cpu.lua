@@ -138,6 +138,13 @@ function P.For(file)
 		end
 		return own(f, label)
 	end
+	-- ONE WRAPPER A KIND, MADE ONCE (Josh 2026-09-30, review). The usual
+	-- guard, `if C_Timer and C_Timer.After then C_Timer.After(0, f) end`,
+	-- reads the proxy twice, and each read made a new wrapper and its label:
+	-- about 600 bytes of garbage a timer, on paths that set one per event.
+	-- Whether the client has the function is still asked at every read, so a
+	-- test that takes C_Timer away sees nil here as before.
+	local wrappers = {}
 	local timer = setmetatable({}, { __index = function(_, key)
 		local real = _G.C_Timer
 		local fn = real and real[key]
@@ -145,15 +152,20 @@ function P.For(file)
 			return fn
 		end
 		if key == "NewTicker" or key == "NewTimer" or key == "After" then
-			local kind = label .. " " .. (key == "After" and "timer" or "ticker")
-			return function(delay, cb, ...)
-				if type(cb) == "function" then
-					cb = whenOn(cb, kind)
+			local w = wrappers[key]
+			if not w then
+				local kind = label .. " " .. (key == "After" and "timer" or "ticker")
+				w = function(delay, cb, ...)
+					if type(cb) == "function" then
+						cb = whenOn(cb, kind)
+					end
+					-- the client's function as it is now: the tests swap it
+					local current = _G.C_Timer and _G.C_Timer[key]
+					return (current or fn)(delay, cb, ...)
 				end
-				-- the client's function as it is now: the tests swap it
-				local current = _G.C_Timer and _G.C_Timer[key]
-				return (current or fn)(delay, cb, ...)
+				wrappers[key] = w
 			end
+			return w
 		end
 		return fn
 	end })

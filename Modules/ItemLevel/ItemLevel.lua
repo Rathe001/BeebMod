@@ -73,27 +73,39 @@ function M.LevelOf(itemLink)
 	return nil
 end
 
+-- whether it is two-handed, and whether the client could say (an item it has
+-- not described yet answers nothing)
 local function twoHanded(itemLink)
 	local info = (C_Item and C_Item.GetItemInfo) or _G.GetItemInfo
 	if not (itemLink and type(info) == "function") then
-		return false
+		return false, true
 	end
-	local ok, _, _, _, _, _, _, _, _, equipLoc = pcall(info, itemLink)
-	return ok and equipLoc == "INVTYPE_2HWEAPON"
+	local ok, name, _, _, _, _, _, _, _, equipLoc = pcall(info, itemLink)
+	return ok and equipLoc == "INVTYPE_2HWEAPON", ok and name ~= nil
 end
 
--- Every worn piece and its level, and the average.
+-- Every worn piece and its level, and the average. `doubled` is the level a
+-- two-hander adds for the off hand it fills; `pending` says a worn piece has
+-- not been described yet, so the answer may still change.
 function M.Read()
 	local out = { items = {}, sum = 0, slots = #M.SLOTS }
 	local offEmpty, mainTwoHand, mainLevel = true, false, nil
 	for _, slot in ipairs(M.SLOTS) do
 		local l = link(slot[1])
 		local lvl = M.LevelOf(l)
+		if l and not lvl then
+			out.pending = true
+		end
 		if lvl then
 			out.items[#out.items + 1] = { slot = slot[1], name = slot[2], level = lvl }
 			out.sum = out.sum + lvl
 			if slot[1] == 16 then
-				mainTwoHand, mainLevel = twoHanded(l), lvl
+				local known
+				mainTwoHand, known = twoHanded(l)
+				mainLevel = lvl
+				if not known then
+					out.pending = true
+				end
 			elseif slot[1] == 17 then
 				offEmpty = false
 			end
@@ -101,6 +113,7 @@ function M.Read()
 	end
 	if mainTwoHand and offEmpty and mainLevel then
 		out.sum = out.sum + mainLevel
+		out.doubled = mainLevel
 	end
 	out.avg = #out.items > 0 and out.sum / out.slots or nil
 	return out
@@ -123,7 +136,9 @@ function M.Update()
 	if not M.chip then
 		return
 	end
-	local cell = M.Cell()
+	local d = M.Read()
+	M.pending = d.pending and true or false
+	local cell = M.Cell(d)
 	-- nothing worn that has a level, nothing to say
 	M.chip:Want(cell ~= nil and BT.Enabled("itemlevel"))
 	if cell then
@@ -168,7 +183,13 @@ function M.Tip()
 		local low = {}
 		for _, slot in ipairs(M.SLOTS) do
 			local item = worn[slot[1]]
-			low[#low + 1] = item and { item = item, level = item.level } or { empty = slot[2], level = -1 }
+			-- the off hand a two-hander fills is not empty: the sum counts it
+			-- full (Josh 2026-09-30, review: it was listed lowest, in red)
+			if item then
+				low[#low + 1] = { item = item, level = item.level }
+			elseif not (slot[1] == 17 and d.doubled) then
+				low[#low + 1] = { empty = slot[2], level = -1 }
+			end
 		end
 		table.sort(low, function(a, b) return a.level < b.level end)
 		t:Section("Lowest")
@@ -229,8 +250,11 @@ function M.Settle()
 	end
 end
 
+-- NOT ON A LOADING SCREEN (Josh 2026-09-30, review): every loading screen
+-- runs OnBind, which is Show(true) and so M.Settle - the same looks this
+-- handler started on PLAYER_ENTERING_WORLD, so each screen had them twice
 M.events = CreateFrame("Frame")
-for _, event in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "PLAYER_ENTERING_WORLD",
+for _, event in ipairs({ "PLAYER_EQUIPMENT_CHANGED",
 	"PLAYER_AVG_ITEM_LEVEL_UPDATE", "GET_ITEM_INFO_RECEIVED", "UNIT_INVENTORY_CHANGED" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
@@ -241,8 +265,12 @@ M.events:SetScript("OnEvent", function(_, event, unit)
 	end
 	if event == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then
 		return
-	elseif event == "PLAYER_ENTERING_WORLD" then
-		M.Settle()
+	-- ONLY WHILE SOMETHING WORN IS UNDESCRIBED (Josh 2026-09-30, review).
+	-- Item information arrives all the time at an auction house or a bank,
+	-- for items you are not wearing; once every worn piece has its level,
+	-- none of it can change the number.
+	elseif event == "GET_ITEM_INFO_RECEIVED" and M.pending == false then
+		return
 	elseif queued then
 		return
 	elseif C_Timer and C_Timer.After then

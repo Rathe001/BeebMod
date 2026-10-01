@@ -226,7 +226,9 @@ end
 
 -- spec = { head, text, points, icon, badge, onClick, minor }
 function T.Push(spec)
-	if BT.settings and BT.settings.expeditionToasts == false then
+	-- the commendations' switch is theirs alone: a new page has its own
+	-- (expeditionDiscover, asked before it is pushed)
+	if not spec.minor and BT.settings and BT.settings.expeditionToasts == false then
 		return false
 	end
 	-- A NEW PAGE GIVES WAY (Josh 2026-09-27, new-enemy toasts on by default):

@@ -208,6 +208,16 @@ local function secret(v)
 	return issecretvalue ~= nil and issecretvalue(v) and true or false
 end
 
+-- A POWER TICK THAT IS NOT A POINT (Josh 2026-09-30, review): energy, mana,
+-- rage and focus come on the same events as combo points, and the events name
+-- which power moved. Only these known others are passed over, so a client
+-- that names its points some other way still has them counted. (The unit
+-- frames keep the same list, F.NOT_COMBO.)
+local NOT_COMBO = { ENERGY = true, MANA = true, RAGE = true, FOCUS = true }
+local function notCombo(powerType)
+	return type(powerType) == "string" and not secret(powerType) and NOT_COMBO[powerType] == true
+end
+
 -- a number from the client, or nil. Only type() and issecretvalue() are asked
 -- of what comes back: a secret cannot be compared, even with nil or false.
 local function ask(fn, ...)
@@ -243,9 +253,16 @@ function M.Combo()
 			return 0, max, false, false
 		end
 	end
+	-- the two ways a client counts them, asked in turn (without a table for
+	-- the pair: this runs on every point gained)
 	local hidden, anyHidden = nil, false
-	for _, v in ipairs({ { ask(UnitPower, "player", COMBO) }, { ask(GetComboPoints, "player", "target") } }) do
-		v = v[1]
+	for i = 1, 2 do
+		local v
+		if i == 1 then
+			v = ask(UnitPower, "player", COMBO)
+		else
+			v = ask(GetComboPoints, "player", "target")
+		end
 		if type(v) == "number" then
 			if secret(v) then
 				if not anyHidden then
@@ -343,6 +360,7 @@ function M.Pips(cur, max, show)
 	local h = pipHolder()
 	local anchor = (show and max > 0 and opt("combo", true)) and M.PipAnchor() or nil
 	if not anchor then
+		h.laidMax = nil
 		h:Hide()
 		return 0
 	end
@@ -383,7 +401,26 @@ function M.Pips(cur, max, show)
 		h.squares[i]:Hide()
 		BT.Pill.HideRing(h.squares[i].rim)
 	end
+	h.laidMax = max
 	h:Show()
+	return max
+end
+
+-- A POINT GAINED IS A COUNT, NOT A LAYOUT (Josh 2026-09-30, review). Every
+-- point gained or spent laid the whole row out again: the anchor looked for,
+-- the holder moved and levelled, each segment sized, placed and painted. With
+-- the row up for as many points as you can have, the count is all that
+-- changed; anything else (a new plate, a shift, the theme) comes through
+-- M.Apply and is laid out there.
+function M.PipCount(cur, max, show)
+	local h = pips
+	if not (h and h:IsShown() and show and max > 0 and h.laidMax == max and opt("combo", true)) then
+		return M.Pips(cur, max, show)
+	end
+	for i = 1, max do
+		-- as it came: it may be secret
+		h.squares[i]:SetValue(cur)
+	end
 	return max
 end
 
@@ -503,7 +540,7 @@ function M.Watch()
 			pcall(M.events.RegisterEvent, M.events, event)
 		end
 	end
-	M.events:SetScript("OnEvent", function(_, event, unit)
+	M.events:SetScript("OnEvent", function(_, event, unit, powerType)
 		if not BT.Enabled("resourcedisplay") then
 			return
 		end
@@ -534,12 +571,22 @@ function M.Watch()
 			if unit and unit ~= "player" then
 				return
 			end
+			-- your energy, mana or rage moving is not a point: the events
+			-- name the power, and a rogue's energy ticks many times a second
+			if notCombo(powerType) then
+				return
+			end
 			-- the points alone: the bars did not move. And never the whole
 			-- look for the display from a power tick (it walked every frame
 			-- in the game several times a second while none was up); the
 			-- other events find it.
 			if plate then
-				M.Pips(M.Combo())
+				if event == "UNIT_DISPLAYPOWER" then
+					-- a druid into cat form or out of it: the row comes or goes
+					M.Pips(M.Combo())
+				else
+					M.PipCount(M.Combo())
+				end
 			end
 			return
 		end

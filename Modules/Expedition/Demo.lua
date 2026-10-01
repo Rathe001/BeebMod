@@ -52,7 +52,7 @@ local function build()
 	local now = U.Now()
 	local rand = BT.Demo.Random(77)
 	local s = { enemies = {}, chars = {}, sessions = {}, demo = true }
-	local kills, first, altKills = {}, {}, {}
+	local kills, first = {}, {}
 	for i, row in ipairs(ENEMIES) do
 		local npc, name, kind, family, rank, level, zone, map, n, boss = unpack(row)
 		s.enemies[npc] = {
@@ -63,16 +63,10 @@ local function build()
 		}
 		kills[npc] = n
 		first[npc] = now - (40 - i) * 86400
-		-- an alt has met a few of them too, for "All characters"
-		if i % 3 == 0 then
-			altKills[npc] = math.max(1, math.floor(n / 3))
-		end
 	end
 	local me = (U.MeKey and U.MeKey()) or "?"
 	s.chars[me] = { kills = kills, first = first, earned = {}, recent = {},
 		feats = { skull = now - 5 * 86400, up5 = now - 9 * 86400 } }
-	s.chars["Beeb Magus-" .. ((U.HomeRealm and U.HomeRealm()) or "?")] = {
-		kills = altKills, first = {}, earned = {}, feats = {}, recent = {} }
 	return s
 end
 

@@ -35,11 +35,9 @@ local RAIL, PAD = 148, 14
 -- (A pixel off each side, Josh 2026-09-24: the Game frames group grew past
 -- the foot of the window at 22 apart, and every tab paid two pixels for it.)
 local TAB_H, TAB_STRIDE = 20, 22
--- a group's name over its tabs, and the line at the foot of the rail
--- A GROUP IS A BLOCK (Josh 2026-09-23: "difficult to tell that the top
--- section is different from the bottom section"): a rule above each heading,
--- like the one under General, and room either side of it
-local GROUP_H, GROUP_GAP, FOOT_H = 20, 8, 16
+-- the line at the foot of the rail (a group's own heading and rule went with
+-- the feature blocks, which draw their own: see W.Rebuild)
+local FOOT_H = 16
 -- TALLER (Josh 2026-09-23): the rail carries every page now - twenty tabs
 -- with two headings since the unit frames, buffs and game menu arrived - and
 -- they need the room
@@ -546,7 +544,8 @@ end
 
 -- A SHARED PAGE: a switch for each of its modules, and under it each one's
 -- own settings while it is on, under its name.
-local BLOCK_HEAD = 20
+-- (its own name for its heading's height: the rail's blocks have theirs)
+local MEMBER_HEAD = 20
 local function sharedPage(panel, page)
 	local st = BT.Widgets.Stack(panel.body)
 	local show = st:Section("Show")
@@ -573,8 +572,8 @@ local function sharedPage(panel, page)
 			block.head:SetText(string.upper(m.title or key))
 			BT.Widgets.TintText(block.head, 0.8)
 			block.body = CreateFrame("Frame", nil, block)
-			block.body:SetPoint("TOPLEFT", 0, -BLOCK_HEAD)
-			block.body:SetPoint("TOPRIGHT", 0, -BLOCK_HEAD)
+			block.body:SetPoint("TOPLEFT", 0, -MEMBER_HEAD)
+			block.body:SetPoint("TOPRIGHT", 0, -MEMBER_HEAD)
 			block.body:SetHeight(1)
 			BT.CallHook(m, "BuildTab", block.body)
 			block.Layout = function(self)
@@ -585,8 +584,8 @@ local function sharedPage(panel, page)
 					return 0
 				end
 				block.body:SetHeight(h)
-				self:SetHeight(BLOCK_HEAD + h)
-				return BLOCK_HEAD + h
+				self:SetHeight(MEMBER_HEAD + h)
+				return MEMBER_HEAD + h
 			end
 			st:Add(block)
 		end
@@ -658,7 +657,11 @@ end
 -- the Census's page: its switch and the way into its window
 local function censusPage(body)
 	local st = BT.Widgets.Stack(body)
-	st:Note("Charts of everyone you have seen on this realm, by class, race, level, tag and age.")
+	-- the feature's picture first, as every feature's page has (W.FeatureArt)
+	local art
+	art, body.picture = W.FeatureArt(body, "census")
+	st:Add(art)
+	st:Note("Charts of everyone you have seen on this realm, by class, race, level, guild, zone and tag.")
 	local sec = st:Section("Census")
 	local on = BT.Widgets.SwitchRow(sec, "Census", "The charts, and their button in the dock's header",
 		function() return BT.Enabled("census") end,
@@ -701,7 +704,8 @@ local function censusPage(body)
 				BT.settings.censusLive = false
 			end
 		end)
-	local open = BT.Widgets.Row(sec, "Open the charts", "Same as the chart button in the header · /bt census")
+	local open = BT.Widgets.Row(sec, "Open the charts",
+		"Same as the chart button in the header. Type /bt census to open them from chat.")
 	local b = open:SetControl(BT.Widgets.Button(open, "Open", 62, 20))
 	b:SetScript("OnClick", function()
 		if BT.CensusWindow then
@@ -720,7 +724,7 @@ local function testingPage(body)
 	-- MADE-UP DATA (Josh 2026-09-27: "mock some data for me so we can show off
 	-- all the features/designs"): every feature at once, for screenshots -
 	-- nothing saved, and off again after a reload (Core/Demo.lua)
-	body.demoRow = Wd.SwitchRow(look, "Made-up data", "A made-up realm, notes, journal and party, none of it saved · /bt demo",
+	body.demoRow = Wd.SwitchRow(look, "Made-up data", "A made-up realm, notes, journal and party. None of it is saved.",
 		function() return BT.Demo and BT.Demo.IsOn() or false end,
 		function(on)
 			if BT.Demo then
@@ -733,7 +737,10 @@ local function testingPage(body)
 		{ "off", "Off" }, { "party", "Party" }, { "raid", "Raid" },
 	}, function(key)
 		local m = BT.GetModule("unitframes")
-		if m and m.Preview then
+		-- only while Unit frames is on, as its line says (Josh 2026-09-30,
+		-- review): switched off, the made-up group drew itself over the
+		-- game's own frames. Off is always heard.
+		if m and m.Preview and (key == "off" or m.live) then
 			m.Preview(key ~= "off" and key or nil)
 		end
 	end))
@@ -919,6 +926,23 @@ function W.Picture(parent, f, w, h)
 	return pic
 end
 
+-- THE PICTURE AT THE TOP OF EVERY FEATURE'S PAGE (Josh 2026-09-30: "Census,
+-- ledger, and expedition don't have a preview screenshot like the others").
+-- A feature of one page is that page, so it puts this first on its own
+-- stack; a feature of several has it on its overview (featurePage). Returns a
+-- holder as tall as the picture, for a Stack to place, and the picture.
+function W.FeatureArt(parent, fkey)
+	local f = BT.Feature(fkey)
+	if not f then
+		return nil
+	end
+	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetHeight(PIC_H + 4)
+	local pic = W.Picture(holder, f)
+	pic:SetPoint("TOPLEFT", 2, -2)
+	return holder, pic
+end
+
 local function featurePage(panel, fkey)
 	local f = BT.Feature(fkey)
 	panel.feature = fkey
@@ -940,10 +964,8 @@ local function featurePage(panel, fkey)
 		"small", 0.50, 0.55, 0.53)
 	panel.off.blurb:SetPoint("TOPLEFT", 2, -18)
 	local st = BT.Widgets.Stack(panel.body)
-	local holder = CreateFrame("Frame", nil, panel.body)
-	holder:SetHeight(PIC_H + 4)
-	panel.picture = W.Picture(holder, f)
-	panel.picture:SetPoint("TOPLEFT", 2, -2)
+	local holder
+	holder, panel.picture = W.FeatureArt(panel.body, fkey)
 	st:Add(holder)
 	local parts = st:Section("Parts")
 	panel.partRows = {}
@@ -975,6 +997,9 @@ function W.SyncFeature(fkey)
 	if panel and panel.enable then
 		panel.enable:SetOn(on)
 		panel.enableWord:SetText(on and "On" or "Off")
+		-- the strip's window with it: its scroll thumb stayed lit beside the
+		-- "off" line, and the wheel moved a strip nobody could see
+		panel.view:SetShown(on)
 		panel.body:SetShown(on)
 		panel.off:SetShown(not on)
 	end
@@ -1094,6 +1119,8 @@ function W.SyncTab(key)
 	local on = BT.Enabled(key)
 	panel.enable:SetOn(on)
 	panel.enableWord:SetText(on and "On" or "Off")
+	-- the strip's window too, scroll thumb and all (see W.SyncFeature)
+	panel.view:SetShown(on)
 	panel.body:SetShown(on)
 	panel.off:SetShown(not on)
 	for _, tab in ipairs(tabs or {}) do
@@ -1291,37 +1318,6 @@ function W.Rebuild()
 		tabTint(tab, W.LitTab() == key, false)
 		y = y - TAB_STRIDE
 	end
-	-- a group's name, small and quiet, over its tabs; made once per group
-	rail.heads = rail.heads or {}
-	rail.rules = rail.rules or {}
-	local function heading(n, text)
-		local h = rail.heads[n]
-		if not h then
-			h = area:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
-			h:SetJustifyH("LEFT")
-			rail.heads[n] = h
-		end
-		-- the first group sits under General's own line; the others get one
-		if n > 1 then
-			y = y - GROUP_GAP
-			local rule = rail.rules[n]
-			if not rule then
-				rule = BT.Widgets.Divider(area, 10, 0)
-				rail.rules[n] = rule
-			end
-			rule:ClearAllPoints()
-			rule:SetPoint("TOPLEFT", area, "TOPLEFT", 10, y)
-			rule:SetPoint("TOPRIGHT", area, "TOPRIGHT", -10, y)
-			rule:Show()
-			y = y - 4
-		end
-		h:SetText(string.upper(text))
-		h:ClearAllPoints()
-		h:SetPoint("TOPLEFT", area, "TOPLEFT", 20, y - 6)
-		h:Show()
-		y = y - GROUP_H
-	end
-
 	-- THE SETTINGS TAB IS NOT ONE OF THE UTILITIES (Josh 2026-09-20). It is
 	-- the toolkit itself, so it goes above them with a line under it.
 	place("settings", "General", "general")
@@ -1500,12 +1496,13 @@ function W.UpdateSubtitle()
 	if not frame then
 		return
 	end
-	-- the realm and side always; how many characters only with a census
-	local where = ("%s · %s"):format(BT.scope and BT.scope.realm or "?", BT.scope and BT.scope.faction or "?")
+	-- the realm always (its book holds both sides: BT.ScopeKey); how many
+	-- characters only with a census
+	local where = BT.scope and BT.scope.realm or "?"
 	if BT.DB and BT.db then
 		-- counted from the list alone: reading each character to count them
 		-- was a long frame on a big book every time the window opened
-		where = ("%s · %d characters"):format(where, (BT.DB.Count(BT.db)))
+		where = ("%s · %s characters"):format(where, BT.Util.Commas((BT.DB.Count(BT.db))))
 	end
 	frame.subtitle:SetText(where)
 end
@@ -1540,7 +1537,24 @@ end
 refreshBody = function()
 	W.UpdateSubtitle()
 	W.UpdateFoot()
-	if current and current ~= "settings" then
+	local page = current and W.PAGES[current]
+	if current == "settings" then
+		BT.Settings.Refresh()
+	elseif page and page.overview then
+		-- A FEATURE'S PAGE HAS THE FEATURE'S SWITCH (Josh 2026-09-30, review).
+		-- It went through SyncTab, which asked whether a module called
+		-- "feature:dock" was on - there is none - and the page said "off"
+		-- under a feature that was on whenever the window was opened onto it.
+		W.SyncFeature(page.overview)
+	elseif page and page.dockOf then
+		-- a row's page: its choices, as it opens (W.SetView), and nothing of
+		-- the module's own page - the Ledger's search is not on it
+		W.SyncTab(current)
+		local m = BT.GetModule(page.dockOf)
+		if m and m.RefreshDockTab then
+			BT.CallHook(m, "RefreshDockTab")
+		end
+	elseif current then
 		-- the switch first, whether the module is live or not: its own tab is
 		-- where a switched-off utility gets switched back on (Josh 2026-09-20)
 		W.SyncTab(current)
@@ -1553,8 +1567,6 @@ refreshBody = function()
 				BT.CallHook(m, "Refresh")
 			end
 		end
-	elseif current == "settings" then
-		BT.Settings.Refresh()
 	end
 end
 
@@ -1572,8 +1584,16 @@ function W.Show(view)
 		W.SetView(view)
 	elseif not current then
 		W.SetView(tabs[1] and tabs[1].key or "settings")
+	else
+		W.Refresh()
+		return
 	end
-	W.Refresh()
+	-- ONCE AS IT OPENS (Josh 2026-09-30, review). SetView has just run each
+	-- module's ShowTab, which does all its Refresh does; a full refresh after
+	-- it ran the Ledger's search through the whole book twice, and laid the
+	-- dock out twice with it. Only the lines around the page are left.
+	W.UpdateSubtitle()
+	W.UpdateFoot()
 end
 
 function W.Hide()

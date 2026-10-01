@@ -202,8 +202,14 @@ local function paintQuality(b)
 	if not (s and border) then
 		return
 	end
-	border:SetAlpha(M.Rings() and 0 or 1)
-	local shown = BT.Enabled("bagwindow") and M.Rings() and BT.Furniture.Call(border, "IsShown")
+	-- THE HOOKS OUTLIVE THE MODULE (Josh 2026-09-30, review): they cannot be
+	-- taken off, so switched off they leave the client's glow as it is. It
+	-- was set see-through on the next loot, until a reload.
+	local on = BT.Enabled("bagwindow")
+	if on then
+		border:SetAlpha(M.Rings() and 0 or 1)
+	end
+	local shown = on and M.Rings() and BT.Furniture.Call(border, "IsShown")
 	if shown then
 		local r, g, bl = BT.Furniture.Call(border, "GetVertexColor")
 		r, g, bl = BT.Pill.Number(r, 1), BT.Pill.Number(g, 1), BT.Pill.Number(bl, 1)
@@ -306,6 +312,9 @@ function M.StyleAll(plain, force)
 	local n = 0
 	if plain then
 		dresser:Undress()
+		for _, w in ipairs(M.Windows()) do
+			w.beebsBagDressed = nil
+		end
 		for b in pairs(slots) do
 			M.StyleSlot(b, true)
 		end
@@ -320,18 +329,25 @@ function M.StyleAll(plain, force)
 		end
 		return 0
 	end
+	-- ONLY THE WINDOWS YOU CAN SEE (Josh 2026-09-30, review). Every item the
+	-- client lays out asks for this pass, and it dressed all fourteen windows
+	-- each time, shown or not. Each is dressed once at least, and a hidden one
+	-- is dressed again when it shows (its OnShow asks) or for a new theme.
 	for _, w in ipairs(M.Windows()) do
-		local ok, err = pcall(function()
-			n = n + (dresser:DressRoot(w) or 0)
-			dressClose(piece(w, "CloseButton", "CloseButton"))
-			for _, b in ipairs(M.Slots(w)) do
-				if M.StyleSlot(b, false, force) then
-					n = n + 1
+		if force or not w.beebsBagDressed or BT.Furniture.Call(w, "IsShown") then
+			local ok, err = pcall(function()
+				n = n + (dresser:DressRoot(w) or 0)
+				dressClose(piece(w, "CloseButton", "CloseButton"))
+				for _, b in ipairs(M.Slots(w)) do
+					if M.StyleSlot(b, false, force) then
+						n = n + 1
+					end
 				end
+			end)
+			w.beebsBagDressed = true
+			if not ok then
+				BT.Err("bagwindow: " .. tostring(err))
 			end
-		end)
-		if not ok then
-			BT.Err("bagwindow: " .. tostring(err))
 		end
 	end
 	-- the search is the combined window's, or a global one on some builds

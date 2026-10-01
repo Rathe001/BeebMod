@@ -64,7 +64,11 @@ function G.Place()
 	return name, dungeon
 end
 
--- everyone in your group but you: key -> what the unit says of them
+-- everyone in your group but you: key -> their unit
+-- THE NAME, NOT THE FACE (Josh 2026-09-30, review). Every roster change read
+-- each member's class, race, level, guild and GUID, forty members in a raid,
+-- and threw it away for anyone already counted. Now only a member about to
+-- be counted is read in full.
 function G.Members()
 	local out = {}
 	local n = GetNumGroupMembers and GetNumGroupMembers() or 0
@@ -74,10 +78,11 @@ function G.Members()
 	local raid = IsInRaid and IsInRaid()
 	for i = 1, n do
 		local unit = (raid and "raid" or "party") .. i
-		if not (UnitIsUnit and UnitIsUnit(unit, "player")) then
-			local key, info = N.Face(unit)
+		if UnitExists and UnitExists(unit) and not (UnitIsUnit and UnitIsUnit(unit, "player")) then
+			local name, realm = U.UnitFullName(unit)
+			local key = name and U.Key(name, realm)
 			if key then
-				out[key] = info
+				out[key] = unit
 			end
 		end
 	end
@@ -129,7 +134,9 @@ function G.Touch(key, place, dungeon, t)
 end
 
 function G.Update(t)
-	if not G.On() then
+	-- not while the made-up notes stand in for this book: a group counted
+	-- then went into them, and was marked done in the real one
+	if not G.On() or N.demo then
 		return 0
 	end
 	t = t or U.Now()
@@ -148,7 +155,7 @@ function G.Update(t)
 		end
 	end
 	local counted = 0
-	for key, info in pairs(here) do
+	for key, unit in pairs(here) do
 		local m = st.members[key]
 		if not m then
 			m = { since = t }
@@ -156,9 +163,12 @@ function G.Update(t)
 		end
 		if not m.counted then
 			if dungeon or t - m.since >= G.LONG_ENOUGH then
-				m.counted = true
-				G.Count(key, info, place, dungeon, t)
-				counted = counted + 1
+				local _, info = N.Face(unit)
+				if info then
+					m.counted = true
+					G.Count(key, info, place, dungeon, t)
+					counted = counted + 1
+				end
 			end
 		else
 			G.Touch(key, place, dungeon, t)
@@ -191,8 +201,22 @@ G.events = CreateFrame("Frame")
 for _, event in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do
 	pcall(G.events.RegisterEvent, G.events, event)
 end
+-- a raid forming or moving people round is a burst of these: one look a
+-- second later covers the lot
+local queued = false
 G.events:SetScript("OnEvent", function()
-	G.Update()
+	if not (C_Timer and C_Timer.After) then
+		G.Update()
+		return
+	end
+	if queued then
+		return
+	end
+	queued = true
+	C_Timer.After(1, function()
+		queued = false
+		G.Update()
+	end)
 end)
 -- and every half minute, for the five minutes that no event marks
 if C_Timer and C_Timer.NewTicker then

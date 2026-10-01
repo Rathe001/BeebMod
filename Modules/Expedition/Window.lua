@@ -594,6 +594,10 @@ function V.BuildPage(b)
 	model:EnableMouse(true)
 	model:EnableMouseWheel(true)
 	model.facing, model.panY, model.panZ, model.zoom = 0, 0, 0, 1
+	-- the turn and the move follow the pointer every frame, and only while a
+	-- button is down (Josh 2026-09-30, review: it ran every frame the popup
+	-- was open)
+	local drag
 	model:SetScript("OnMouseDown", function(self, button)
 		local x, y = GetCursorPosition()
 		if button == "RightButton" then
@@ -601,12 +605,15 @@ function V.BuildPage(b)
 		else
 			self.turning = x
 		end
+		self:SetScript("OnUpdate", drag)
 	end)
 	model:SetScript("OnMouseUp", function(self)
 		self.turning, self.panning = nil, nil
+		self:SetScript("OnUpdate", nil)
 	end)
-	model:SetScript("OnUpdate", function(self)
+	drag = function(self)
 		if not (self.turning or self.panning) then
+			self:SetScript("OnUpdate", nil)
 			return
 		end
 		local x, y = GetCursorPosition()
@@ -623,7 +630,7 @@ function V.BuildPage(b)
 			self.panning[1], self.panning[2] = x, y
 			pcall(self.SetPosition, self, 0, self.panY, self.panZ)
 		end
-	end)
+	end
 	model:SetScript("OnMouseWheel", function(self, delta)
 		self.zoom = math.max(ZOOM_MIN, math.min(ZOOM_MAX, (self.zoom or 1) * ((delta or 0) > 0 and 0.88 or 1.14)))
 		pcall(self.SetCamDistanceScale, self, self.zoom)
@@ -762,21 +769,6 @@ function V.Facts(npc, kills)
 	if #f.lore == 0 then
 		f.lore[1] = { text = f.loreLine }
 	end
-	-- WHAT YOU HAVE SEEN IT CAST (Josh 2026-09-29: "only recording abilities
-	-- that have been seen... it kind of drives home 'I'm learning about this
-	-- enemy'"), under its own page's lore: each spell with its picture, and
-	-- how many times you have seen it
-	f.abilities = J.Abilities(npc)
-	local seen = {}
-	for _, a in ipairs(f.abilities) do
-		local icon = a.icon and ("|T%s:16:16:0:0|t "):format(tostring(a.icon)) or ""
-		seen[#seen + 1] = ("%s%s |cff8a948f· %s|r"):format(icon, a.name,
-			a.n == 1 and "once" or (big(a.n) .. " times"))
-	end
-	table.insert(f.lore, math.min(2, #f.lore + 1), {
-		head = "Abilities you've seen",
-		text = #seen > 0 and table.concat(seen, "\n") or "You haven't seen it cast a spell yet.",
-	})
 	-- EVERY PART, NOT UP TO THE FIRST GAP (Josh 2026-09-27: "The details dont
 	-- have any indicator if the enemy is rare or elite"). The parts were walked
 	-- with ipairs, which stops at the first nil: an enemy with no beast family -
@@ -1307,11 +1299,20 @@ local function bind(c, e, w)
 		c.artKey = artKey
 		V.PaintArt(c, e.m)
 	end
+	-- DRESSED ONCE FOR WHAT IT SHOWS (Josh 2026-09-30, review). Every step of
+	-- a scroll deals the cards again, a frame at a time while it glides, and
+	-- each card was dressed afresh - a hundred and fifty setters and its name
+	-- fitted to its width again - though it showed the same enemy. A redraw
+	-- of the journal makes new entries, so a kill still dresses it again.
+	if c.dressedFor == e and c.dressedW == w then
+		return
+	end
+	c.dressedFor, c.dressedW = e, w
 	local tier = J.Mastery(e.n, e.m)
 	local _, catWord, catColor = V.CategoryOf(e.m)
 	Card.Dress(c, {
 		npc = e.npc, name = e.m.name or ("#" .. e.npc), rank = e.m.rank,
-		kind = V.TypeLine(e.m), category = catWord, categoryColor = catColor, lore = J.LoreLine(e.m),
+		kind = V.TypeLine(e.m), category = catWord, categoryColor = catColor,
 		kills = big(e.n), points = big(J.EnemyPoints(e.m, e.n)), tier = tier,
 	})
 end
@@ -2447,12 +2448,13 @@ local function earnedLine(it)
 end
 V.EarnedLine = earnedLine
 
--- the rail: the rank, the earned, the groups and the points
-local function drawRail(a, groups, earned, all, kills, feats)
+-- the rail: the rank, the earned, the groups and the points (`score`, what
+-- J.Points said: the total, then the unique kills' and the masteries' shares)
+local function drawRail(a, groups, earned, all, score)
 	local J = BT.Expedition
 	local rail = a.rail
 	local accent = BT.Widgets.ACCENT
-	local points, _, _, uniquePoints, masteryPoints = J.Points(kills, feats)
+	local points, uniquePoints, masteryPoints = score[1], score[2], score[3]
 	-- the rank, badge and bar as previewed (V.ShownPoints); the sums at the
 	-- foot stay your own
 	local shown = V.ShownPoints(points)
@@ -2508,8 +2510,14 @@ local function drawRail(a, groups, earned, all, kills, feats)
 	end
 end
 
-function V.DrawCommendations(kills, feats)
+function V.DrawCommendations(kills, feats, score)
 	local a = frame.commendations
+	-- the points once, from V.Refresh where it has them: the rail and the
+	-- ladder each worked them out again from every kill
+	if not score then
+		local points, _, _, uniquePoints, masteryPoints = BT.Expedition.Points(kills, feats)
+		score = { points, uniquePoints, masteryPoints }
+	end
 	local accent = BT.Widgets.ACCENT
 	local width = BT.Pill.Number(a.list.content:GetWidth(), WIDTH - PAD * 2 - COMMENDATION_RAIL_W - 30)
 	local tileW = math.floor((width - COMMENDATION_GAP * (COMMENDATION_COLS - 1)) / COMMENDATION_COLS)
@@ -2525,8 +2533,8 @@ function V.DrawCommendations(kills, feats)
 		end
 	end
 	a.tally:SetText(("%d of %d commendations earned"):format(earned, all))
-	drawRail(a, groups, earned, all, kills, feats)
-	drawLadder(a, (BT.Expedition.Points(kills, feats)))
+	drawRail(a, groups, earned, all, score)
+	drawLadder(a, score[1])
 	local pick = ui().commendationPick or "all"
 	local y, ri, hi = 0, 0, 0
 	local focusY
@@ -2655,7 +2663,7 @@ function V.Refresh()
 	local u = ui()
 	frame.views:Select(u.view)
 	local kills, feats = J.Counts()
-	local points, _, st = J.Points(kills, feats)
+	local points, _, st, uniquePoints, masteryPoints = J.Points(kills, feats)
 	local _, title = J.Rank(points)
 	-- "73 kills (7 unique)" (Josh 2026-09-28): the kills, and how many of
 	-- them were an enemy's first
@@ -2670,7 +2678,7 @@ function V.Refresh()
 	if journal then
 		V.DrawJournal(kills)
 	else
-		V.DrawCommendations(kills, feats)
+		V.DrawCommendations(kills, feats, { points, uniquePoints, masteryPoints })
 	end
 	return true
 end

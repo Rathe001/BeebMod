@@ -698,16 +698,25 @@ end
 -- Keeping them current
 -- ---------------------------------------------------------------------------
 
-function M.PaintAll()
+function M.PaintSingles()
 	for unit, f in pairs(M.singles) do
 		if f:IsShown() or unit == "targettarget" then
 			F.Paint(f, F.Source(unit))
 		end
 	end
+end
+
+-- the cells of a column that is down are not painted: the party's in a raid,
+-- the raid's in a party. Each is painted as it shows (the OnShow hook in
+-- F.Dress).
+function M.PaintAll()
+	M.PaintSingles()
 	for _, h in ipairs(M.headers) do
-		for _, child in ipairs({ h:GetChildren() }) do
-			if type(child) == "table" and child.bmUnit then
-				F.Paint(child, F.Source(child.bmUnit))
+		if h:IsShown() then
+			for _, child in ipairs({ h:GetChildren() }) do
+				if type(child) == "table" and child.bmUnit then
+					F.Paint(child, F.Source(child.bmUnit))
+				end
 			end
 		end
 	end
@@ -748,7 +757,7 @@ local SHARED = {
 -- range - every cast in a raid, every mob's threat - and all but yours were
 -- thrown away after the handler had run
 local PLAYER_ONLY = {
-	"UNIT_POWER_FREQUENT", "UNIT_THREAT_SITUATION_UPDATE",
+	"UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_THREAT_SITUATION_UPDATE",
 	"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
 	"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE",
 	"UNIT_SPELLCAST_CHANNEL_STOP",
@@ -756,8 +765,9 @@ local PLAYER_ONLY = {
 
 local ENEMY_FRAMES = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 
--- every group cell there is, in every header
-function M.Cells()
+-- every group cell there is, in every header (not `Cells`: that name is the
+-- dock's question to a module, UI/Dock.lua B.Rebuild)
+function M.GroupCells()
 	local out = {}
 	for _, h in ipairs(M.headers) do
 		for _, child in ipairs({ h:GetChildren() }) do
@@ -771,7 +781,7 @@ end
 
 -- the white outline on whichever cell is your target, and nothing else
 function M.PaintOutlines()
-	for _, child in ipairs(M.Cells()) do
+	for _, child in ipairs(M.GroupCells()) do
 		if child.outline and child:IsVisible() then
 			F.AlphaFrom(child.outline, F.Source(child.bmUnit):IsTarget(), 1, 0)
 		end
@@ -808,14 +818,27 @@ function M.QueueRoster()
 		if M.live then
 			M.UpdateLooter()
 			M.PackRaid()
-			M.Sweep()
-			-- the same tokens may be other people now: every cell jumps
-			for _, child in ipairs(M.Cells()) do
+			-- the same tokens may be other people now: every cell jumps, and
+			-- reads its auras again (the rows only move on by themselves when
+			-- the token does)
+			for _, child in ipairs(M.GroupCells()) do
 				F.Fresh(child)
 				F.Fresh(child.bmPet)
 				F.Fresh(child.bmTarget)
+				if F.Auras then
+					F.Auras.Refresh(child)
+				end
 			end
-			M.PaintAll()
+			-- ONE PAINT A CELL (Josh 2026-09-30, review): the sweep paints
+			-- every cell it binds or finds bound, and every cell was painted
+			-- again after it. In a fight the sweep waits for the end of it (it
+			-- dresses secure buttons), and the paint is all there is.
+			M.Sweep()
+			if inCombat() then
+				M.PaintAll()
+			else
+				M.PaintSingles()
+			end
 		end
 	end
 	if not (C_Timer and C_Timer.After) then
@@ -826,7 +849,7 @@ function M.QueueRoster()
 	C_Timer.After(0.1, run)
 end
 
-local function onEvent(_, event, unit)
+local function onEvent(_, event, unit, powerType)
 	if not M.live then
 		return
 	end
@@ -861,17 +884,28 @@ local function onEvent(_, event, unit)
 		if unit == "target" then
 			F.Fresh(M.singles.targettarget)
 			F.Paint(M.singles.targettarget, F.Source("targettarget"))
+			return
 		end
-		-- every header's cells (a call inside "and ... or" gives one value,
-		-- so only the first party cell used to be looked at)
-		for _, child in ipairs(M.Cells()) do
-			if child.bmUnit == unit and child.bmTarget then
-				F.Fresh(child.bmTarget)
-				F.Paint(child.bmTarget, F.Source(F.TargetOf(unit)))
+		-- ONLY WHO HAS A TARGET BESIDE THEM (Josh 2026-09-30, review): this is
+		-- heard for every unit the client tracks - every nameplate in a pull -
+		-- and each one walked every cell of every header. A target is shown
+		-- beside a party member and a main tank, and only while their column
+		-- is up.
+		if not (unit == "player" or (type(unit) == "string" and (unit:find("^party%d") or unit:find("^raid%d")))) then
+			return
+		end
+		for _, h in ipairs(M.headers) do
+			if (h.bmRole == "party" or h.bmRole == "tanks") and h:IsShown() then
+				for _, child in ipairs({ h:GetChildren() }) do
+					if type(child) == "table" and child.bmUnit == unit and child.bmTarget then
+						F.Fresh(child.bmTarget)
+						F.Paint(child.bmTarget, F.Source(F.TargetOf(unit)))
+					end
+				end
 			end
 		end
 	elseif event == "UNIT_PET" then
-		for _, child in ipairs(M.Cells()) do
+		for _, child in ipairs(M.GroupCells()) do
 			if child.bmPet and child.bmUnit == unit then
 				F.Fresh(child.bmPet)
 				F.Paint(child.bmPet, F.Source(F.PetOf(unit)))
@@ -887,10 +921,12 @@ local function onEvent(_, event, unit)
 				F.Paint(f, F.Source(key))
 			end
 		end
-	elseif event == "UNIT_POWER_FREQUENT" then
+	elseif event == "UNIT_POWER_FREQUENT" or event == "UNIT_DISPLAYPOWER" then
 		-- combo points live on the target frame (there is none yet when the
-		-- frames were switched on in a fight)
-		if unit == "player" and M.singles.target then
+		-- frames were switched on in a fight). A rogue's energy ticking is not
+		-- a point, and laid the row out again with every tick; a druid going
+		-- into cat form or out of it is said by the second event.
+		if unit == "player" and M.singles.target and not F.NotCombo(powerType) then
 			F.PaintCombo(M.singles.target, F.Source("target"))
 		end
 	elseif event == "READY_CHECK_FINISHED" then
@@ -908,9 +944,14 @@ local function onEvent(_, event, unit)
 	elseif event == "GROUP_ROSTER_UPDATE" then
 		M.QueueRoster()
 	elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-		-- the boss slots dealt again: whoever is in each now, from where they are
+		-- the boss slots dealt again: whoever is in each now, from where they
+		-- are, and their auras read again - the same token, somebody else
 		for n = 1, 5 do
-			F.Fresh(M.singles["boss" .. n])
+			local f = M.singles["boss" .. n]
+			F.Fresh(f)
+			if F.Auras then
+				F.Auras.Refresh(f)
+			end
 		end
 		M.QueuePaint()
 	else
@@ -930,10 +971,13 @@ local function tick()
 	if tot and tot:IsShown() then
 		F.Paint(tot, F.Source("targettarget"))
 	end
-	-- and reach, which changes with every step and tells nobody
+	-- and reach, which changes with every step and tells nobody - faded as
+	-- far as the setting says, as a paint fades it: the strong figures that
+	-- stood here undid a light or medium fade four times a second
+	local far, groupFar = F.Far(false), F.Far(true)
 	for key, f in pairs(M.singles) do
 		if key ~= "targettarget" and f:IsShown() then
-			F.AlphaFrom(f, F.Source(key):InRange(), 1, F.FAR_ALPHA)
+			F.AlphaFrom(f, F.Source(key):InRange(), 1, far)
 		end
 	end
 	for _, h in ipairs(M.headers) do
@@ -941,7 +985,7 @@ local function tick()
 			for _, child in ipairs({ h:GetChildren() }) do
 				if type(child) == "table" and child.bmUnit and child:IsShown() then
 					local src = F.Source(child.bmUnit)
-					F.AlphaFrom(child, src:InRange(), 1, F.GROUP_FAR)
+					F.AlphaFrom(child, src:InRange(), 1, groupFar)
 					if child.bmTarget and child.bmTarget:IsShown() then
 						F.Paint(child.bmTarget, F.Source(child.bmTarget.bmUnit))
 					end
@@ -950,10 +994,19 @@ local function tick()
 		end
 	end
 end
+M.Tick = tick
 
 -- ---------------------------------------------------------------------------
 -- On, off
 -- ---------------------------------------------------------------------------
+
+-- a frame's aura rows reading, or put away with it (A.Pause in Auras.lua);
+-- this runs out of combat, from the queue above
+local function pauseAuras(f, paused)
+	if F.Auras and type(f) == "table" then
+		F.Auras.Pause(f, paused)
+	end
+end
 
 function M.Apply()
 	if not M.live then
@@ -972,10 +1025,15 @@ function M.Apply()
 				on = opt("boss", true)
 			end
 			watch(unit, on)
+			pauseAuras(M.singles[unit], not on)
 		end
 		buildGroups()
 		for _, h in ipairs(M.headers) do
-			drive(h, opt(h.bmRole, true))
+			local on = opt(h.bmRole, true)
+			drive(h, on)
+			for _, child in ipairs({ h:GetChildren() }) do
+				pauseAuras(child, not on)
+			end
 		end
 		M.BuildCast()
 		if M.cast and not opt("cast", true) then
@@ -1038,9 +1096,13 @@ function M:OnDisable()
 		end
 		for _, pair in ipairs(SINGLES) do
 			watch(pair[1], false)
+			pauseAuras(M.singles[pair[1]], true)
 		end
 		for _, h in ipairs(M.headers) do
 			drive(h, false)
+			for _, child in ipairs({ h:GetChildren() }) do
+				pauseAuras(child, true)
+			end
 		end
 		if M.cast then
 			M.cast.casting = nil
@@ -1122,22 +1184,46 @@ local BOSSES = {
 
 M.previews = {}
 
+-- MADE ONCE, DRAWN AGAIN (Josh 2026-09-30, review). Every redraw - each
+-- switch, segment or fade clicked while the preview is up - built a new set
+-- of frames and hid the old, and the client never gives a frame back: some
+-- forty-five frames of a raid's worth, each with its bars, icons and lanes,
+-- a click. They are kept by kind and handed out again in turn.
+M.pool = {}
+local used = {}
+
 local function preview(kind, d, point, handle)
-	local f = F.Build(UIParent, kind, nil, false)
+	M.pool[kind] = M.pool[kind] or {}
+	used[kind] = (used[kind] or 0) + 1
+	local f = M.pool[kind][used[kind]]
+	if not f then
+		f = F.Build(UIParent, kind, nil, false)
+		M.pool[kind][used[kind]] = f
+	end
+	f:ClearAllPoints()
 	f:SetPoint(unpack(point))
 	-- a made-up pet or target moves the party it hangs off; the made-up
 	-- target frame moves nothing
-	M.Handle(f, handle or ((kind == "gpet" or kind == "gtarget") and "party")
-		or (kind == "tank" and "tanks") or kind)
+	local key = handle or ((kind == "gpet" or kind == "gtarget") and "party") or (kind == "tank" and "tanks") or kind
+	M.Handle(f, key)
+	-- and one drawn before beside a tank moves whichever block it is in now
+	if f.bmHandle and HOLDERS[key] then
+		f.bmHandle = key
+	end
 	f:SetFrameStrata("MEDIUM")
 	f:SetScale(M.Scale())
 	F.Paint(f, F.Fake(d))
-	if d.auras and F.Auras then
-		F.Auras.Show(f, kind, d.auras)
+	-- a frame drawn before for somebody else puts away what they had
+	if F.Auras and (d.auras or f.bmFakeAuras or f.bmFakeDispel) then
+		F.Auras.Show(f, kind, d.auras or {})
 	end
 	-- and the bars of your heals or damage over time, part run down
 	if F.Timers and not d.dead and not d.offline then
 		F.Timers.Show(f, kind)
+	elseif f.bmFakeTimers then
+		for _, t in ipairs(f.bmFakeTimers) do
+			t:Hide()
+		end
 	end
 	f:Show()
 	M.previews[#M.previews + 1] = f
@@ -1168,6 +1254,9 @@ function M.Preview(what)
 		f:Hide()
 	end
 	M.previews = {}
+	for kind in pairs(used) do
+		used[kind] = 0
+	end
 	if M.cast then
 		M.cast.casting = nil
 	end
@@ -1422,6 +1511,7 @@ function M.CastEvent(event)
 			c.bar:SetValue(1)
 			c.name:SetText(event == "UNIT_SPELLCAST_INTERRUPTED" and "Interrupted" or "Failed")
 			c.time:SetText("")
+			c.flashUntil = (GetTime and GetTime() or 0) + 0.6
 			if C_Timer and C_Timer.After then
 				C_Timer.After(0.6, function()
 					if not c.casting then
@@ -1436,11 +1526,19 @@ function M.CastEvent(event)
 	end
 	local k = current()
 	if not k then
+		-- THE RED FLASH STAYS ITS MOMENT (Josh 2026-09-30, review): the
+		-- client says a cast stopped after it says it was interrupted, and
+		-- this hid the flash as soon as it was shown. The timer above puts
+		-- it away.
+		if c.flashUntil and (GetTime and GetTime() or 0) < c.flashUntil then
+			return
+		end
 		c.casting = nil
 		c:SetScript("OnUpdate", nil)
 		c:Hide()
 		return
 	end
+	c.flashUntil = nil
 	c.casting = k
 	local a = BT.Widgets.ACCENT
 	c.bar:SetStatusBarColor(a[1], a[2], a[3], 0.9)

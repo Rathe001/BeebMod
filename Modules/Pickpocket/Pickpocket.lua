@@ -40,8 +40,6 @@ local PICK_POCKET = 921
 -- long after it closes the money may still land
 local OPEN_WITHIN, LATE_MONEY = 3, 1
 
-local WORDS = "|cff8a9894%s|r"
-
 local function now()
 	if type(GetTime) == "function" then
 		return GetTime()
@@ -234,16 +232,8 @@ function M.Closed()
 end
 
 -- ---------------------------------------------------------------------------
--- The line
+-- The cell
 -- ---------------------------------------------------------------------------
-
-function M.Lines(r, s)
-	local c, i = M.Worth(r)
-	local sc, si = M.Worth(s)
-	local left = WORDS:format("Pickpocketed") .. " " .. coins(c + i)
-	local right = (sc + si) > 0 and ("+" .. coins(sc + si) .. " " .. WORDS:format("today")) or ""
-	return left, right
-end
 
 -- A READOUT (Josh 2026-09-22, the panel redesign): one cell of the grid - a
 -- pouch and everything pickpocketed, as coins to the silver. This session's

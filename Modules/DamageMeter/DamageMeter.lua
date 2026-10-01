@@ -99,7 +99,7 @@ function M.AddRoot(f)
 	return true
 end
 
-function M.Roots(again)
+function M.Roots(again, byName)
 	-- LOOKED FOR ONCE (Josh 2026-09-23, audit): with no meter found, every
 	-- restyle - each fight's start and end, every roster change, every addon
 	-- that loads - walked every frame in the game looking for one. A fresh
@@ -113,7 +113,9 @@ function M.Roots(again)
 			M.AddRoot(f)
 		end
 	end
-	if type(_G.EnumerateFrames) == "function" then
+	-- `byName` looks under the known names only: a loading screen with no
+	-- meter found walked every frame in the game again
+	if not byName and type(_G.EnumerateFrames) == "function" then
 		local f, guard = nil, 0
 		repeat
 			local ok, nxt = pcall(_G.EnumerateFrames, f)
@@ -135,12 +137,29 @@ end
 -- Dressing
 -- ---------------------------------------------------------------------------
 
+-- how many frames a window is made of, as deep as a dress goes
+local sizes = setmetatable({}, { __mode = "k" })
+local function size(f, depth)
+	if type(f) ~= "table" or depth > 10 then
+		return 0
+	end
+	local n = 1
+	local ok, kids = pcall(function() return { f:GetChildren() } end)
+	for _, kid in ipairs(ok and kids or {}) do
+		n = n + size(kid, depth + 1)
+	end
+	return n
+end
+
 -- Dresses every meter window there is; `plain` puts the client's look back.
 function M.StyleAll(plain)
 	if plain then
 		dresser:Undress()
 		M.Unextras()
 		M.lastCount = 0
+		for root in pairs(sizes) do
+			sizes[root] = nil
+		end
 		return 0
 	end
 	local n = 0
@@ -155,10 +174,21 @@ function M.StyleAll(plain)
 		if not okE then
 			BT.Err("damagemeter.extras: " .. tostring(err))
 		end
+		-- how many frames it was made of when dressed (M.Grown)
+		sizes[root] = size(root, 0)
 	end
 	M.lastCount = n
 	M.Hook()
 	return n
+end
+
+-- A NEW ROW IS A NEW FRAME (Josh 2026-09-30, review). The two-second look
+-- dressed the whole meter every time, in a fight too: a walk of every piece,
+-- each one asked who its parent is. Counting the frames is a walk of the
+-- frames alone, and a new row, a new breakdown or a new scroll bar each adds
+-- one; only then is there anything new to dress.
+function M.Grown(root)
+	return sizes[root] == nil or size(root, 0) ~= sizes[root]
 end
 
 -- the theme changed: paint again
@@ -206,6 +236,15 @@ end
 -- left as it is.
 M.SESSION_WORDS = { C = "Current", O = "Overall" }
 local labelled = setmetatable({}, { __mode = "k" })
+
+local function isWord(text)
+	for _, word in pairs(M.SESSION_WORDS) do
+		if text == word then
+			return true
+		end
+	end
+	return false
+end
 -- the dropdown's other label, which writes the same letter (Josh 2026-09-24:
 -- the header read "OOverall"), see-through while ours says it in full
 local doubled = setmetatable({}, { __mode = "k" })
@@ -222,12 +261,7 @@ local function hush(r)
 	if not (okT and type(other) == "string") or secret(other) then
 		return
 	end
-	local session = M.SESSION_WORDS[other] ~= nil
-	for _, word in pairs(M.SESSION_WORDS) do
-		if other == word then
-			session = true
-		end
-	end
+	local session = M.SESSION_WORDS[other] ~= nil or isWord(other)
 	if session and BT.Enabled("damagemeter") then
 		if doubled[r] == nil then
 			doubled[r] = BT.Pill.Number(r.GetAlpha and r:GetAlpha(), 1)
@@ -269,6 +303,14 @@ local function relabel(fs)
 	end
 	local word = M.SESSION_WORDS[text]
 	if not word then
+		-- A PAST FIGHT'S LABEL IS THE CLIENT'S (Josh 2026-09-30, review). The
+		-- letter remembered from before was written back over it when the
+		-- meter was switched off or a switch changed, and then read again as
+		-- "Current" while the window showed the old fight. Our own word read
+		-- again still stands for its letter.
+		if not isWord(text) then
+			labelled[fs] = nil
+		end
 		return
 	end
 	labelled[fs] = text
@@ -348,7 +390,13 @@ local shown = setmetatable({}, { __mode = "k" })
 
 -- the client has just written a row's amount: its rate after it
 local function decorate(fs)
-	if fs.beebsWriting or not BT.Enabled("damagemeter") or not opt("perSecond", true) then
+	if fs.beebsWriting then
+		return
+	end
+	-- the client has written this one: the total remembered from its last
+	-- is old, and is not the one to put back (Josh 2026-09-30, review)
+	shown[fs] = nil
+	if not BT.Enabled("damagemeter") or not opt("perSecond", true) then
 		return
 	end
 	local row = fs.beebsRow
@@ -364,10 +412,28 @@ local function decorate(fs)
 	end
 	shown[fs] = text
 	fs.beebsWriting = true
-	fs:SetText(("%s (%.1f)"):format(text, rate))
+	fs:SetText(("%s (%s)"):format(text, M.RateText(rate)))
 	fs.beebsWriting = false
 end
 M.Decorate = decorate
+
+-- a rate as the total beside it is written: to a tenth under a thousand, and
+-- whole with its thousands marked from there - "84,213 (1,234)", not
+-- "84,213 (1234.5)" (Josh 2026-09-30, review)
+function M.RateText(rate)
+	if rate < 999.95 then
+		return ("%.1f"):format(rate)
+	end
+	local n = math.floor(rate + 0.5)
+	if type(BreakUpLargeNumbers) == "function" then
+		local ok, s = pcall(BreakUpLargeNumbers, n)
+		if ok and type(s) == "string" then
+			return s
+		end
+	end
+	local out = tostring(n):reverse():gsub("(%d%d%d)", "%1,"):reverse()
+	return (out:gsub("^,", ""))
+end
 
 -- the rows a window has made so far, each hooked once
 local function eachRow(win, fn)
@@ -536,29 +602,51 @@ function M.Hook()
 	end
 end
 
+-- the two-second look: a meter shown that has grown since it was dressed is
+-- dressed again (M.Grown)
+-- AND EVERY TEN SECONDS ALL THE SAME: a row the client hands to another
+-- combatant is not a new frame, and if it paints that row's bar again, only a
+-- whole pass puts ours back. Ten seconds is how long that can show.
+M.LOOK_ALL = 5
+local looks = 0
+function M.Look()
+	if not BT.Enabled("damagemeter") then
+		return false
+	end
+	looks = looks + 1
+	for _, root in ipairs(roots) do
+		if BT.Furniture.Call(root, "IsShown") and (looks >= M.LOOK_ALL or M.Grown(root)) then
+			looks = 0
+			M.StyleAll()
+			return true
+		end
+	end
+	return false
+end
+
 function M.Watch()
-	if M.events then
-		return M.events
-	end
-	M.events = CreateFrame("Frame")
-	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "ADDON_LOADED", "PLAYER_REGEN_ENABLED",
-		"PLAYER_REGEN_DISABLED", "GROUP_ROSTER_UPDATE" }) do
-		pcall(M.events.RegisterEvent, M.events, event)
-	end
-	M.events:SetScript("OnEvent", function(_, event, addon)
-		if not BT.Enabled("damagemeter") then
-			return
+	if not M.events then
+		M.events = CreateFrame("Frame")
+		for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "ADDON_LOADED", "PLAYER_REGEN_ENABLED",
+			"PLAYER_REGEN_DISABLED", "GROUP_ROSTER_UPDATE" }) do
+			pcall(M.events.RegisterEvent, M.events, event)
 		end
-		if event == "ADDON_LOADED" then
-			-- the meter's own addon arriving is the one moment worth a scan
-			if type(addon) == "string" and addon:find("DamageMeter", 1, true) then
-				M.Roots(true)
+		M.events:SetScript("OnEvent", function(_, event, addon)
+			if not BT.Enabled("damagemeter") then
+				return
 			end
-		elseif event == "PLAYER_ENTERING_WORLD" and #roots == 0 then
-			M.Roots(true)
-		end
-		soon()
-	end)
+			if event == "ADDON_LOADED" then
+				-- the meter's own addon arriving is the one moment worth a scan
+				if type(addon) == "string" and addon:find("DamageMeter", 1, true) then
+					M.Roots(true)
+				end
+			elseif event == "PLAYER_ENTERING_WORLD" and #roots == 0 then
+				-- by its names: the meter's addon loading is caught above
+				M.Roots(true, true)
+			end
+			soon()
+		end)
+	end
 	-- ROWS ARRIVE WITHOUT AN EVENT (Josh 2026-09-22). A new combatant is a
 	-- new row, made by the client whenever it likes; nothing tells us. A
 	-- slow tick over a small tree costs nothing, and dressing is idempotent:
@@ -579,17 +667,7 @@ function M.Watch()
 		end)
 	end
 	if not M.ticker and C_Timer and C_Timer.NewTicker then
-		M.ticker = C_Timer.NewTicker(2, function()
-			if not BT.Enabled("damagemeter") then
-				return
-			end
-			for _, root in ipairs(roots) do
-				if BT.Furniture.Call(root, "IsShown") then
-					M.StyleAll()
-					return
-				end
-			end
-		end)
+		M.ticker = C_Timer.NewTicker(2, M.Look)
 	end
 	return M.events
 end
@@ -607,6 +685,14 @@ end
 
 function M:OnDisable()
 	M.StyleAll(true)
+	-- and its two tickers stopped, as every other module's are: nothing of
+	-- ours is on the meter to keep up (M.Watch starts them again)
+	for _, key in ipairs({ "ticker", "clockTicker" }) do
+		if M[key] then
+			M[key]:Cancel()
+			M[key] = nil
+		end
+	end
 end
 
 -- ---------------------------------------------------------------------------

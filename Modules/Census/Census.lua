@@ -55,7 +55,9 @@ BT.OnUnitTooltip("census", 30, function(tip, unit)
 	local U = BT.Util
 	local name, realm = U.UnitFullName(unit)
 	local key = name and U.Key(name, realm)
-	local p = key and BT.DB.Get(BT.db, key)
+	-- read, not taken out: DB.Get unpacks a packed row and keeps it unpacked
+	-- until logout, so every player you pointed at stayed a table
+	local p = key and BT.DB.View(BT.db, key, BT.DB.Players(BT.db)[key], true)
 	local former, when = BT.DB.FormerGuild(p)
 	if former then
 		tip:AddLine(("Was in %s, %s"):format(former, U.Since(when)), 0.6, 0.65, 0.7)

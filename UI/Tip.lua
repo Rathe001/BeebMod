@@ -105,10 +105,15 @@ local function text(size, face, layer)
 	return fs
 end
 
+-- and a texture comes back untinted (Josh 2026-09-30, review): the header's
+-- icon and the bars' fills share a pool, and a tint left by an icon would
+-- multiply into the colour of the next tooltip's bar
 local function rect(layer, sub)
-	return take("rect:" .. (layer or "ARTWORK") .. ":" .. (sub or 0), function()
+	local t = take("rect:" .. (layer or "ARTWORK") .. ":" .. (sub or 0), function()
 		return frame.body:CreateTexture(nil, layer or "ARTWORK", nil, sub or 0)
 	end)
+	t:SetVertexColor(1, 1, 1, 1)
+	return t
 end
 
 local function place(region, x, y)
@@ -700,7 +705,16 @@ function T.Show(owner, spec)
 	local bar = BT.Dock and BT.Dock.Frame and BT.Dock.Frame()
 	local scale = ask(bar, "GetEffectiveScale", 1) / ask(UIParent, "GetEffectiveScale", 1)
 	frame:SetScale(scale > 0 and scale or 1)
-	anchor(owner)
+	-- NEXT TO WHAT IT IS ABOUT (Josh 2026-09-30, the census redesign): a
+	-- card is put beside the dock, which a bar in the census window may be
+	-- nowhere near; `near` puts it beside its owner, kept on the screen
+	if spec.near then
+		frame:ClearAllPoints()
+		frame:SetPoint("TOPLEFT", owner, "TOPRIGHT", 8, 0)
+		pcall(frame.SetClampedToScreen, frame, true)
+	else
+		anchor(owner)
+	end
 	frame.check = 0
 	frame:Show()
 	T.last = t

@@ -110,8 +110,16 @@ local function greenGuild(inside)
 	return nil
 end
 
+-- ONE PAIR OF BRACKETS (Josh 2026-09-30: "Looks like extra < and >
+-- characters are being added to guild names in the chat"). A recruiter
+-- writes "<<True Freedom>>" to make it stand out; the inner pair was made
+-- the green link and the outer pair left beside it, which read as brackets
+-- BeebMod had added. However many there are, a guild reads as it does on a
+-- tooltip: one pair, green. Anything that is not a guild is left as typed.
 local function guilds(words)
-	return (words:gsub("<([^<>]+)>", greenGuild))
+	return (words:gsub("(<+)([^<>]+)(>+)", function(open, inside, close)
+		return greenGuild(inside) or (open .. inside .. close)
+	end))
 end
 
 -- ---------------------------------------------------------------------------
@@ -152,6 +160,10 @@ end
 -- the brackets and full stops round an address are the sentence's, not the
 -- address's: "(see www.x.com)." links www.x.com
 local function address(word)
+	-- an address has a dot or a colon in it; most words have neither
+	if not word:find("[%.:]") then
+		return word
+	end
 	local lead, core, trail = word:match("^([%(%[\"']*)(.-)([%.,;:!%?%)%]\"']*)$")
 	if not core or not M.IsAddress(core) then
 		return word

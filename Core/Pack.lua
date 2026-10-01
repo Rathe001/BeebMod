@@ -32,6 +32,10 @@
 --   22    2   seen           capped at 4095
 --   24    1   bits           1 = vouched for by a list the client builds,
 --                             2 = heard from another copy, not seen yourself
+--                             4 and 8 = the faction: 1 Alliance, 2 Horde,
+--                                 3 Neutral, 0 not known (Josh 2026-09-30)
+--                             16 and 32 = the sex: 1 male, 2 female, 0 not
+--                                 known (the game's 2 and 3, Josh 2026-09-30)
 --                                 (the census is no longer shared: read only
 --                                 so DB.DropHeard can find such a row)
 --   25    1   server         the realm number in the GUID, words.server
@@ -102,22 +106,26 @@ P.KINDS = KINDS
 local places = setmetatable({}, { __mode = "k" })
 
 function P.Words(db)
-	db.words = db.words or {}
+	-- every unpack asks for these: once the places are built, the lists are
+	-- there too, and nothing needs making
 	local w = db.words
+	local ix = w and places[w]
+	if ix then
+		return w, ix
+	end
+	w = w or {}
+	db.words = w
 	for kind in pairs(KINDS) do
 		w[kind] = w[kind] or {}
 	end
-	local ix = places[w]
-	if not ix then
-		ix = {}
-		for kind in pairs(KINDS) do
-			ix[kind] = {}
-			for i, word in ipairs(w[kind]) do
-				ix[kind][word] = i
-			end
+	ix = {}
+	for kind in pairs(KINDS) do
+		ix[kind] = {}
+		for i, word in ipairs(w[kind]) do
+			ix[kind][word] = i
 		end
-		places[w] = ix
 	end
+	places[w] = ix
 	return w, ix
 end
 
@@ -151,9 +159,18 @@ local PACKED = {
 	name = true, realm = true, class = true, race = true, level = true, levelAt = true,
 	guild = true, guildAt = true, guilds = true, zone = true, zoneAt = true,
 	first = true, last = true, seen = true, vouch = true, guid = true, heard = true,
+	faction = true, sex = true,
 }
 -- written by older versions, and dropped rather than kept
-local DEAD = { given = true, surname = true, srcName = true, src = true, faction = true, sex = true }
+local DEAD = { given = true, surname = true, srcName = true, src = true }
+
+-- THE FACTION, IN THE FLAGS (Josh 2026-09-30: "Let's also store faction so
+-- we can work with it in the future"). A book is a realm and a side, but a
+-- unit of the other side is filed in it too, and a Skyborne may be either.
+-- Two spare bits of the flags letter say which, so no row grows a letter.
+P.FACTIONS = { "Alliance", "Horde", "Neutral" }
+local FACTION_CODE = { Alliance = 1, Horde = 2, Neutral = 3 }
+P.FACTION_CODE = FACTION_CODE
 
 local function guildCode(db, g)
 	if g == nil then
@@ -184,7 +201,8 @@ function P.Pack(db, key, p)
 	end
 	local name, realm = P.Split(db, key)
 	if p.name ~= name or p.realm ~= realm or not (p.vouch == nil or p.vouch == true)
-		or not (p.heard == nil or p.heard == true) then
+		or not (p.heard == nil or p.heard == true) or not (p.faction == nil or FACTION_CODE[p.faction])
+		or not (p.sex == nil or p.sex == 2 or p.sex == 3) then
 		return nil
 	end
 	local level = p.level
@@ -218,7 +236,8 @@ function P.Pack(db, key, p)
 		{ when(p.levelAt, 3600, 3), 3 },
 		{ when(p.guildAt, 3600, 3), 3 },
 		{ math.min(seen, 4095), 2 },
-		{ (p.vouch and 1 or 0) + (p.heard and 2 or 0), 1 },
+		{ (p.vouch and 1 or 0) + (p.heard and 2 or 0) + (FACTION_CODE[p.faction or ""] or 0) * 4
+			+ (p.sex and (p.sex - 1) or 0) * 16, 1 },
 		{ server, 1 },
 		{ id, 6 },
 	}
@@ -298,6 +317,9 @@ function P.Unpack(db, key, s, into, light)
 	local bits = VALUE[byte(s, 24)]
 	into.vouch = bits % 2 == 1 or nil
 	into.heard = math.floor(bits / 2) % 2 == 1 or nil
+	into.faction = P.FACTIONS[math.floor(bits / 4) % 4]
+	local sex = math.floor(bits / 16) % 4
+	into.sex = sex > 0 and sex + 1 or nil
 	into.guid, into.guilds = nil, nil
 	if light then
 		into.light = true
@@ -350,6 +372,11 @@ function P.CensusReader(db)
 		into.zone = z > 0 and zones[z] or nil
 		local t = ((VALUE[byte(s, 9)] * 64 + VALUE[byte(s, 10)]) * 64 + VALUE[byte(s, 11)]) * 64 + VALUE[byte(s, 12)]
 		into.last = t > 0 and (P.EPOCH + (t - 1) * 60) or nil
+		-- and the side and the sex, for the census's filters (Josh 2026-09-30)
+		local bits = VALUE[byte(s, 24)]
+		into.faction = P.FACTIONS[floor(bits / 4) % 4]
+		local sex = floor(bits / 16) % 4
+		into.sex = sex > 0 and sex + 1 or nil
 		return into
 	end
 end
@@ -357,6 +384,12 @@ end
 -- Just the last sighting, for sorting the book by age without unpacking it.
 function P.Last(s)
 	return at(dec(s, 9, 4), 60)
+end
+
+-- whether a class is on file, for a walk that only wants the rows without one
+function P.HasClass(s)
+	local c = byte(s, 1)
+	return c ~= nil and (VALUE[c] or 0) > 0
 end
 
 -- whether a packed row was heard from another copy of BeebMod, not seen
@@ -368,4 +401,30 @@ end
 function P.Level(s)
 	local level = VALUE[byte(s, 3)]
 	return level > 0 and level or nil
+end
+
+-- the race token on file, nil without one
+function P.Race(db, s)
+	local i = VALUE[byte(s, 2) or 0] or 0
+	if i == 0 then
+		return nil
+	end
+	local w = db.words and db.words.race
+	return w and w[i] or nil
+end
+
+-- the faction on file ("Alliance", "Horde", "Neutral"), nil when not known
+function P.Faction(s)
+	local bits = VALUE[byte(s, 24) or 0] or 0
+	return P.FACTIONS[math.floor(bits / 4) % 4]
+end
+
+-- the same row with `faction` written in, the rest of it untouched
+function P.WithFaction(s, faction)
+	local code = FACTION_CODE[faction or ""]
+	local bits = VALUE[byte(s, 24) or 0]
+	if not (code and bits) then
+		return s
+	end
+	return sub(s, 1, 23) .. CHAR[bits % 4 + code * 4 + floor(bits / 16) * 16] .. sub(s, 25)
 end

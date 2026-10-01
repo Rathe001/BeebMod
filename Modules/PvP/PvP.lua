@@ -205,7 +205,11 @@ local function kept()
 		return nil
 	end
 	BT.settings.pvp = BT.settings.pvp or {}
-	local who = (BT.Util.Me and BT.Util.Me()) or "?"
+	-- BY NAME AND REALM (Josh 2026-09-30, review). The settings are
+	-- account-wide, and under the name alone two characters of one name on
+	-- two realms shared a rank. Kept by U.MeKey like every other record of a
+	-- character; one kept under the bare name comes across (BT.Session.Mine).
+	local _, who = BT.Session.Mine(BT.settings.pvp)
 	return BT.settings.pvp, who
 end
 
@@ -261,6 +265,24 @@ function M.WatchTab()
 	M.watching = true
 	M.TakeTab()
 	return true
+end
+
+-- ASKED, NOT WAITED FOR (Josh 2026-09-30: "PvP progress meter is not
+-- showing"). The tab's labels are written when the tab is opened, so a
+-- character whose PvP tab you had never opened had no line at all. The tab
+-- has an Update of its own (the Testing page's record lists
+-- PVPRankFrame:Update), which writes them without showing anything: it is
+-- asked to, until this character's rank is on file, at most every half
+-- minute. Its labels are then read as ever (M.WatchTab, M.TakeTab).
+M.ASK_EVERY = 30
+function M.AskTab()
+	local tab = M.Tab()
+	local now = BT.Util.Now and BT.Util.Now() or 0
+	if not (tab and type(tab.Update) == "function") or now - (M.askedAt or -math.huge) < M.ASK_EVERY then
+		return false
+	end
+	M.askedAt = now
+	return (pcall(tab.Update, tab))
 end
 
 -- whether there is anything to read: Classic's calls, or this game's tab
@@ -357,6 +379,10 @@ function M.Update()
 	-- and read it again now: two labels, cheap, and whatever the game
 	-- wrote without a word to us is taken the next time round
 	if not M.Classic() then
+		local all, who = kept()
+		if not (all and all[who]) then
+			M.AskTab()
+		end
 		M.TakeTab()
 	end
 	local p = M.Read()

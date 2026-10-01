@@ -6,13 +6,14 @@
 -- and its switch). The bag space it carried for a while is its own line now:
 -- see Modules/Bags/Bags.lua.
 --
--- One line of the dock, under the row: your money on the left in the client's
--- own coins, and what you have earned per hour on the right. Point at it for
--- the session's totals.
+-- One cell of the dock's readout grid: your money, in the client's own coins.
+-- Point at it for the session's totals.
 --
--- EARNED, NOT NET. Money coming in is what "per hour" is about - loot, quest
--- rewards, sales. A trainer visit is not a slower farm, so spending is counted
--- separately and shown on hover rather than taken off the rate.
+-- EARNED AND SPENT, APART. Money coming in and money going out are counted
+-- separately and are two rows on the hover, with the net an hour under them
+-- (Josh 2026-09-27, the dock's tooltips redrawn). The earned-an-hour figure
+-- the line once showed went with the line; the words that still promised it
+-- went on 2026-09-30 (review).
 --
 -- A SESSION IS A LOGIN. A /reload carries it on (the save comes back through
 -- Data/Live, and the client says which kind of load this is); a fresh login
@@ -25,7 +26,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "currency",
 	title = "Currency",
-	blurb = "Your gold, and what you earn per hour",
+	blurb = "Your gold, and what you earned and spent this session",
 	order = 39,
 	-- on the right panel, as a row of the Metrics grid (a part has no tab of
 	-- its own: its switch is on the Metrics tab)
@@ -37,9 +38,6 @@ local M = BT.Module({
 
 local EVERY = 10
 local COIN = 12
-
-local WORDS = "|cff8a9894%s|r"
-local GAIN = "|cff8cd99a"
 
 -- THE COINS THE MONEY FRAME DRAWS (Josh 2026-09-22). Not GetCoinTextureString,
 -- which this client may not have - its absence left "2g 9s 39c" in letters.
@@ -140,31 +138,9 @@ function M.Money()
 	M.Update()
 end
 
--- copper per hour earned, or nil while there is too little time to say
-function M.Rate(s, now)
-	s = s or M.session
-	if not s then
-		return nil
-	end
-	return BT.Session.Rate(s.earned, s.start, now)
-end
-
 -- ---------------------------------------------------------------------------
--- The line
+-- The cell
 -- ---------------------------------------------------------------------------
-
-function M.Lines(purse, rate)
-	local left = M.Coins(purse)
-	local right
-	if not rate then
-		right = WORDS:format("- /h")
-	elseif rate < 1 then
-		right = WORDS:format("0 /h")
-	else
-		right = GAIN .. "+|r" .. M.Coins(rate, true) .. " " .. WORDS:format("/h")
-	end
-	return left, right
-end
 
 -- A READOUT (Josh 2026-09-22, the panel redesign): one cell of the grid, your
 -- gold as the client's coins - to the silver once there is gold, so it fits
@@ -293,7 +269,7 @@ end
 
 function M:BuildTab(panel)
 	local note = BT.Widgets.Label(panel,
-		"Your gold, and what you earn per hour this session. Point at it for the totals.",
+		"Your gold. Point at it for what you earned and spent this session, and the net per hour.",
 		"small", 0.55, 0.60, 0.58)
 	note:SetPoint("TOPLEFT", 0, -2)
 	note:SetWidth(520)

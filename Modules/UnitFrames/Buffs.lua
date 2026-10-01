@@ -528,6 +528,10 @@ function B.Watch()
 		if (event == "UNIT_AURA" or event == "UNIT_INVENTORY_CHANGED") and unit ~= "player" then
 			return
 		end
+		-- a switch made in the fight, made now it is over (B.Enable)
+		if event == "PLAYER_REGEN_ENABLED" and B.enableAfter ~= nil then
+			B.Enable(B.enableAfter)
+		end
 		if not M.live then
 			return
 		end
@@ -550,12 +554,38 @@ function B.Watch()
 	B.watch = w
 end
 
+-- PUT AWAY, NOT READING (Josh 2026-09-30, review): the tray's containers are
+-- the client's, and a hidden one still reads your auras and lays them out. Off
+-- with the tray and on with it; the client will not have one switched in a
+-- fight, so a change asked for then is made when the fight ends.
+function B.Enable(on)
+	on = on and true or false
+	if not B.rows then
+		return false
+	end
+	if inCombat() then
+		B.enableAfter = on
+		return false
+	end
+	B.enableAfter = nil
+	for _, row in ipairs(B.rows) do
+		if row.perm then
+			pcall(row.perm.SetEnabled, row.perm, on)
+		end
+		if row.timed then
+			pcall(row.timed.SetEnabled, row.timed, on)
+		end
+	end
+	return true
+end
+
 function B.SetShown(on)
 	if on then
 		B.Build()
 	end
 	if B.holder then
 		B.holder:SetShown(on and true or false)
+		B.Enable(on)
 		if on then
 			B.Place()
 			B.Update()
@@ -615,18 +645,23 @@ local function fakeTimed(parent, a, x, y)
 	return f
 end
 
--- the tray, drawn from made-up auras over where the real one sits
+-- the tray, drawn from made-up auras over where the real one sits. The
+-- made-up auras never change, so the tray is drawn once and shown again
+-- (Josh 2026-09-30, review: each switch on built a whole new one, and the
+-- client never gives a frame back).
 function B.Preview(on)
 	B.previewing = on and true or false
 	if B.fake then
-		B.fake:Hide()
-		B.fake = nil
+		B.fake:SetShown(on and true or false)
 	end
 	if B.real then
 		B.real:SetShown(not on)
 	end
 	if not on or not B.holder then
 		return nil
+	end
+	if B.fake then
+		return B.fake
 	end
 	local fake = CreateFrame("Frame", nil, B.holder)
 	fake:SetAllPoints(B.holder)

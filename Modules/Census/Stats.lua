@@ -176,11 +176,21 @@ local function begin(now, filter)
 		now = now, bands = bands, filtering = filtering,
 		seen = seenWithin[filter.seen] and filter.seen or nil,
 		within = seenWithin[filter.seen], pick = pick,
+		-- FACTION AND SEX (Josh 2026-09-30: "add alliance/horde/all faction
+		-- filters", "We should also add a gender filter"): like Seen, a
+		-- character of the other one is on no chart at all, and one whose side
+		-- or sex is not on file yet only counts under All
+		faction = (filter.faction == "Alliance" or filter.faction == "Horde") and filter.faction or nil,
+		sex = (filter.sex == 2 or filter.sex == 3) and filter.sex or nil,
 		class = {}, race = {}, band = {}, tag = {}, guild = {}, zone = {},
 		ages = {}, ageBuckets = {},
 		-- book: every character; total: those seen recently enough; matched:
 		-- those of them the pick picks (all of them with no pick)
 		book = 0, total = 0, matched = 0, mine = 0,
+		-- the tiles over the charts (Josh 2026-09-30, the census redesign):
+		-- seen today, of the whole book; everyone every filter keeps; and the
+		-- side and sex splits, each of everyone the OTHER filters keep
+		today = 0, shown = 0, sides = {}, sexes = {},
 		unknownClass = 0, unknownLevel = 0, unknownRace = 0,
 		unknownGuild = 0, unknownZone = 0,
 		-- characters carrying at least one tag: the tag chart's rows count
@@ -206,27 +216,53 @@ local AGE = S.AGE_BUCKETS
 local function yours(t, key, p)
 	local mine = key and t.people and t.people[key]
 	if mine then
-		return true, mine.tags
+		-- a row that only says you grouped with them is not one you wrote on
+		return BT.Notes.Noted(mine), mine.tags
 	end
 	return DB.IsMine(p), p.tags
 end
 
+local DAY = 86400
 local function count(t, p, key)
 	t.book = t.book + 1
 	local age = t.now - (p.last or t.now)
+	if p.last and age < DAY then
+		t.today = t.today + 1
+	end
 	-- not seen lately: on no chart at all (never seen has no age, so it is
 	-- as old as the book)
 	if t.within and (p.last == nil or age >= t.within) then
 		return
 	end
-	t.total = t.total + 1
 	local pick = t.pick
 	local isMine, tags = yours(t, key, p)
 	local matched = pick == nil or picks(pick, p, tags)
+	local myBand = S.BandOf(p.level)
+	local bandOK = (not t.filtering) or (myBand ~= nil and t.bands[myBand] == true)
+	local sideOK = not t.faction or p.faction == t.faction
+	local sexOK = not t.sex or p.sex == t.sex
+	-- EACH TILE LEAVES OUT ITS OWN FILTER (Josh 2026-09-30, the census
+	-- redesign), as the level chart always has: the faction bar shows both
+	-- sides of whoever else is counted, so a click on the other side shows
+	-- what it would be before it is made
+	if matched and bandOK and sexOK then
+		local f = p.faction or S.UNKNOWN
+		t.sides[f] = (t.sides[f] or 0) + 1
+	end
+	if matched and bandOK and sideOK then
+		local x = p.sex or 0
+		t.sexes[x] = (t.sexes[x] or 0) + 1
+	end
+	if not (sideOK and sexOK) then
+		return
+	end
+	t.total = t.total + 1
+	if matched and bandOK then
+		t.shown = t.shown + 1
+	end
 	-- a chart counts a character the pick picks - or anybody, if the pick
 	-- was made on that chart
 	local pickMode = pick and pick.mode
-	local myBand = S.BandOf(p.level)
 	-- the level chart counts everybody the brackets would leave out
 	if matched then
 		t.matched = t.matched + 1
@@ -236,7 +272,7 @@ local function count(t, p, key)
 			t.unknownLevel = t.unknownLevel + 1
 		end
 	end
-	if not ((not t.filtering) or (myBand ~= nil and t.bands[myBand])) then
+	if not bandOK then
 		matched, pickMode = false, nil
 	end
 	if isMine then
@@ -342,6 +378,10 @@ local function finish(t)
 	return {
 		book = t.book,
 		total = t.total,
+		today = t.today,
+		shown = t.shown,
+		sides = { Alliance = t.sides.Alliance or 0, Horde = t.sides.Horde or 0, unknown = t.sides[S.UNKNOWN] or 0 },
+		sexes = { male = t.sexes[2] or 0, female = t.sexes[3] or 0, unknown = t.sexes[0] or 0 },
 		matched = t.matched,
 		mine = t.mine,
 		filtered = t.filtering,
@@ -410,6 +450,13 @@ function S.CensusJob(db, now, filter, per)
 	local view = reader(db)
 	local at = 0
 	per = per or S.JOB_SLICE
+	-- WHAT IT COUNTED, AS IT WAS WHEN IT STARTED (Josh 2026-09-30, review).
+	-- The census window's recount runs over many frames, and a bracket
+	-- clicked meanwhile changed the filter under it. Its census came back
+	-- with no key and was drawn as the new filter's. Each census now carries
+	-- the key of the filter it began with (Modules/Census/Chart.lua), so a
+	-- census of anything else is counted again.
+	local key = BT.Census and BT.Census.FilterKey and BT.Census.FilterKey(filter or {}) or nil
 	return function(budget)
 		local clock = budget and type(debugprofilestop) == "function" and debugprofilestop or nil
 		local started = clock and clock()
@@ -425,7 +472,9 @@ function S.CensusJob(db, now, filter, per)
 		end
 		at = i
 		if at >= #list then
-			return finish(t)
+			local census = finish(t)
+			census.key = key
+			return census
 		end
 		return nil, (#list > 0 and at / #list or 1)
 	end, #list
@@ -437,46 +486,7 @@ end
 -- OUT OF WHOM (Josh 2026-09-24): with a bar picked, a chart counts the
 -- characters it picked, so "of" is out of them and not out of the realm - and
 -- the chart it was picked on is still out of everybody.
-local NOUN = { race = "race", guild = "guild on file", zone = "zone on file" }
 local SEEN_AS = { today = "seen today", week = "seen this week", month = "seen this month" }
-
-local function subtitle(mode, census, counted)
-	local unknown = (census.unknown and census.unknown[mode]) or 0
-	local pick = census.pick
-	local of = (pick and pick.mode ~= mode and census.matched) or census.total
-	if mode == "tag" then
-		-- characters, not marks: "6 of 3 tagged" was three people with two
-		-- tags each
-		return ("%d of %d tagged"):format(census.tagged or counted, of)
-	end
-	if mode == "level" then
-		local noLevel = (census.unknown and census.unknown.level) or 0
-		return noLevel > 0
-			and ("%d of %d · %d no level"):format(counted, of, noLevel)
-			or ("All %d"):format(counted)
-	end
-	-- with brackets switched off, say what is being left out rather than
-	-- letting the chart read like the whole book
-	if census.filtered then
-		local noLevel = (census.unknown and census.unknown.level) or 0
-		local tail = unknown > 0 and (" · %d unknown"):format(unknown) or ""
-		return ("%d of %d in these levels%s%s"):format(counted, of, tail,
-			noLevel > 0 and (" · %d no level"):format(noLevel) or "")
-	end
-	if unknown > 0 then
-		if mode == "class" then
-			return ("All %d · %d unknown"):format(counted, unknown)
-		end
-		return ("%d of %d · %d no %s"):format(counted, of, unknown, NOUN[mode] or mode)
-	end
-	return ("All %d"):format(counted)
-end
-
-function S.Subtitle(mode, census, counted)
-	local line = subtitle(mode, census, counted)
-	local seen = SEEN_AS[census.seen]
-	return seen and (line .. " · " .. seen) or line
-end
 
 -- "median 2 days, average 5 days" - how much of this book you should believe.
 -- NOBODY TO COUNT (Josh 2026-09-28, "fix it"): an empty book, the Seen filter
@@ -492,6 +502,10 @@ function S.AgeLine(census)
 		end
 		return "Nobody in the book matches the bar you picked."
 	end
-	return ("Median %s old · average %s"):format(
-		U.Ago(0, a.median), U.Ago(0, math.floor(a.mean or a.median)))
+	-- IN PLAIN WORDS (Josh 2026-09-30, the census redesign): "Median 6 days
+	-- old · average 5 days" needed decoding; the median is the half
+	if a.median < 3600 then
+		return "Half were last seen in the past hour"
+	end
+	return ("Half were last seen in the past %s"):format(U.Ago(0, a.median))
 end

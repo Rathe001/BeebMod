@@ -25,8 +25,6 @@ BT.Collect = C
 local fresh = U.Throttle(60)
 C.Fresh = fresh -- Collect/Meter.lua shares the window
 
-local myFaction, myRealm -- who this character is, for the book that is bound
-
 local function enabled()
 	return BT.Collecting()
 end
@@ -39,9 +37,47 @@ end
 -- the tooltips want it without a census. The old name stays for callers.
 C.UnitFullName = function(unit) return U.UnitFullName(unit) end
 
+-- the same people by GUID, for the unit path's first question
+local freshGuid = U.Throttle(60)
+
+local function secret(v)
+	return issecretvalue ~= nil and issecretvalue(v) and true or false
+end
+
+-- a side as the client names it, or nil (Core/Pack.lua keeps three)
+local function side(unit)
+	local ok, f = pcall(UnitFactionGroup or error, unit)
+	if ok and type(f) == "string" and not secret(f) and BT.Pack.FACTION_CODE[f] then
+		return f
+	end
+	return nil
+end
+C.Side = side
+
+-- the game's 2 (male) or 3 (female), or nil
+local function sexOf(unit)
+	local ok, v = pcall(UnitSex or error, unit)
+	if ok and type(v) == "number" and not secret(v) and (v == 2 or v == 3) then
+		return v
+	end
+	return nil
+end
+C.Sex = sexOf
+
 -- A unit token you can still see: the best kind of sighting.
+-- WHO WAS SEEN A MOMENT AGO IS ASKED FIRST (Josh 2026-09-30, review). In a
+-- city the nameplates and the mouseover name the same people over and over,
+-- and each one's name and key were worked out before the throttle said no.
+-- A GUID the client hands over plainly answers that in one call. A secret one
+-- is never used as a key, and is not written down either.
 function C.FromUnit(unit)
 	if not (enabled() and unit and UnitExists(unit) and UnitIsPlayer(unit)) then
+		return nil
+	end
+	local guid = UnitGUID and UnitGUID(unit)
+	if type(guid) ~= "string" or secret(guid) then
+		guid = nil
+	elseif not freshGuid(guid) then
 		return nil
 	end
 	local name, realm = C.UnitFullName(unit)
@@ -61,6 +97,8 @@ function C.FromUnit(unit)
 		src = "unit:" .. tostring(unit),
 		class = class,
 		race = race,
+		faction = side(unit),
+		sex = sexOf(unit),
 		-- "we could not tell" is nil and changes nothing. A unit whose guild
 		-- has not arrived yet reads the same as an unguilded one, so a unit
 		-- never records a leave (Josh 2026-09-23, audit): a /who you ran,
@@ -68,7 +106,7 @@ function C.FromUnit(unit)
 		guild = guild,
 		level = (level and level > 0) and level or nil,
 		zone = zone(),
-		guid = UnitGUID(unit),
+		guid = guid,
 	})
 end
 
@@ -105,7 +143,7 @@ end
 -- hunter's pet, with no GUID attached - and they were landing in the book as
 -- grey, classless, one-word rows. Anything the client will not identify is not
 -- a character, so it is not written down.
-local function fromName(name, guid)
+local function fromName(name, guid, faction)
 	if not enabled() or type(name) ~= "string" or name == "" then
 		return nil
 	end
@@ -118,6 +156,11 @@ local function fromName(name, guid)
 	end
 	local info = C.Identify(guid)
 	if info then
+		-- a surname in the realm's place is no realm (U.SurnameIsRealm), and
+		-- is not learned as one
+		if U.SurnameIsRealm(name, info.realm) then
+			info.realm = nil
+		end
 		U.LearnRealm(info.realm)
 		-- NEVER take the shorter name (Josh 2026-09-18). Identify returns the
 		-- GIVEN name on this client, so "name = info.name" quietly cut every
@@ -137,6 +180,8 @@ local function fromName(name, guid)
 		src = "chat", guid = guid, zone = zone(),
 		class = info and info.class or nil,
 		race = info and info.race or nil,
+		faction = faction,
+		sex = info and info.sex or nil,
 	})
 end
 
@@ -155,38 +200,42 @@ function C.Backfill(budget)
 	-- written after the walk: a rename can add a row and empty this one, and
 	-- adding to the table being walked is an "invalid key to next"
 	local renames = {}
-	for key, p in DB.Each(BT.db) do
+	for key, row in pairs(DB.Players(BT.db)) do
 		-- A PACKED ROW IS A TIDY ONE (Josh 2026-09-24): only a real GUID
 		-- goes into the string, so a packed row with a class has nothing
-		-- to put right, and one without is unpacked to be filled in
-		if not p.class and p.light then
-			p = DB.Get(BT.db, key)
-		end
-		-- a "guid" that is not one is the lineID bug above: drop it, so the
-		-- count of who we cannot identify is honest
-		if p.guid ~= nil and not p.light and (type(p.guid) ~= "string" or not p.guid:match("^Player%-")) then
-			p.guid = nil
-		end
-		if not p.class and not p.guid then
-			noGuid = noGuid + 1
-		end
-		local halfNamed = p.guid and p.name and select(2, U.SplitName(p.name)) == nil
-		if (not p.class or halfNamed) and p.guid and GetPlayerInfoByGUID then
-			looked = looked + 1
-			local info = C.Identify(p.guid)
-			if info then
-				p.class = p.class or info.class
-				p.race = p.race or info.race
-				done = done + 1
-				-- on the off chance a build starts returning both halves
-				if info.name and select(2, U.SplitName(info.name)) ~= nil
-					and select(2, U.SplitName(p.name)) == nil then
-					renames[#renames + 1] = { info.name, info.realm, p.guid, p.class }
-					renamed = renamed + 1
-				end
+		-- to put right, and one without is unpacked to be filled in. The
+		-- class is read off the string's first letter (Josh 2026-09-30,
+		-- review): unpacking all of them to look cost a visible moment five
+		-- seconds after login, and more the bigger the book.
+		if not (type(row) == "string" and BT.Pack.HasClass(row)) then
+			local p = type(row) == "string" and DB.Get(BT.db, key) or row
+			-- a "guid" that is not one is the lineID bug above: drop it, so the
+			-- count of who we cannot identify is honest
+			if p.guid ~= nil and (type(p.guid) ~= "string" or not p.guid:match("^Player%-")) then
+				p.guid = nil
 			end
-			if looked >= (budget or 200) then
-				break
+			if not p.class and not p.guid then
+				noGuid = noGuid + 1
+			end
+			local halfNamed = p.guid and p.name and select(2, U.SplitName(p.name)) == nil
+			if (not p.class or halfNamed) and p.guid and GetPlayerInfoByGUID then
+				looked = looked + 1
+				local info = C.Identify(p.guid)
+				if info then
+					p.class = p.class or info.class
+					p.race = p.race or info.race
+					p.sex = p.sex or ((info.sex == 2 or info.sex == 3) and info.sex or nil)
+					done = done + 1
+					-- on the off chance a build starts returning both halves
+					if info.name and select(2, U.SplitName(info.name)) ~= nil
+						and select(2, U.SplitName(p.name)) == nil then
+						renames[#renames + 1] = { info.name, info.realm, p.guid, p.class }
+						renamed = renamed + 1
+					end
+				end
+				if looked >= (budget or 200) then
+					break
+				end
 			end
 		end
 	end
@@ -248,9 +297,13 @@ end
 -- every chat sighting stored a line number as its identity: nothing could be
 -- identified from it, and two names for one character never merged. select()
 -- says which argument it wants out loud, which is the point.
-local function onChat(_, _, ...)
+-- WHO CAN BE ON THE OTHER SIDE (Josh 2026-09-30): only what is said aloud
+-- reaches you from the other faction; a channel, your guild, your group or a
+-- whisper is your own side's
+local ANY_SIDE = { CHAT_MSG_SAY = true, CHAT_MSG_YELL = true, CHAT_MSG_EMOTE = true, CHAT_MSG_TEXT_EMOTE = true }
+local function onChat(_, event, ...)
 	local sender, guid = select(2, ...), select(12, ...)
-	fromName(sender, guid)
+	fromName(sender, guid, not ANY_SIDE[event] and side("player") or nil)
 end
 for _, e in ipairs({ "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_TEXT_EMOTE",
 	"CHAT_MSG_CHANNEL", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER", "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER",
@@ -321,11 +374,16 @@ handlers.GUILD_ROSTER_UPDATE = function()
 	if now - lastRoster < 60 then
 		return
 	end
+	-- an empty roster is the one that comes at login before the members do,
+	-- and it must not use up the minute the real one arrives in
+	local total = GetNumGuildMembers()
+	if (total or 0) == 0 then
+		return
+	end
 	lastRoster = now
 
 	local guild = GetGuildInfo and GetGuildInfo("player")
-	local total = GetNumGuildMembers()
-	for i = 1, (total or 0) do
+	for i = 1, total do
 		local name, _, _, level, _, zoneName, _, _, online, _, class = GetGuildRosterInfo(i)
 		if name then
 			local key = U.Key(name)
@@ -335,6 +393,8 @@ handlers.GUILD_ROSTER_UPDATE = function()
 				DB.Note(BT.db, name, nil, {
 					src = "guild", class = class, level = (level and level > 0) and level or nil,
 					guild = guild, zone = online and zoneName or nil, listed = not online or nil,
+					-- a guild is one side's
+					faction = side("player"),
 				})
 			end
 		end
@@ -345,8 +405,6 @@ end
 -- itself in - the settings, the book, the dock - and this is the census's
 -- share of every loading screen, which it used to do all of
 function C.World(initial, reloading)
-	myFaction = UnitFactionGroup and UnitFactionGroup("player") or nil
-	myRealm = GetRealmName and GetRealmName() or nil
 	-- SILENT AT LOGIN (Josh 2026-09-19). The addon says nothing when you log
 	-- in - not one line, however interesting it is to the addon. Everything
 	-- that used to be announced here is kept and shown where you would go
@@ -362,7 +420,13 @@ function C.World(initial, reloading)
 	-- once, off the loading screen so it costs nothing visible
 	-- ONCE A SESSION (Josh 2026-09-23, audit): the walks below each go over
 	-- the whole book, and they ran at every loading screen
-	if C.housekept then
+	-- AND ONLY WITH THE CENSUS ON (Josh 2026-09-30, review). Nothing moves a
+	-- row's last-seen while the census is off, so pruning then would take out
+	-- everyone not seen in the window for no reason but the switch. A module
+	-- that is off never tidies away what it is not showing (BT.Bind); the
+	-- session is marked only when the work ran, so switching the census on
+	-- lets the next loading screen do it.
+	if C.housekept or not enabled() then
 		C.FromUnit("player")
 		return
 	end

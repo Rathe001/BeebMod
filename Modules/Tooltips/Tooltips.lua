@@ -399,6 +399,11 @@ local function unskin(tip)
 		BT.Pill.ShowSurface(s.surface, false)
 		BT.Widgets.ShowShadow(tip, false)
 		s.accent:Hide()
+		-- and the rule under a unit's header, which nothing else takes off
+		-- while the module is off
+		if s.rule then
+			s.rule:Hide()
+		end
 		if s.ornament then
 			BT.Ornament.Paint(s.ornament, nil)
 		end
@@ -972,7 +977,11 @@ function M.Compose(tip, unit)
 	for line in pairs(usedByQuests or {}) do
 		spoken[line] = true
 	end
-	local extra = clientLines(tip, spoken, name)
+	-- the name may be secret (the width below is not measured for one), and a
+	-- secret is never compared: the client's lines are matched against it only
+	-- when it is plain
+	local plainName = not (issecretvalue and issecretvalue(name)) and name or nil
+	local extra = clientLines(tip, spoken, plainName)
 	-- ONE OF THEM SAYS IT BETTER (Josh 2026-09-20). Ours is built from
 	-- UnitRace and UnitClass; the client's is whatever it knows, and on this
 	-- build it can be either longer or shorter than ours:
@@ -1413,8 +1422,9 @@ BT.OnItemTooltip("tooltips", 0, M.ComposeItem)
 function M:OnEnable()
 	M.Dress(GameTooltip)
 	-- some of these are created by the client the first time they are needed,
-	-- so this is worth another go whenever the module comes back on
-	M.HookOthers()
+	-- so this is worth another go whenever the module comes back on (a slice
+	-- a frame: this runs on every loading screen, see M.HookOthers)
+	M.HookOthers(false, true)
 	BT.UnitTip.Restack()
 end
 
@@ -1811,15 +1821,26 @@ M.Slicer = function() return slicer end
 -- handful of lookups; the sweep walks every frame in the UI, and it was run
 -- from GameTooltip's OnShow - dozens of times a second across a bag. With
 -- `cheap` it sweeps at most once every half minute, spread over frames.
+--
+-- A SLICE A FRAME AFTER A LOADING SCREEN TOO (Josh 2026-09-30, review). The
+-- module comes on again with every loading screen, and a panel loaded the
+-- first time it opens sets off the watcher below: each walked every frame in
+-- the game in one go, a hitch half a second after the screen came up or the
+-- auction house opened. With `sliced` the same walk is spread over frames.
+-- Only the walk at load, before anything is on screen, is done at once.
 local lastSweep = 0
-function M.HookOthers(cheap)
+function M.HookOthers(cheap, sliced)
 	for _, name in ipairs(OTHER_TOOLTIPS) do
 		hook(_G[name], name)
 	end
 	local now = U.Now()
 	if not cheap then
 		lastSweep = now
-		M.SweepTooltips()
+		if sliced then
+			M.SweepSoon()
+		else
+			M.SweepTooltips()
+		end
 	elseif now - lastSweep >= 30 then
 		lastSweep = now
 		M.SweepSoon()
@@ -1850,11 +1871,11 @@ if CreateFrame then
 			C_Timer.After(0.5, function()
 				queued = false
 				if BT.Enabled("tooltips") then
-					M.HookOthers()
+					M.HookOthers(false, true)
 				end
 			end)
 		else
-			M.HookOthers()
+			M.HookOthers(false, true)
 		end
 	end)
 end
@@ -1968,17 +1989,24 @@ end
 -- the map, and the pin's tooltip came up wearing the elite's gold border,
 -- because the edge was remembered on the skin and nothing ever took it off.
 -- It goes when the tooltip does; a unit puts it back on the way in.
-BT.OnUnitTooltipHide(function()
+-- OFF STAYS OFF (Josh 2026-09-30, review). Painting the plain edge back
+-- shows our fill and rim, so with the module switched off every hover put
+-- them back under the client's own border. What the unit asked for is still
+-- forgotten; only the painting waits for the module to be on.
+function M.UnitTooltipHidden()
 	local s = skins[GameTooltip]
 	if s then
 		s.accent:Hide()
 		s.wantEdge = nil
 		s.wantTop = nil
 		s.ours = nil
-		applyEdge(GameTooltip, s)
+		if BT.Enabled("tooltips") then
+			applyEdge(GameTooltip, s)
+		end
 		M.HideRule(GameTooltip)
 	end
-end)
+end
+BT.OnUnitTooltipHide(M.UnitTooltipHidden)
 
 -- ---------------------------------------------------------------------------
 -- The tab: the switches, and a picture of what they do
@@ -2073,15 +2101,17 @@ function M:RefreshPreview()
 	if self.scaleText then
 		self.scaleText:SetText(("%d%%"):format(math.floor(opt("scale", 0.95) * 100 + 0.5)))
 	end
+	-- the line as the tooltip writes it (detailLine): the guild green, straight
+	-- after race and class, and only the faction after a dot
 	if self.preview then
-		local bits = { "Gnome Mage" }
+		local detail = "Gnome Mage"
 		if opt("guild", true) then
-			bits[#bits + 1] = "<Nightwatch>"
+			detail = detail .. " " .. M.GUILD:format("<Nightwatch>")
 		end
 		if opt("faction", true) then
-			bits[#bits + 1] = "Alliance"
+			detail = detail .. " · Alliance"
 		end
-		self.preview.detail:SetText(table.concat(bits, " · "))
+		self.preview.detail:SetText(detail)
 	end
 end
 

@@ -5,6 +5,157 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **One census for the realm.** Each ruleset has one realm, and BeebMod now
+  keeps one book for it with no realm in any character's key. From the
+  evening of September 30 the game handed back a player's surname where
+  their realm goes, and 1,163 characters were filed under a realm named
+  after their own surname ("Scotty Forever@Forever"). A version that
+  read the realm's other spelling, ClassicBetaPvE, as a second realm split
+  the book further. At the next login every character filed under a realm
+  joins the rest, and two rows for one character become one.
+
+- **Guild names in chat have one pair of brackets.** A recruiter's
+  "<<True Freedom>>" reads as a green <True Freedom>.
+
+- **The PvP line shows without opening the PvP tab first.** BeebMod asks the
+  tab to write your rank and reads it from there.
+
+- **An enemy's page no longer lists abilities.** The game hides an
+  enemy's spells from addons, so the list stayed empty. In a fight with
+  a Writhing Highborne, the game reported 8 enemy casts and hid the spell
+  in every one.
+
+- **The Ledger keeps duel scores.** Each duel you win or lose against a
+  player counts on their row. Their tooltip and their card in the Ledger
+  say "Won 3 of 4 duels · last 2 days ago". A switch on the Ledger's page
+  turns it off.
+
+- **One book for both factions.** A realm's Alliance and Horde books
+  become one at the next login, the Ledger's with them. Each character
+  keeps their own faction: from the character when you see them, from
+  their race for the characters already in the book, and otherwise from
+  the book they were in. The window's title names the realm alone.
+
+- **A new census window.** Four tiles across the top show the realm at a
+  glance: how many characters and how many were seen today, the Alliance
+  and Horde split, the male and female split, and how many are at each
+  level. Each tile is also its filter. Click Alliance, female or a level's
+  column and every chart narrows to it; click it again to let it go. Each
+  filter that is on shows as a chip beside the count, with an x to clear
+  it. The charts are tabs, with Seen at the end of them. Pointing at a bar
+  shows its count and share, and what a click on it does. The window is
+  only as tall as its chart, and the line under the bars says "Half were
+  last seen in the past 6 days".
+
+- **The census tracks gender.** A character's gender is kept from when you
+  first see them, so the gender tile fills in as you meet people.
+
+- **Big numbers in the window's title have commas**: 26,210, not 26210.
+
+- **Your own unit frame and your party's stay up.** After you switched a
+  module or a feature, or dragged a tab, the next target change hid them.
+
+- **The light and medium out-of-range fades hold.** A check four times a
+  second set every faded frame back to the strong fade.
+
+- **An interrupted cast flashes red for its moment** instead of going at
+  once.
+
+- **The Census, Ledger and Expedition pages show their feature's picture**
+  at the top, as the Dock, Unit frames and Interface pages do. The Ledger's
+  page scrolls by the picture's height, so its search keeps the room it
+  had.
+
+- **A feature's page shows its switch as it is.** Opening the window onto
+  one said the feature was off while it was on. A page that is switched off
+  no longer shows a scroll thumb.
+
+- **With Tooltips off, the game's tooltip stays the game's.** BeebMod's
+  background and border came back after each hover. The Tooltips page's
+  preview now shows the guild in green after race and class, as the tooltip
+  does.
+
+- **With Bag window off, the game's quality glow stays on bag slots.** It
+  went see-through after the next loot until a reload.
+
+- **The Bags hover counts the same bags throughout.** The number of bags and
+  their bars leave out soul, herb and reagent bags, as the free slots always
+  did. Those bags have their own row.
+
+- **The item level hover doesn't list the off hand as empty** when a
+  two-hander fills it.
+
+- **The mouse wheel zooms the camera over a quest list that fits.** It
+  scrolls only a list too long for its space. A quest item's button no
+  longer stays clickable and invisible after the tracker is switched off in
+  a fight.
+
+- **Menu bar pictures keep their size.** Each time the game gave a button a
+  new picture, BeebMod cropped it again and it grew.
+
+- **Typing [ in the Ledger's search no longer causes a Lua error.**
+
+- **"My notes" and "you've noted" count only people you wrote on.** People
+  you only grouped with are kept, and no longer listed there. A group made
+  while the made-up data is on is no longer lost from your real Ledger.
+
+- **The census leaves the book alone while it is off.** At login it still
+  removed everyone it hadn't seen in 90 days, though while it is off it sees
+  nobody. Names with
+  accents, such as Zoë, now count as names. The guild roster is read when it
+  arrives at login, not up to a minute later.
+
+- **Switching census filters quickly no longer leaves "Counting..." over
+  the chart.** Going back to a filter already counted, while another count
+  ran, drew its chart under the dots.
+
+- **Clicking a chart while the census counts no longer starts the count
+  again.** A count made for an older filter is no longer drawn, and closing
+  the census window stops its count.
+
+- **Chat puts back only what it hid.** Switching off its side buttons showed
+  a scrollbar and a jump-to-bottom that weren't showing before. Combat log
+  lines are left as the game writes them.
+
+- **Worldbreaker is for world bosses.** A raid boss counted for it. A
+  character who earned it from a raid boss loses its 25 points.
+
+- **New-enemy toasts show with commendation toasts off.** The commendations
+  switch turned off both.
+
+- **An enemy counted from its loot alone gets its name.** It went in the
+  journal as a number. Its page says "Met in a raid" for a raid enemy, and
+  "The game has no map of that place" where there is none.
+
+- **"Played this session" carries through a /reload**, as the other session
+  figures do.
+
+- **The experience pace no longer jumps** after you switch Experience off and
+  on, or when the game reports a level-up in two steps.
+
+- **Two characters with one name on two realms keep separate PvP ranks.**
+
+- **The damage meter keeps a past fight's label.** Switching a setting or
+  the meter off wrote "Current" over it. A rate of 1,000 or more has commas.
+
+- **/bt help names each command's module as its tab does.**
+
+- **Wording.** Currency's description says what its hover shows: what you
+  earned and spent. Reputation's no longer mentions a time to the next
+  standing. The speed hover says "of running speed".
+
+- **Less work while you play.**
+  - Unit frames paint only what an event changed.
+  - A target change no longer lays out the whole dock.
+  - The Ledger's page no longer redraws every second in a city.
+  - The journal searches, scrolls and loads faster with a large book.
+  - Loading screens, equipping a gear set and the auction house cause
+    fewer stutters.
+  - Unit frames, the Expedition and the damage meter stop listening when
+    they are switched off.
+
 ## 0.1.0-beta.16
 
 - **An enemy's page lists the abilities you've seen it cast.** Each spell

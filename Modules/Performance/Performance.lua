@@ -72,8 +72,9 @@ function M.Read()
 	return fps, home, world
 end
 
--- the three figures, each as it should read now (M.Line joins them)
-function M.Cells(fps, home, world)
+-- the three figures, each as it should read now (M.Line joins them). Not
+-- `Cells`: that name is the dock's question to a module (UI/Dock.lua, B.Rebuild)
+function M.Figures(fps, home, world)
 	local function ms(mark, v)
 		return {
 			icon = mark.icon, coords = mark.coords, tint = mark.tint,
@@ -150,7 +151,7 @@ function M.Series()
 end
 
 function M.Line(fps, home, world)
-	local cells = M.Cells(fps, home, world)
+	local cells = M.Figures(fps, home, world)
 	local function figure(v)
 		return v and tostring(math.floor(v + 0.5)) or "-"
 	end

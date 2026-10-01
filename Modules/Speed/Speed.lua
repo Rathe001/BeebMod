@@ -178,7 +178,7 @@ function M.Tip()
 	BT.Tip.Show(M.chip, { build = function(t)
 		local pct = M.Percent()
 		t:Header({ name = "Movement speed" })
-		t:Headline(pct and (pct .. "%") or "-", "of walking speed")
+		t:Headline(pct and (pct .. "%") or "-", "of running speed")
 		if M.secret then
 			t:Note("From your character sheet. The game doesn't give addons your live speed.")
 			return
@@ -217,13 +217,21 @@ function M.Build()
 	return M.chip
 end
 
+-- NOTHING TO READ (Josh 2026-09-30, review): with the speed secret the
+-- figure is the sheet's, and with the sheet closed it is the one already
+-- shown. The half-second tick repainted it twice a second all the same.
+function M.Still()
+	local sheet = _G.CharacterFrame
+	return M.secret == true and not (sheet and sheet.IsShown and sheet:IsShown())
+end
+
 function M.Show(on)
 	M.Build()
 	M.Update()
 	if on then
 		if not M.ticker and C_Timer and C_Timer.NewTicker then
 			M.ticker = C_Timer.NewTicker(EVERY, function()
-				if BT.Enabled("speed") then
+				if BT.Enabled("speed") and not M.Still() then
 					M.Update()
 				end
 			end)

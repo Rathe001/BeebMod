@@ -95,7 +95,6 @@ function M.Backing(menu)
 end
 
 -- a menu, dressed: our surface under it, its art off, its words ours
-local dressed = setmetatable({}, { __mode = "k" })
 function M.DressMenu(menu)
 	if not (type(menu) == "table" and BT.Enabled("dropdowns")) then
 		return false
@@ -109,7 +108,6 @@ function M.DressMenu(menu)
 		BT.Err("dropdowns: " .. tostring(err))
 		return false
 	end
-	dressed[menu] = true
 	-- the next one opened, written down (see M.DumpNext)
 	if M.dumpNext then
 		M.dumpNext = false

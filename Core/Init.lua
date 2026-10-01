@@ -25,7 +25,7 @@
 --
 -- BeebModDB = {
 --   schema, settings,                         account-wide
---   realms = { ["Whitemane|Alliance"] = { realm, players, words, stats } },
+--   realms = { ["Whitemane|All"] = { realm, players, words, stats } },
 -- }
 -- BT.db is the book for whoever is logged in; BT.settings is account-wide.
 local ADDON, BT = ...
@@ -79,7 +79,7 @@ BT.NAME = ADDON
 -- book lives in, and this client is already bad enough at handing that back.
 BT.TITLE = "BeebMod"
 BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-beta.16"
-BT.SCHEMA = 13
+BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
@@ -502,11 +502,15 @@ function BT.SetEnabled(key, on)
 	else
 		call(m, "OnDisable")
 	end
-	-- an owner takes its parts with it, each as its own switch says
+	-- an owner takes its parts with it, each as its own switch says - and
+	-- on only where the part can run: an owner switched on inside a feature
+	-- that is off stays put away, and so do its parts
 	for _, part in ipairs(modules) do
 		if part.part == key and BT.Switched(part.key) then
 			if on then
-				switchOn(part)
+				if BT.Enabled(part.key) then
+					switchOn(part)
+				end
 			else
 				call(part, "OnDisable")
 			end
@@ -695,9 +699,56 @@ local function newBook()
 	return { players = {}, stats = { sightings = 0 } }
 end
 
+-- ONE BOOK FOR BOTH SIDES (Josh 2026-09-30: "I think I'd also like to go
+-- ahead and combine the alliance and horde books, and add alliance/horde/all
+-- faction filters"). A book was a realm and a side; it is a realm now, every
+-- character on it whichever side they are on (the side is on the row, and
+-- the census filters by it). The key keeps its "Realm|Side" shape, with "All"
+-- for the side, so everything that reads one reads this. The third answer is
+-- still your own side, for what is said about you.
+BT.ALL_SIDES = "All"
 function BT.ScopeKey(realm, faction)
 	realm = (realm or "?"):gsub("%s+", "")
-	return realm .. "|" .. (faction or "?"), realm, (faction or "?")
+	return realm .. "|" .. BT.ALL_SIDES, realm, (faction or "?")
+end
+
+-- The realm's books of one side each, folded into its one book (BT.Bind),
+-- the Ledger's with them. A row that says no side yet takes its book's, after
+-- the race has had its say (DB.FillFaction). A book that cannot be read across
+-- is left where it is. Returns how many characters came across.
+function BT.JoinSides(realm)
+	if not (BT.DB and BT.db and BT.scope and type(BeebModDB.realms) == "table") then
+		return 0
+	end
+	local olds = {}
+	for key, book in pairs(BeebModDB.realms) do
+		local r, side = nil, nil
+		if type(key) == "string" then
+			r, side = key:match("^(.-)|(.+)$")
+		end
+		if r == realm and side ~= BT.ALL_SIDES and type(book) == "table" then
+			olds[#olds + 1] = { key = key, book = book, side = side }
+		end
+	end
+	table.sort(olds, function(a, b) return a.key < b.key end)
+	local n = 0
+	for _, o in ipairs(olds) do
+		local ok, added, folded = pcall(function()
+			o.book.players = o.book.players or {}
+			o.book.realm = o.book.realm or realm
+			BT.DB.BackfillFaction(o.book)
+			BT.DB.FillFaction(o.book, o.side)
+			return BT.DB.Adopt(BT.db, o.book)
+		end)
+		if ok then
+			BeebModDB.realms[o.key] = nil
+			n = n + (added or 0) + (folded or 0)
+			if BT.Notes and BT.Notes.Join then
+				BT.Notes.Join(o.key, BT.scope.key)
+			end
+		end
+	end
+	return n
 end
 
 -- WHAT THE CLIENT HANDED US (Josh 2026-09-19). A morning came where a book of
@@ -777,8 +828,23 @@ function BT.Bind(realm, faction)
 	-- it cannot find would erase your judgements while the characters they
 	-- were about are being restored
 	BT.TakeBaked(key)
+	-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30: "There should
+	-- just be a single realm, and if not, we need to just combine them"). A
+	-- version that split the book by realm left its list of realm names here
+	-- and its rows under "Name@Realm"; every key of every book, the Ledger's
+	-- too, is folded back to the name alone below, and the list goes.
+	BeebModDB.servers = nil
+	-- the record of enemy casts, from the abilities list that is gone
+	BeebModDB.expeditionDump = nil
+	if BT.Notes and BT.Notes.FoldRealms then
+		local n = BT.Notes.FoldRealms(rname)
+		BT.unsplitOnLoad = n > 0 and n or nil
+	end
 	-- the same realm under two spellings is one realm
 	local folded = BT.DB and BT.DB.FoldRealms(BT.db, rname) or 0
+	-- and its two sides one book
+	local joined = BT.JoinSides(rname)
+	BT.joinedOnLoad = joined > 0 and joined or nil
 	if folded > 0 then
 		BT.foldedOnLoad = folded
 	end
@@ -817,6 +883,17 @@ function BT.Bind(realm, faction)
 		end
 		if wasSchema < 13 then
 			BT.Unshare()
+		end
+		-- THE FACTION, FROM THE RACE (schema 14, Josh 2026-09-30): every
+		-- book's rows that one of the eight races of one side settles
+		if wasSchema < 14 then
+			local given = 0
+			for _, book in pairs(BeebModDB.realms) do
+				if type(book) == "table" then
+					given = given + BT.DB.BackfillFaction(book)
+				end
+			end
+			BT.factionsOnLoad = given > 0 and given or nil
 		end
 	end
 	BT.boot.bound = key
@@ -869,7 +946,23 @@ function BT.TakeBaked(key)
 	if not (type(baked) == "table" and type(baked.realms) == "table" and BT.DB) then
 		return 0
 	end
+	-- ONE BOOK FOR BOTH SIDES (BT.JoinSides): a baked file keeps a book for
+	-- each side; every one of this realm's comes into its one book
+	local realmOf = function(k) return type(k) == "string" and k:match("^(.-)|") or nil end
+	local mine = realmOf(key)
 	local from = baked.realms[key]
+	if type(from) ~= "table" then
+		for otherKey, other in pairs(baked.realms) do
+			if realmOf(otherKey) == mine and type(other) == "table" then
+				from = from or { players = {}, realm = other.realm }
+				for who in pairs(other.players or {}) do
+					if not from.players[who] then
+						from.players[who] = BT.DB.Get(other, who)
+					end
+				end
+			end
+		end
+	end
 	local book = BeebModDB.realms[key]
 	if type(from) ~= "table" or type(book) ~= "table" then
 		return 0
@@ -882,7 +975,9 @@ function BT.TakeBaked(key)
 	-- leaves every row the book already has exactly as it is.
 	if next(book.players or {}) then
 		local added = 0
-		for otherKey, other in pairs(baked.realms) do
+		for bakedKey, other in pairs(baked.realms) do
+			-- a side's book is its realm's one book now
+			local otherKey = bakedKey:gsub("|[^|]*$", "|" .. BT.ALL_SIDES)
 			local into = BeebModDB.realms[otherKey]
 			if type(into) ~= "table" then
 				into = newBook()
@@ -923,7 +1018,7 @@ function BT.TakeBaked(key)
 	-- characters - lived nowhere but here. The companion is written from what
 	-- is bound, so everything the baked file knows goes in on the first login.
 	for otherKey, other in pairs(baked.realms) do
-		if otherKey ~= key and type(other) == "table"
+		if realmOf(otherKey) ~= mine and type(other) == "table"
 			and type(BeebModDB.realms[otherKey]) ~= "table" then
 			BeebModDB.realms[otherKey] = other
 		end
@@ -945,9 +1040,14 @@ function BT.AcceptLateBook()
 	if live == BT.db then
 		return false -- the same table we have been writing in: nothing arrived
 	end
+	-- this realm's books, either side's (BT.JoinSides folds them on the bind)
 	local n = 0
-	for _ in pairs((live and live.players) or {}) do
-		n = n + 1
+	for key, book in pairs(BeebModDB.realms) do
+		if type(key) == "string" and key:match("^(.-)|") == sc.realm and type(book) == "table" and book ~= BT.db then
+			for _ in pairs(book.players or {}) do
+				n = n + 1
+			end
+		end
 	end
 	if n == 0 then
 		return false
