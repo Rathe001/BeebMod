@@ -596,6 +596,8 @@ function M:BuildTab(panel)
 	-- every enemy.
 	page:Note("The journal's descriptions come from the Warcraft Wiki (warcraft.wiki.gg), "
 		.. "some of them rewritten, under the CC BY-SA 3.0 licence.", true)
+	page:Note("An enemy's abilities come from the VMaNGOS database (github.com/vmangos), "
+		.. "under the GPL 2.0 licence.", true)
 	page:Layout()
 end
 

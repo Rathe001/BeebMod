@@ -102,6 +102,7 @@ Modules\PvP\PvP.lua
 # toast and the journal window before the module that drives them
 Modules\Expedition\LoreData.lua
 Modules\Expedition\BodyData.lua
+Modules\Expedition\AbilityData.lua
 Modules\Expedition\Journal.lua
 Modules\Expedition\Kills.lua
 Modules\Expedition\Toast.lua

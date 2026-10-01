@@ -11298,6 +11298,11 @@ if ok then
 				credited = credited or (t:find("Warcraft Wiki", 1, true) and t:find("CC BY-SA 3.0", 1, true)) ~= nil
 			end
 			assert(credited, "the Expedition's settings page credits the Warcraft Wiki and its licence")
+			credited = false
+			for _, t in ipairs(notes) do
+				credited = credited or (t:find("VMaNGOS", 1, true) and t:find("GPL 2.0", 1, true)) ~= nil
+			end
+			assert(credited, "and the VMaNGOS database, where the abilities come from")
 			for npc = 1, 12 do
 				m.Kill({ npc = 250000 + npc, name = "Mob " .. npc, kind = npc % 2 == 0 and "Beast" or "Undead",
 					family = "Cat", rank = (npc == 3 and "rare") or ((npc == 5 or npc == 7) and "rareelite") or "normal", level = 5, zone = "Zephras Isle",
@@ -11624,14 +11629,55 @@ if ok then
 				and lp[1].text:GetText() == "Bog beasts, Fel Moss and all.", "the best page first, bare, its links plain")
 			assert(lp[2].rule:IsShown() and lp[2].head:GetText() == "ELEMENTAL", "the next under its title, an ornament over it")
 			assert(lp[3].head:GetText() == "TIMBER WOLF", "a heading leaves off the wiki's \"(mob)\": " .. tostring(lp[3].head:GetText()))
-			-- NO ABILITIES LIST (2026-09-30): the game keeps an enemy's spells
-			-- from addons, so the list could never fill
+			-- an enemy the database gives no spells has no Abilities heading
 			for _, piece in ipairs(lp) do
 				assert(not (piece.head:IsShown() and tostring(piece.head:GetText()):find("ABILITIES")),
-					"no list of abilities on an enemy's page")
+					"no abilities heading without abilities")
 			end
 			assert(b.page.loreFrom == nil,
 				"and no credit under the enemy: it is on the Expedition's settings page")
+			-- ABILITIES FROM THE DATABASE (Josh 2026-09-30): the enemy's spells
+			-- from Modules/Expedition/AbilityData.lua, named by the game; a spell
+			-- this client doesn't have is left out
+			do
+				local npc = b.page.loreFor
+				local data, hadSpell = BT.ExpeditionAbilities, _G.C_Spell
+				assert(type(data) == "table" and data[2177] and data[2177][1] == 5884,
+					"the database's list is loaded: a Writhing Highborne casts Banshee Curse")
+				local NAMES = { [5884] = "Banshee Curse", [133] = "Fireball", [143] = "Fireball" }
+				_G.C_Spell = { GetSpellInfo = function(id)
+					return NAMES[id] and { name = NAMES[id], iconID = 136183 } or nil
+				end }
+				data[npc] = { 5884, 133, 143, 999999 }
+				V.Refresh()
+				local piece = b.page.lorePieces[2]
+				assert(piece.head:GetText() == "ABILITIES", "its abilities, under its own page: " .. tostring(piece.head:GetText()))
+				-- A ROW OF ICONS (Josh 2026-10-01): two ranks as one, an unknown
+				-- spell left out, side by side, and no words
+				local cells = piece.icons and piece.icons.cells
+				assert(piece.icons:IsShown() and not piece.text:IsShown(), "the abilities are icons, not lines of words")
+				assert(cells[1]:IsShown() and cells[2]:IsShown() and not (cells[3] and cells[3]:IsShown()),
+					"one icon for each ability")
+				assert(cells[1].spell.name == "Banshee Curse" and cells[2].spell.name == "Fireball",
+					"in order of their names")
+				local _, _, _, x1, y1 = cells[1]:GetPoint(1)
+				local _, _, _, x2, y2 = cells[2]:GetPoint(1)
+				assert(y1 == y2 and x2 - x1 == 38, "on one line, a margin between: " .. tostring(x2 - x1))
+				assert(b.page.lorePieces[3].head:GetText() == "ELEMENTAL", "and the wiki's next page after it")
+				-- the game's own card for an ability: its name and description
+				local tip, asked = _G.GameTooltip, nil
+				local hadSet = tip.SetSpellByID
+				tip.SetSpellByID = function(_, id) asked = id end
+				cells[2]:GetScript("OnEnter")(cells[2])
+				assert(asked == 133, "the pointer on Fireball's icon shows Fireball's card: " .. tostring(asked))
+				cells[2]:GetScript("OnLeave")(cells[2])
+				tip.SetSpellByID = hadSet
+				data[npc], _G.C_Spell = nil, hadSpell
+				V.Refresh()
+				assert(not piece.icons:IsShown() or b.page.lorePieces[2].head:GetText() ~= "ABILITIES",
+					"and an enemy without abilities has no icons")
+				assert(not cells[1]:IsShown(), "none at all")
+			end
 			MJ.WikiLore = wiki
 			V.Refresh()
 			-- THE STAGE AS A MAP (Josh 2026-09-28): a switch in its corner, the

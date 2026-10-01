@@ -5,6 +5,17 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **An enemy's page lists its abilities again.** The list now comes from
+  the VMaNGOS database, which knows the spells of 3,428 enemies, such as
+  Banshee Curse for a Writhing Highborne. The game gives each spell's name
+  and picture, and a spell Forever doesn't have is left out. The abilities
+  are a row of icons; point at one to see the game's tooltip for it, as in
+  your spellbook. Most dungeon
+  and raid bosses aren't in the database's lists, so their pages have no
+  abilities.
+
 ## 0.1.0-beta.17
 
 - **One census for the realm.** Each ruleset has one realm, and BeebMod now

@@ -73,7 +73,8 @@ scores too: how many duels you won and lost against each player.
 **Nesingwary's Expedition** is a journal of every enemy you have
 killed. Each has a card with its model, its lore from the Warcraft Wiki
 and its mastery. On its page, a Model · Map switch shows the zone's map with
-a dot for each place you killed it, or a dungeon's loading screen. Every unique kill and every commendation is worth points. The
+a dot for each place you killed it, or a dungeon's loading screen. The page also lists
+the enemy's abilities, from the VMaNGOS database. Every unique kill and every commendation is worth points. The
 points set your rank, from Greenhorn to Expedition Leader. A line in the
 dock shows your points and rank. Click it to open the journal, or type
 `/bt expedition`.

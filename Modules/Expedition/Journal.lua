@@ -574,8 +574,8 @@ local function fresh(c)
 	c.earned = c.earned or {}
 	c.feats = c.feats or {}
 	c.recent = c.recent or {}
-	-- the abilities list, gone (2026-09-30): the game keeps an enemy's
-	-- spells from addons
+	-- the spells seen cast, gone (2026-09-30): the game keeps an enemy's
+	-- spells from addons, and the list is now J.Abilities
 	c.spells = nil
 	return c
 end
@@ -723,6 +723,64 @@ function J.PageOf(info)
 		end
 	end
 	return info.npc
+end
+
+-- ---------------------------------------------------------------------------
+-- What an enemy casts (Modules/Expedition/AbilityData.lua)
+-- ---------------------------------------------------------------------------
+
+-- FROM A BOOK, NOT FROM WATCHING (Josh 2026-09-30: "Ok let's go ahead and
+-- start scraping all the mob data, and link them to their expedition page").
+-- The game keeps an enemy's casts secret from addons, so the journal can't
+-- learn them in a fight. The list is the VMaNGOS database's, made by
+-- scripts/make-abilities.py; the name and picture are the game's own.
+
+-- a spell's name and picture, however this build asks for them; nil for a
+-- spell this client doesn't have
+function J.SpellInfo(id)
+	local S = _G.C_Spell
+	if type(S) == "table" and type(S.GetSpellInfo) == "function" then
+		local ok, i = pcall(S.GetSpellInfo, id)
+		if ok and type(i) == "table" and type(i.name) == "string" then
+			return i.name, i.iconID or i.originalIconID
+		end
+	end
+	if type(GetSpellInfo) == "function" then
+		local ok, name, _, icon = pcall(GetSpellInfo, id)
+		if ok and type(name) == "string" then
+			return name, icon
+		end
+	end
+	return nil
+end
+
+-- every spell the enemy on this page can cast, by name:
+-- { { id, name, icon }, ... }. A page holds every npc of its name
+-- (J.PageOf), so their lists are one list; a spell Forever doesn't have is
+-- left out.
+function J.Abilities(npc)
+	local data = BT.ExpeditionAbilities or {}
+	local ids = { npc }
+	local s = J.Store()
+	for from, to in pairs(s and s.same or {}) do
+		if to == npc and from ~= npc then
+			ids[#ids + 1] = from
+		end
+	end
+	local byName, out = {}, {}
+	for _, n in ipairs(ids) do
+		for _, id in ipairs(data[n] or {}) do
+			local name, icon = J.SpellInfo(id)
+			if name and not byName[name] then
+				byName[name] = true
+				out[#out + 1] = { id = id, name = name, icon = icon }
+			end
+		end
+	end
+	table.sort(out, function(a, b)
+		return a.name < b.name
+	end)
+	return out
 end
 
 -- one page into another: what it is, and every character's kills of it

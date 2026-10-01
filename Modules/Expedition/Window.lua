@@ -503,6 +503,88 @@ function V.LorePiece(page, i)
 	return p
 end
 
+-- THE GAME'S OWN CARD FOR AN ABILITY (Josh 2026-10-01: "Are we able to add a
+-- tooltip for the actual ability?"), and THE ABILITIES AS A ROW OF ICONS (Josh
+-- 2026-10-01: "Maybe just show the icons, and the tooltip will show the name
+-- and description"): each spell's picture, side by side, wrapping to a second
+-- row when the page is full; the pointer on one shows the spell as your
+-- spellbook would.
+local SPELL_ICON, SPELL_GAP = 30, 8
+
+local function spellEnter(self)
+	if not (GameTooltip and self.spell) then
+		return
+	end
+	self.lit:Show()
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	if not (GameTooltip.SetSpellByID and pcall(GameTooltip.SetSpellByID, GameTooltip, self.spell.id)) then
+		GameTooltip:AddLine(self.spell.name, 1, 1, 1)
+	end
+	GameTooltip:Show()
+end
+
+local function spellLeave(self)
+	self.lit:Hide()
+	if GameTooltip then
+		GameTooltip:Hide()
+	end
+end
+
+-- the piece's row of icons, as tall as its rows; hidden without spells
+function V.SpellIcons(page, p, spells)
+	if not p.icons then
+		p.icons = CreateFrame("Frame", nil, page.loreBody)
+		p.icons.cells = {}
+	end
+	local row, cells = p.icons, p.icons.cells
+	local n = spells and #spells or 0
+	-- how many fit across: the page's width, or the box's before it is laid out
+	local w = BT.Pill.Number(page.loreBody:GetWidth(), 0)
+	if w < SPELL_ICON then
+		w = MODAL_W - 2 * MODAL_PAD - 24
+	end
+	local across = math.max(1, math.floor((w + SPELL_GAP) / (SPELL_ICON + SPELL_GAP)))
+	for j = 1, math.max(n, #cells) do
+		local c = cells[j]
+		if j <= n and not c then
+			c = CreateFrame("Frame", nil, row)
+			c:SetSize(SPELL_ICON, SPELL_ICON)
+			c:EnableMouse(true)
+			local edge = c:CreateTexture(nil, "BACKGROUND")
+			edge:SetAllPoints()
+			edge:SetColorTexture(ORNAMENT[1], ORNAMENT[2], ORNAMENT[3], 0.45)
+			c.icon = c:CreateTexture(nil, "ARTWORK")
+			c.icon:SetPoint("TOPLEFT", 1, -1)
+			c.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+			-- the client's square icons have a border of their own; trimmed
+			c.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+			c.lit = c:CreateTexture(nil, "OVERLAY")
+			c.lit:SetAllPoints(c.icon)
+			c.lit:SetColorTexture(1, 1, 1, 0.15)
+			c.lit:Hide()
+			c:SetScript("OnEnter", spellEnter)
+			c:SetScript("OnLeave", spellLeave)
+			cells[j] = c
+		end
+		if j <= n then
+			local s = spells[j]
+			c.spell = s
+			c.icon:SetTexture(s.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+			c:ClearAllPoints()
+			c:SetPoint("TOPLEFT", row, "TOPLEFT", ((j - 1) % across) * (SPELL_ICON + SPELL_GAP),
+				-math.floor((j - 1) / across) * (SPELL_ICON + SPELL_GAP))
+			c:Show()
+		elseif c then
+			c.spell = nil
+			c:Hide()
+		end
+	end
+	local rows = math.ceil(n / across)
+	row:SetHeight(math.max(1, rows * SPELL_ICON + math.max(0, rows - 1) * SPELL_GAP))
+	row:SetShown(n > 0)
+	return row
+end
+
 function V.BuildPage(b)
 	local W = BT.Widgets
 	local inner = MODAL_W - 2 * MODAL_PAD
@@ -768,6 +850,12 @@ function V.Facts(npc, kills)
 	end
 	if #f.lore == 0 then
 		f.lore[1] = { text = f.loreLine }
+	end
+	-- WHAT IT CAN CAST (J.Abilities), under its own page's lore: a row of
+	-- icons (V.SpellIcons). An enemy the database gives no spells has no heading.
+	f.abilities = J.Abilities(npc)
+	if #f.abilities > 0 then
+		table.insert(f.lore, math.min(2, #f.lore + 1), { head = "Abilities", spells = f.abilities })
 	end
 	-- EVERY PART, NOT UP TO THE FIRST GAP (Josh 2026-09-27: "The details dont
 	-- have any indicator if the enemy is rare or elite"). The parts were walked
@@ -1873,14 +1961,23 @@ function V.DrawPage(npc, kills)
 			p.head:SetText(sec.head:upper())
 			put(p.head, 10)
 		end
-		p.text:SetText(sec.text or "")
-		put(p.text, sec.head and 5 or 10)
+		-- a piece of spells is a row of icons; any other, its words
+		local icons = V.SpellIcons(page, p, sec.spells)
+		if sec.spells then
+			p.text:SetText("")
+			p.text:Hide()
+			put(icons, 8)
+		else
+			p.text:SetText(sec.text or "")
+			put(p.text, sec.head and 5 or 10)
+		end
 	end
 	for i = #f.lore + 1, #page.lorePieces do
 		local p = page.lorePieces[i]
 		p.rule:Hide()
 		p.head:Hide()
 		p.text:Hide()
+		V.SpellIcons(page, p, nil)
 	end
 	page.loreBox:SetContentHeight(tall + 6)
 	if page.loreFor ~= npc then
