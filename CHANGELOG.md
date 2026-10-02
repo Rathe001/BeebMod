@@ -5,6 +5,13 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Long quest lines wrap in the dock.** A quest title or objective too long
+  for one line goes on to a second and a third, and the lines below move
+  down to make room. A crossed-off objective stays on one line and ends in
+  "...", and its line through now stops at the edge of the dock.
+
 ## 0.1.0-beta.19
 
 - **The census window says where its characters come from.** A line under

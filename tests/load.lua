@@ -9419,8 +9419,13 @@ if ok then
 					D.SetCellWidth(self, D.Width() + 80)
 				end
 				local okWide, errWide = pcall(function()
+					local tracker = BT.GetModule("tracker")
+					local list = tracker and tracker.Frame and tracker.Frame()
+					-- and a quest list on show wraps its words to the new width,
+					-- which lays the dock out once more with its new heights
+					local rewrap = (list and list:IsShown() and tracker.laidWidth) and 1 or 0
 					D.Update()
-					assert(laidOut == 3, "a row wider than the dock lays it out again")
+					assert(laidOut == 3 + rewrap, "a row wider than the dock lays it out again: " .. laidOut)
 					assert(D.Frame():GetWidth() >= D.Width() + 80, "and the dock takes the row's width")
 				end)
 				who.Update = update
@@ -10838,7 +10843,10 @@ if ok then
 			-- the row, the tracker and the whole dock protected in a fight
 			assert(b:GetParent() == _G.UIParent and b:GetParent() ~= row.item,
 				"the secure button belongs to the screen, not to the dock")
-			assert(((row.text._points or {}).RIGHT or {}).x < 0, "and the title makes room for it")
+			-- (the header starts where a title does, and has nothing at its end)
+			local plain = mod.Rows()[1].text._width
+			assert(row.text._width and plain and row.text._width <= plain - 15,
+				("and the title makes room for it: %s of %s"):format(tostring(row.text._width), tostring(plain)))
 			assert(mod.Rows()[1].item == nil or not mod.Rows()[1].item:IsShown(),
 				"the header carries nothing")
 
@@ -10891,7 +10899,8 @@ if ok then
 			_G.GetQuestLogSpecialItemInfo = function() return nil end
 			mod.Update()
 			assert(not row.item:IsShown(), "no item, no button")
-			assert(((row.text._points or {}).RIGHT or {}).x == 0, "and the title has the whole line back")
+			assert(row.text._width == mod.Rows()[1].text._width,
+				"and the title has the whole line back: " .. tostring(row.text._width))
 			_G.GetQuestLogSpecialItemInfo = nil
 			_G.GetNumQuestLogEntries, _G.GetQuestLogTitle = nil, nil
 		end },
@@ -10949,6 +10958,46 @@ if ok then
 			assert(rows[5].strike:IsShown(), "with a line through the words")
 			assert(rows[5].strike._color and rows[5].strike._color[4] < 1,
 				"drawn softly enough to read what you finished")
+
+			-- LONG LINES WRAP (Josh 2026-10-01: "some quest text is running off
+			-- the right side of the dock"). The stub measures words at 6 a
+			-- letter and 11 a line, against the width they were given.
+			local wasBoard = _G.GetQuestLogLeaderBoard
+			_G.GetQuestLogLeaderBoard = function(j)
+				if j == 1 then
+					return "Glowing shards gathered from the crystal formations along the lake shore: 0/8", "item", false
+				end
+				return "Sunhammer's Rifle, and the long story of where it was left behind: 1/1", "item", true
+			end
+			local function plainText(fs)
+				return (tostring(fs._text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+			end
+			for _, r in ipairs(rows) do
+				r.text.GetNumLines = function(fs)
+					local n = math.ceil(#plainText(fs) * 6 / (fs._width or 200))
+					return math.max(1, math.min(n, fs._wrap == false and 1 or 3))
+				end
+				r.text.GetStringHeight = function(fs) return fs:GetNumLines() * 11 end
+				r.text.SetWordWrap = function(fs, on) fs._wrap = on end
+			end
+			mod.Update()
+			local long, done = rows[4], rows[5]
+			assert(long.tall > 15 and long.text._points and long.text._points.TOPLEFT,
+				"a long objective goes on to a second line: " .. tostring(long.tall))
+			assert(long.text._width < (mod.Frame():GetWidth() or 0),
+				"inside the dock's width: " .. tostring(long.text._width))
+			assert(done.top == long.top + long.tall, "and the next line starts under it")
+			assert(done.tall == 15 and done.text._wrap == false,
+				"a crossed-off objective stays on one line")
+			assert(done.strike._width <= done.text._width,
+				("and its line through stops at the dock's edge: %s of %s"):format(
+					tostring(done.strike._width), tostring(done.text._width)))
+			assert(rows[3].tall == 15, "a title that fits stays one line")
+			_G.GetQuestLogLeaderBoard = wasBoard
+			for _, r in ipairs(rows) do
+				r.text.GetNumLines, r.text.GetStringHeight, r.text.SetWordWrap = nil, nil, nil
+			end
+			mod.Update()
 			assert(not rows[5].mark:IsShown(), "and no second column of checks to read down")
 			assert(not rows[4].strike:IsShown(), "an objective still to do is not struck through")
 			assert(rows[3].markKind == "dot", "a quest in progress gets the mark you click to follow it")

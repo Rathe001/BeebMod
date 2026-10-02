@@ -444,7 +444,8 @@ local function itemButton(row)
 	-- the screen's (see above)
 	local holder = CreateFrame("Frame", nil, row)
 	holder:SetSize(ROW, ROW)
-	holder:SetPoint("RIGHT", 0, 0)
+	-- beside the title's first line, however many it wraps to
+	holder:SetPoint("TOPRIGHT", 0, 0)
 	holder.beebs = true
 	holder:SetScript("OnShow", function() M.PlaceItems() end)
 	holder:SetScript("OnHide", function() M.PlaceItems() end)
@@ -558,8 +559,6 @@ local function placeItem(row, item)
 	end
 	b.count:SetText((item.charges or 0) > 1 and tostring(item.charges) or "")
 	itemCooldown(b)
-	-- the title stops short of it
-	row.text:SetPoint("RIGHT", -(ROW + ITEM_GAP), 0)
 	holder.wanted = true
 	holder:Show()
 	return true
@@ -574,6 +573,62 @@ function M.UpdateCooldowns()
 	end
 end
 
+-- LONG LINES WRAP (Josh 2026-10-01: "some quest text is running off the
+-- right side of the dock"). A title or an objective too long for one line
+-- goes on to a second and a third, and its row grows to hold them. A crossed
+-- off objective stays on one line: its line through is drawn to the width of
+-- the words, and on a wrapped one there is no knowing where each line ends.
+local WRAP_LINES = 3
+
+-- how wide the list is: the dock's last layout, or its setting before it has
+-- had one
+local function listWidth()
+	local w = BT.Pill.Number(frame and frame:GetWidth(), 0)
+	if w < 100 then
+		w = BT.Dock.Width()
+	end
+	return w
+end
+
+-- the row's words from `left` to `right` short of its end, and how tall that
+-- makes the row
+local function layText(row, left, right, wrap, size)
+	local num = BT.Pill.Number
+	local fs = row.text
+	fs:ClearAllPoints()
+	fs:SetWidth(math.max(1, listWidth() - 2 * PAD - left - right))
+	fs:SetWordWrap(wrap and true or false)
+	if fs.SetMaxLines then
+		pcall(fs.SetMaxLines, fs, wrap and WRAP_LINES or 1)
+	end
+	local tall, lines = ROW, 1
+	if wrap then
+		local h = num(fs.GetStringHeight and fs:GetStringHeight(), 0)
+		local ok, n = false, nil
+		if fs.GetNumLines then
+			ok, n = pcall(fs.GetNumLines, fs)
+		end
+		n = ok and num(n, nil) or nil
+		-- no count of lines: the height says it, a line being the font's size
+		-- and a little
+		if not n and h > 0 then
+			n = math.max(1, math.floor(h / (size * 1.15) + 0.5))
+		end
+		if n and n > 1 and h > 0 then
+			lines = n
+			local one = h / n
+			fs:SetJustifyV("TOP")
+			fs:SetPoint("TOPLEFT", row, "TOPLEFT", left, -math.max(0, (ROW - one) / 2))
+			tall = math.ceil(ROW + h - one)
+		end
+	end
+	if lines == 1 then
+		fs:SetJustifyV("MIDDLE")
+		fs:SetPoint("LEFT", row, "LEFT", left, 0)
+	end
+	return tall
+end
+
 local function setRow(i, y, kind, text, mark, colour, quest)
 	local row = rowFrame(i)
 	row.endsAt = nil
@@ -585,11 +640,10 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 	row:ClearAllPoints()
 	row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -y)
 	row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -y)
-	row:SetHeight(ROW)
 	row.text:SetFontObject(nil)
-	pcall(row.text.SetFont, row.text, select(1, row.text:GetFont()),
-		BT.Fonts.Size((kind == "title" or kind == "clock") and TITLE or ((kind == "head" or kind == "zone") and HEAD or LINE)),
-		select(3, row.text:GetFont()))
+	local size = BT.Fonts.Size((kind == "title" or kind == "clock") and TITLE
+		or ((kind == "head" or kind == "zone") and HEAD or LINE))
+	pcall(row.text.SetFont, row.text, select(1, row.text:GetFont()), size, select(3, row.text:GetFont()))
 	row.text:SetText(text or "")
 	row.text:SetTextColor(colour[1], colour[2], colour[3])
 
@@ -619,14 +673,18 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 			row.band:SetColorTexture(colour[1], colour[2], colour[3], 0.14)
 		end
 	end
-	row.text:SetPoint("LEFT", (kind == "line" and (INDENT + NEST)) or (clock and (INDENT + NEST + 16))
-		or (kind == "zone" and 0 or INDENT), 0)
-	row.text:SetPoint("RIGHT", 0, 0)
+	local left = (kind == "line" and (INDENT + NEST)) or (clock and (INDENT + NEST + 16))
+		or (kind == "zone" and 0 or INDENT)
+	-- the mark beside the first line, however many the words wrap to
 	row.mark:ClearAllPoints()
-	row.mark:SetPoint("LEFT", kind == "line" and NEST or 0, 0)
+	row.mark:SetPoint("TOPLEFT", kind == "line" and NEST or 0, 0)
 	row.mark:SetSize(INDENT, ROW)
-	-- the quest's item, on its title and nowhere else
-	placeItem(row, kind == "title" and quest and quest.item or nil)
+	-- the quest's item, on its title and nowhere else; the title stops short
+	-- of it
+	local item = placeItem(row, kind == "title" and quest and quest.item or nil)
+	row.tall = layText(row, left, item and (ROW + ITEM_GAP) or 0,
+		(kind == "title" or kind == "line") and mark ~= "strike", size)
+	row:SetHeight(row.tall)
 
 	row.kind = kind
 	row.isHeader = (kind == "head")
@@ -640,9 +698,12 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 		-- the width of the words, not of the line they sit on
 		local w = BT.Pill.Number(row.text.GetStringWidth and row.text:GetStringWidth(),
 			#(text or "") * 5)
+		-- and no wider than the line: words cut short with "..." are still
+		-- measured whole, and the line through ran off the dock
+		local room = BT.Pill.Number(row.text:GetWidth(), w)
 		row.strike:ClearAllPoints()
 		row.strike:SetPoint("LEFT", row.text, "LEFT", 0, 0)
-		row.strike:SetWidth(math.max(8, w))
+		row.strike:SetWidth(math.max(8, math.min(w, room)))
 		row.strike:SetColorTexture(colour[1], colour[2], colour[3], 0.55)
 		row.strike:Show()
 	else
@@ -680,7 +741,7 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 	row.quest = quest
 	row:EnableMouse(quest ~= nil or row.isHeader)
 	row:Show()
-	return y + ROW + (kind == "title" and 1 or 0)
+	return y + row.tall + (kind == "title" and 1 or 0)
 end
 
 -- A colour as a text escape, for the parts of a line that are not the line's
@@ -1038,6 +1099,8 @@ function M.Update()
 	-- and M.Fit is handed the answer
 	local content = math.max(24, y + PAD - GAP)
 	M.contentHeight, M.used = content, i
+	-- the width the words were wrapped to (M.Fit)
+	M.laidWidth = listWidth()
 	M.listTop = PAD + ROW + GAP
 	M.bandTop, M.bandFoot = bandTop, bandFoot
 	frame.wantHeight = content
@@ -1052,6 +1115,13 @@ end
 -- QUESTS line where it is, and show where in the list you are.
 function M.Fit(height)
 	if not (frame and rows) then
+		return
+	end
+	-- A NEW WIDTH WRAPS THE WORDS AGAIN: the dock's width changed, or it had
+	-- not been laid out when the list was drawn. Update hands the dock the
+	-- new heights, and the dock calls back here with the room for them.
+	if M.laidWidth and listWidth() ~= M.laidWidth and frame:IsShown() then
+		M.Update()
 		return
 	end
 	local content = M.contentHeight or 0
@@ -1070,9 +1140,9 @@ function M.Fit(height)
 			row:ClearAllPoints()
 			row:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -at)
 			row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -at)
-			-- a row is a full ROW tall, so one that starts inside the list and
-			-- ends past it is past it
-			row:SetShown(row.isHeader or over <= 0 or (at >= listTop - 1 and at + ROW <= height))
+			-- a row is shown whole or not at all, so one that starts inside the
+			-- list and ends past it is past it
+			row:SetShown(row.isHeader or over <= 0 or (at >= listTop - 1 and at + (row.tall or ROW) <= height))
 		end
 	end
 	-- THE BAND SCROLLS WITH THE ROWS (Josh 2026-09-22), and is cut to the
