@@ -14,6 +14,8 @@ BT.Census = C
 local ROWS, ROW_H = 12, 22
 -- the tiles, the tabs, the count and its chips, then the bars
 local TILE_H, TAB_Y, CAP_Y, ROWS_Y = 62, -72, -106, -134
+-- where the bars start with no filter on: the chips' line is not needed
+local ROWS_BARE = -104
 -- where a bar starts, the count's column and the share's, and a bar's room
 -- before the window has been laid out (UI/CensusWindow.lua: 640 less padding)
 local BAR_X, COUNT_W, PCT_W = 150, 58, 38
@@ -298,12 +300,9 @@ function C.Build(parent)
 		view.seenButtons[b.key] = b
 	end
 
-	-- THE COUNT, AND WHAT IT IS OF: every filter that is on, a chip with its x
-	view.count = view:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
-	view.count:SetPoint("TOPLEFT", 2, CAP_Y)
-	view.subtitle = label(view, "", "small", 0.55, 0.6, 0.58)
-	view.subtitle:SetPoint("BOTTOMLEFT", view.count, "BOTTOMRIGHT", 6, 1)
-	view.subtitle:SetJustifyH("LEFT")
+	-- every filter that is on, a chip with its x, on a line of their own
+	-- above the bars. NO COUNT BESIDE THEM (Josh 2026-10-01: "I think we can
+	-- just remove this line"): the tiles say how many there are.
 	view.chips = {}
 
 	view.rows = {}
@@ -489,7 +488,6 @@ function C.Loading(view, on, share, size)
 			view.footer:Hide()
 			view.note:Hide()
 		end
-		view.subtitle:SetText("")
 	elseif view.footer then
 		view.footer:Show()
 		view.note:Show()
@@ -600,9 +598,16 @@ function C.Refresh(view, census)
 	view.seenControl:Select(view.seen or "all")
 
 	C.PaintTiles(view, census)
-	view.count:SetText(U.Commas(census.shown or census.total or 0))
-	view.subtitle:SetText(("of %s characters"):format(U.Commas(census.book or 0)))
-	C.PaintChips(view)
+	-- the bars under the chips while a filter is on, and in their place when not
+	-- (not `top`: that name is the biggest bar's count further down, and the
+	-- window was once made as tall as 4,738 less the rows: negative, with no
+	-- background and its top above the screen)
+	local rowsTop = C.PaintChips(view) > 0 and ROWS_Y or ROWS_BARE
+	for i, row in ipairs(view.rows) do
+		row:ClearAllPoints()
+		row:SetPoint("TOPLEFT", 0, rowsTop - (i - 1) * ROW_H)
+		row:SetPoint("TOPRIGHT", 0, rowsTop - (i - 1) * ROW_H)
+	end
 
 	local pick = view.pick
 	local rows = census[view.mode] or {}
@@ -668,7 +673,7 @@ function C.Refresh(view, census)
 	end
 	-- THE WINDOW AS TALL AS ITS ROWS (the census redesign): the footer under
 	-- the last bar, and the window told how tall that makes it
-	local bottom = ROWS_Y - math.max(shown, 1) * ROW_H - 8
+	local bottom = rowsTop - math.max(shown, 1) * ROW_H - 8
 	view.footer:ClearAllPoints()
 	view.footer:SetPoint("TOPLEFT", 4, bottom)
 	view.footer:SetText(BT.Stats.AgeLine(census))
@@ -712,11 +717,15 @@ function C.PaintTiles(view, census)
 				card:Foot({ { "Click", chosen == k and "count everyone again" or "count only these" } })
 			end
 		end
+		-- THE BAR SPLITS THOSE ON FILE (Josh 2026-10-01: "Gender summary chart
+		-- should show male vs female"): it was a share of everyone, so with
+		-- most genders not yet known it was a sliver of male and female
+		-- along an empty track, under words that said 41% and 59%
 		local w = t.w - 18
 		local x = 0
 		for _, k in ipairs(t.keys) do
 			local part = t.parts[k]
-			local share = total > 0 and (counts[k] or 0) / total or 0
+			local share = known > 0 and (counts[k] or 0) / known or 0
 			part:ClearAllPoints()
 			part:SetPoint("TOPLEFT", t.track, "TOPLEFT", x, 0)
 			part:SetWidth(math.max(share * w, 1))
@@ -829,7 +838,7 @@ function C.PaintChips(view)
 			local w = BT.Pill.Width(b.label, c.text .. "  x", 8)
 			b:SetWidth(w)
 			b:ClearAllPoints()
-			b:SetPoint("TOPRIGHT", view, "TOPRIGHT", -x, CAP_Y + 1)
+			b:SetPoint("TOPLEFT", view, "TOPLEFT", x, CAP_Y + 1)
 			b:Show()
 			x = x + w + 4
 		elseif b then
@@ -837,4 +846,5 @@ function C.PaintChips(view)
 			b:Hide()
 		end
 	end
+	return #list
 end

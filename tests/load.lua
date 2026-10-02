@@ -1673,6 +1673,20 @@ if ok then
 			BT.Census.Refresh = wasRefresh
 			-- CLICK A BAR, SEEN WITHIN, GUILD AND ZONE (Josh 2026-09-24)
 			local view = BT.GetModule("census").view
+			-- ONLY WHO YOU HAVE COME ACROSS (Josh 2026-10-01): said at the top
+			assert(cw.note:IsShown() and cw.note:GetText():find("^|cff%x%x%x%x%x%xNote:|r Only counts characters you've personally seen$"),
+				"the window says where its characters come from: " .. tostring(cw.note:GetText()))
+			-- THE BAR SPLITS THOSE ON FILE (Josh 2026-10-01): 41 male and 59
+			-- female among 1,000 is a bar of 41 to 59, not a sliver
+			do
+				local t = view.sexTile
+				BT.Census.PaintTiles(view, { sexes = { male = 41, female = 59, unknown = 900 }, sides = {}, level = {} })
+				local w = t.w - 18
+				local m, f = t.parts[2]:GetWidth(), t.parts[3]:GetWidth()
+				assert(math.abs(m - 0.41 * w) < 0.01 and math.abs(f - 0.59 * w) < 0.01,
+					("male and female fill the bar between them: %s + %s of %s"):format(m, f, w))
+				BT.Census.PaintTiles(view, view.census)
+			end
 			assert(view.modeButtons.guild and view.modeButtons.zone, "guild and zone have charts")
 			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
 			local row = view.rows[1]
@@ -1690,6 +1704,15 @@ if ok then
 			assert(view.pick and view.pick.key == picked, "the pick stays on the other charts")
 			view.chips[1]:GetScript("OnClick")(view.chips[1])
 			assert(view.pick == nil and not view.chips[1]:IsShown(), "and its x clears it")
+			-- NO COUNT LINE (Josh 2026-10-01: "I think we can just remove this
+			-- line"): the bars start where it was, and under the chips while
+			-- a filter is on
+			assert(view.count == nil and view.subtitle == nil, "no count above the bars")
+			local _, _, _, _, bare = view.rows[1]:GetPoint(1)
+			view.rows[1]:GetScript("OnClick")(view.rows[1])
+			local _, _, _, _, under = view.rows[1]:GetPoint(1)
+			assert(bare == -104 and under == -134, ("the bars move down for the chips: %s, %s"):format(bare, under))
+			view.chips[1]:GetScript("OnClick")(view.chips[1])
 			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
 			view.rows[1]:GetScript("OnClick")(view.rows[1])
 			view.rows[1]:GetScript("OnClick")(view.rows[1])
@@ -1722,7 +1745,21 @@ if ok then
 				assert(BT.Census.Filter(view).sex == nil, "nobody female on file, so Female does nothing")
 			end
 			-- and the window is as tall as its rows
-			assert(view.height and view.height < 500, "the chart says how tall it is: " .. tostring(view.height))
+			assert(view.height and view.height > 100 and view.height < 500,
+				"the chart says how tall it is: " .. tostring(view.height))
+			-- the footer under the last bar, and the height down to it
+			-- (Josh 2026-10-01: the window lost its background and jumped
+			-- above the screen; the height came from the biggest bar's count)
+			local last
+			for _, row in ipairs(view.rows) do
+				if row:IsShown() then
+					last = select(5, row:GetPoint(1))
+				end
+			end
+			local footY = select(5, view.footer:GetPoint(1))
+			assert(last and footY and footY <= last - 22 and view.height == -footY + 16,
+				("the footer sits under the last bar: %s under %s, height %s"):format(
+					tostring(footY), tostring(last), tostring(view.height)))
 			-- RACES BY THEIR NAMES (Josh 2026-09-29: "how scourge and tauren show up")
 			assert(BT.Census.RaceName("Scourge") == "Undead" and BT.Census.RaceName("NightElf") == "Night Elf"
 				and BT.Census.RaceName("Human") == "Human" and BT.Census.RaceName("Skyborne") == "Skyborne",
@@ -2101,6 +2138,40 @@ if ok then
 			-- drawing "Priest" in nine-point type (Josh 2026-09-19).
 			local wasHead = select(2, _G.TestTipTextLeft1:GetFont())
 			assert(BT.UnitTip.Touched() > 0, "it knows which lines it changed")
+			-- THE QUEST ITEM'S LINE (Josh 2026-10-01): an update to the data a
+			-- rebuilt unit tooltip was drawn from asks for the unit again,
+			-- and only that data's, and not without end
+			do
+				local T = BT.UnitTip
+				local hadRestack, hadAfter = T.Restack, _G.C_Timer.After
+				local asked, later = 0, nil
+				T.Restack = function() asked = asked + 1 return true end
+				-- a frame later, as the game would: kept, and run below
+				_G.C_Timer.After = function(_, fn) later = fn end
+				local function update(id)
+					later = nil
+					local did = T.DataUpdated(id)
+					if later then
+						later()
+					end
+					return did
+				end
+				T.Drawn({ dataInstanceID = 41 })
+				assert(not update(40) and asked == 0, "another tooltip's update is not ours")
+				assert(update(41) and asked == 1, "ours draws the unit again")
+				-- the redraw comes back as a unit drawn, its count kept
+				T.Drawn({ dataInstanceID = 41 })
+				for _ = 1, 10 do
+					update(41)
+					T.Drawn({ dataInstanceID = 41 })
+				end
+				assert(asked == 5, "five times at most for one tooltip: " .. asked)
+				T.Gone()
+				T.Drawn({ dataInstanceID = 43 })
+				assert(update(43) and asked == 6, "and the next tooltip starts its count again")
+				T.Restack, _G.C_Timer.After = hadRestack, hadAfter
+				T.dataID, T.redraws, T.redrawn = nil, 0, false
+			end
 			BT.UnitTip.RestoreFonts()
 			assert(BT.UnitTip.Touched() == 0, "and lets go of them once they are back")
 			assert(select(2, _G.TestTipTextLeft1:GetFont()) ~= wasHead
@@ -7369,6 +7440,23 @@ if ok then
 			win.SessionDropdown.SessionName.GetLeft = function() return 260 end
 			mod.Tick(win)
 			assert(win.beebsClock:IsShown(), "and shows where there is room")
+			-- THE CLOCK ON "DPS" (Josh 2026-10-01): the client keeps its type
+			-- label's size secret; the words are measured on a label of ours
+			local tn = win.DamageMeterTypeDropdown:CreateFontString()
+			win.DamageMeterTypeDropdown.TypeName = tn
+			tn:SetText("DPS")
+			tn.GetStringWidth = function() return "secret" end
+			local measure = win:CreateFontString()
+			measure.GetStringWidth = function(self) return #(self._text or "") * 7 end
+			win.beebsMeasure = measure
+			mod.Tick(win)
+			local _, _, _, x = win.beebsClock:GetPoint(1)
+			assert(x == 21 + 8, "the clock after the measured words, not on them: " .. tostring(x))
+			measure.GetStringWidth = function() return 0 end
+			mod.Tick(win)
+			local point = win.beebsClock:GetPoint(1)
+			assert(point == "RIGHT", "and left of the session when nothing can be measured: " .. tostring(point))
+			win.DamageMeterTypeDropdown.TypeName, win.beebsMeasure = nil, nil
 			meterRow.StatusBar.Value:SetText("900")
 			assert(meterRow.StatusBar.Value._text == "900 (12.5)", "each row's rate after its total: "
 				.. tostring(meterRow.StatusBar.Value._text))

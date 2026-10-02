@@ -499,6 +499,40 @@ function M.Extras(root)
 	end
 end
 
+-- HOW WIDE THE TYPE'S NAME IS, WHEN THE CLIENT WON'T SAY (Josh 2026-10-01:
+-- the clock sat on "DPS"). The client keeps the size of its type label
+-- secret, so its width came back as nothing and the clock went 8 pixels in.
+-- Its words are plain: they are written on a hidden label of ours, in its
+-- font where that can be read and in the clock's where not, and that one is
+-- measured. nil when nothing can be.
+function M.NameWidth(win, name)
+	local w = plainNumber(name:GetStringWidth())
+	if w and w > 0 then
+		return w
+	end
+	local ok, text = pcall(name.GetText, name)
+	if not ok or type(text) ~= "string" or secret(text) then
+		return nil
+	end
+	local m = win.beebsMeasure
+	if not m then
+		m = win:CreateFontString(nil, "OVERLAY")
+		m:Hide()
+		win.beebsMeasure = m
+	end
+	local okF, font, size, flags = pcall(name.GetFont, name)
+	if not (okF and type(font) == "string" and not secret(font) and plainNumber(size)
+		and pcall(m.SetFont, m, font, size, type(flags) == "string" and not secret(flags) and flags or "")) then
+		local okC, cf, cs, cfl = pcall(win.beebsClock.GetFont, win.beebsClock)
+		if okC and type(cf) == "string" then
+			pcall(m.SetFont, m, cf, cs, cfl or "")
+		end
+	end
+	m:SetText(text)
+	w = plainNumber(m:GetStringWidth())
+	return w and w > 0 and w or nil
+end
+
 -- the header's clock, now
 function M.Tick(win)
 	local clock = win.beebsClock
@@ -512,8 +546,8 @@ function M.Tick(win)
 	-- "Healing Done" is longer than "Damage Done"), or left of the session
 	local name = win.DamageMeterTypeDropdown and win.DamageMeterTypeDropdown.TypeName
 	clock:ClearAllPoints()
-	if name and name.GetStringWidth then
-		local w = BT.Pill.Number(name:GetStringWidth(), 0)
+	local w = name and name.GetStringWidth and M.NameWidth(win, name)
+	if w then
 		clock:SetPoint("LEFT", name, "LEFT", w + 8, 0)
 	else
 		clock:SetPoint("RIGHT", win.SessionDropdown, "LEFT", -6, 0)

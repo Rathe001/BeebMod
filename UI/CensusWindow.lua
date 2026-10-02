@@ -12,11 +12,24 @@ local C = {}
 BT.CensusWindow = C
 
 local PAD, TITLE_H = 14, 40
+-- the line under the title that says where the census comes from
+local NOTE_H = 22
 local WIDTH, HEIGHT = 640, 500
 
 local frame
 -- the frame that counts a slice a frame (C.Count)
 local counter
+
+-- (Josh 2026-10-01: "Change this to 'Note: Only counts characters you've
+-- personally seen'", with "Note:" in a highlight: the window's accent)
+C.NOTE = "Only counts characters you've personally seen"
+function C.NoteText()
+	local a = BT.Widgets.ACCENT
+	local function byte(v)
+		return math.floor(v * 255 + 0.5)
+	end
+	return ("|cff%02x%02x%02xNote:|r %s"):format(byte(a[1]), byte(a[2]), byte(a[3]), C.NOTE)
+end
 
 function C.Build()
 	if frame then
@@ -56,8 +69,18 @@ function C.Build()
 
 	BT.Widgets.Divider(frame, PAD, -TITLE_H)
 
+	-- ONLY WHO YOU HAVE COME ACROSS (Josh 2026-10-01: "put a note at the top
+	-- explaining that census data is only built off of players you have
+	-- personally seen"): a count of 29,398 reads like the realm's
+	-- population, and it is the characters this copy of BeebMod has met
+	frame.note = frame:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
+	frame.note:SetPoint("TOPLEFT", PAD + 4, -TITLE_H - 10)
+	frame.note:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD - 4, -TITLE_H - 10)
+	frame.note:SetJustifyH("LEFT")
+	frame.note:SetText(C.NoteText())
+
 	frame.body = CreateFrame("Frame", nil, frame)
-	frame.body:SetPoint("TOPLEFT", PAD, -TITLE_H - 10)
+	frame.body:SetPoint("TOPLEFT", PAD, -TITLE_H - 10 - NOTE_H)
 	frame.body:SetPoint("BOTTOMRIGHT", -PAD, PAD)
 
 	-- Escape hides it without going through C.Hide, so the ticker stops here
@@ -191,7 +214,7 @@ function C.Show()
 	-- says how much room it took, and the window fits round it
 	if m.view and not m.view.onHeight then
 		m.view.onHeight = function(h)
-			frame:SetHeight(TITLE_H + 10 + h + PAD)
+			frame:SetHeight(TITLE_H + 10 + NOTE_H + h + PAD)
 		end
 		if m.view.height then
 			m.view.onHeight(m.view.height)

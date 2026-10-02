@@ -368,6 +368,9 @@ end
 
 if GameTooltip and GameTooltip.HookScript then
 	GameTooltip:HookScript("OnHide", function()
+		if T.Gone then
+			T.Gone()
+		end
 		for _, fn in ipairs(hiders) do
 			pcall(fn)
 		end
@@ -392,14 +395,84 @@ end
 local processor = TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall
 	and Enum and Enum.TooltipDataType
 
+-- THE QUEST ITEM'S LINE (Josh 2026-10-01: "it just isn't showing the line
+-- '2/10 Fine Moonstalker Pelt'... The kill count quests work"). An objective
+-- that names an item is written once the game knows the item's name, and
+-- until then the line is missing; when the name arrives the game sends
+-- TOOLTIP_DATA_UPDATE and draws the tooltip again. But the Tooltips module
+-- rebuilds a unit tooltip with ClearLines, and clearing GameTooltip makes it
+-- forget what it was showing, so the update found nothing to draw again and
+-- the line never came. The data's id is kept here instead, and an update
+-- for it asks for the unit again (T.Restack), a frame later.
+local REDRAWS = 5 -- for one tooltip: an update that keeps coming is not chased
+local function plainID(v)
+	if v == nil or (issecretvalue and issecretvalue(v)) then
+		return nil
+	end
+	return v
+end
+
+-- a unit drawn: its data's id, and a fresh count of redraws unless this is
+-- one of them
+function T.Drawn(data)
+	local id = plainID(type(data) == "table" and data.dataInstanceID or nil)
+	if T.redrawn then
+		T.redrawn = false
+	elseif id ~= T.dataID then
+		T.redraws = 0
+	end
+	T.dataID = id
+end
+
+function T.DataUpdated(id)
+	id = plainID(id)
+	if not (T.dataID and id == T.dataID) or T.redrawing or (T.redraws or 0) >= REDRAWS then
+		return false
+	end
+	-- only a tooltip the Tooltips module rebuilt has forgotten its data; the
+	-- client draws its own again
+	if not BT.Enabled("tooltips") then
+		return false
+	end
+	T.redrawing = true
+	T.redraws = (T.redraws or 0) + 1
+	local function again()
+		T.redrawing = false
+		T.redrawn = true
+		if not T.Restack() then
+			T.redrawn = false
+		end
+	end
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, again)
+	else
+		again()
+	end
+	return true
+end
+
+-- gone from the screen: nothing of it to draw again (GameTooltip's OnHide,
+-- above). Not when it is only cleared: the rebuild clears it, and that is
+-- what this is for.
+function T.Gone()
+	T.dataID, T.redraws, T.redrawn = nil, 0, false
+end
+
 if processor and Enum.TooltipDataType.Unit then
-	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tip)
+	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tip, data)
 		if tip ~= GameTooltip then
 			return
 		end
+		T.Drawn(data)
 		local _, unit = TooltipUtil.GetDisplayedUnit(tip)
 		T.Fill(tip, unit)
 	end)
+	local updates = CreateFrame("Frame")
+	if pcall(updates.RegisterEvent, updates, "TOOLTIP_DATA_UPDATE") then
+		updates:SetScript("OnEvent", function(_, _, id)
+			T.DataUpdated(id)
+		end)
+	end
 	T.path = "processor"
 elseif GameTooltip and GameTooltip.HookScript then
 	GameTooltip:HookScript("OnTooltipSetUnit", function(tip)

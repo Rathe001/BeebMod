@@ -5,6 +5,34 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The census window says where its characters come from.** A line under
+  the title reads "Note: Only counts characters you've personally seen."
+  The count is everyone you've come across, not the realm's population.
+
+- **No count above the census bars.** "29,412 of 29,412 characters" said
+  what the Characters tile already says. The bars start where it was. A
+  filter's chip now sits on its own line above the bars, which move down
+  to make room while a filter is on.
+
+- **The gender bar splits male and female.** It was drawn as a share of
+  every character, and most have no gender on file yet, so the bar was
+  nearly empty while its words said 41% and 59%. It now splits only the
+  characters whose gender is known, as the words do.
+
+- **Quest items show on an enemy's tooltip.** An enemy that drops an item
+  for a quest sometimes had no line such as "2/10 Fine Moonstalker Pelt".
+  The game writes that line once it has loaded the item's name, and then
+  draws the tooltip again. BeebMod's restyled tooltip made the game forget
+  which tooltip to draw again. BeebMod now redraws it when the item's name
+  arrives. Kill quests were never affected.
+
+- **The damage meter's clock no longer covers "DPS".** The game keeps the
+  width of the meter's type label secret, so the clock sat 8 pixels in.
+  BeebMod now measures the label's words itself and puts the clock after
+  them.
+
 ## 0.1.0-beta.18
 
 - **An enemy's page lists its abilities again.** The list now comes from
