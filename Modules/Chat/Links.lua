@@ -247,7 +247,7 @@ local function build()
 	pcall(edit.SetFontObject, edit, "BeebModFontHighlightSmall")
 	box.edit = edit
 
-	box.hint = W.Label(box, "Press Ctrl+C to copy it, then Escape to close this box.", "small", 0.62, 0.68, 0.65)
+	box.hint = W.Label(box, "Ctrl+C to copy, Escape to close.", "small", 0.62, 0.68, 0.65)
 	box.hint:SetPoint("TOPLEFT", field, "BOTTOMLEFT", 2, -8)
 
 	-- the address can't be typed over: a key that changes it puts it back,

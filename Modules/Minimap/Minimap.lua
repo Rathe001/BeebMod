@@ -1589,7 +1589,7 @@ end
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
 	page:Note("BeebMod moves the game's own minimap into the dock. The mouse wheel still zooms, and right-click still opens tracking.")
-	page:Note("It is square. A round map in a stack of rectangles leaves four corners of world showing.", true)
+	page:Note("The map is square so it fits the dock.", true)
 	-- WHAT IT SAYS AND WHEN (Josh 2026-09-24)
 	local show = page:Section("Show")
 	BT.Widgets.SwitchRow(show, "Zone name", "Above the map, coloured by who controls the zone",

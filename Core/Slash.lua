@@ -36,7 +36,7 @@ local function bootLines(say)
 		say(("bound: %s · %d at login"):format((b.bound:gsub("|", " ")), b.boundCount or 0))
 	end
 	if BT.linkedRestored then
-		say("BeebMod put back the book the client cleared")
+		say("saved data restored after the game cleared it")
 	end
 	if BT.stashTaken then
 		say(("%d put back from the stashed book"):format(BT.stashTaken))
@@ -54,7 +54,7 @@ local function bootLines(say)
 		say(("%d settings moved to their new names"):format(BT.renamedOnLoad))
 	end
 	if BT.lateBook then
-		say(("the book turned up late · %d found · %d seen since login kept"):format(BT.lateBook.found,
+		say(("saved data loaded late · %d found · %d seen since login kept"):format(BT.lateBook.found,
 			BT.lateBook.kept))
 	end
 end

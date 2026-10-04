@@ -27,7 +27,7 @@ local M = BT.Module({
 	feature = "interface",
 	onPage = "allmenus",
 	title = "Game menu",
-	blurb = "Redraws the menu that Escape opens",
+	blurb = "Redraws the Escape menu",
 	order = 59,
 })
 
@@ -451,10 +451,10 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("The menu Escape opens gets an elite's border, in your border colour. "
-		.. "Its buttons use BeebMod's font and light up in your accent colour under the pointer.")
-	page:Note("Only the look changes. Every button does what it did before. The game keeps some of its "
-		.. "buttons from addons, so those look the same as ever. Switched off, the menu looks like the game's again.", true)
+	page:Note("The Escape menu gets an elite's border, in your border colour. "
+		.. "Its buttons use BeebMod's font and light up in your accent colour under your mouse.")
+	page:Note("Only the look changes. Every button works as before. The game doesn't let addons restyle "
+		.. "some of its buttons, so those keep the game's look.", true)
 	page:Layout()
 end
 

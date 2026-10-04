@@ -474,9 +474,9 @@ function M.Tip()
 			t:Row("Highest rank", p.life.highest)
 		end
 		if p.fromTab then
-			t:Note("As your character window's PvP tab last showed them.")
+			t:Note("From your PvP tab.")
 		end
-		t:Foot({ { "Click", "open the PvP page" } })
+		t:Foot({ { "Click", "open PvP tab" } })
 	end })
 end
 
@@ -787,7 +787,7 @@ function M:BuildTab(panel)
 	if not M.Available() then
 		page:Note("This game has no PvP rank to read, so there is no line.", true)
 	elseif not M.Classic() then
-		page:Note("The game shows rank points only in the PvP tab of your character window, so BeebMod reads them there whenever the game writes them. If the line is missing, open that tab once.", true)
+		page:Note("The game shows rank points only in the PvP tab of your character window, and BeebMod reads them from there. If the line is missing, open that tab once.", true)
 	end
 	page:Layout()
 end

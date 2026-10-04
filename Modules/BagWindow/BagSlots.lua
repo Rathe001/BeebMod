@@ -176,7 +176,7 @@ function S.Tip(b)
 		end
 	else
 		call(tip.SetText, tip, slot, 1, 1, 1)
-		call(tip.AddLine, tip, b.reagent and "Drag a reagent bag here to put it on." or "Drag a bag here to put it on.",
+		call(tip.AddLine, tip, b.reagent and "Drag a reagent bag here to equip it." or "Drag a bag here to equip it.",
 			0.8, 0.8, 0.8, true)
 		drawn = true
 	end

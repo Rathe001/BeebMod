@@ -133,7 +133,7 @@ function B.WayIn(key, coord, view, tip)
 		if tip and BT.Tip then
 			BT.Tip.Show(c, { build = function(t)
 				t:Header({ icon = false, name = tip })
-				t:Foot({ { "Click", ("open the %s"):format(tip:lower()) } })
+				t:Foot({ { "Click", ("open %s"):format(tip:lower()) } })
 			end })
 		end
 	end)
@@ -1464,7 +1464,7 @@ function B.Create()
 			local census = BT.Feature and BT.Feature("census")
 			BT.Tip.Show(self, { edge = census and census.color, build = function(t)
 				t:Header({ icon = false, name = "Census", sub = "Everyone you have seen on this realm" })
-				t:Foot({ { "Click", "open the census" } })
+				t:Foot({ { "Click", "open census" } })
 			end })
 		end
 	end)

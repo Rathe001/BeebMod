@@ -247,12 +247,12 @@ function M:BuildTab(panel)
 		"In the corner of each piece you wear. Shirts and tabards show none.",
 		function() return opt("levels", true) and true or false end,
 		function(on) M.SetShowsLevels(on) end).switch
-	self.themeSwitch = BT.Widgets.SwitchRow(sheet, "In BeebMod's look",
-		"Flat panels and plain headings. Off, the game's art comes back.",
+	self.themeSwitch = BT.Widgets.SwitchRow(sheet, "BeebMod's look",
+		"Flat panels and plain headings, in place of the game's art",
 		function() return opt("theme", true) and true or false end,
 		function(on) M.SetThemed(on) end).switch
-	self.moveSwitch = BT.Widgets.SwitchRow(sheet, "Drag it by its title",
-		"It opens where you left it",
+	self.moveSwitch = BT.Widgets.SwitchRow(sheet, "Drag by title",
+		"Opens where you left it",
 		function() return opt("move", true) and true or false end,
 		function(on)
 			BT.EnsureBound()
@@ -264,11 +264,11 @@ function M:BuildTab(panel)
 		end).switch
 	-- PUT BACK FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
 	-- slash commands"): the Reset that /bt sheet reset was
-	local back = BT.Widgets.Row(sheet, "Where it opens", "Back where the game puts it")
+	local back = BT.Widgets.Row(sheet, "Position", "Reset to where the game puts it")
 	self.resetButton = back:SetControl(BT.Widgets.Button(back, "Reset", 62, 20))
 	self.resetButton:SetScript("OnClick", function()
 		M.ResetPosition()
-		U.Print("Character sheet: the window is back where the game puts it.")
+		U.Print("Character sheet: position reset.")
 	end)
 	page:Layout()
 end

@@ -496,11 +496,11 @@ function S.AgeLine(census)
 	local a = census.age
 	if not a.median then
 		if (census.book or 0) == 0 then
-			return "Nobody in the book yet. Characters you see go in it."
+			return "Nobody seen yet. Characters you see show up here."
 		elseif (census.total or 0) == 0 and SEEN_AS[census.seen] then
-			return ("Nobody in the book was %s."):format(SEEN_AS[census.seen])
+			return ("Nobody was %s."):format(SEEN_AS[census.seen])
 		end
-		return "Nobody in the book matches the bar you picked."
+		return "Nobody matches the filter."
 	end
 	-- IN PLAIN WORDS (Josh 2026-09-30, the census redesign): "Median 6 days
 	-- old · average 5 days" needed decoding; the median is the half

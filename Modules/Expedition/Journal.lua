@@ -372,7 +372,7 @@ function J.LoreLine(m)
 	if m.family then
 		what = m.family:lower()
 	elseif kind == J.UNTYPED then
-		what = "enemy of no known type"
+		what = "enemy of unknown type"
 	else
 		what = kind:lower()
 	end
@@ -381,12 +381,12 @@ function J.LoreLine(m)
 	if m.zone then
 		-- "of" after a kind, "on" after no kind: "a creature of no known kind
 		-- of Zephras Isle" read twice over
-		out = out .. (kind == J.UNTYPED and not m.family and ", met on " or " of ") .. m.zone
+		out = out .. (kind == J.UNTYPED and not m.family and " in " or " of ") .. m.zone
 	end
 	if m.lo then
-		out = out .. (", first met at level %d"):format(m.lo)
+		out = out .. (", level %d"):format(m.lo)
 	elseif m.skull then
-		out = out .. ", its level shown as a skull"
+		out = out .. ", level ??"
 	end
 	return out .. "."
 end

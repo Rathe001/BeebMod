@@ -30,7 +30,7 @@ settings.
 |---|---|
 | **Dock** | The panel itself: its size, and the **Clock** in its header. The clock shows local or server time; click it to switch. |
 | **Minimap** | The client's map, moved into the dock, and **Addon buttons**: other addons' minimap buttons in one line, a switch each. |
-| **Progress** | **Experience** (the XP bar, and time to level at your current pace), **Reputation** (the watched faction, and your standing with it) and **PvP** (your PvP rank with its insignia, how far to the next, and this week's honor), a switch each. Each line starts with a shield: your level on it, a banner, or your rank. |
+| **Progress** | **Experience** (the XP bar, and time to level at your XP per hour), **Reputation** (the watched faction, and your standing with it) and **PvP** (your PvP rank with its insignia, how far to the next, and this week's honor), a switch each. Each line starts with a shield that shows your level, a banner or your rank. |
 | **Metrics** | A grid of readouts, each with its own switch: gold, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
 | **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
 | **Micro menu** | The game's menu buttons, in the dock. |
@@ -39,7 +39,7 @@ settings.
 
 | tab | what it is |
 |---|---|
-| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. One Size setting covers them all. Shift-drag a block to move it, and Reset on the page puts every block back. Made-up people, on the Testing page, shows a made-up party or raid. Switch them off, or one kind off, and the game's own frames come back. |
+| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. One Size setting covers them all. Shift-drag a block to move it, and Reset on the page puts every block back. The Made-up people switch on the Testing page shows a made-up party or raid. Switch them off, or one type of frame off, and the game's own frames come back. |
 | **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
 | **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). |
 | **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
@@ -48,9 +48,9 @@ settings.
 
 | tab | what it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button still does what it did. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row across the foot of the backpack. Drag a bag onto a slot to put it on, or off one to take it out. Its page has the switch that hides the game's bag bar. In chat, a guild written in a line, such as <New Horizon>, is guild green. Click it to get its /who in the chat box. Click a web address to get it in a box you can copy from. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
+| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The Bag window page has the switch that hides the game's bag bar. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
 | **Character sheet** | Item level on every slot, and BeebMod's look. |
-| **Menus** | The **Game menu** that Escape opens, and every **Dropdown menu**, a switch each. The game keeps some of its menu buttons from addons, so those keep the game's look. |
+| **Menus** | The **Game menu** that Escape opens, and every **Dropdown menu**, a switch each. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
 | **Tooltips** | Unit tooltips rebuilt into two lines, in BeebMod's look. Elites and rares get a gold or silver border. |
 
 **Census** is a record of every character you see, with charts of the realm
@@ -67,7 +67,7 @@ page searches the people you wrote about, and with the Census on, everyone
 the Census knows. The Ledger keeps what you write in its own book
 (`BeebModDB.ledger`), so it doesn't need the Census.
 It also remembers the people you grouped with. A group counts once you've
-been together 5 minutes, or at once in a dungeon. It keeps your duel
+been together 5 minutes, or straight away in a dungeon. It keeps your duel
 scores too: how many duels you won and lost against each player.
 
 **Nesingwary's Expedition** is a journal of every enemy you have
@@ -133,7 +133,7 @@ lives in `Modules/Ledger`.
                          new one, once, at login
     Core/Util.lua        names, keys, how old a record is, colours
     Core/Session.lua     "this session" for Currency, Experience, Reputation
-                         and Pick Pocket: when one starts, and its pace an hour
+                         and Pick Pocket: when one starts, and the rate per hour
     Core/DB.lua          one row per character: read, write, merge, prune
     Core/Collect/        what the client tells BeebMod without being asked
     Core/Slash.lua       /bt, /bt help, and What loaded for the Testing page

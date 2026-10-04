@@ -43,7 +43,7 @@ end
 
 BT.Command("census", function()
 	BT.CensusWindow.Toggle()
-end, "open the charts in their own window", "census")
+end, "open census charts", "census")
 
 -- WAS IN A GUILD (moved from the Ledger's tooltip, Josh 2026-09-26): a guild
 -- change is the census's to know, so it says so itself, for anyone in the

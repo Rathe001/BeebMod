@@ -255,7 +255,7 @@ P.SECONDS = 10
 function P.Measure(seconds)
 	seconds = math.max(2, math.min(120, seconds or P.SECONDS))
 	if P.on then
-		BT.Util.Print("CPU: already measuring. The list comes when it ends.")
+		BT.Util.Print("CPU: already measuring.")
 		return false
 	end
 	P.Start(seconds)

@@ -686,11 +686,10 @@ function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
 	page:Note("These are the game's own bags. Every slot works as it did. "
 		.. "An item's quality shows as a ring in its colour.")
-	page:Note("Switched off, the bags look like the game's again.", true)
 	-- the game's bag bar, from Metrics (Josh 2026-09-24): the bag window's page
 	-- is where you look for anything to do with your bags
 	local look = page:Section("Slots")
-	BT.Widgets.SwitchRow(look, "Quality rings", "A ring in the item's quality colour. Off, the game's own glow.",
+	BT.Widgets.SwitchRow(look, "Quality rings", "A ring in the item's quality colour, in place of the game's glow",
 		function() return M.Rings() end,
 		function(on)
 			BT.EnsureBound()
@@ -706,7 +705,7 @@ function M:BuildTab(panel)
 				paintQuality(b)
 			end
 		end)
-	BT.Widgets.SwitchRow(look, "Bag slots", "Your bag slots, across the foot of the backpack. Drag a bag onto one to put it on.",
+	BT.Widgets.SwitchRow(look, "Bag slots", "Along the bottom of the backpack. Drag a bag onto one to equip it.",
 		function() return M.BagSlots and M.BagSlots.On() or false end,
 		function(on)
 			if M.BagSlots then
@@ -720,9 +719,9 @@ function M:BuildTab(panel)
 	self.resetButton = move:SetControl(BT.Widgets.Button(move, "Reset", 62, 20))
 	self.resetButton:SetScript("OnClick", function()
 		M.ResetPosition()
-		U.Print("Bags: every bag window is back where the game puts it.")
+		U.Print("Bags: bag window positions reset.")
 	end)
-	local bar = page:Section("The game's own")
+	local bar = page:Section("Bag bar")
 	local space = BT.GetModule("bags")
 	self.hideBags = BT.Widgets.SwitchRow(bar, "Hide the bag bar",
 		"The backpack and bag slots by the action bars. The bag window has its own bag slots.",

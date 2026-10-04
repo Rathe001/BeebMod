@@ -67,7 +67,7 @@ end
 -- you read; keys are private and never reused.
 function BT.AddTag(label, colorIndex, key)
 	if not BT.settings then
-		return nil, "no book is open yet."
+		return nil, "not loaded yet."
 	end
 	label = type(label) == "string" and label:match("^%s*(.-)%s*$") or ""
 	if label == "" then

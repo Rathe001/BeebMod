@@ -735,14 +735,13 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("This is the game's own damage meter. Every button and every row still does what it did before.")
-	page:Note("Switched off, the meter looks like the game's again.", true)
+	page:Note("This is the game's own damage meter. Every button and row works as before.")
 	-- (Josh 2026-09-24) the two things this adds to the client's meter
 	local more = page:Section("Extras")
-	BT.Widgets.SwitchRow(more, "Per second", "Each row's amount per second after its total, as in 8,421 (93.5)",
+	BT.Widgets.SwitchRow(more, "Per second", "After each row's total, as in 8,421 (93.5)",
 		function() return opt("perSecond", true) and true or false end,
 		function(on) setOpt("perSecond", on) end)
-	BT.Widgets.SwitchRow(more, "Fight length", "How long the fight has run, in the header when there's room",
+	BT.Widgets.SwitchRow(more, "Fight length", "In the header, when there's room",
 		function() return opt("clock", true) and true or false end,
 		function(on) setOpt("clock", on) end)
 	page:Layout()

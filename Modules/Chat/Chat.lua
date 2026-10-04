@@ -847,7 +847,7 @@ function M.Newest(smf, wanted)
 		b:SetScript("OnEnter", function(self)
 			BT.Widgets.Tint(self.icon)
 			if GameTooltip then
-				BT.Dock.Tip(self, function() GameTooltip:AddLine("Newest line", 1, 1, 1) end)
+				BT.Dock.Tip(self, function() GameTooltip:AddLine("Scroll to bottom", 1, 1, 1) end)
 			end
 		end)
 		b:SetScript("OnLeave", function(self)
@@ -920,7 +920,7 @@ function M.Controls(frame, plain)
 			if BT.ChatReader then
 				BT.ChatReader.Toggle(frame)
 			end
-		end, "Open in a large window")
+		end, "Open large window")
 		controlButton(holder, 1, BT.Dock.CogCoord, nil, function()
 			M.OpenMenu(frame)
 		end, "Chat menu")
@@ -928,7 +928,7 @@ function M.Controls(frame, plain)
 			if frame.ScrollToBottom then
 				frame:ScrollToBottom()
 			end
-		end, "Newest line")
+		end, "Scroll to bottom")
 		controlButton(holder, 3, BT.Dock.ChevronCoord, false, function()
 			if frame.ScrollDown then
 				frame:ScrollDown()
@@ -1399,15 +1399,15 @@ function M:BuildTab(panel)
 		r.optName, r.default = name, default
 		self.rows[#self.rows + 1] = r
 	end
-	row("Side buttons on hover", "The scroll and menu buttons show only while you point at chat",
+	row("Side buttons on hover", "Scroll and menu buttons show only while you point at chat",
 		"buttons", true)
-	row("Edit box on top", "The box you type in sits above the tabs, clear of the newest line", "editOnTop", true)
-	row("Into the corner", "The main chat window sits in the bottom-left corner of the screen", "flush", true)
+	row("Chat box on top", "Above the tabs", "editOnTop", true)
+	row("Snap to corner", "Main chat window in the bottom-left corner", "flush", true)
 	row("Short channel names", "[1. General - Dun Morogh] becomes [1.Gen]", "shortChannels", true)
 	row("Timestamps", "Puts the time in front of each new line. Off while the game's own timestamps are on.", "timestamps", false)
-	row("Guild names in green", "A guild written in a line, such as <New Horizon>, turns guild green. Click it to get its /who in the chat box.", "guilds", true)
-	row("Clickable links", "Click a web address in chat to get it in a box you can copy from", "links", true)
-	local size = BT.Widgets.Row(page:Section("Text"), "Text size", "Sets the game's own text size for every chat window")
+	row("Guild names in green", "Guild names in chat, such as <New Horizon>, turn green. Click one to put its /who in the chat box.", "guilds", true)
+	row("Clickable links", "Click a web address in chat to copy it", "links", true)
+	local size = BT.Widgets.Row(page:Section("Text"), "Text size", "For every chat window")
 	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir)
 		local now = opt("size", 14) + dir
 		now = math.max(10, math.min(20, now))

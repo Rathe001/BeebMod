@@ -609,7 +609,7 @@ local function dockPage(body)
 	end))
 	body.sizeText = step.value
 	-- ONE WIDTH, WHATEVER IS IN IT (Josh 2026-09-24)
-	local wide = BT.Widgets.Row(sizeSec, "Dock width", "The same with or without the quests")
+	local wide = BT.Widgets.Row(sizeSec, "Dock width", "Stays the same with or without quests")
 	local wstep = wide:SetControl(BT.Widgets.Stepper(wide, function(dir)
 		BT.Dock.SetWidth(BT.Dock.Width() + dir * BT.Dock.WIDTH_STEP)
 		W.RefreshDock()
@@ -623,7 +623,7 @@ local function dockPage(body)
 			BT.EnsureBound()
 			BT.settings.dockLocked = on and true or nil
 		end)
-	local fade = BT.Widgets.Row(feel, "Fade in combat", "Fades while you fight, and comes back when you point at it")
+	local fade = BT.Widgets.Row(feel, "Fade in combat", "Shows again when you point at it")
 	body.fadeSeg = fade:SetControl(BT.Widgets.Segmented(fade, {
 		{ "off", "Off" }, { "soft", "70%" }, { "strong", "40%" },
 	}, function(key)
@@ -721,7 +721,7 @@ local function testingPage(body)
 	local Wd = BT.Widgets
 	local st = Wd.Stack(body)
 	body.stack = st
-	local look = st:Section("Look at")
+	local look = st:Section("Preview")
 	-- MADE-UP DATA (Josh 2026-09-27: "mock some data for me so we can show off
 	-- all the features/designs"): every feature at once, for screenshots -
 	-- nothing saved, and off again after a reload (Core/Demo.lua)
@@ -826,7 +826,7 @@ local function testingPage(body)
 		end
 		body.previews[p.key] = stepper
 	end
-	local clear = Wd.Row(prev, "Your own again", "Every shield back to what you have")
+	local clear = Wd.Row(prev, "Clear previews", "Shows your own shields again")
 	body.clearPreviews = clear:SetControl(Wd.Button(clear, "Clear", 62, 20))
 	body.clearPreviews:SetScript("OnClick", function()
 		for _, s in pairs(body.previews) do
@@ -840,7 +840,7 @@ local function testingPage(body)
 	-- slash commands for debugging. I'd actually prefer to use the 'Testing'
 	-- module with buttons/toggles going forward"). The reports that were
 	-- /bt debug, /bt timers and /bt stats; they go to your chat.
-	local ask = st:Section("Ask BeebMod")
+	local ask = st:Section("Reports")
 	for _, c in ipairs({
 		{ "whatButton", "What loaded", "Says in chat which modules loaded and what the game refused",
 			function() BT.WhatLoaded() end },
@@ -851,7 +851,7 @@ local function testingPage(body)
 					T.Report()
 				end
 			end },
-		{ "statsButton", "The book", "Says in chat how many characters the book holds",
+		{ "statsButton", "Saved characters", "Says in chat how many characters BeebMod has saved",
 			function() BT.StatsReport() end },
 	}) do
 		local row = Wd.Row(ask, c[2], c[3])
@@ -961,7 +961,7 @@ local function featurePage(panel, fkey)
 	panel.off.title = BT.Widgets.Label(panel.off, fkey == "dock" and "The Dock is off, and its logo and cog stay"
 		or ("%s is off"):format(f.title), nil, 0.72, 0.77, 0.75)
 	panel.off.title:SetPoint("TOPLEFT", 2, 0)
-	panel.off.blurb = BT.Widgets.Label(panel.off, "Everything in it is off. What you set inside it comes back when it does.",
+	panel.off.blurb = BT.Widgets.Label(panel.off, "Everything in it is off. Your settings come back when you switch it on.",
 		"small", 0.50, 0.55, 0.53)
 	panel.off.blurb:SetPoint("TOPLEFT", 2, -18)
 	local st = BT.Widgets.Stack(panel.body)

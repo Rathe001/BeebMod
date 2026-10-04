@@ -255,7 +255,7 @@ function C.Build(parent)
 				BT.Tip.Show(self, { near = true, build = function(t)
 					t:Header({ name = "Level " .. self.key:gsub("%-", "–"), sub = U.Commas(self.n) })
 					if self.live then
-						t:Foot({ { "Click", view.bands[self.key] and "count these levels again" or "count only these levels" } })
+						t:Foot({ { "Click", view.bands[self.key] and "show all levels" or "show only these levels" } })
 					end
 				end })
 			end
@@ -333,7 +333,7 @@ function C.Build(parent)
 					t:Header({ name = self.name:GetText(), sub = U.Commas(self.n) })
 					t:Note(("%d%% of these %s."):format(self.share or 0, U.Commas(self.of or 0)))
 					if self.pickable then
-						t:Foot({ { "Click", self.picked and "count everyone again" or "count only these" } })
+						t:Foot({ { "Click", self.picked and "show everyone" or "show only these" } })
 					end
 				end })
 			end
@@ -714,7 +714,7 @@ function C.PaintTiles(view, census)
 				card:Note(("%s of %s have a %s on file so far."):format(U.Commas(known), U.Commas(total), noun))
 			end
 			if n > 0 or chosen == k then
-				card:Foot({ { "Click", chosen == k and "count everyone again" or "count only these" } })
+				card:Foot({ { "Click", chosen == k and "show everyone" or "show only these" } })
 			end
 		end
 		-- THE BAR SPLITS THOSE ON FILE (Josh 2026-10-01: "Gender summary chart

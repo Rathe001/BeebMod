@@ -106,7 +106,7 @@ function M.Kill(info, how)
 	if new and on("expeditionDiscover", true) then
 		local _, worth = J.Worth(J.Store().enemies[info.npc])
 		-- minor: it gives way in a full queue (T.Push)
-		T.Push({ head = "New in the Field Journal", text = name, points = worth, icon = T.HunterIcon("discover"),
+		T.Push({ head = "New unique kill", text = name, points = worth, icon = T.HunterIcon("discover"),
 			onClick = openOn(info.npc), minor = true })
 	end
 	for _, a in ipairs(news or {}) do
@@ -441,7 +441,7 @@ function M.Tip()
 				t:Section()
 				t:Row("Next rank", ("%s at %s"):format(nextTitle, big(nextAt)))
 			end
-			t:Foot({ { "Click", "open the journal" } })
+			t:Foot({ { "Click", "open journal" } })
 			return
 		end
 		if nextAt then
@@ -469,7 +469,7 @@ function M.Tip()
 				{ big(math.floor(s.kills / hours + 0.5)), "an hour" },
 			})
 		end
-		t:Foot({ { "Click", "open the journal" } })
+		t:Foot({ { "Click", "open journal" } })
 	end })
 end
 
@@ -787,13 +787,13 @@ function M:BuildTab(panel)
 	if art then
 		page:Add(art)
 	end
-	page:Note("Every enemy you kill goes in the journal, with its kill count and a model of it. "
+	page:Note("The journal lists the enemies you've killed, with a kill count and a model for each. "
 		.. "Unique kills, masteries and commendations are worth points. Your points set your Expedition rank.")
 	page:Note("A kill counts when an enemy you tagged and fought dies in view, or when the game gives you "
 		.. "experience or loot for it. Click the Expedition line in the dock to open the journal.", true)
 
-	local journal = page:Section("The field journal")
-	local open = W.Row(journal, "Open the Expedition", "The Field Journal and Commendations, or type /bt expedition")
+	local journal = page:Section("Journal")
+	local open = W.Row(journal, "Open Expedition", "Or type /bt expedition")
 	open:SetControl(W.Button(open, "Open", 80, 20)):SetScript("OnClick", function()
 		BT.ExpeditionWindow.Show()
 	end)
@@ -805,7 +805,7 @@ function M:BuildTab(panel)
 			BT.EnsureBound()
 			BT.settings.expeditionToasts = v and true or false
 		end)
-	W.SwitchRow(toasts, "Every unique kill", "Shows a toast when an enemy goes in the journal for the first time",
+	W.SwitchRow(toasts, "Every unique kill", "Shows a toast the first time you kill an enemy",
 		function() return on("expeditionDiscover", true) end,
 		function(v)
 			BT.EnsureBound()
@@ -834,15 +834,15 @@ end
 function M:BuildDockTab(panel)
 	local W = BT.Widgets
 	local page = W.Stack(panel)
-	local line = page:Section("The line")
-	local shows = W.Row(line, "It shows", "Your Expedition points, or how many enemies you have killed")
+	local line = page:Section("Line")
+	local shows = W.Row(line, "Shows", "Your Expedition points, or how many enemies you have killed")
 	self.shows = shows:SetControl(W.Segmented(shows, { { "points", "Points" }, { "kills", "Kills" } },
 		function(key)
 			BT.EnsureBound()
 			BT.settings.expeditionShows = key
 			M.Update()
 		end, 62))
-	page:Note("Click the line to open the journal. Drag this tab on the rail to move the line in the dock.", true)
+	page:Note("Click the line to open the journal. Drag this tab to move the line in the dock.", true)
 	page:Layout()
 	self:RefreshTab()
 end
@@ -904,5 +904,5 @@ local function command()
 	BT.ExpeditionWindow.Toggle()
 end
 
-BT.Command("expedition", command, "open the journal of every enemy you have killed", "expedition")
+BT.Command("expedition", command, "open Expedition", "expedition")
 BT.Command("menagerie", command, nil, "expedition")

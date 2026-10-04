@@ -36,4 +36,14 @@ f:SetScript("OnEvent", function(_, event, addon, func)
 	if debugstack then
 		BT.blockedStack = debugstack(2, 10, 0)
 	end
+	-- KEPT IN THE SAVED FILE TOO (2026-10-04: "Interface action failed
+	-- because of an AddOn", and the list had gone with the reload)
+	if type(BeebModDB) == "table" then
+		BeebModDB.blockedDump = { at = BT.Util.Now(), lines = BT.blockedLog, stack = BT.blockedStack }
+	end
+end)
+
+-- the record is written when it happens; this only says there is one
+BT.Record("blockedDump", function()
+	return BT.blockedLog and #BT.blockedLog or nil
 end)

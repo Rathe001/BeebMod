@@ -95,6 +95,8 @@ Modules\Durability\Durability.lua
 Modules\ItemLevel\ItemLevel.lua
 Modules\Pickpocket\Pickpocket.lua
 Modules\Speed\Speed.lua
+Modules\XP\Dungeons.lua
+Modules\XP\Zones.lua
 Modules\XP\XP.lua
 Modules\Rep\Rep.lua
 Modules\PvP\PvP.lua

@@ -27,7 +27,7 @@ local M = BT.Module({
 	key = "resourcedisplay",
 	feature = "unitframes",
 	title = "Resource display",
-	blurb = "Draws your own nameplate flat, with combo points under it",
+	blurb = "Flat bars and combo points for your Personal Resource Display",
 	order = 58.5,
 })
 
@@ -609,11 +609,11 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("This is your own nameplate. The game shows it when the nameplateShowSelf setting is on.")
-	local plateSection = page:Section("The display")
+	page:Note("This is your own nameplate. Turn on Personal Resource Display in the game's Combat options to see it.")
+	local plateSection = page:Section("Display")
 	self.rows = {
-		switchRow(plateSection, "Theme the bars", "Flat bars in a one-pixel rim, in place of the game's art", "theme", true),
-		switchRow(plateSection, "Combo points under it", "One segment per point, for rogues and druids in cat form", "combo", true),
+		switchRow(plateSection, "Theme bars", "Flat bars with a thin border, in place of the game's art", "theme", true),
+		switchRow(plateSection, "Combo points", "One segment per point, for rogues and druids in cat form", "combo", true),
 	}
 	-- what the display is doing right now, as a row of its own: pinned to
 	-- the foot of the panel it sat on the rows once the page grew
@@ -630,9 +630,9 @@ function M:RefreshTab()
 	end
 	if self.found then
 		if not (plate and plate.IsVisible and plate:IsVisible()) then
-			self.found:SetText("Not on screen. It needs nameplateShowSelf on.")
+			self.found:SetText("Not on screen. Turn on Personal Resource Display.")
 		else
-			self.found:SetText(("%d pieces redrawn · %s"):format(M.lastCount or 0, M.Said()))
+			self.found:SetText(("%d bars themed · %s"):format(M.lastCount or 0, M.Said()))
 		end
 	end
 end

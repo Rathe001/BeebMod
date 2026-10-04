@@ -299,7 +299,7 @@ function M.Tip(owner)
 				t:Row(("|T%s:13:13:0:0|t %s"):format(tostring(r.icon), r.name), r.count, r.count <= 0 and "bad" or nil)
 			end
 		end
-		t:Foot({ { "Click", "open your bags" } })
+		t:Foot({ { "Click", "open bags" } })
 	end })
 end
 
@@ -496,7 +496,7 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("Bag slots used out of the slots you have. Under them go your class's reagents, such as a warlock's shards or a hunter's ammo.")
+	page:Note("Shows bag slots used out of the total, and your class's reagents, such as a warlock's shards or a hunter's ammo.")
 	page:Note("Amber at 4 free slots, red when full. Herb, enchanting, soul and ammunition bags count as reagent bags.", true)
 	-- (the switch that puts the game's bag bar away is on the Bag window's page)
 	page:Layout()

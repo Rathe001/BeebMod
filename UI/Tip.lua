@@ -483,25 +483,65 @@ function Builder:Section(title)
 		y = y + 4
 	end
 	self.y = y
+	self.afterRows = nil
+	self.indent = nil
+end
+
+-- A STEP IN, for the groups inside a section (Josh 2026-10-04: "slightly
+-- indent the zones/dungeons sections, and place an (also indented) divider
+-- between them"): subheadings, rows and dividers after it start this far
+-- in; the values stay on the right edge. Until the next section, or nil.
+function Builder:Indent(px)
+	self.indent = px
+end
+
+-- a hairline between groups inside a section, from the indent to the edge
+function Builder:Divider()
+	local x = PAD + (self.indent or 0)
+	local y = self.y + 6
+	local line = rect("ARTWORK", 1)
+	place(line, x, y)
+	line:SetSize(WIDTH - x - PAD, 1)
+	local h = BT.Widgets.HAIR
+	line:SetColorTexture(h[1], h[2], h[3], h[4] or 0.6)
+	-- as much room under the line as over it, with a subheading's own two
+	self.y = y + 1 + 4
+	self.afterRows = nil
+end
+
+-- a smaller heading inside a section, with no line over it: the section
+-- says what its rows are for, this which kind each group is (Josh
+-- 2026-10-04: "a 'Recommended content' heading for the zones/dungeons sub
+-- headings"). A gap above one that follows rows.
+function Builder:Subhead(title)
+	local y = self.y + (self.afterRows and 8 or 2)
+	local head = text(10)
+	head:SetText(title)
+	head:SetTextColor(DIM[1], DIM[2], DIM[3])
+	place(head, PAD + (self.indent or 0), y)
+	self.y = y + 13
+	self.afterRows = nil
 end
 
 -- a label and a value; `state` colours the value; `bar` = { value, color }
 -- draws a thin bar under the pair
-function Builder:Row(label, value, state, bar, labelColor)
+local function row(self, label, value, state, bar, labelColor, size)
+	size = size or 12
 	local y = self.y + 3
-	local v = text(12, T.NUMBER)
+	local v = text(size, T.NUMBER)
 	v:SetText(tostring(value or ""))
 	local c = colourOf(state)
 	v:SetTextColor(c[1], c[2], c[3])
 	v:SetPoint("TOPRIGHT", frame.body, "TOPRIGHT", -PAD, -y)
 	v:SetJustifyH("RIGHT")
-	local k = text(12)
+	local k = text(size)
 	k:SetText(label or "")
 	local lc = labelColor and colourOf(labelColor) or INK2
 	k:SetTextColor(lc[1], lc[2], lc[3])
-	place(k, PAD, y)
-	k:SetWidth(math.max(40, WIDTH - PAD * 2 - width(v, 60) - 10))
-	y = y + 15
+	local indent = self.indent or 0
+	place(k, PAD + indent, y)
+	k:SetWidth(math.max(40, WIDTH - PAD * 2 - indent - width(v, 60) - 10))
+	y = y + size + 3
 	if bar then
 		local w = WIDTH - PAD * 2
 		local track = rect("ARTWORK", 1)
@@ -519,6 +559,18 @@ function Builder:Row(label, value, state, bar, labelColor)
 		y = y + 6
 	end
 	self.y = y
+	self.afterRows = true
+end
+
+function Builder:Row(label, value, state, bar, labelColor)
+	row(self, label, value, state, bar, labelColor)
+end
+
+-- A QUIETER ROW, for a list under a subheading (Josh 2026-10-04: "Can we
+-- reduce the font size of the zones/dungeons maybe? The text is larger than
+-- their header"): the subheading's size, and closer together
+function Builder:ListRow(label, value, state, labelColor)
+	row(self, label, value, state, nil, labelColor, 10)
 end
 
 -- two or three tiles side by side: { { value, label, state, on }, ... }; a
@@ -753,6 +805,31 @@ function T.Texts()
 end
 
 -- does the last one say `words` anywhere
+-- the line that says `words`, or nil
+function T.LineOf(words)
+	for kind, list in pairs(pools) do
+		if kind:find("^text:") then
+			for i = 1, used[kind] or 0 do
+				local fs = list[i]
+				local s = fs:GetText()
+				if type(s) == "string" and s:find(words, 1, true) then
+					return fs
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- the colour a line is written in, r, g, b; nil if no line says `words`
+function T.ColourOf(words)
+	local fs = T.LineOf(words)
+	if fs and fs.GetTextColor then
+		return fs:GetTextColor()
+	end
+	return nil
+end
+
 function T.Says(words)
 	for _, s in ipairs(T.Texts()) do
 		if type(s) == "string" and s:find(words, 1, true) then

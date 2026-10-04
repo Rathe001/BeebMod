@@ -39,7 +39,7 @@ function M:BuildTab(parent)
 		stack:Add(art)
 	end
 	local tips = stack:Section("Tooltips")
-	self.notesRow = BT.Widgets.SwitchRow(tips, "Notes on tooltips", "Your note above the tooltip, tags and rating below it",
+	self.notesRow = BT.Widgets.SwitchRow(tips, "Notes on tooltips", "Your note, tags and rating on player tooltips",
 		function() return BT.settings and BT.settings.tooltip ~= false end,
 		function(on)
 			BT.EnsureBound()
@@ -98,7 +98,7 @@ end
 -- block (Josh 2026-09-27), which is dragged to move the row.
 function M:BuildDockTab(parent)
 	local stack = BT.Widgets.Stack(parent)
-	local dock = stack:Section("The row")
+	local dock = stack:Section("Row")
 	self.rowRow = BT.Widgets.SwitchRow(dock, "Target row", "Your target, their tags and your note",
 		function() return BT.settings and BT.settings.targetRow ~= false end,
 		function(on)
@@ -109,7 +109,7 @@ function M:BuildDockTab(parent)
 			end
 		end)
 	self.rowRow.field = "targetRow"
-	stack:Note("Drag this tab on the rail to move the row in the dock.", true)
+	stack:Note("Drag this tab to move the row in the dock.", true)
 	stack:Layout()
 end
 
@@ -446,7 +446,7 @@ BT.Command("note", function(rest)
 		U.Print(("Ledger: couldn't write a note on %s. Target them first."):format(name))
 	end
 	BT.Find.Refresh()
-end, "note [name] <text|clear> - write or clear a note, on your target if you give no name. With no text it reads the note back.", "ledger")
+end, "note [name] <text|clear> - write, read or clear a note. With no name, uses your target.", "ledger")
 
 -- A tag on someone, or off them: /bt tag [name] <tag>. By what you see
 -- (Josh 2026-09-23, audit): a tag of yours is "tag3" inside and "Tank" on
@@ -542,4 +542,4 @@ BT.Command("rate", function(rest)
 	local p = N.SetRating(key, math.floor(want), info)
 	local rating = p and p.rating
 	U.Print(rating and ("Ledger: rated %s %d/5."):format(name, rating) or ("Ledger: couldn't rate " .. name .. "."))
-end, "rate [name] <1-5|clear> - rate someone. With no number it reads the rating back.", "ledger")
+end, "rate [name] <1-5|clear> - rate someone. With no number, shows their rating.", "ledger")

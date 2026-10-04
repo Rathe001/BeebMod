@@ -3063,6 +3063,15 @@ if ok then
 				if (r.text._text or ""):find("Iverron", 1, true) then titleRow = r end
 			end
 			mod.QuestTip(titleRow, titleRow.quest)
+			-- HIDE OBJECTIVES, NOT FOLD (Josh 2026-10-04: "Instead of 'fold' say
+			-- 'hide objectives'"), and show them once they are hidden
+			assert(BT.Tip.Says("hide objectives") and not BT.Tip.Says("fold"),
+				"right-click hides the objectives: " .. table.concat(BT.Tip.Texts(), " | "))
+			titleRow:GetScript("OnClick")(titleRow, "RightButton")
+			mod.QuestTip(titleRow, titleRow.quest)
+			assert(BT.Tip.Says("show objectives"), "and shows them again once hidden")
+			titleRow:GetScript("OnClick")(titleRow, "RightButton")
+			mod.QuestTip(titleRow, titleRow.quest)
 			local function tipTime()
 				for _, t in ipairs(BT.Tip.Texts()) do
 					if t:find(" left$") then return t end
@@ -3883,6 +3892,15 @@ if ok then
 			_G.CheckInteractDistance = function() return nil end
 			F.Paint(target, F.Source("target"))
 			assert(target._alpha == 1, "no answer at all is not faded")
+			-- not asked in a fight: the client refuses it there, and says
+			-- "Interface action failed because of an AddOn" (2026-10-04)
+			local hadLockdown = _G.InCombatLockdown
+			_G.InCombatLockdown = function() return true end
+			local askedInFight = false
+			_G.CheckInteractDistance = function() askedInFight = true return false end
+			F.Paint(target, F.Source("target"))
+			assert(not askedInFight and target._alpha == 1, "in a fight the distance is not asked, and nothing fades")
+			_G.InCombatLockdown = hadLockdown
 			-- THE LOOK FOUR TIMES A SECOND FADES AS FAR AS THE SETTING SAYS
 			-- (Josh 2026-09-30, review): it faded by the strong figures, whatever
 			-- was chosen, and undid a light fade between paints
@@ -4036,7 +4054,7 @@ if ok then
 			for _, cell in pairs(mod.raidCells) do
 				local m = cell.bmFakeDispel
 				if m and m._shown ~= false and m.pattern.path then
-					seen[m.pattern.path:match("(%a+)$")] = true
+					seen[m.pattern.path:gsub("%-fine$", ""):match("(%a+)$")] = true
 				end
 			end
 			for _, kind in ipairs({ "magic", "curse", "poison", "disease", "bleed" }) do
@@ -4048,9 +4066,11 @@ if ok then
 			local t = mod.previewTarget.bmFakeAuras.debuffs
 			assert(#t == 5 and t[2].count._text == "5", "the target's debuffs, sunder at five")
 			assert(t[1]._points.TOPLEFT.relPoint == "BOTTOMLEFT", "under the target")
-			-- A PATTERN A TYPE: stripes for magic, a crosshatch for a curse
-			assert(doomed.bmFakeDispel.pattern.path:find("magic$"), "the doom's stripes")
-			assert(cursed.bmFakeDispel.pattern.path:find("curse$"), "the curse's crosshatch")
+			-- A PATTERN A TYPE: sparks for magic, smoke for a curse - at half
+			-- the size on a raid cell (Josh 2026-10-04: "Should we do the same
+			-- for the debuff textures?")
+			assert(doomed.bmFakeDispel.pattern.path:find("magic%-fine$"), "the doom's sparks, fine")
+			assert(cursed.bmFakeDispel.pattern.path:find("curse%-fine$"), "the curse's smoke, fine")
 			-- THE TARGET SAYS MORE: its health as a number beside its share
 			local t = mod.previewTarget
 			assert(t and t.hpText._text == "1.1K", "the target's health, abbreviated: " .. tostring(t and t.hpText._text))
@@ -4067,6 +4087,44 @@ if ok then
 			local cp = t.cast._points
 			assert(cp.BOTTOMLEFT.rel == t.power and cp.BOTTOMRIGHT.rel == t.power and t.cast._height == K.power,
 				"the cast covers the power bar")
+			-- THE SPELL'S PICTURE AND NAME (Josh 2026-10-04: "The target unit
+			-- frame and nameplates don't show the name of the spell or icon")
+			do
+				local hadDur, hadInfo, hadNotes, hadDump = _G.UnitCastingDuration, _G.UnitCastingInfo, F.castNotes, BeebModDB.castDump
+				F.castNotes = {}
+				_G.UnitCastingDuration = function() return { duration = true } end
+				_G.UnitCastingInfo = function() return "Fireball", "", 135812, 0, 0, false, 7, false end
+				F.PaintCast(t, F.Source("target"))
+				assert(t.cast.text._text == "Fireball" and t.cast.icon._texture == 135812 and t.cast.icon._shown ~= false,
+					"the name and the picture: " .. tostring(t.cast.text._text) .. " " .. tostring(t.cast.icon._texture))
+				assert(t.cast.icon._width == K.power and t.cast.text._points.LEFT.rel == t.cast.icon,
+					"the picture as tall as the bar, the name after it")
+				assert(BeebModDB.castDump and BeebModDB.castDump.lines[1]:find('name="Fireball"', 1, true)
+					and BeebModDB.castDump.lines[1]:find("icon=135812", 1, true),
+					"what the game gave, kept for the next reload: " .. tostring(BeebModDB.castDump and BeebModDB.castDump.lines[1]))
+				assert(t.cast.rim._alpha == 0, "a cast the game does not call important has no rim")
+				-- A CAST TO STOP (the same day: "highlights high priority casts that
+				-- should be interrupted"): the game's own word, by the spell's number
+				local hadSpell = _G.C_Spell
+				local asked
+				_G.C_Spell = { IsSpellImportant = function(id) asked = id return id == 133 end }
+				_G.UnitCastingInfo = function() return "Fireball", "", 135812, 0, 0, false, 7, false, 133 end
+				F.PaintCast(t, F.Source("target"))
+				assert(asked == 133 and t.cast.rim._alpha == 1, "an important cast gets the red rim")
+				_G.UnitCastingInfo = function() return "Frostbolt", "", 135846, 0, 0, false, 8, false, 116 end
+				F.PaintCast(t, F.Source("target"))
+				assert(t.cast.rim._alpha == 0, "and the next one, not important, loses it")
+				_G.C_Spell = hadSpell
+				_G.UnitCastingInfo = function() return "Fireball", "", 135812, 0, 0, false, 7, false end
+				-- no name and no picture from the game: an empty bar, the name's
+				-- place back at the left end, and nothing tested that might be hidden
+				_G.UnitCastingInfo = function() return nil end
+				F.PaintCast(t, F.Source("target"))
+				assert(t.cast.text._text == "" and t.cast.icon._shown == false and t.cast.text._points.LEFT.rel ~= t.cast.icon,
+					"no picture, the name at the left end")
+				_G.UnitCastingDuration, _G.UnitCastingInfo, F.castNotes, BeebModDB.castDump = hadDur, hadInfo, hadNotes, hadDump
+				F.PaintCast(t, F.Source("target"))
+			end
 			assert(F.KINDS.party.w == 160 and F.KINDS.party.h == 60, "and a party cell the size the player frame was")
 			-- A LIGHT UNDER THE POINTER, on every unit frame
 			t:GetScript("OnEnter")(t)
@@ -4084,6 +4142,20 @@ if ok then
 				if f.bmKind == "party" then cellNames[#cellNames + 1] = f.name._text end
 			end
 			assert(#cellNames == 4 and cellNames[4]:find("Ashby$"), "four made-up people under the real you: " .. table.concat(cellNames, ","))
+			-- SHIELDS BOTH WAYS (Josh 2026-10-04: "add some shields to the
+			-- Made-up people"): one that fits after the health, one too big
+			local fits, tooBig = 0, 0
+			for _, f in ipairs(mod.previews) do
+				if f.bmKind == "party" then
+					if (f.shield._value or 0) > 0 and f.shieldLattice._alpha == 1 then
+						fits = fits + 1
+					end
+					if (f.shieldOver._value or 0) > 0 and f.shieldOverLattice._alpha == 1 then
+						tooBig = tooBig + 1
+					end
+				end
+			end
+			assert(fits == 2 and tooBig == 2, "two shields that fit and two too big: " .. fits .. " " .. tooBig)
 			assert(mod.previews[1]._points.TOPLEFT.y == -(F.KINDS.party.h + mod.PARTY_STEP), "the first place left for you")
 			assert(mod.previews[1].value._shown == false, "a party cell writes no figure: the bar says it")
 			-- A PET AND A TARGET FOR EVERY MEMBER: the room for a pet is kept
@@ -4703,10 +4775,10 @@ if ok then
 			local gapNear, gapFar = points[2][1] - points[1][1], points[#points - 1][1] - points[#points - 2][1]
 			assert(gapNear < gapFar, "faster the nearer the end: " .. gapNear .. " then " .. gapFar)
 			assert(points[1][2].a == 1 and points[2][2].a == 0, "lit, then dark, then lit")
-			-- DAMAGE FROM THREE (Josh 2026-10-03: "start the dot blinker at 3
-			-- seconds"): a heal's still from five, each its own curve
-			assert(points[#points][1] == T.BLINK_FROM.hot and T.BLINK_FROM.hot == 5,
-				"a heal's lane blinks from 5 seconds: " .. tostring(points[#points][1]))
+			-- FROM THREE (Josh 2026-10-03: "start the dot blinker at 3
+			-- seconds"; 2026-10-04: "make heals also 3 seconds"), each its own curve
+			assert(points[#points][1] == T.BLINK_FROM.hot and T.BLINK_FROM.hot == 3,
+				"a heal's lane blinks from 3 seconds: " .. tostring(points[#points][1]))
 			points = {}
 			local dotCurve = T.BlinkCurve("dot")
 			assert(dotCurve and dotCurve ~= T.BlinkCurve("hot"), "damage has a curve of its own")
@@ -4727,8 +4799,11 @@ if ok then
 					end
 					return ""
 				end
-				assert(said(dotRow):find("last 3 seconds", 1, true) and said(hotRow):find("last 5 seconds", 1, true),
+				assert(said(dotRow):find("last 3 seconds", 1, true) and said(hotRow):find("last 3 seconds", 1, true),
 					"and each switch says its own: " .. said(dotRow) .. " / " .. said(hotRow))
+				-- and whose lanes it is for, since the two are on two pages
+				assert(said(dotRow):find("damage over time bars", 1, true) and said(hotRow):find("heal over time bars", 1, true),
+					"each names its lanes: " .. said(dotRow) .. " / " .. said(hotRow))
 			end
 			-- one switch for heals, one for damage; off, a lane without it
 			T.SetBlinks(false, "hot")
@@ -4793,13 +4868,20 @@ if ok then
 			local pictured
 			dotButton.SetIcon = function(_, tex) pictured = tex end
 			moonGroup.opts.initializeFrame(dotButton)
-			assert(dotButton:GetHeight() == T.DOT_H and T.DOT_H > T.LANE_H.target, "thicker than a heal's")
+			local laneH = T.LaneHeight("target", "dot")
+			assert(laneH == T.DOT_H + T.ICON_MORE and dotButton:GetHeight() == laneH and T.DOT_H > T.LANE_H.target,
+				"thicker than a heal's")
 			-- THE SPELL'S PICTURE (Josh 2026-10-03: "include small spell icons
-			-- on the dot timers"): a square at the left the client fills, and
-			-- the bar after it
-			assert(pictured and pictured == dotButton.bmIcon and pictured._width == T.DOT_H - 2,
+			-- on the dot timers"), BIGGER THAN ITS BAR (Josh 2026-10-04: "Do we
+			-- have room to make the spell icon larger"): a square as tall as the
+			-- lane at its left, the client fills it, and the bar after it, its
+			-- own height, in the middle of the lane
+			assert(pictured and pictured == dotButton.bmIcon and pictured._width == laneH - 2,
 				"the client puts the spell's picture in a square at the lane's left")
-			assert(dotButton.bmBar._points.TOPLEFT.x == T.DOT_H + 1, "and the bar starts after it")
+			local bp = dotButton.bmBar._points
+			assert(bp.LEFT.x == laneH + 1 and bp.RIGHT and dotButton.bmBar._height == T.DOT_H,
+				"and the bar starts after it, as tall as it was")
+			assert(moonGroup.opts.layout.elementHeight == laneH, "each line of the stack as tall as the picture")
 			T.SetBlinks(false, "dot")
 			assert(T.LaneStyle("dot") == "still" and target.bmAuras.timers.dot ~= stack,
 				"the damage's switch makes its lanes again")
@@ -4950,6 +5032,12 @@ if ok then
 				patterns = patterns + 1
 				assert(mark.bmPatterns[id], "a pattern for type " .. id)
 			end
+			-- the full size on a party cell, half on a raid cell
+			local partyMark, raidMark = realCF("Button"), realCF("Button")
+			A.DispelButton(F.KINDS.party.w, F.KINDS.party.h)(partyMark)
+			A.DispelButton(F.KINDS.raid.w, F.KINDS.raid.h)(raidMark)
+			assert(partyMark.bmPatterns[1]._texture == A.PATTERN[1] and raidMark.bmPatterns[1]._texture == A.PATTERN_FINE[1],
+				"full size on a party cell, half on a raid cell: " .. tostring(raidMark.bmPatterns[1]._texture))
 			assert(#bound == 4 + 1 + patterns, "four edges, the wash and the patterns, bound: " .. #bound)
 
 			-- a button, dressed as the client makes it: an icon on a black edge
@@ -4997,6 +5085,34 @@ if ok then
 			assert(Bf.enchants[1]._shown ~= false and Bf.enchants[2]._shown == false, "one weapon enchant")
 			assert(Bf.enchants[1]._points.TOPRIGHT.x == -Bf.STEP, "past the campfire")
 			assert(Bf.enchants[1].words._text == "24 m", "with its time: " .. tostring(Bf.enchants[1].words._text))
+			-- A SLOT AT A TIME, ON THIS CLIENT (Josh 2026-10-04: "Weapon enchants
+			-- (rockbiter) aren't showing on the buff bar"): C_Item's list, as the
+			-- game's own buff frame reads it, with the enchant's own picture
+			do
+				local hadItem, hadOld = _G.C_Item, _G.GetWeaponEnchantInfo
+				_G.GetWeaponEnchantInfo = nil
+				_G.C_Item = setmetatable({ GetWeaponEnchantInfo = function(slot)
+					if slot == 0 then
+						return { { hasEnchant = true, enchantType = 0, timeLeft = 3600000, charges = 0, enchantID = 29,
+							enchantIconID = 136086 } }
+					end
+					return {}
+				end }, { __index = hadItem })
+				local read = Bf.ReadEnchants()
+				assert(#read == 1 and read[1].slot == 16 and read[1].left == 3600 and read[1].icon == 136086,
+					"Rockbiter on the main hand, an hour left, its own picture")
+				Bf.Update()
+				assert(Bf.enchants[1]._shown ~= false and Bf.enchants[1].icon._texture == 136086
+					and Bf.enchants[1].words._text == "1 h",
+					"in the tray, with the enchant's picture: " .. tostring(Bf.enchants[1].icon._texture))
+				-- and the old call, where a client answers 1 for yes
+				_G.C_Item = hadItem and setmetatable({ GetWeaponEnchantInfo = false }, { __index = hadItem }) or nil
+				_G.GetWeaponEnchantInfo = function() return 1, 600000, 0, 29, nil end
+				read = Bf.ReadEnchants()
+				assert(#read == 1 and read[1].left == 600, "an old client's 1 for yes counts too")
+				_G.C_Item, _G.GetWeaponEnchantInfo = hadItem, hadOld
+				Bf.Update()
+			end
 			assert(buffs.timedPin._points.TOPRIGHT.x == -2 * Bf.STEP, "and the timed ones start past both")
 			-- no debuffs, out of a fight: that row's tray is put away
 			assert(debuffs.surface._shown == false and buffs.surface._shown ~= false,
@@ -5091,6 +5207,87 @@ if ok then
 			assert(room and target.heals:GetParent() == room and room._points.BOTTOMRIGHT
 				and room._points.BOTTOMRIGHT.x == over and room._points.BOTTOMRIGHT.rel == target.health,
 				"the target's heal may run past the end of its health, by " .. over)
+			-- A SHIELD WHERE DANDER'S FRAMES PUTS IT (Josh 2026-10-04: "Dander's
+			-- default"): after the heal while it fits,
+			-- from the bar's right-hand end back over the health when it does not
+			local sh, over = target.shield, target.shieldOver
+			assert(sh:GetParent() == target.health and over:GetParent() == target.health,
+				"both inside the health bar, cut at its edges")
+			assert(sh._points.TOPLEFT.relPoint == "TOPRIGHT" and sh._points.TOPLEFT.rel ~= target.health
+				and not sh.bmBackwards, "one starts where the heal ends")
+			assert(over._points.TOPRIGHT.rel == target.health and over._points.TOPRIGHT.relPoint == "TOPRIGHT"
+				and over._points.BOTTOMRIGHT.rel == target.health and over.bmBackwards,
+				"the other runs back from the bar's end")
+			for _, bar in ipairs({ sh, over }) do
+				assert(bar._barColor[4] == 0, "its own fill unseen")
+			end
+			-- A HONEYCOMB IN A RIM (the same day: "looks more like BeebMod
+			-- instead of a Dander's Frames copy", "C: honeycomb")
+			for _, cut in ipairs({ target.shieldLattice, target.shieldOverLattice }) do
+				assert(cut:GetFrameLevel() > target.heals:GetFrameLevel() and cut:GetFrameLevel() < target.over:GetFrameLevel(),
+					"over the heal, under the words: " .. tostring(cut:GetFrameLevel()))
+				assert(cut.lattice._texture == F.SHIELD_PATTERN and cut.lattice._vertex[1] == F.SHIELD_COLOUR[1]
+					and cut.lattice._vertex[3] == F.SHIELD_COLOUR[3], "an ice-blue honeycomb")
+				assert(cut.top._points.TOPLEFT and cut.bottom._points.BOTTOMRIGHT and cut.edge._points.TOPLEFT.x == 0
+					and cut.inner._points.TOPLEFT.x > 0, "in a one-pixel rim, dark then light at its left end")
+			end
+			-- FINER ON A SHORT BAR (the same day: "scale down the textures of
+			-- the raid unit frames a bit"): the target and the party keep the
+			-- larger, everything shorter wears the finer
+			for kind, want in pairs({ target = F.SHIELD_PATTERN, party = F.SHIELD_PATTERN, raid = F.SHIELD_FINE,
+				tank = F.SHIELD_FINE, focus = F.SHIELD_FINE, boss = F.SHIELD_FINE, plate = F.SHIELD_FINE }) do
+				local f = F.Build(_G.UIParent, kind, nil, false)
+				assert(f.shieldLattice.lattice._texture == want and f.shieldOverLattice.lattice._texture == want,
+					kind .. " wears " .. tostring(want) .. ": " .. tostring(f.shieldLattice.lattice._texture))
+			end
+			-- it fits: half the health missing, a fifth of it shielded
+			F.Paint(target, F.Fake({ name = "Beeb", class = "PRIEST", hp = 50, max = 1000, shield = 20 }))
+			assert(sh._value == 200 and target.shieldLattice._alpha == 1 and target.shieldOverLattice._alpha == 0,
+				"a shield that fits goes after the health")
+			assert(sh._width == target.health._width or sh._width == F.KINDS.target.w,
+				"the shield's bar is as wide as the health's: " .. tostring(sh._width))
+			-- too big: full health, a quarter shielded
+			F.Paint(target, F.Fake({ name = "Beeb", class = "PRIEST", hp = 100, max = 1000, shield = 25 }))
+			assert(over._value == 250 and target.shieldLattice._alpha == 0 and target.shieldOverLattice._alpha == 1,
+				"a shield too big to fit shows whole, from the bar's end: " .. tostring(over._value))
+			-- THE CLIENT'S WORD ON FITTING: two calculators, one clamped to the
+			-- health missing (and its "too big"), one to the most health
+			do
+				local hadCreate, hadDetailed, hadCalcs = _G.CreateUnitHealPredictionCalculator,
+					_G.UnitGetDetailedHealPrediction, F.calcs
+				local hadClamp = Enum.UnitDamageAbsorbClampMode
+				Enum.UnitDamageAbsorbClampMode = { MissingHealth = 0, MissingHealthWithoutIncomingHeals = 1, MaximumHealth = 2 }
+				local made = {}
+				_G.CreateUnitHealPredictionCalculator = function()
+					local calc = { mode = 0 }
+					function calc:SetDamageAbsorbClampMode(m) self.mode = m end
+					-- a shield of 300 on a unit missing 100
+					function calc:GetDamageAbsorbs()
+						if self.mode == 2 then
+							return 300, false
+						end
+						return 100, true
+					end
+					made[#made + 1] = calc
+					return calc
+				end
+				_G.UnitGetDetailedHealPrediction = function() end
+				F.calcs = nil
+				local fit, whole, tooBig = F.Source("bmshieldtest"):Shields()
+				assert(fit == 100 and whole == 300 and tooBig == true,
+					"what fits, the whole, and too big: " .. tostring(fit) .. " " .. tostring(whole) .. " " .. tostring(tooBig))
+				F.Source("bmshieldtest"):Shields()
+				assert(#made == 2, "one calculator for each clamp, made once: " .. #made)
+				-- no calculator: the plain total, from the bar's end
+				_G.CreateUnitHealPredictionCalculator = nil
+				local hadTotal = _G.UnitGetTotalAbsorbs
+				_G.UnitGetTotalAbsorbs = function() return 75 end
+				fit, whole, tooBig = F.Source("bmshieldtest"):Shields()
+				assert(fit == nil and whole == 75 and tooBig == nil, "without a calculator, the total")
+				_G.UnitGetTotalAbsorbs = hadTotal
+				_G.CreateUnitHealPredictionCalculator, _G.UnitGetDetailedHealPrediction, F.calcs = hadCreate, hadDetailed, hadCalcs
+				Enum.UnitDamageAbsorbClampMode = hadClamp
+			end
 			assert(target.health._points.TOPLEFT.x == 0 and target.health._points.TOPLEFT.y == 0,
 				"the health bar reaches the frame's edge: no dark border round it")
 			assert(F.Build(_G.UIParent, "party", nil, true).healRoom, "so may a party cell's, which is yours too")			-- RESTING (Josh 2026-09-28: "I am not seeing the resting icon"): the
@@ -5109,8 +5306,9 @@ if ok then
 			assert(not me.rest:IsShown(), "and gone when you are not")
 			_G.IsResting = nil
 			local raidCell = F.Build(_G.UIParent, "raid", nil, true)
-			assert(raidCell.healRoom == nil and raidCell.heals:GetParent() == raidCell.health,
-				"a raid cell's stays inside its health")
+			assert(raidCell.healRoom == nil and raidCell.heals:GetParent() == raidCell.health
+				and raidCell.shield:GetParent() == raidCell.health,
+				"a raid cell's heal and shield stay inside its health")
 			A.Attach(target, "target")
 			local row = target.bmAuras.debuffs
 			assert(row and row._points.TOPLEFT and row._points.TOPLEFT.rel == target
@@ -6570,7 +6768,7 @@ if ok then
 			tip.AddLine = function(_, text) said[#said + 1] = text end
 			tip.SetInventoryItem = function() said[#said + 1] = "the game's" end
 			tip.NumLines = function() return lines end
-			assert(S.Tip(bs[2]) and said[1] == "Bag slot" and said[2] == "Drag a bag here to put it on.",
+			assert(S.Tip(bs[2]) and said[1] == "Bag slot" and said[2] == "Drag a bag here to equip it.",
 				"an empty slot says what it is and what to do: " .. table.concat(said, " | "))
 			said = {}
 			_G.GetInventoryItemID = function(_, inv) return inv == 20 and 4496 or nil end
@@ -6976,7 +7174,7 @@ if ok then
 			local cog = BT.Dock.Cog()
 			cog.button:GetScript("OnEnter")(cog.button)
 			-- in the dock's own tooltip, with its click (Josh 2026-09-27)
-			assert(BT.Tip.Says("Settings") and BT.Tip.Says("open the settings"),
+			assert(BT.Tip.Says("Settings") and BT.Tip.Says("open settings"),
 				"hovering the cog says Settings, and what a click does: " .. table.concat(BT.Tip.Texts(), " | "))
 			BT.Tip.Hide()
 		end },		{ "a tooltip's pieces come back plain", function()
@@ -7898,6 +8096,20 @@ if ok then
 
 			mod.Compose(tip, "target")
 			local at = (body._points or {}).LEFT
+			-- A BARE TITLE IS STILL A TITLE (Josh 2026-10-04: an innkeeper's
+			-- tooltip said "Humanoid", and "Innkeeper" on a line of its own)
+			do
+				local hadText, hadType = body.GetText, _G.UnitCreatureType
+				body.GetText = function() return "Innkeeper" end
+				_G.UnitCreatureType = function() return "Humanoid" end
+				local detail, spoken = mod.DetailLine("target", false)
+				assert(detail:find("<Innkeeper>", 1, true) and not detail:find("Humanoid", 1, true) and spoken.Innkeeper,
+					"the title in place of the type, and the client's own line not said twice: " .. tostring(detail))
+				body.GetText = function() return "Level 30 Humanoid" end
+				detail = mod.DetailLine("target", false)
+				assert(detail:find("Humanoid", 1, true) and not detail:find("<", 1, true), "no title: the type: " .. tostring(detail))
+				body.GetText, _G.UnitCreatureType = hadText, hadType
+			end
 			assert(at and at.x == 12,
 				("the body comes across to meet it (%s)"):format(tostring(at and at.x)))
 
@@ -8431,20 +8643,180 @@ if ok then
 			-- RIGHT-CLICK TO START AGAIN (Josh 2026-09-28): the tooltip says so,
 			-- and a right-click on the line does it
 			section:GetScript("OnEnter")(section)
-			assert(BT.Tip.Says("RIGHT-CLICK") and BT.Tip.Says("start the pace again"),
+			assert(BT.Tip.Says("RIGHT-CLICK") and BT.Tip.Says("reset session"),
 				"the tooltip names the right-click: " .. table.concat(BT.Tip.Texts(), " | "))
+			-- DUNGEONS FOR YOUR LEVEL (Josh 2026-10-04): the old ones and the
+			-- new, each side its own, none before the first
+			local D = BT.Dungeons
+			local function names(list)
+				local out = {}
+				for _, d in ipairs(list) do out[#out + 1] = d.name end
+				return table.concat(out, ",")
+			end
+			assert(names(D.For(15, "Horde")) == "Ragefire Chasm,Ruins of Lordaeron",
+				"a level 15 Horde player: " .. names(D.For(15, "Horde")))
+			assert(names(D.For(15, "Alliance")) == "The Hall of Thanes",
+				"a level 15 Alliance player: " .. names(D.For(15, "Alliance")))
+			assert(#D.For(12, "Horde") == 0 and #D.For(nil, "Horde") == 0, "none before level 13")
+			-- NEAREST THE SWEET SPOT, THREE AT MOST (the same day: "the average of
+			-- the min and max level. We can probably cap it to 3")
+			assert(names(D.For(42, "Alliance")) == "Razorfen Downs,Krol'dok Stronghold,Scarlet Monastery Cathedral",
+				"new and old side by side at 42, nearest the middle first: " .. names(D.For(42, "Alliance")))
+			assert(#D.For(59, "Horde") == 3 and #D.For(59, "Horde", 9) == 9, "nine at 59, three shown")
+			assert(#D.For(15, nil) == 3, "with no side known, every one")
+			-- HOW HARD, BY WHERE YOU ARE IN THE RANGE (Josh 2026-10-04: "13-14
+			-- orange, 15-16 yellow, 17-18 green")
+			do
+				local U = BT.Util
+				local thanes = { lo = 13, hi = 18 }
+				for level, want in pairs({ [13] = "verydifficult", [14] = "verydifficult", [15] = "difficult",
+					[16] = "difficult", [17] = "standard", [18] = "standard" }) do
+					assert(D.RangeColour(thanes, level, "dungeon") == U.DIFFICULTY[want],
+						"The Hall of Thanes at " .. level .. " is " .. want)
+				end
+				-- a zone in halves: yellow while you start it, green after
+				local westfall = { lo = 10, hi = 20 }
+				assert(D.RangeColour(westfall, 10, "zone") == U.DIFFICULTY.difficult
+					and D.RangeColour(westfall, 14, "zone") == U.DIFFICULTY.difficult
+					and D.RangeColour(westfall, 16, "zone") == U.DIFFICULTY.standard, "Westfall yellow to 14, green from 15")
+			end
+			-- A RANGE'S TOP LEVEL IS THE ONE YOU LEAVE IT AT, but the cap's
+			assert(not D.Takes({ lo = 13, hi = 18 }, 18) and D.Takes({ lo = 13, hi = 18 }, 17)
+				and D.Takes({ lo = 58, hi = 60 }, 60), "18 is past 13-18; 60 is still in 58-60")
+			-- NEXT, WHEN NONE IS YET (Josh 2026-10-04: "I am level 10 so I think I
+			-- should see 1 dungeon showing up right?")
+			assert(names(D.Next(10, "Alliance")) == "The Hall of Thanes" and names(D.Next(10, "Horde")) == "Ragefire Chasm",
+				"at 10, the first dungeon each side gets, at 13")
+			assert(#D.Next(5, "Horde") == 0, "but not eight levels off")
+			assert(names(D.Next(10, nil)) == "Ragefire Chasm,The Hall of Thanes", "two that start together, both")
+			do
+				local hadLevel, hadMap = _G.UnitLevel, _G.C_Map
+				_G.C_Map = nil
+				BT.Zones.list = nil
+				local zoneNames = {}
+				for _, z in ipairs(BT.Zones.For(10, "Horde")) do zoneNames[#zoneNames + 1] = z.name end
+				assert(table.concat(zoneNames, ",") == "Silverpine Forest,The Barrens",
+					"at 10, the zones after the starting ones: " .. table.concat(zoneNames, ","))
+				_G.UnitLevel = function() return 10 end
+				section:GetScript("OnEnter")(section)
+				assert(BT.Tip.Says("Next dungeon") and BT.Tip.Says("Ragefire Chasm") and BT.Tip.Says("13-18")
+					and not BT.Tip.Says("Durotar"),
+					"the tooltip at 10: " .. table.concat(BT.Tip.Texts(), " | "))
+				-- HOW HARD, BY WHERE A RANGE STARTS (the same day: "color the
+				-- zones/dungeons by the relative difficulty"): The Barrens from 10
+				-- is about right at 10, Ragefire Chasm from 13 needs somebody
+				local hadRange = _G.GetQuestGreenRange
+				_G.GetQuestGreenRange = function() return 5 end
+				section:GetScript("OnEnter")(section)
+				local yellow, orange = BT.Util.DIFFICULTY.difficult, BT.Util.DIFFICULTY.verydifficult
+				local r, g = BT.Tip.ColourOf("The Barrens")
+				assert(r == yellow[1] and g == yellow[2], "a zone that starts at your level is yellow: " .. tostring(g))
+				r, g = BT.Tip.ColourOf("Ragefire Chasm")
+				assert(r == orange[1] and g == orange[2], "a dungeon three levels up is orange: " .. tostring(g))
+				r, g = BT.Tip.ColourOf("13-18")
+				assert(r ~= orange[1] or g ~= orange[2], "and the range itself stays plain")
+				-- A STEP IN, A LINE BETWEEN (the same day: "slightly indent the
+				-- zones/dungeons sections, and place an (also indented) divider")
+				local heading, zone = BT.Tip.LineOf("RECOMMENDED CONTENT"), BT.Tip.LineOf("The Barrens")
+				local sub = BT.Tip.LineOf("Next dungeon")
+				local hx = heading._points.TOPLEFT.x
+				assert(zone._points.TOPLEFT.x == hx + 8 and sub._points.TOPLEFT.x == hx + 8,
+					"the zones and the dungeons a step in from the heading")
+				local range = BT.Tip.LineOf("10-25")
+				assert(range._points.TOPRIGHT, "their ranges still on the right edge")
+				_G.GetQuestGreenRange = hadRange
+				_G.UnitLevel, _G.C_Map = hadLevel, hadMap
+				BT.Zones.list = nil
+			end
+			do
+				local hadLevel = _G.UnitLevel
+				_G.UnitLevel = function() return 15 end
+				section:GetScript("OnEnter")(section)
+				assert(BT.Tip.Says("RECOMMENDED CONTENT") and BT.Tip.Says("Dungeons") and BT.Tip.Says("Ragefire Chasm") and BT.Tip.Says("15-20")
+					and not BT.Tip.Says("The Hall of Thanes"),
+					"the tooltip lists them for your side: " .. table.concat(BT.Tip.Texts(), " | "))
+				_G.UnitLevel = function() return 5 end
+				section:GetScript("OnEnter")(section)
+				assert(not BT.Tip.Says("Dungeons"), "and has no dungeons when there are none")
+				_G.UnitLevel = hadLevel
+				section:GetScript("OnEnter")(section)
+			end
+			-- ZONES THE SAME WAY (Josh 2026-10-04: "How about questing zones"):
+			-- the game's range where it gives one, Classic's where it doesn't
+			do
+				local Z = BT.Zones
+				local hadMap, hadEnum, hadLevel = _G.C_Map, Enum.UIMapType, _G.UnitLevel
+				local function zoneNames(list)
+					local out = {}
+					for _, z in ipairs(list) do out[#out + 1] = z.name end
+					return table.concat(out, ",")
+				end
+				-- no ranges from the game at all ("I'm only level 4, but I'm not
+				-- seeing any dungeons or zones"): Classic's, and kept for nobody
+				_G.C_Map = nil
+				Z.list = nil
+				assert(zoneNames(Z.For(4, "Horde")) == "Durotar,Mulgore,Tirisfal Glades",
+					"a level 4 Horde player gets the Horde's starting zones: " .. zoneNames(Z.For(4, "Horde")))
+				assert(zoneNames(Z.For(4, "Alliance")) == "Dun Morogh,Elwynn Forest,Teldrassil",
+					"and an Alliance one the Alliance's: " .. zoneNames(Z.For(4, "Alliance")))
+				assert(Z.list == nil and Z.fromGame == 0, "nothing from the game: built again next time")
+				_G.UnitLevel = function() return 4 end
+				section:GetScript("OnEnter")(section)
+				assert(BT.Tip.Says("RECOMMENDED CONTENT") and BT.Tip.Says("Zones") and BT.Tip.Says("Durotar")
+					and BT.Tip.Says("1-10") and not BT.Tip.Says("Dungeons"), "the tooltip at level 4: " .. table.concat(BT.Tip.Texts(), " | "))
+				-- the game's ranges, and a zone only the game knows
+				Enum.UIMapType = { Continent = 2, Zone = 3 }
+				local asked = 0
+				local LEVELS = { [1433] = { 16, 26 }, [9001] = { 40, 45 }, [1454] = { 0, 0 } }
+				_G.C_Map = {
+					GetFallbackWorldMapID = function() return 947 end,
+					GetMapChildrenInfo = function(id, kind, all)
+						asked = asked + 1
+						assert(id == 947 and kind == 3 and all == true, "every zone under the world map")
+						return { { mapID = 1433, name = "Redridge Mountains" }, { mapID = 9001, name = "Riverglades" },
+							{ mapID = 1454, name = "Orgrimmar" } }
+					end,
+					GetMapLevels = function(id)
+						local l = LEVELS[id]
+						return l and l[1] or 0, l and l[2] or 0
+					end,
+				}
+				Z.list = nil
+				local redridge, river, capital
+				for _, z in ipairs(Z.All()) do
+					if z.id == 1433 then redridge = z end
+					if z.id == 9001 then river = z end
+					if z.id == 1454 then capital = z end
+				end
+				assert(redridge and redridge.lo == 16 and redridge.hi == 26, "the game's range over Classic's")
+				assert(river and river.name == "Riverglades" and river.lo == 40, "a zone only the game knows")
+				assert(capital == nil, "a capital has no range and is left out")
+				assert(Z.fromGame == 2 and Z.list ~= nil, "kept once the game has given ranges")
+				Z.All()
+				assert(asked == 1, "read from the game once")
+				assert(zoneNames(Z.For(18, "Horde")) == "The Barrens,Silverpine Forest,Stonetalon Mountains",
+					"nearest the middle first, three at most: " .. zoneNames(Z.For(18, "Horde")))
+				assert(zoneNames(Z.For(18, "Alliance")) == "Darkshore,Loch Modan,Westfall",
+					"and the other side's zones left out: " .. zoneNames(Z.For(18, "Alliance")))
+				_G.UnitLevel = function() return 18 end
+				section:GetScript("OnEnter")(section)
+				assert(BT.Tip.Says("Zones") and BT.Tip.Says("The Barrens") and BT.Tip.Says("10-25")
+					and not BT.Tip.Says("Westfall"),
+					"the tooltip lists them over the dungeons: " .. table.concat(BT.Tip.Texts(), " | "))
+				_G.C_Map, Enum.UIMapType, _G.UnitLevel = hadMap, hadEnum, hadLevel
+				Z.list = nil
+				section:GetScript("OnEnter")(section)
+			end
 			section:GetScript("OnMouseUp")(section, "LeftButton")
 			assert(mod.Rate() ~= nil, "a left-click resets nothing")
 			section:GetScript("OnMouseUp")(section, "RightButton")
 			assert(mod.Rate() == nil and mod.session.gained == 0 and #mod.PaceList() == 0,
 				"a right-click starts the pace and the session again")
-			-- NOT YET, AND WHY (Josh 2026-09-28): with no pace, the tooltip
-			-- says what it is waiting for
-			assert(BT.Tip.Says("The time to level shows after 3 more gains of XP."),
-				"the tooltip says what the pace needs: " .. table.concat(BT.Tip.Texts(), " | "))
-			assert(mod.Waiting({ {}, {} }) == "The time to level shows after 1 more gain of XP."
-				and mod.Waiting({ {}, {}, {} }) == "The time to level shows after a little more play.",
-				"one gain, and then a little more time")
+			-- NO XP RATE IN THE TOOLTIP (Josh 2026-10-04: "remove all of this
+			-- redundant or unneeded info to save space"): the dock's line says
+			-- how long the level takes
+			assert(not BT.Tip.Says("XP RATE") and not BT.Tip.Says("Per hour") and not BT.Tip.Says("XP to level"),
+				"no rate, session or XP left in the tooltip: " .. table.concat(BT.Tip.Texts(), " | "))
 			BT.Tip.Hide()
 
 			-- a reload carries it on; a login does not
@@ -8807,11 +9179,33 @@ if ok then
 			assert(not b.brackets[1]._shown, "and a plain one in none")
 			F.Paint(b, F.Fake({ name = "Defias Thug", level = -1, reaction = "hostile" }))
 			assert(tostring(b.levelText._text):find("??", 1, true), "too high to say is ??")
+			-- HOW HARD, BY THE OLD RULE (Josh 2026-10-04: "This mob is 4 levels
+			-- below me, but is showing as yellow"): the client's own answer is
+			-- the modern game's, yellow down to four below, so nothing reads it
+			do
+				local hadLevel, hadAsk, hadRange = _G.UnitLevel, _G.GetQuestDifficultyColor, _G.GetQuestGreenRange
+				_G.UnitLevel = function() return 9 end
+				_G.GetQuestDifficultyColor = function() return { r = 1, g = 0.82, b = 0 } end
+				_G.GetQuestGreenRange = function() return 5 end
+				local function hexOf(c)
+					return ("%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5),
+						math.floor(c[3] * 255 + 0.5))
+				end
+				for _, case in ipairs({ { 5, "standard", "four below is green" }, { 7, "difficult", "two below is yellow" },
+					{ 12, "verydifficult", "three above is orange" }, { 3, "trivial", "six below is grey" } }) do
+					F.Paint(b, F.Fake({ name = "Decrepit Darkhound", level = case[1], reaction = "hostile" }))
+					assert(tostring(b.levelText._text):find(hexOf(BT.Util.DIFFICULTY[case[2]]), 1, true),
+						case[3] .. ": " .. tostring(b.levelText._text))
+				end
+				_G.UnitLevel, _G.GetQuestDifficultyColor, _G.GetQuestGreenRange = hadLevel, hadAsk, hadRange
+			end
 			-- the lanes: short and centred over it, a little thicker
 			-- AS WIDE AS THE PLATE (Josh 2026-10-03: "make them the same width
 			-- as the bar"), a little taller, and clear of the rings
-			local ph = T.PLATE_H
-			assert(T.LaneWidth(b) == F.KINDS.plate.w and T.Height("plate", "dot") == ph, "a plate's lanes are its width")
+			-- (a lane as tall as its picture, ICON_MORE taller than its bar)
+			local ph = T.LaneHeight("plate", "dot")
+			assert(T.LaneWidth(b) == F.KINDS.plate.w and T.Height("plate", "dot") == T.PLATE_H
+				and ph == T.PLATE_H + T.ICON_MORE, "a plate's lanes are its width")
 			local lane = _G.CreateFrame("Frame", nil, _G.UIParent)
 			T.Place(lane, b, 2, "plate", "dot")
 			assert(lane._points.TOPLEFT.x == 0 and lane._points.TOPLEFT.y == 5 + ph + (ph + 1),
@@ -8879,9 +9273,111 @@ if ok then
 			-- client puts its frame back to full as the enemy goes into a fight
 			uf:SetAlpha(1)
 			assert(uf._alpha == 0, "the game setting its plate back to full does not bring it back")
-			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate2")
-			assert(not mod.skins.nameplate2._shown and (plates.nameplate2.UnitFrame._alpha or 1) == 1,
-				"a friend's plate is left as the game draws it")
+			-- A FRIEND'S PLATE IS ITS NAME (Josh 2026-10-04: "Can we add friendly
+			-- nameplates as well? They should look distinct and more simple")
+			do
+				local hadPlayer, hadClass, hadName, hadIsUnit = _G.UnitIsPlayer, _G.UnitClass, _G.UnitName, _G.UnitIsUnit
+				local hadFull = _G.GetUnitName
+				_G.GetUnitName = function(unit) if unit == "nameplate2" then return "Omajin Ghosttusk" end return "Beeb Bob" end
+				_G.UnitIsPlayer = function(unit) return unit == "nameplate2" end
+				_G.UnitClass = function() return "Shaman", "SHAMAN" end
+				_G.UnitName = function(unit) if unit == "nameplate2" then return "Omajin" end return "Beeb" end
+				_G.UnitIsUnit = function() return false end
+				fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate2")
+				local f, guf = mod.friends.nameplate2, plates.nameplate2.UnitFrame
+				assert(not mod.skins.nameplate2._shown and f and f._shown and f._parent == plates.nameplate2,
+					"a friend gets a name on the plate, not the enemy's frame")
+				assert(guf._alpha == 0 and f._mouse == false, "the game's own put away, and the plate takes the click")
+				assert(f.name._text == "Omajin Ghosttusk", "the whole name: " .. tostring(f.name._text))
+				local r, g, b = BT.Util.Bright({ BT.Util.ClassColor("SHAMAN") })
+				assert(f.name._textColor and math.abs(f.name._textColor[1] - r) < 0.01 and math.abs(f.name._textColor[3] - b) < 0.01,
+					"in the class's colour")
+				assert(f.under._alpha == 0, "no line under one who is not your target")
+				_G.UnitIsUnit = function(a, b2) return a == "nameplate2" and b2 == "target" end
+				mod.TargetChanged()
+				assert(f.under._alpha == 1, "and a white line under your target's")
+				local playerFont = f.name._font
+				-- an NPC is green, and steps back (the same day: "Able to make NPCs
+				-- distinct from players? They should be less noticeable")
+				_G.UnitIsPlayer = function() return false end
+				mod.PaintFriend(f, F.Source("nameplate2"))
+				assert(f.name._textColor[1] == mod.FRIEND_NPC[1] and f.name._textColor[2] == mod.FRIEND_NPC[2],
+					"an NPC's name in the softer green")
+				assert(playerFont and f.name._font and f.name._font[2] < playerFont[2]
+					and f.name._font[1] == BT.Fonts.Face("text") and playerFont[1] == BT.Fonts.Face("name"),
+					"a size down, in the lighter face: " .. tostring(f.name._font and f.name._font[2]))
+				-- A PICTURE FOR WHAT AN NPC DOES (the same day: "Could we put
+				-- vendor/trainer/directions icons on NPCs that have them?")
+				do
+					local hadTip, hadGuid = _G.C_TooltipInfo, _G.UnitGUID
+					local asked = 0
+					-- (this client writes the title bare, with no angle brackets)
+					local sub = "Innkeeper"
+					_G.C_TooltipInfo = { GetUnit = function()
+						asked = asked + 1
+						return { lines = { { leftText = "Innkeeper Shaussiy" }, { leftText = sub }, { leftText = "Level 30" } } }
+					end }
+					_G.UnitGUID = function() return "Creature-0-4372-1-123-6736-0000ABCDEF" end
+					mod.roles = {}
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.role._shown ~= false and f.role._texture == mod.ROLES[2].icon, "an innkeeper's picture before the name")
+					assert(f.role._points.RIGHT.rel == f.name, "and before the name it is")
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(asked == 1, "learned once for each kind of NPC")
+					assert(mod.RoleFor("Warrior Trainer").key == "class" and mod.RoleFor("Cooking Trainer").key == "trainer"
+						and mod.RoleFor("Weaponsmith").key == "repair" and mod.RoleFor("Trade Supplies").key == "vendor"
+						and mod.RoleFor("Wind Rider Master").key == "flight", "each subtitle its picture, the most useful first")
+					-- DIRECTIONS ONLY IN A CAPITAL (the same day: "The directions are
+					-- only available in major cities")
+					assert(mod.GivesDirections("Stormwind City Guard", true) and mod.GivesDirections("Darnassus Sentinel", true)
+						and not mod.GivesDirections("Auberdine Sentinel", false)
+						and not mod.GivesDirections("Guardian Felhunter", true), "a guard gives directions in a capital only")
+					local hadMap = _G.C_Map
+					_G.C_Map = { GetBestMapForUnit = function() return 1457 end }
+					assert(mod.InCapital(), "Darnassus is a capital")
+					_G.C_Map = { GetBestMapForUnit = function() return 1439 end }
+					assert(not mod.InCapital(), "Darkshore is not")
+					_G.C_Map = hadMap
+					assert(mod.RoleFor("Some Title") == nil, "nothing it does that BeebMod knows: no picture")
+					assert(BT.Util.NpcTitle("Innkeeper") == "Innkeeper" and BT.Util.NpcTitle("<Banker>") == "Banker"
+						and BT.Util.NpcTitle("Level 30 Humanoid") == nil, "a title with or without brackets; a level line is none")
+					_G.UnitGUID = function() return "Creature-0-4372-1-123-9999-0000ABCDEF" end
+					sub = "<Fishing Supplies>"
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.role._texture == mod.ROLES[#mod.ROLES].icon, "another NPC, a vendor")
+					_G.UnitIsPlayer = function(unit) return unit == "nameplate2" end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.role._shown == false, "and a player never has one")
+					_G.UnitIsPlayer = function() return false end
+					_G.C_TooltipInfo, _G.UnitGUID = hadTip, hadGuid
+				end
+				-- PLATES FOR PETS (the same day: "can we add nameplates for player
+				-- pets/minions?"): the game's own switch, turned on and put back
+				do
+					local hadCVar, hadLock = _G.C_CVar, _G.InCombatLockdown
+					local cvars = { [mod.MINION_CVAR] = "0" }
+					_G.C_CVar = { GetCVar = function(k) return cvars[k] end, SetCVar = function(k, v) cvars[k] = v end }
+					assert(mod.ShowMinions(true) and cvars[mod.MINION_CVAR] == "1", "the game's minion plates on")
+					assert(mod.ShowMinions(false) and cvars[mod.MINION_CVAR] == "0", "and back as you had them")
+					_G.InCombatLockdown = function() return true end
+					assert(not mod.ShowMinions(true) and cvars[mod.MINION_CVAR] == "0", "not in a fight")
+					_G.InCombatLockdown = hadLock
+					fire(mod.events, "PLAYER_REGEN_ENABLED")
+					assert(cvars[mod.MINION_CVAR] == "1", "but as soon as it ends")
+					mod.ShowMinions(false)
+					_G.C_CVar = hadCVar
+				end
+				-- names switched off: the game's own plate
+				mod.SetOpt("friends", false)
+				mod.Sweep()
+				assert(not f._shown and (guf._alpha or 1) == 1, "with friends switched off, the game's plate is back")
+				mod.SetOpt("friends", nil)
+				fire(mod.events, "NAME_PLATE_UNIT_REMOVED", "nameplate2")
+				assert(not f._shown and f._parent == _G.UIParent and guf._alpha == 1,
+					"and when the friend goes, ours comes off and the game's is given back")
+				_G.UnitIsPlayer, _G.UnitClass, _G.UnitName, _G.UnitIsUnit = hadPlayer, hadClass, hadName, hadIsUnit
+				_G.GetUnitName = hadFull
+			end
 			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate21")
 			assert(mod.skins.nameplate21 == nil and (plates.nameplate21.UnitFrame._alpha or 1) == 1,
 				"and one past the first twenty keeps the game's")
@@ -9591,7 +10087,7 @@ if ok then
 			end
 			assert(#ys == 0 or math.abs(ys[1] - ys[#ys]) < 1e-6, "a steady figure draws a flat line")
 			local said = table.concat(BT.Tip.Texts(), " | ")
-			assert(said:find("last two minutes", 1, true), "and the hover says what the graph is")
+			assert(said:find("Last 2 minutes", 1, true), "and the hover says what the graph is")
 			BT.Tip.Hide()
 			assert(#BT.Dock.Chips() > 0 and not BT.Dock.Graph, "and nothing of it in the dock")
 
@@ -12318,22 +12814,22 @@ if ok then
 			enemy.instance, enemy.zone = "party", "The Deadmines"
 			assert(ST.Paint(pg, enemy) == "screen" and pg.map.screen._texture:find("LoadScreenDeadmines", 1, true),
 				"a dungeon's enemy: its loading screen, there being no map")
-			assert(pg.hint:GetText() == "Met in a dungeon. There is no map of it.", "and the hint says so")
+			assert(pg.hint:GetText() == "Killed in a dungeon, which has no map.", "and the hint says so")
 			enemy.zone = "Some Forever Crypt"
 			ST.Paint(pg, enemy)
 			assert(pg.map.screen._texture:find("LoadScreenDungeon", 1, true), "one the list does not know: the game's dungeon screen")
 			enemy.instance, enemy.zone = "raid", "Molten Core"
 			ST.Paint(pg, enemy)
-			assert(pg.hint:GetText() == "Met in a raid. There is no map of it.",
+			assert(pg.hint:GetText() == "Killed in a raid, which has no map.",
 				"a raid's enemy is met in a raid: " .. tostring(pg.hint:GetText()))
 			enemy.instance = nil
 			local artWas = V.MapArt
 			V.MapArt = function() return nil end
-			assert(ST.Paint(pg, enemy) == "none" and pg.map.note:GetText() == "The game has no map of that place.",
+			assert(ST.Paint(pg, enemy) == "none" and pg.map.note:GetText() == "The game has no map of this zone.",
 				"a place with no map says so: " .. tostring(pg.map.note:GetText()))
 			V.MapArt = artWas
 			enemy.instance, enemy.spots, enemy.map, enemy.mx = nil, nil, nil, nil
-			assert(ST.Paint(pg, enemy) == "none" and pg.map.note:GetText():find("next kill", 1, true),
+			assert(ST.Paint(pg, enemy) == "none" and pg.map.note:GetText() == "No kills marked yet. Kill one to mark the map.",
 				"nothing on record: says so, and what fills it")
 			ST.SetMode("model")
 			assert(ST.Paint(pg, enemy) == "model" and pg.model:IsShown() and not pg.map:IsShown(), "and back to the model")

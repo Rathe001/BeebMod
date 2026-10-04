@@ -24,7 +24,7 @@ local M = BT.Module({
 	feature = "dock",
 	onPage = "progress",
 	title = "Reputation",
-	blurb = "The faction you watch, and where you stand with it",
+	blurb = "Your standing with the faction you watch",
 	order = 37.5,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -225,7 +225,7 @@ function M.Tip()
 	end
 	BT.Tip.Show(M.frame, { build = function(t)
 		local c = M.StandingColour(f.reaction)
-		t:Header({ name = f.name, sub = "The faction you watch", pill = M.StandingName(f.reaction), pillState = c })
+		t:Header({ name = f.name, sub = "Watched faction", pill = M.StandingName(f.reaction), pillState = c })
 		local top = f.reaction >= TOP or f.max <= 0
 		if top then
 			t:Headline(M.StandingName(f.reaction), nil, c, true)
@@ -248,7 +248,7 @@ function M.Tip()
 				t:Row(m.name, (m.gained > 0 and "+" or "-") .. big(math.abs(m.gained)), m.gained > 0 and "good" or "bad")
 			end
 		end
-		t:Foot({ { "Click", "open the reputation page" } })
+		t:Foot({ { "Click", "open reputation" } })
 	end })
 end
 
@@ -369,9 +369,9 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("The faction you watch, and where you stand with it. Watch a faction by ticking \"Show as Experience Bar\" in the reputation panel.")
-	page:Note("With no faction watched there is no line, the same as the game's own bar.", true)
-	local r = BT.Widgets.SwitchRow(page:Section("The game's own"), "Hide the game's bar",
+	page:Note("Your standing with the faction you watch. Watch a faction by ticking \"Show as Experience Bar\" in the reputation panel.")
+	page:Note("With no faction watched, there is no line.", true)
+	local r = BT.Widgets.SwitchRow(page:Section("Game's reputation bar"), "Hide the game's bar",
 		"Hides the game's reputation bar while this one shows",
 		function() return M.HideClient() and true or false end,
 		function(on) M.SetHideClient(on) end)

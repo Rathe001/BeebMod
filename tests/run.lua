@@ -522,7 +522,7 @@ do
 		"but the level chart still counts everybody, filter or no filter")
 	check(only60.filtered and only60.shown == 1, "and the count is the one at those levels")
 	check(only60.unknown.level == 1, "with who has no level to filter by counted apart")
-	check(BT.Stats.AgeLine(BT.Stats.Census(newdb(), now)) == "Nobody in the book yet. Characters you see go in it.",
+	check(BT.Stats.AgeLine(BT.Stats.Census(newdb(), now)) == "Nobody seen yet. Characters you see show up here.",
 		"an empty book says so")
 end
 
@@ -1613,10 +1613,10 @@ do
 	check(week.total == 4, "this week adds the one seen two days ago")
 	check(S.Census(db, now, { seen = "month" }).total == 4, "the month leaves out forty days ago and never")
 	check(S.Census(db, now, { seen = "nonsense" }).total == 6, "a seen that is not one of ours is no filter")
-	check(S.AgeLine(S.Census(db, now + 100 * DAY, { seen = "today" })) == "Nobody in the book was seen today.",
+	check(S.AgeLine(S.Census(db, now + 100 * DAY, { seen = "today" })) == "Nobody was seen today.",
 		"a Seen filter that leaves nobody says so, not that the book is empty")
 	check(S.AgeLine(S.Census(db, now, { pick = { mode = "class", key = "WARLOCK" } }))
-		== "Nobody in the book matches the bar you picked.", "and so does a picked bar that leaves nobody")
+		== "Nobody matches the filter.", "and so does a picked bar that leaves nobody")
 
 	-- the guild chart: guilds, then the unguilded; the never-seen are a caveat
 	check(all.guild[1].key == "Vanguard" and all.guild[1].n == 3, "the largest guild first")
@@ -1878,7 +1878,7 @@ do
 	end
 	-- and one no quest names keeps the journal's own line, made only of facts
 	J.Learn({ npc = 5004, name = "Vuldren", kind = "Beast", family = "Fox", zone = "Zephras Isle", level = 6 })
-	check(J.LoreLine(J.Store().enemies[5004]) == "A fox of Zephras Isle, first met at level 6.", "with no quest, a line of facts")
+	check(J.LoreLine(J.Store().enemies[5004]) == "A fox of Zephras Isle, level 6.", "with no quest, a line of facts")
 	check(J.LoreLine({ kind = "Elemental" }) == "An elemental.", "with the right article")
 	for _, npc in ipairs({ 5001, 5002, 5003, 5004 }) do J.Store().enemies[npc] = nil end
 	-- LORE FROM THE WIKI (Josh 2026-09-28: "I think we need an exact match on

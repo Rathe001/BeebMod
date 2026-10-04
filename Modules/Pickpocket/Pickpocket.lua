@@ -291,7 +291,7 @@ function M.Tip()
 		local picks = s and s.picks or 0
 		if picks > 0 then
 			t:Headline(coins(sc + si))
-			t:Note(("This session, from %d %s. %s a pocket."):format(picks, picks == 1 and "pocket" or "pockets",
+			t:Note(("This session, from %d %s. Average %s a pocket."):format(picks, picks == 1 and "pocket" or "pockets",
 				coins(math.floor((sc + si) / picks))))
 		else
 			t:Headline(coins(0))
@@ -431,7 +431,7 @@ end
 -- CLEARED FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of slash
 -- commands"). What /bt pockets reset did, as a Reset row on the Metrics page
 -- (see Gold's M.Reset).
-M.resetRow = { "Pick Pocket record", "Clears what pickpocketing has been worth, all time and this session" }
+M.resetRow = { "Pick Pocket record", "Clears all-time and session totals" }
 
 function M.Reset()
 	if not M.Record() then

@@ -376,7 +376,7 @@ end
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
 	page:Note("The buttons other addons put on the minimap, set in a line in the dock at BeebMod's icon size.")
-	page:Note("Each button still does what its addon made it do. With no addon buttons there is no line.", true)
+	page:Note("Each button works as before. With no addon buttons, the line is hidden.", true)
 	self.found = page:Note("", true).text
 	page:Layout()
 end

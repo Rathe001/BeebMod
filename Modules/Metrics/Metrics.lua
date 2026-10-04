@@ -16,7 +16,7 @@ local M = BT.Module({
 	key = "metrics",
 	feature = "dock",
 	title = "Metrics",
-	blurb = "Money, bags, durability, item level, pockets, speed and performance in one grid",
+	blurb = "Money, bags, durability, item level, Pick Pocket, speed and performance",
 	order = 38,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -64,7 +64,7 @@ function M:BuildTab(panel)
 	-- START AGAIN (Josh 2026-09-28: "We don't need hundreds of slash
 	-- commands"): a part that keeps a session or a record has its Reset here,
 	-- where /bt gold reset and /bt pockets reset were (the part's resetRow)
-	local again = self.page:Section("Start again")
+	local again = self.page:Section("Reset")
 	self.resets = {}
 	for _, part in ipairs(M.Parts()) do
 		if part.resetRow and part.Reset then
@@ -78,7 +78,7 @@ function M:BuildTab(panel)
 		end
 	end
 	local layout = self.page:Section("Layout")
-	local cols = BT.Widgets.Row(layout, "Columns", "How many cells to a line")
+	local cols = BT.Widgets.Row(layout, "Columns", "Cells per row")
 	self.colsSeg = cols:SetControl(BT.Widgets.Segmented(cols, { { 3, "Three" }, { 2, "Two" } }, function(n)
 		BT.EnsureBound()
 		BT.settings.metricsCols = (n == 2) and 2 or nil

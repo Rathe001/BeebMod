@@ -273,7 +273,7 @@ function V.BuildJournal()
 	edit:SetAutoFocus(false)
 	pcall(edit.SetFontObject, edit, "BeebModFontHighlightSmall")
 	search.edit = edit
-	search.hint = W.Label(search, "Search every enemy", "small", DIM[1], DIM[2], DIM[3])
+	search.hint = W.Label(search, "Search enemies", "small", DIM[1], DIM[2], DIM[3])
 	search.hint:SetPoint("LEFT", 8, 0)
 	search.clear = W.Close(search, 14)
 	search.clear:SetPoint("RIGHT", -4, 0)
@@ -2630,7 +2630,7 @@ local function drawLadder(a, points)
 	local n, title, at, nextAt, nextTitle = J.Rank(points)
 	l.points = points
 	l.note:SetText(nextAt and ("%s · %s points to %s"):format(title, big(nextAt - points), nextTitle)
-		or ("%s · the highest rank"):format(title))
+		or ("%s · highest rank"):format(title))
 	for i, r in ipairs(l.rungs) do
 		local reached = i <= n
 		r.here = i == n
@@ -2836,7 +2836,7 @@ function V.MasteryRows(kills)
 		rows[#rows + 1] = {
 			id = ("next:%d"):format(nx.npc), title = ("%s %s"):format(name, WORDS:format("· " .. m.name)),
 			points = m.points, need = nx.need, have = nx.have,
-			text = ("Kill it %s times"):format(big(nx.need)),
+			text = ("%s kills"):format(big(nx.need)),
 		}
 	end
 	return rows, total
@@ -2932,7 +2932,7 @@ local function drawRail(a, groups, earned, all, score)
 	else
 		rail.rankFill:Show()
 		rail.rankFill:SetWidth(w)
-		rail.rankNext:SetText("The highest rank")
+		rail.rankNext:SetText("Highest rank")
 	end
 	rail.earned:SetText(("%d of %d commendations earned"):format(earned, all))
 	local eshare = all > 0 and earned / all or 0

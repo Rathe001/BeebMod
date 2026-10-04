@@ -80,9 +80,15 @@ enough to have an effect? Could I put it more shortly?
 8. **Name clicks exactly.** "Click: open your bags." "Shift-click: stop
    tracking." Never "interact" or "tap".
 9. **Use the player's words.** Enemy, pull, tag, rested, reset, vendor. Not
-   entity, encounter unit, engagement.
+   entity, encounter unit, engagement. Don't invent a noun for a mechanic:
+   "the pace" is not a word players use for the XP rate.
 10. **Leave out what doesn't matter now.** A row of zeros, a setting nobody
     changed, a total that equals its only part: leave them out.
+11. **A word or two beats an explanation.** "Right-click: reset session",
+    not "Right-click: start the pace again". In hints, footers, labels and
+    grey lines, try the shortest phrase a player would use first. Click
+    hints drop "the" and "it": "Click: open journal", not "Click: open the
+    journal"; "Shift-click: untrack", not "stop tracking it".
 
 ## Writing to Josh
 
@@ -158,6 +164,7 @@ up constantly in generated text. Don't use them:
 | Everything you need, right in the dock. | *(say nothing; show it)* |
 | Your notes, beautifully organized. | Notes you wrote, newest first. |
 | Great news — the rewrite is done, and it's a big improvement! | The rewrite is done. Every page was read, and 2,005 were left out. |
+| Right-click: start the pace again | Right-click: reset session |
 
 ## Before you ship a line
 

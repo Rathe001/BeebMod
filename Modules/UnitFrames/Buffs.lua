@@ -355,19 +355,57 @@ end
 -- What is on you, out of a fight
 -- ---------------------------------------------------------------------------
 
--- the enchants on your weapons now: { slot, left (seconds), charges }
+-- the enchants on your weapons now: { slot, left (seconds), charges, icon }
+--
+-- A SLOT AT A TIME, ON THIS CLIENT (Josh 2026-10-04: "Weapon enchants
+-- (rockbiter) aren't showing on the buff bar"). The game's own buff frame
+-- here reads them with C_Item.GetWeaponEnchantInfo(slot), each weapon slot's
+-- enchants as a list, and nothing in it calls the old GetWeaponEnchantInfo()
+-- this read; so a shaman's Rockbiter never reached the tray. The list also
+-- carries the enchant's own picture, which stands in for the weapon's. The old
+-- call is kept for a client that has only it, its "yes" a true or a 1.
+-- the game's weapon slots (Enum.WeaponSlot) to inventory slots, as its buff
+-- frame maps them
+B.WEAPON_SLOT = { [0] = 16, [1] = 17, [2] = 18 }
+local function present(v)
+	return not (issecretvalue and issecretvalue(v)) and (v == true or v == 1)
+end
 function B.ReadEnchants()
+	local out = {}
+	local get = C_Item and C_Item.GetWeaponEnchantInfo
+	if type(get) == "function" then
+		local slots = {}
+		if Enum and type(Enum.WeaponSlot) == "table" then
+			for _, id in pairs(Enum.WeaponSlot) do
+				slots[#slots + 1] = id
+			end
+			table.sort(slots)
+		else
+			slots = { 0, 1, 2 }
+		end
+		for _, id in ipairs(slots) do
+			local ok, list = pcall(get, id)
+			if ok and type(list) == "table" then
+				for _, e in pairs(list) do
+					if type(e) == "table" and present(e.hasEnchant) then
+						local ms, icon = plainNumber(e.timeLeft), plainNumber(e.enchantIconID)
+						out[#out + 1] = { slot = B.WEAPON_SLOT[id] or 16, left = ms and ms / 1000 or nil,
+							charges = plainNumber(e.charges), icon = icon and icon > 0 and icon or nil }
+					end
+				end
+			end
+		end
+		return out
+	end
 	if type(GetWeaponEnchantInfo) ~= "function" then
-		return {}
+		return out
 	end
 	local r = { pcall(GetWeaponEnchantInfo) }
 	if not r[1] then
-		return {}
+		return out
 	end
-	local out = {}
 	for _, w in ipairs({ { slot = 16, at = 2 }, { slot = 17, at = 6 } }) do
-		local has = r[w.at]
-		if type(has) == "boolean" and has then
+		if present(r[w.at]) then
 			local ms = plainNumber(r[w.at + 1])
 			out[#out + 1] = { slot = w.slot, left = ms and ms / 1000 or nil, charges = plainNumber(r[w.at + 2]) }
 		end
@@ -468,7 +506,7 @@ function B.Update(enchantsOnly)
 				if e then
 					f.slot = e.slot
 					local tex = GetInventoryItemTexture and GetInventoryItemTexture("player", e.slot)
-					f.icon:SetTexture(tex or 134400)
+					f.icon:SetTexture(e.icon or tex or 134400)
 					f:ClearAllPoints()
 					f:SetPoint("TOPRIGHT", B.real, "TOPRIGHT", -(lead + i - 1) * B.STEP, row.top)
 					if e.left then
@@ -487,7 +525,7 @@ function B.Update(enchantsOnly)
 					f:Hide()
 				end
 			end
-			lead = lead + #enchants
+			lead = lead + math.min(#enchants, #B.enchants)
 		end
 		-- the timed container moved along only when what is before it
 		-- changed, and never in a fight: the client's container hangs off
@@ -514,7 +552,7 @@ function B.Watch()
 		return
 	end
 	local w = CreateFrame("Frame")
-	for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD" }) do
+	for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "WEAPON_ENCHANT_CHANGED" }) do
 		pcall(w.RegisterEvent, w, event)
 	end
 	-- yours alone: an aura or an item change of anybody else's is no news
@@ -734,11 +772,11 @@ end
 function M:BuildTab(panel)
 	local W = BT.Widgets
 	local page = W.Stack(panel)
-	page:Note("Your buffs are on the top line and your debuffs are under them. From left to right come the ones "
-		.. "that run out soonest, then longer ones, then your weapon enchants, then the ones that never run out, A to Z.")
-	page:Note("Right-click a buff to cancel it, out of combat. Switched off, the game's own buff bar comes back.", true)
+	page:Note("Buffs are on the top row and debuffs below. The soonest to run out are on the left, then "
+		.. "weapon enchants, then ones with no timer, A to Z.")
+	page:Note("Right-click a buff to cancel it, out of combat. Turn this off to get the game's buff bar back.", true)
 	local tray = page:Section("Tray")
-	local size = W.Row(tray, "Size", "The whole tray, icons and times")
+	local size = W.Row(tray, "Size", "Whole tray, icons and times")
 	local step = size:SetControl(W.Stepper(size, function(dir)
 		BT.EnsureBound()
 		BT.settings.buffs = BT.settings.buffs or {}
@@ -750,7 +788,7 @@ function M:BuildTab(panel)
 	M.sizeText = step.value
 	M.sizeText:SetText(("%d%%"):format(math.floor(((BT.settings and BT.settings.buffs
 		and BT.settings.buffs.scale) or 1) * 100 + 0.5)))
-	W.SwitchRow(tray, "Time left in words", "Under each icon. Needs a /reload to change.",
+	W.SwitchRow(tray, "Time left under icons", "Needs a /reload to change",
 		function() return not (BT.settings and BT.settings.buffs and BT.settings.buffs.timeText == false) end,
 		function(on)
 			BT.EnsureBound()

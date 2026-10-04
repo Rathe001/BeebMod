@@ -103,7 +103,21 @@ T.DOT_ALPHA, T.DOT_BACK = 0.75, 0.3
 -- width as the bar"): as wide as the plate kind says (laneW), and this thick
 T.PLATE_H = 9
 
--- how tall a lane is: a heal's by the frame's size, damage's thicker
+-- A BIGGER PICTURE THAN BAR (Josh 2026-10-04: "Do we have room to make the
+-- spell icon larger on the DoT timers?"). The picture was a square as tall as
+-- its bar, seven units across on a plate once its edge was taken off. A lane
+-- of damage is ICON_MORE taller than its bar now, the picture that tall, and
+-- the bar keeps its height in the middle of the lane beside it.
+T.ICON_MORE = 4
+
+-- how tall a whole lane of damage is - its picture - and how tall a heal's,
+-- which is its bar (T.Height)
+function T.LaneHeight(kind, which)
+	local h = T.Height(kind, which)
+	return which == "dot" and (h + T.ICON_MORE) or h
+end
+
+-- how tall a lane's bar is: a heal's by the frame's size, damage's thicker
 function T.Height(kind, which)
 	if kind == "plate" then
 		return T.PLATE_H
@@ -131,8 +145,11 @@ end
 T.MAX_LANES = { hot = 1, dot = 4 }
 -- the last seconds, counted down; a blink gets shorter the nearer the end.
 -- DAMAGE FROM THREE (Josh 2026-10-03: "I think we should start the dot
--- blinker at 3 seconds"); a heal's lane still from five.
-T.BLINK_FROM = { hot = 5, dot = 3 }
+-- blinker at 3 seconds"), AND HEALS (2026-10-04: "make heals also 3
+-- seconds"). Why short: "if it blinks too long, it will just become
+-- distracting and kind of lose its attention grabbing value". Kept one a
+-- kind, so either can move again on its own.
+T.BLINK_FROM = { hot = 3, dot = 3 }
 
 local function inCombat()
 	return InCombatLockdown and InCombatLockdown() or false
@@ -467,7 +484,10 @@ function T.IconRoom(h, above)
 	return above and (h + 1) or 0
 end
 
-local function laneButton(w, h, colour, blinks, above)
+-- `h` is the whole lane's height and `barH` its bar's, in the lane's middle
+-- after the picture (the same as `h` on a heal's lane)
+local function laneButton(w, h, colour, blinks, above, barH)
+	barH = barH or h
 	return function(b)
 		T.seen.inits = T.seen.inits + 1
 		b:SetSize(w, h)
@@ -495,21 +515,26 @@ local function laneButton(w, h, colour, blinks, above)
 			b.bmIcon = icon
 		end
 		local bw = w - left
+		-- the bar's strip: after the picture, as tall as the bar, in the
+		-- middle of the lane
+		local function strip(region)
+			region:SetPoint("LEFT", b, "LEFT", left, 0)
+			region:SetPoint("RIGHT", b, "RIGHT", 0, 0)
+			region:SetHeight(barH)
+		end
 		local bg = b:CreateTexture(nil, "BACKGROUND")
-		bg:SetPoint("TOPLEFT", b, "TOPLEFT", left, 0)
-		bg:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+		strip(bg)
 		bg:SetColorTexture(0, 0, 0, above and T.DOT_BACK or 0.5)
 		-- OVERSIZED, AND CUT TO THE LANE (Josh 2026-09-24: "the red bar
 		-- still doesn't cover the full rail"): the client drew the picture
 		-- short of the lane's end - by whatever it scales a text's picture
 		-- by - so it is made twice the lane's width and a few pixels taller,
 		-- and the frame it is on clips it to the lane's own edges
-		local opts = blinks and flashOptions(bw * 2, h + 6, above and "dot" or "hot") or nil
+		local opts = blinks and flashOptions(bw * 2, barH + 6, above and "dot" or "hot") or nil
 		if opts and b.SetDurationText then
 			-- the client only asks that the text be somewhere inside the button
 			local under = CreateFrame("Frame", nil, b)
-			under:SetPoint("TOPLEFT", b, "TOPLEFT", left, 0)
-			under:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+			strip(under)
 			under:SetFrameLevel(level + 1)
 			if under.SetClipsChildren then
 				under:SetClipsChildren(true)
@@ -530,8 +555,7 @@ local function laneButton(w, h, colour, blinks, above)
 			end
 		end
 		local bar = CreateFrame("StatusBar", nil, b)
-		bar:SetPoint("TOPLEFT", b, "TOPLEFT", left, 0)
-		bar:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+		strip(bar)
 		bar:SetFrameLevel(level + 2)
 		bar:SetStatusBarTexture(BLANK)
 		bar:SetStatusBarColor(colour[1], colour[2], colour[3], above and T.DOT_ALPHA or 1)
@@ -594,13 +618,15 @@ end
 
 -- `dx` moves it right of the lane's start (a made-up lane's bar, after its
 -- picture: T.Show)
-local function place(c, b, i, kind, which, dx)
-	local h = T.Height(kind, which)
+-- `dy` moves it down from the lane's top (a made-up lane's bar, in the
+-- middle of its lane)
+local function place(c, b, i, kind, which, dx, dy)
+	local h = T.LaneHeight(kind, which)
 	c:ClearAllPoints()
 	if T.Above(which) then
 		-- the lane's top edge, so the first one's bottom is clear of the
 		-- frame and each next one a lane higher
-		c:SetPoint("TOPLEFT", b, "TOPLEFT", laneX(b) + (dx or 0), clearOf(b) + h + (i - 1) * (h + 1))
+		c:SetPoint("TOPLEFT", b, "TOPLEFT", laneX(b) + (dx or 0), clearOf(b) + h + (i - 1) * (h + 1) - (dy or 0))
 	else
 		c:SetPoint("TOPLEFT", b.health, "TOPLEFT", 0, -(i - 1) * (h + 1))
 	end
@@ -625,7 +651,7 @@ local function dotSignature(lanes)
 end
 
 local function dotStack(b, set, lanes)
-	local h = T.Height(set.kind, "dot")
+	local h, barH = T.LaneHeight(set.kind, "dot"), T.Height(set.kind, "dot")
 	local w = T.LaneWidth(b)
 	local ok, c = pcall(CreateFrame, "AuraContainer", nil, set.host, "CustomAuraContainerTemplate")
 	if not (ok and c and c.AddAuraGroup) then
@@ -649,7 +675,7 @@ local function dotStack(b, set, lanes)
 		if spells and next(spells) then
 			local added = pcall(c.AddAuraGroup, c, lane.name, "HARMFUL|PLAYER", {
 				maxFrameCount = 1,
-				initializeFrame = laneButton(w, h, lane.colour, T.Blinks("dot"), true),
+				initializeFrame = laneButton(w, h, lane.colour, T.Blinks("dot"), true, barH),
 				candidateFilters = { includeSpellIDs = spells },
 				layout = { elementSpacing = 1, lineSpacing = 1, groupLineSpacing = 1, forceNewLine = true,
 					elementWidth = w, elementHeight = h, layoutIndex = i },
@@ -803,11 +829,15 @@ end
 -- Their settings, for whichever page they belong on
 -- ---------------------------------------------------------------------------
 
--- the blink, as a row, for heals or for damage
+-- the blink, as a row, for heals or for damage. WHICH LANES, IN SO MANY
+-- WORDS (Josh 2026-10-04: "I thought we changed the blinking to 3 seconds
+-- instead of 5"): the heal's row on the Unit frames page said five and the
+-- damage's on the Nameplates page three, and neither said whose it was.
+local BLINK_LANE = { hot = "heal over time", dot = "damage over time" }
 function T.BlinkRow(section, which, changed)
 	return BT.Widgets.SwitchRow(section, "Blink as it runs out",
-		("In the last %d seconds, the empty part of the lane flashes red"):format(
-			T.BLINK_FROM[which] or T.BLINK_FROM.dot),
+		("In the last %d seconds, %s bars flash red"):format(
+			T.BLINK_FROM[which] or T.BLINK_FROM.dot, BLINK_LANE[which] or BLINK_LANE.dot),
 		function() return T.Blinks(which) end,
 		function(on)
 			T.SetBlinks(on, which)
@@ -898,8 +928,7 @@ function T.DotSection(page, changed)
 		end
 	end
 	orderRows(dots, nil)
-	W.Row(dots, "Nearest the bars at the bottom",
-		"Only the spells that are up show, in this order, with no gaps between them.")
+	W.Row(dots, "Same order as on screen", "Only spells that are up show, with no gaps")
 	return dots
 end
 
@@ -991,14 +1020,15 @@ function T.Show(b, kind)
 				f:SetMinMaxValues(0, 1)
 				b.bmFakeTimers[n] = f
 			end
-			local h = T.Height(kind, lane.which)
+			-- the lane's height (its picture's) and its bar's
+			local h, barH = T.LaneHeight(kind, lane.which), T.Height(kind, lane.which)
 			local above = T.Above(lane.which)
-			-- the spell's picture at the lane's left, the bar after it, as on
-			-- a real one (laneButton)
+			-- the spell's picture at the lane's left, the bar after it in the
+			-- middle of the lane, as on a real one (laneButton)
 			local left = T.IconRoom(h, above)
 			f:SetFrameLevel((b:GetFrameLevel() or 1) + 4)
-			f:SetSize(T.LaneWidth(b) - left, h)
-			place(f, b, n, kind, lane.which, left)
+			f:SetSize(T.LaneWidth(b) - left, barH)
+			place(f, b, n, kind, lane.which, left, math.floor((h - barH) / 2))
 			if above then
 				if not f.icon then
 					f.edge = f:CreateTexture(nil, "BACKGROUND", nil, 1)
@@ -1007,7 +1037,7 @@ function T.Show(b, kind)
 					f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 				end
 				f.edge:ClearAllPoints()
-				f.edge:SetPoint("TOPRIGHT", f, "TOPLEFT", -1, 0)
+				f.edge:SetPoint("RIGHT", f, "LEFT", -1, 0)
 				f.edge:SetSize(h, h)
 				f.icon:ClearAllPoints()
 				f.icon:SetPoint("TOPLEFT", f.edge, "TOPLEFT", 1, -1)

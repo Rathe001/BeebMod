@@ -78,9 +78,9 @@ BT.Command("cap", function(rest)
 	end
 	local c = BT.settings.bookCap or 0
 	U.Print(c > 0
-		and ("Census: the book keeps up to %d characters. Past that, at login, levels 1-10 go first, then those seen longest ago. Characters you've noted stay."):format(c)
+		and ("Census: keeps up to %d characters. At login, BeebMod drops levels 1-10 first, then those seen longest ago. Characters you've noted stay."):format(c)
 		or "Census: no size limit.")
-end, "cap <characters|off> - the most characters the book keeps")
+end, "cap <characters|off> - how many characters the census keeps")
 
 BT.Command("books", function()
 	for _, b in ipairs(BT.Books()) do

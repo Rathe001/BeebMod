@@ -594,10 +594,12 @@ local function levelText(unit, isPlayer)
 	-- THE COLOUR MEANS "HOW HARD" (Josh 2026-09-22), which is a question
 	-- about a mob. On a player a grey eleven read as "unimportant", so a
 	-- player's level is plain text.
-	if GetQuestDifficultyColor and level and level > 0 and not isPlayer then
-		local c = GetQuestDifficultyColor(level)
-		if c and c.r then
-			r, g, b = c.r, c.g, c.b
+	-- by the shared rule (Core/Util.lua, U.LevelColour): the client's own
+	-- answer is the modern game's on this build
+	if not isPlayer then
+		local c = U.LevelColour(level)
+		if c then
+			r, g, b = c[1], c[2], c[3]
 		end
 	end
 	return text, r, g, b
@@ -616,7 +618,11 @@ end
 -- chat's green, straight after race and class - "Dwarf Shaman <The Gnome
 -- Depot>" - as a guild reads in the game's own chat
 M.GUILD = "|cff40ff40%s|r"
-local function detailLine(unit, isPlayer)
+local detailLine
+function M.DetailLine(unit, isPlayer)
+	return detailLine(unit, isPlayer)
+end
+function detailLine(unit, isPlayer)
 	local bits = {}
 	-- everything this line SPEAKS FOR, whether it printed it or deliberately
 	-- left it out: the sweep that carries the client's remaining lines over
@@ -661,15 +667,15 @@ local function detailLine(unit, isPlayer)
 		-- clicked, "Humanoid" is not
 		-- read off the tooltip's own second line: UnitPVPName returns the
 		-- name with the title folded in, never the title on its own
+		-- with or without its angle brackets (Core/Util.lua, U.NpcTitle)
 		local title = nil
 		if _G.GameTooltipTextLeft2 then
-			local second = _G.GameTooltipTextLeft2:GetText()
-			if second and second:find("^<") then
-				title = second:match("^<(.*)>$")
-			end
+			title = U.NpcTitle(_G.GameTooltipTextLeft2:GetText())
 		end
 		if title and title ~= "" then
 			spoken["<" .. title .. ">"] = true
+			-- and the client's own bare line, so it is not said twice
+			spoken[title] = true
 			bits[#bits + 1] = "<" .. title .. ">"
 		end
 		-- the family and the type both: whichever one the client wrote on its
@@ -2058,16 +2064,16 @@ function M:BuildTab(panel)
 		r.optName, r.default = name, default
 		self.rows[#self.rows + 1] = r
 	end
-	row("Guild", "The guild name, in angle brackets", "guild", true)
+	row("Guild", "Guild name in angle brackets", "guild", true)
 	row("Other faction", "Only when it isn't your faction", "faction", true)
 	row("Health bar", "The game's health bar under the tooltip", "healthBar", false)
-	row("Small item footers", "An item's sell price and the lines under it, in small grey text", "footer", true)
+	row("Small sell price", "Sell price and the lines under it, in small grey text", "footer", true)
 	row("Item level", "Beside the name, on anything you can wear", "itemLevel", true)
-	row("Who it targets", "A line saying who a player or NPC is targeting", "targetLine", false)
+	row("Targeting", "Who a player or NPC is targeting", "targetLine", false)
 
 	-- WHERE AND WHEN (Josh 2026-09-24)
 	local place = page:Section("Place")
-	local where = BT.Widgets.Row(place, "Position", "For tooltips with no place of their own, the corner or the pointer")
+	local where = BT.Widgets.Row(place, "Position", "For tooltips the game puts in the corner")
 	self.anchorSeg = where:SetControl(BT.Widgets.Segmented(where, {
 		{ "dock", "Corner" }, { "cursor", "Pointer" },
 	}, function(key)

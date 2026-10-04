@@ -297,9 +297,9 @@ end
 -- A NEW SESSION FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
 -- slash commands"). What /bt gold reset did, as a Reset row on the Metrics
 -- page, which builds one for each part with a `resetRow` and an M.Reset.
-M.resetRow = { "Currency session", "Starts what you earned, spent and made an hour again from now" }
+M.resetRow = { "Currency session", "Resets earned, spent and net per hour" }
 
 function M.Reset()
 	M.Start(true, false)
-	U.Print("Currency: a new session starts now.")
+	U.Print("Currency: session reset.")
 end

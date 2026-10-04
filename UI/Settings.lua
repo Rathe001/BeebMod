@@ -22,7 +22,7 @@ function S.Build(parent)
 	-- WHICH FEATURES (Josh 2026-09-27): the question the first login asks -
 	-- six cards, a switch each - asked again
 	local layout = stack:Section("Features")
-	local again = W.Row(layout, "Choose again",
+	local again = W.Row(layout, "Pick features",
 		"The six cards from your first login, one for each feature. Type /bt setup to show them from chat.")
 	local ask = again:SetControl(W.Button(again, "Choose", 70, 20))
 	ask:SetScript("OnClick", function()

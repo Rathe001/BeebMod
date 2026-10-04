@@ -148,7 +148,7 @@ function M.Tip()
 		if s and s.start then
 			t:Note(("Played this session: %s."):format(BT.Session.Duration(U.Now() - s.start)))
 		end
-		t:Foot({ { "Click", which == "local" and "show server time instead" or "show local time instead" } })
+		t:Foot({ { "Click", which == "local" and "show server time" or "show local time" } })
 	end })
 end
 

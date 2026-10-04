@@ -898,7 +898,7 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod moves the game's own buttons into the dock. Every one still does what it did before.")
+	page:Note("BeebMod moves the game's menu buttons into the dock. Each works as before.")
 	page:Note("Switch this off and the game's micro menu comes back as it was.", true)
 	local list = page:Section("Buttons")
 	for _, b in ipairs(M.Buttons()) do

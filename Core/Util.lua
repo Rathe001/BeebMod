@@ -341,6 +341,86 @@ function U.Bright(color, floor)
 	return r, g, b
 end
 
+-- HOW HARD A LEVEL IS, WORKED OUT HERE (Josh 2026-09-19, the quest tracker;
+-- 2026-10-04 for everything else: "This mob is 4 levels below me, but is
+-- showing as yellow"). GetQuestDifficultyColor on this build answers the
+-- way the modern game does, yellow down to four levels below you: at level
+-- 10 it called a level 6 quest yellow and a level 13 one red, where the
+-- client's own quest log beside it drew them green and orange. Measured,
+-- not guessed - /bt tracker colours printed 1.00 0.82 0.00 for every quest
+-- but one. So the five bands are worked out from your level and the other,
+-- the way they have been since the game shipped:
+--
+--   +5 or more   red        it will kill you
+--   +3 or +4     orange     bring somebody
+--   -2 to +2     yellow     about right
+--   within the green range  green      easy
+--   below that   grey       not worth the time
+--
+-- GetQuestGreenRange is the client's own idea of how far below your level a
+-- quest or an enemy stays worth the time; it narrows as you level, and five
+-- is what it is around here if the call is missing. One rule for the
+-- tracker, the unit frames, the nameplates and the tooltips.
+U.DIFFICULTY = {
+	impossible = { 1.00, 0.24, 0.24 },
+	verydifficult = { 1.00, 0.50, 0.25 },
+	difficult = { 1.00, 0.82, 0.00 },
+	standard = { 0.35, 0.78, 0.38 },
+	trivial = { 0.58, 0.62, 0.60 },
+}
+
+function U.GreenRange()
+	if not GetQuestGreenRange then
+		return 5
+	end
+	-- newer clients want the unit, older ones take nothing at all
+	local ok, n = pcall(GetQuestGreenRange, "player")
+	if not ok then
+		ok, n = pcall(GetQuestGreenRange)
+	end
+	n = ok and tonumber(n) or nil
+	return n or 5
+end
+
+-- AN NPC'S TITLE, FROM ITS TOOLTIP'S SECOND LINE (Josh 2026-10-04: an
+-- innkeeper's nameplate had no picture, and her tooltip said "Humanoid" with
+-- "Innkeeper" on a line of its own). The game once wrote "<Innkeeper>"; this
+-- client writes it bare. The second line is the title, or, for an NPC with
+-- none, the level line - so anything there but a level line is the title.
+function U.NpcTitle(line)
+	if type(line) ~= "string" or (issecretvalue and issecretvalue(line)) or line == "" then
+		return nil
+	end
+	local bracketed = line:match("^<(.*)>$")
+	if bracketed then
+		return bracketed ~= "" and bracketed or nil
+	end
+	local level = type(_G.LEVEL) == "string" and _G.LEVEL or "Level"
+	if line:sub(1, #level) == level or line:sub(1, 5) == "Level" then
+		return nil
+	end
+	return line
+end
+
+-- the colour for a level, against yours; nil where either is not known
+function U.LevelColour(level)
+	local mine = UnitLevel and tonumber((UnitLevel("player"))) or 0
+	if not (type(level) == "number" and level > 0 and mine > 0) then
+		return nil
+	end
+	local diff = level - mine
+	if diff >= 5 then
+		return U.DIFFICULTY.impossible
+	elseif diff >= 3 then
+		return U.DIFFICULTY.verydifficult
+	elseif diff >= -2 then
+		return U.DIFFICULTY.difficult
+	elseif -diff <= U.GreenRange() then
+		return U.DIFFICULTY.standard
+	end
+	return U.DIFFICULTY.trivial
+end
+
 -- WHO IS WRITING (Josh 2026-09-19). The book is shared by every character on
 -- the realm and the side, so "who said this" is a real question - and the
 -- answer reads like a quotation's source, which is what a note is.

@@ -205,7 +205,7 @@ function M.Handle(f, key)
 			return
 		end
 		if inCombat() then
-			U.Print("Unit frames: you can't move frames in a fight. Move them when it's over.")
+			U.Print("Unit frames: you can't move frames in combat.")
 			return
 		end
 		local h = holder(self.bmHandle)
@@ -1142,22 +1142,27 @@ local SP = {
 }
 
 local SKULL = { name = "Edwin VanCleef", reaction = "hostile", hp = 64, marker = 8 }
+-- SHIELDS, EVERY WAY ONE IS DRAWN (Josh 2026-10-04: "add some shields to the
+-- Made-up people"): Brannoc's fits after his heal, Ashby's straight after
+-- the health, Maelis's is too big for what she is missing and lies back over
+-- a priest's white bar, and Ysolde's is on a full bar. The raid's warriors
+-- carry them too, and the made-up target one too big to fit.
 local PARTY = {
 	{ name = "Brannoc", class = "WARRIOR", level = 34, hp = 64, max = 1480, heal = 20, shield = 8, aggro = 3, leader = true, ml = true,
 		aim = SKULL, auras = { debuffs = { { spell = SP.poison, type = "Poison", count = 3 } },
 			mine = { { spell = SP.renew }, { spell = SP.shield } }, dispel = "Poison" } },
 	-- the one with something you could remove, to show the mark
 	-- and a summon waiting for her
-	{ name = "Maelis", class = "PRIEST", level = 33, hp = 92, max = 760, mana = 58, summon = 1, heal = 20,
+	{ name = "Maelis", class = "PRIEST", level = 33, hp = 92, max = 760, mana = 58, summon = 1, heal = 20, shield = 30,
 		aim = { name = "Brannoc", class = "WARRIOR", hp = 64 },
 		auras = { debuffs = { { spell = SP.pain, type = "Magic" }, { spell = SP.hamstring } }, dispel = "Magic" } },
 	-- the one on the wrong target, which is what the column is for
-	{ name = "Ysolde", class = "MAGE", level = 35, hp = 100, max = 720, mana = 71, target = true,
+	{ name = "Ysolde", class = "MAGE", level = 35, hp = 100, max = 720, mana = 71, target = true, shield = 15,
 		aim = { name = "Defias Blackguard", reaction = "hostile", hp = 100 },
 		auras = { debuffs = { { spell = SP.infected, type = "Disease" } }, mine = { { spell = SP.shield } },
 			dispel = "Disease" } },
 	-- a hunter, with a boar that is only content: the happiness square
-	{ name = "Ashby", class = "HUNTER", level = 32, hp = 47, max = 1210, mana = 80, aim = SKULL,
+	{ name = "Ashby", class = "HUNTER", level = 32, hp = 47, max = 1210, mana = 80, shield = 20, aim = SKULL,
 		pet = { name = "Bristleback", reaction = "friendly", hp = 83, happy = 2, power = "FOCUS", mana = 60 },
 		auras = { debuffs = { { spell = SP.corruption, type = "Curse" } }, mine = { { spell = SP.rejuv } },
 			dispel = "Curse" } },
@@ -1171,7 +1176,8 @@ local RAID_NAMES = {
 }
 local BOSSES = {
 	{ name = "Lucifron", level = -1, classification = "worldboss", reaction = "hostile", hp = 38, marker = 8,
-		cast = { name = "Impending Doom", p = 0.6, shielded = true },
+		-- one the game calls important, for the red rim (Unit.lua, F.IMPORTANT)
+		cast = { name = "Impending Doom", p = 0.6, shielded = true, important = true },
 		auras = {} },
 	{ name = "Flamewaker Protector", level = 62, classification = "elite", reaction = "hostile", hp = 100, marker = 7,
 		auras = {} },
@@ -1313,6 +1319,8 @@ function M.Preview(what)
 				end
 				if d.class == "WARRIOR" or i <= 2 then
 					auras.mine = { { spell = SP.renew }, { spell = SP.shield } }
+					-- and the shield their aura says they have, a different size each
+					d.shield = d.shield or (8 + (i * 7) % 24)
 				end
 				d.auras = auras
 				M.raidCells[i] = preview("raid", d, { "TOPLEFT", spot("raid"), "TOPLEFT", at[g + 1] * M.RAID_STEP,
@@ -1332,7 +1340,7 @@ function M.Preview(what)
 	-- the main tanks, in a raid, each with what they have in hand
 	if what == "raid" and opt("tanks", true) then
 		local list = {
-			{ name = "Brannoc", class = "WARRIOR", hp = 71, aggro = 3, aim = { name = "Lucifron", reaction = "hostile", hp = 38, marker = 8 } },
+			{ name = "Brannoc", class = "WARRIOR", hp = 71, shield = 20, aggro = 3, aim = { name = "Lucifron", reaction = "hostile", hp = 38, marker = 8 } },
 			{ name = "Garrow", class = "WARRIOR", hp = 22, aggro = 3, aim = { name = "Flamewaker Protector", reaction = "hostile", hp = 12, marker = 6 } },
 		}
 		-- stacked up from the raid, the first on top
@@ -1358,7 +1366,7 @@ function M.Preview(what)
 		M.previews[#M.previews + 1] = c
 	end
 	M.previewTarget = preview("target", { name = "Defias Blackguard", level = 20, classification = "elite",
-		reaction = "hostile", hp = 72, max = 1540, mana = 45, power = "RAGE", combo = 3, threat = 82, threatStatus = 2,
+		reaction = "hostile", hp = 72, max = 1540, mana = 45, power = "RAGE", combo = 3, threat = 82, threatStatus = 2, shield = 40,
 		auras = { debuffs = { { spell = SP.rupture }, { spell = SP.sunder, count = 5 }, { spell = SP.fire, type = "Magic" },
 			{ spell = SP.hamstring }, { spell = SP.expose } },
 			-- and its buffs under them, a stance it keeps all day included
@@ -1641,23 +1649,23 @@ function M:BuildTab(panel)
 	local W = BT.Widgets
 	local page = W.Stack(panel)
 	local groups = page:Section("Show")
-	W.SwitchRow(groups, "Party", "You and your pet at the top, then 4 others with their pets and targets",
+	W.SwitchRow(groups, "Party", "You and your pet on top, then 4 others with pets and targets",
 		function() return opt("party", true) end, function(on) setOpt("party", on) end)
 	W.SwitchRow(groups, "Raid", "A column for each group in use, in place of the game's raid frames",
 		function() return opt("raid", true) end, function(on) setOpt("raid", on) end)
-	W.SwitchRow(groups, "Main tanks", "In a raid, above the raid frames, each with its target",
+	W.SwitchRow(groups, "Main tanks", "Above raid frames, with targets",
 		function() return opt("tanks", true) end, function(on) setOpt("tanks", on) end)
-	W.SwitchRow(groups, "Bosses", "Up to 5, with their casts and mechanics",
+	W.SwitchRow(groups, "Bosses", "Up to 5, with casts and mechanics",
 		function() return opt("boss", true) end, function(on) setOpt("boss", on) end)
 	W.SwitchRow(groups, "Your cast bar", "Under the resource display, in place of the game's cast bar",
 		function() return opt("cast", true) end, function(on) setOpt("cast", on) end)
 	local where = page:Section("Place")
-	local move = W.Row(where, "Shift-drag to move", "Any block, out of combat")
+	local move = W.Row(where, "Shift-drag to move", "Out of combat")
 	local reset = move:SetControl(W.Button(move, "Reset", 62, 20))
 	reset:SetScript("OnClick", function()
 		M.ResetPlaces()
 	end)
-	local size = W.Row(where, "Size", "Every unit frame, and the cast bar")
+	local size = W.Row(where, "Size", "All unit frames and cast bar")
 	self.sizeStep = size:SetControl(W.Stepper(size, function(dir)
 		M.SetScale(M.Scale() + dir * M.SCALE_STEP)
 		M:ShowTab()
@@ -1681,17 +1689,17 @@ function M:BuildTab(panel)
 		seg.healthKey = key
 		self.healthSegs[#self.healthSegs + 1] = seg
 	end
-	local look = page:Section("Feel")
-	local fadeRow = W.Row(look, "Out of range", "How much a frame fades when it's out of range")
+	local look = page:Section("Look")
+	local fadeRow = W.Row(look, "Out of range", "How much frames fade")
 	self.fadeSeg = fadeRow:SetControl(W.Segmented(fadeRow, {
 		{ "light", "Light" }, { "medium", "Medium" }, { "strong", "Strong" },
 	}, function(key)
 		setOpt("fade", key)
 		M.PaintAll()
 	end))
-	W.SwitchRow(look, "Bars slide", "Health and power slide to a new value. Off, they jump.",
+	W.SwitchRow(look, "Bars slide", "Health and power bars slide instead of jumping",
 		function() return opt("animate", true) end, function(on) setOpt("animate", on) end)
-	W.SwitchRow(look, "Target's buffs", "A row of your target's buffs, beside its debuffs",
+	W.SwitchRow(look, "Target's buffs", "Next to debuffs",
 		function() return opt("targetBuffs", true) end,
 		function(on)
 			setOpt("targetBuffs", on)
@@ -1706,21 +1714,21 @@ function M:BuildTab(panel)
 	if T and #T.Spells("hot") > 0 then
 		local timers = page:Section("Heal over time")
 		for _, name in ipairs(T.Spells("hot")) do
-			W.SwitchRow(timers, name, "A bar on the player who has it, counting down",
+			W.SwitchRow(timers, name, "Countdown bar on each frame with this heal",
 				function() return T.On(name) end,
 				function(on)
 					T.SetOn(name, on)
 					M.RefreshPreview()
 				end)
 		end
-		-- the heal's own blink; the damage has its own, on the Resource
-		-- display's page
+		-- the heal's own blink; the damage has its own, on the Nameplates
+		-- page
 		self.blinkRow = T.BlinkRow(timers, "hot", function() M.RefreshPreview() end)
 	end
 	local more = page:Section("More")
 	if M.MouseoverSupported() then
-		self.mouseoverRow = W.SwitchRow(more, "Cast on what you point at",
-			"Heals go to the frame under the pointer. Attacks still go to your target.",
+		self.mouseoverRow = W.SwitchRow(more, "Mouseover cast",
+			"Heals go to the frame under your mouse. Attacks still go to your target.",
 			function() return M.Mouseover() end,
 			function(on) M.SetMouseover(on) end)
 	end

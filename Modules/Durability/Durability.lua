@@ -187,7 +187,7 @@ function M.Tip()
 		end
 		table.sort(worn, function(a, b) return a.pct < b.pct end)
 		local worst = worn[1] and wear(worn[1])
-		t:Header({ name = "Durability", sub = "Your worn gear",
+		t:Header({ name = "Durability", sub = "Equipped gear",
 			pill = worst == "bad" and "Repair now" or (worst == "warn" and "Repair soon" or nil),
 			pillState = worst })
 		local avg = d.pct or 100

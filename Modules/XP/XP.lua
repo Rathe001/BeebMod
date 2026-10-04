@@ -21,7 +21,7 @@ local M = BT.Module({
 	feature = "dock",
 	onPage = "progress",
 	title = "Experience",
-	blurb = "The bar, and time to level",
+	blurb = "Your XP bar and time to level",
 	order = 37,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -239,16 +239,6 @@ function M.Pace(list)
 	return gained * 3600 / counted
 end
 
--- what the pace still needs, in words, while there is none
-function M.Waiting(list)
-	list = list or M.PaceList() or {}
-	local more = M.MIN_GAINS - #list
-	if more > 0 then
-		return ("The time to level shows after %d more %s of XP."):format(more, more == 1 and "gain" or "gains")
-	end
-	return "The time to level shows after a little more play."
-end
-
 -- experience per hour at your pace, or nil while there is too little to go on
 function M.Rate()
 	return M.Pace()
@@ -363,36 +353,66 @@ function M.Tip()
 		return
 	end
 	local level, cur, max, rested = M.Read()
-	local s = M.session
-	local rate = M.Rate()
 	-- (Josh 2026-09-27, the dock's tooltips redrawn) how far through the
-	-- level, rested drawn on the bar, and how long the rest takes at your pace
+	-- level, rested drawn on the bar.
+	-- NO XP RATE (Josh 2026-10-04: "I think we can remove all of this
+	-- redundant or unneeded info to save space"). The XP left, the time to
+	-- level, this session and XP per hour went: the dock's line already says
+	-- how long the level will take, and the room went to zones and dungeons.
 	BT.Tip.Show(M.frame, { build = function(t)
 		local className = UnitClass and select(1, UnitClass("player")) or nil
 		local pct = max > 0 and math.floor(cur / max * 100) or 0
 		t:Header({ name = "Experience", sub = ("Level %d%s"):format(level, className and (" " .. className) or ""),
 			pill = (rested or 0) > 0 and "Rested" or nil, pillState = "rested" })
-		t:Headline(pct .. "%", ("through level %d"):format(level))
+		t:Headline(pct .. "%", ("of level %d"):format(level))
 		local done = max > 0 and cur / max or 0
 		t:Bar(done, nil, nil, (rested or 0) > 0 and { (rested or 0) / max, "rested" } or nil)
-		t:Scale(("%s XP to %d"):format(big(math.max(0, max - cur)), level + 1),
-			(rested or 0) > 0 and ("%s rested"):format(big(rested)) or nil, "rested")
-		local secs = M.ToLevel(cur, max, rate)
-		t:Section("At your pace")
-		if secs then
-			t:Row(("Level %d in"):format(level + 1), "about " .. duration(secs))
-		else
-			-- NOT YET, AND WHY (Josh 2026-09-28: "Not seeing any 'x to next
-			-- level' estimates now"): the pace needs a few gains first
-			t:Note(M.Waiting())
+		-- ZONES AND DUNGEONS FOR YOUR LEVEL (Josh 2026-10-04): three of each
+		-- whose range takes you in, for your side, nearest the middle of
+		-- their range first (Modules/XP/Zones.lua, Dungeons.lua); none, no section
+		local side = UnitFactionGroup and select(1, UnitFactionGroup("player")) or nil
+		local zones = BT.Zones and BT.Zones.For(level, side) or {}
+		local dungeons = BT.Dungeons and BT.Dungeons.For(level, side) or {}
+		local soon = #dungeons == 0 and BT.Dungeons and BT.Dungeons.Next(level, side) or {}
+		-- A LEVEL HELPER (Josh 2026-10-04: "Can we add a 'Recommended content'
+		-- heading for the zones/dungeons sub headings? I'd like to frame it
+		-- more as a level helper"): one section, a small heading for each kind
+		-- HOW HARD (Josh 2026-10-04: "Could we color the zones/dungeons by the
+		-- relative difficulty (similar to quests and mobs)?"): by where you are
+		-- in the range (Dungeons.lua, D.RangeColour). A dungeon still ahead of
+		-- you, below its range, by the quests' rule on its lowest level.
+		local function hard(entry, kind)
+			return BT.Dungeons.RangeColour(entry, level, kind)
 		end
-		if s and (s.gained or 0) > 0 then
-			t:Row("This session", ("+%s in %s"):format(big(s.gained), duration(U.Now() - (s.start or U.Now()))))
+		if #zones > 0 or #dungeons > 0 or #soon > 0 then
+			t:Section("Recommended content")
+			-- each kind a step in, a line between them (Josh 2026-10-04: "slightly
+			-- indent the zones/dungeons sections, and place an (also indented)
+			-- divider between them")
+			t:Indent(8)
+			if #zones > 0 then
+				t:Subhead("Zones")
+				for _, z in ipairs(zones) do
+					t:ListRow(z.name, ("%d-%d"):format(z.lo, z.hi), nil, hard(z, "zone"))
+				end
+			end
+			if #zones > 0 and (#dungeons > 0 or #soon > 0) then
+				t:Divider()
+			end
+			if #dungeons > 0 then
+				t:Subhead("Dungeons")
+				for _, d in ipairs(dungeons) do
+					t:ListRow(d.name, ("%d-%d"):format(d.lo, d.hi), nil, hard(d, "dungeon"))
+				end
+			elseif #soon > 0 then
+				-- none yet: the first coming, a few levels off (Dungeons.lua, D.Next)
+				t:Subhead("Next dungeon")
+				for _, d in ipairs(soon) do
+					t:ListRow(d.name, ("%d-%d"):format(d.lo, d.hi), nil, BT.Util.LevelColour(d.lo))
+				end
+			end
 		end
-		if rate then
-			t:Row("Per hour", big(math.floor(rate)))
-		end
-		t:Foot({ { "Right-click", "start the pace again" } })
+		t:Foot({ { "Right-click", "reset session" } })
 	end })
 end
 
@@ -539,16 +559,16 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("Your level, how far through it you are, and roughly how long the rest will take.")
+	page:Note("Your level, how far through it you are, and about how long until the next.")
 	page:Note("The time to level comes from the XP you gained in your last hour of play. "
 		.. "Only the time between one gain and the next counts, and a gap longer than 5 minutes counts as 5.", true)
 	page:Note("The paler stretch on the bar is rested XP. At the level cap there is no line.", true)
-	local r = BT.Widgets.SwitchRow(page:Section("The game's own"), "Hide the game's bar",
+	local r = BT.Widgets.SwitchRow(page:Section("Game's XP bar"), "Hide the game's bar",
 		"Hides the game's experience bar while this one shows",
 		function() return M.HideClient() and true or false end,
 		function(on) M.SetHideClient(on) end)
 	self.hideSwitch = r.switch
-	local session = BT.Widgets.Row(page:Section("Session"), "New session", "Starts XP an hour and the time to level again from now")
+	local session = BT.Widgets.Row(page:Section("Session"), "New session", "Resets XP per hour and the time to level")
 	self.resetButton = session:SetControl(BT.Widgets.Button(session, "Reset", 62, 20))
 	self.resetButton:SetScript("OnClick", function()
 		M.Reset()
@@ -577,5 +597,5 @@ function M.Reset()
 		end
 	end
 	M.Start(true, false)
-	U.Print("XP: the session and the pace start again now.")
+	U.Print("XP: session reset.")
 end

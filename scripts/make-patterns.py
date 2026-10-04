@@ -2,7 +2,8 @@
 unit frames' dispel mark - magic sparks, curse smoke, poison bubbles, disease
 spores, bleed drips. White, with the drawing in the alpha channel, so the
 client tints each in its type's colour. Every one tiles seamlessly (all the
-noise is periodic over the tile).
+noise is periodic over the tile). And the lattice of a shield over a unit's
+health (shield, below).
 
     python scripts/make-patterns.py [proof.png]
 
@@ -174,13 +175,80 @@ def disease():
     return np.clip(a, 0, 1)
 
 
+# --- shield (Josh 2026-10-04: "C: honeycomb"): a lattice of hexagons, the
+# shape a shield takes in a hundred games, drawn as the dispel patterns are.
+# Each line is bright with a dark line just inside it, over a faint fill, so
+# the lattice reads on a white bar and on the empty dark alike. The bright and
+# the fill are white and the dark is black: the client tints the white, and
+# black under any tint stays black - so the drawing is in the colour as well
+# as the alpha, unlike the others. It sat in Dander's Frames' cyan stripes for
+# an afternoon first ("looks more like BeebMod instead of a Dander's Frames
+# copy"). 64 square: seven hexagons across and four pairs of rows down, so
+# the lattice comes round to meet itself at every edge.
+# AND A FINER ONE (Josh 2026-10-04: "scale down the textures of the raid unit
+# frames a bit? Doesn't read quite as well as player/target frames"): ten
+# across and six pairs of rows, with thinner lines, for the frames whose bar
+# is short - a raid cell showed two or three hexagons and read as a blur.
+def shield(name='shield', across=7, pairs=4, lw=1.2):
+    n = 64
+    yy2, xx2 = np.mgrid[0:n, 0:n].astype(np.float64) + 0.5
+    w, r = n / float(across), n / float(pairs) / 3.0
+    b1 = np.array((w, 0.0))
+    b2 = np.array((w / 2.0, 1.5 * r))
+    inv = np.linalg.inv(np.array([b1, b2]).T)
+    u = inv[0, 0] * xx2 + inv[0, 1] * yy2
+    v = inv[1, 0] * xx2 + inv[1, 1] * yy2
+    best = np.full(xx2.shape, 1e9)
+    bx = np.zeros_like(xx2)
+    by = np.zeros_like(xx2)
+    for du in (0, 1):
+        for dv in (0, 1):
+            cu, cv = np.floor(u) + du, np.floor(v) + dv
+            dx = xx2 - (cu * b1[0] + cv * b2[0])
+            dy = yy2 - (cu * b1[1] + cv * b2[1])
+            d = dx * dx + dy * dy
+            near = d < best
+            best = np.where(near, d, best)
+            bx = np.where(near, dx, bx)
+            by = np.where(near, dy, by)
+    norm = np.zeros_like(xx2)
+    for ang in (0, 60, 120):
+        a = np.radians(ang)
+        norm = np.maximum(norm, np.abs(bx * np.cos(a) + by * np.sin(a)))
+    edge = w / 2.0 - norm                       # inside a hexagon, how far from its edge
+    line = np.clip(lw - np.abs(edge), 0, 1)
+    shade = np.clip(lw - np.abs(edge - lw), 0, 1) * 0.55
+    # laid one over another: the fill, the dark, the line
+    col, alpha = np.zeros_like(xx2), np.zeros_like(xx2)
+    for c, a in ((1.0, np.full_like(xx2, 0.16)), (0.0, shade), (1.0, line * 0.9)):
+        col = c * a + col * (1 - a)
+        alpha = a + alpha * (1 - a)
+    grey = np.where(alpha > 0, col / np.maximum(alpha, 1e-6), 0)
+    rgb = np.repeat((np.clip(grey, 0, 1) * 255).astype(np.uint8)[..., None], 3, axis=2)
+    rgba = np.dstack([rgb, (np.clip(alpha, 0, 1) * 255).astype(np.uint8)])
+    Image.fromarray(rgba, 'RGBA').save(os.path.join(OUT, name + '.tga'))
+
+
 COLOURS = {
     'magic': (0.20, 0.60, 1.00), 'curse': (0.60, 0.00, 1.00), 'disease': (0.60, 0.40, 0.00),
     'poison': (0.00, 0.60, 0.00), 'bleed': (0.80, 0.20, 0.20),
 }
+# --- each at half the size, for a short cell (Josh 2026-10-04: "Should we do
+# the same for the debuff textures?"). A raid cell's band is 18 tall: it held
+# part of one bubble or one drip, and the type read as a plain wash. Shrunk
+# from three tiles by three and the middle one kept, so it still tiles.
+def half(name, a):
+    tile = Image.fromarray(np.tile(a, (3, 3)), 'L')
+    small = np.array(tile.resize((3 * N // 2, 3 * N // 2), Image.LANCZOS)).astype(np.float64) / 255
+    save(name + '-fine', small[N // 2:N, N // 2:N])
+
+
 made = {}
 for name, fn in (('magic', magic), ('curse', curse), ('poison', poison), ('disease', disease), ('bleed', bleed)):
     made[name] = save(name, fn())
+    half(name, made[name])
+shield()
+shield('shield-fine', across=10, pairs=6, lw=0.9)
 
 # --- the proof: each one tiled 2x2 on the cell's dark, and as it sits on a
 # party cell: the class bar, the wash at 28%, the texture at 45% over it

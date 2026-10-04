@@ -5,6 +5,114 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **An NPC's title is back on its tooltip.** An innkeeper's tooltip said
+  "Humanoid", with "Innkeeper" on a line of its own: this client writes an
+  NPC's title without the angle brackets BeebMod looked for. The title
+  shows as "<Innkeeper>" in place of the creature type again.
+
+- **Weapon enchants show in the buff tray again.** A shaman's Rockbiter, a
+  rogue's poison or a sharpening stone never reached the tray: BeebMod
+  asked for them the old way, which this client doesn't use. They show now,
+  with the enchant's own icon and its time left.
+
+- **Friendly nameplates show just the name.** A friendly player's name is in
+  their class colour. An NPC's is a size smaller, in a lighter face and a
+  softer green, so players stand out and NPCs stay readable. There is no
+  bar, level or figure, so friends stand apart from enemies and add little
+  to the screen. An NPC who sells, repairs, trains, flies you, keeps an inn,
+  a bank, an auction house or a stable, or gives directions as a guard in a
+  capital, has the game's own picture for it before the name. BeebMod reads
+  this from the subtitle under the NPC's name, as the English game writes
+  it. Your target's name is underlined in white. A switch on the Nameplates
+  page turns them off. In dungeons the game keeps friendly nameplates for
+  itself, so they stay the game's there.
+
+- **Nameplates for pets and minions.** A new switch on the Nameplates page,
+  on by default, turns on the game's own setting for friendly players' pets
+  and minions, and puts back what you had when you turn it off. Their names
+  show in the NPC style.
+
+- **Zones and dungeons for your level in the XP tooltip.** Hovering the XP
+  line shows a Recommended content section: up to 3 questing zones and up to
+  3 dungeons whose level range includes yours, each kind under its own small
+  heading, set in a step with a line between, for your side, with the range
+  beside each. The first of each is the one whose middle level is nearest
+  yours. Each name is coloured by where your level sits in its range, in the
+  quest colours: a dungeon orange, then yellow, then green through each
+  third, so The Hall of Thanes (13-18) is orange at 13-14, yellow at 15-16
+  and green at 17-18; a zone yellow for the first half and green for the
+  second. The next dungeon, still above you, is coloured as a quest of its
+  lowest level would be. A range's top level counts as done, so at level 10
+  it lists the 10-20 zones, not the starting ones. With no dungeon in range
+  yet, it names the next one if it starts within 5 levels. Zone ranges come
+  from the game where it gives them, as its world map shows them, and from
+  Classic's published ranges where it doesn't. The dungeons cover the 20
+  Classic dungeons, Scarlet Monastery wing by wing, and the 9 new ones in
+  WoW: Forever. It doesn't say yet which still have quests for you.
+
+- **A shorter XP tooltip.** The XP left, the time to level, this session
+  and XP per hour are gone from it. The dock's line already says how long
+  the level will take.
+
+- **Spell icons on cast bars, and a red rim on casts to stop.** The target,
+  focus and boss frames and enemy nameplates show the spell's icon at the
+  left of the cast bar, with its name after it. A cast the game marks as
+  important, one that is lethal if not interrupted, gets a red rim round its
+  bar. The game decides which casts those are; BeebMod keeps no list.
+
+- **Plainer words.** Hints, labels and notes across BeebMod are shorter and
+  use the words players use. The XP tooltip's right-click says "reset
+  session". Click hints drop "the", as in "Click: open journal". The quest
+  tracker's hints are "open in quest log", "hide objectives" (or "show
+  objectives") and "untrack". The Performance tooltip explains itself in one
+  short line, and "Mouseover cast" uses the game's own name for that
+  setting.
+
+- **Heal lanes blink in their last 3 seconds.** They started at 5; damage
+  over time lanes already started at 3. A blink that lasts longer is easier
+  to ignore. The two blink switches also say which bars they are for: heal
+  over time on the Unit frames page, damage over time on the Nameplates
+  page.
+
+- **Bigger spell icons on damage over time lanes.** Each lane's icon is 4
+  pixels taller than its bar now, 13 pixels on a nameplate and 14 on the
+  focus and boss frames. The bars keep their height, centred in the lane
+  beside the icon.
+
+- **Shields are an ice-blue honeycomb.** A shield on a unit frame was a
+  white wash after the health and read as more healing. It is drawn as a
+  honeycomb now, ice blue with dark lines along it, in a one-pixel rim, so
+  it shows on a white bar and on the empty part alike. While the shield fits
+  in the health missing, it sits straight after the health and any heal
+  coming in. When it is bigger than that, it shows whole instead, from the
+  right end of the bar back over the health: a shield worth a third of your
+  health covers the last third of the bar, even at full health. Short bars
+  (raid cells, tanks, focus, bosses, pets and nameplates) use a finer
+  honeycomb, so a shield there still shows several cells. Heals are also
+  measured against the full width of the health bar; they were drawn a
+  little short. The made-up people on the Testing page have shields, so you
+  can see both ways a shield is drawn.
+
+- **Debuff patterns at half size on raid cells.** Sparks, smoke, bubbles,
+  spores and drips tell one debuff type from another. On a raid cell they
+  sit in a band 18 pixels tall, which held only part of one bubble or drip,
+  so every type looked like a plain wash. Raid and tank cells use patterns
+  at half size now; party cells keep the full size.
+
+- **Level colours follow Classic's rule everywhere.** Unit frames,
+  nameplates and tooltips took a level's colour from the game, which on this
+  client uses the modern rule, so an enemy four levels below you was yellow.
+  Now they use the quest tracker's rule: yellow within two levels of yours,
+  green below that within the game's green range, grey past that. At level
+  9, a level 5 enemy is green.
+
+- **No more "Interface action failed because of an AddOn" in fights.** Unit
+  frames checked how far away their unit was, and the game blocks that check
+  in a fight. They check only out of a fight now. Nothing you see changes,
+  because the check never gave an answer in a fight.
+
 ## 0.1.0-beta.22
 
 - **Enemy nameplates in BeebMod's style.** A new Nameplates module, under

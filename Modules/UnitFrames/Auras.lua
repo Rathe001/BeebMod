@@ -156,6 +156,18 @@ A.PATTERN = {
 	[1] = "Interface\\AddOns\\BeebMod\\Art\\Patterns\\magic", [2] = "Interface\\AddOns\\BeebMod\\Art\\Patterns\\curse", [3] = "Interface\\AddOns\\BeebMod\\Art\\Patterns\\disease",
 	[4] = "Interface\\AddOns\\BeebMod\\Art\\Patterns\\poison", [11] = "Interface\\AddOns\\BeebMod\\Art\\Patterns\\bleed",
 }
+-- AND HALF THE SIZE ON A SHORT CELL (Josh 2026-10-04: "Should we do the
+-- same for the debuff textures?", after the shield's finer honeycomb). A
+-- raid cell's band is 18 tall, and held part of one bubble or one drip: the
+-- type read as a plain wash. A cell shorter than A.FINE_BELOW wears these.
+A.PATTERN_FINE = {}
+for id, path in pairs(A.PATTERN) do
+	A.PATTERN_FINE[id] = path .. "-fine"
+end
+A.FINE_BELOW = 50
+function A.Patterns(h)
+	return (h or 0) < A.FINE_BELOW and A.PATTERN_FINE or A.PATTERN
+end
 A.TYPE_ID = { Magic = 1, Curse = 2, Disease = 3, Poison = 4, Bleed = 11 }
 A.PATTERN_ALPHA = 0.45
 
@@ -311,7 +323,7 @@ local function dispelButton(w, h)
 		patternHost:SetAlpha(A.PATTERN_ALPHA)
 		b.bmPatterns = {}
 		local style = Enum and Enum.CustomAuraButtonDispelTypeTextureStyle
-		for id, path in pairs(A.PATTERN) do
+		for id, path in pairs(A.Patterns(h)) do
 			local t = tiled(patternHost:CreateTexture(nil, "OVERLAY"), path)
 			t:SetAllPoints()
 			b.bmPatterns[id] = t
@@ -745,7 +757,7 @@ local function fakeDispel(b, colour, typeName)
 		t:SetColorTexture(colour[1], colour[2], colour[3], 1)
 	end
 	m.wash:SetColorTexture(colour[1], colour[2], colour[3], 0.28)
-	local path = A.PATTERN[A.TYPE_ID[typeName or ""] or -1]
+	local path = A.Patterns(b.bmSpec and b.bmSpec.h)[A.TYPE_ID[typeName or ""] or -1]
 	if path then
 		tiled(m.pattern, path)
 		m.pattern:SetVertexColor(colour[1], colour[2], colour[3], A.PATTERN_ALPHA)

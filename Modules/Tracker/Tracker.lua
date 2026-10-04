@@ -298,7 +298,7 @@ local function rowFrame(i)
 			self.hot:Show()
 			BT.Tip.Show(self, { build = function(t)
 				t:Header({ icon = false, name = self.quest.title or "Quest" })
-				t:Foot({ { "Click", "track it on the map" } })
+				t:Foot({ { "Click", "track on map" } })
 			end })
 		end
 	end)
@@ -752,60 +752,10 @@ local function tint(color, text)
 		math.floor(color[1] * 255), math.floor(color[2] * 255), math.floor(color[3] * 255), text)
 end
 
--- HOW HARD IT IS, WORKED OUT HERE (Josh 2026-09-19). This was GetQuestDifficultyColor,
--- which on this build does not answer the question the client's own quest log
--- answers: at level 10 it calls a level 6 quest yellow and a level 13 one red,
--- where the log beside it draws them green and orange. Measured, not guessed -
--- /bt tracker colours printed 1.00 0.82 0.00 for every quest but one.
---
--- So the five bands are worked out from your level and the quest's, the way
--- they have been since the game shipped:
---
---   +5 or more   red        it will kill you
---   +3 or +4     orange     bring somebody
---   -2 to +2     yellow     about right
---   within the green range  green      easy
---   below that   grey       not worth the time
---
--- GetQuestGreenRange is the client's own idea of how far below your level a
--- quest stays worth doing; it narrows as you level, and five is what it is
--- around here if the call is missing.
-local DIFFICULTY = {
-	impossible = { 1.00, 0.24, 0.24 },
-	verydifficult = { 1.00, 0.50, 0.25 },
-	difficult = { 1.00, 0.82, 0.00 },
-	standard = { 0.35, 0.78, 0.38 },
-	trivial = { 0.58, 0.62, 0.60 },
-}
-
-local function greenRange()
-	if not GetQuestGreenRange then
-		return 5
-	end
-	-- newer clients want the unit, older ones take nothing at all
-	local ok, n = pcall(GetQuestGreenRange, "player")
-	if not ok then
-		ok, n = pcall(GetQuestGreenRange)
-	end
-	return BT.Pill.Number(ok and n or nil, 5)
-end
-
+-- how hard a quest is: the rule is shared (Core/Util.lua, U.LevelColour),
+-- since the client's own answer is wrong on this build
 local function levelColour(level)
-	local mine = BT.Pill.Number(UnitLevel and UnitLevel("player"), 0)
-	if not (level and level > 0 and mine > 0) then
-		return MUTED
-	end
-	local diff = level - mine
-	if diff >= 5 then
-		return DIFFICULTY.impossible
-	elseif diff >= 3 then
-		return DIFFICULTY.verydifficult
-	elseif diff >= -2 then
-		return DIFFICULTY.difficult
-	elseif -diff <= greenRange() then
-		return DIFFICULTY.standard
-	end
-	return DIFFICULTY.trivial
+	return U.LevelColour(level) or MUTED
 end
 M.LevelColour = levelColour
 
@@ -980,9 +930,11 @@ function M.QuestTip(owner, q)
 			end
 		end
 		t:Foot({
-			{ "Click", "open it in the quest log" },
-			{ "Right-click", "fold its objectives" },
-			{ "Shift-click", "stop tracking it" },
+			{ "Click", "open in quest log" },
+			-- (Josh 2026-10-04: "Instead of 'fold' say 'hide objectives'"), and
+			-- the other way round once they are hidden
+			{ "Right-click", folded(q) and "show objectives" or "hide objectives" },
+			{ "Shift-click", "untrack" },
 		})
 	end })
 end
@@ -1444,10 +1396,10 @@ function M:BuildTab(panel)
 		r.optName, r.default = name, default
 		self.rows[#self.rows + 1] = r
 	end
-	row("By level", "Lowest level first in each zone, instead of the quest log's order", "byLevel", true)
-	row("Zone headings", "Each zone's name over its quests, instead of one list", "zones", true)
+	row("By level", "Lowest level first in each zone", "byLevel", true)
+	row("Zone headings", "Quests grouped under their zone", "zones", true)
 	row("Only this zone", "Only the quests of the zone you are in", "hereOnly", false)
-	row("Fold in combat", "The list folds while you fight and unfolds after", "combatFold", false)
+	row("Fold in combat", "Unfolds when the fight ends", "combatFold", false)
 	row("Hide when empty", "Hides the panel when you track no quests", "hideEmpty", true)
 	row("Fold finished quests", "Hides their objectives", "hideDone", false)
 	-- "Fold the list" used to be a row here. Folding the list is something you

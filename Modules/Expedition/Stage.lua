@@ -350,7 +350,7 @@ function ST.Paint(page, m)
 			page.reset:Hide()
 		end
 		if page.hint then
-			page.hint:SetText(("Met in a %s. There is no map of it."):format(m.instance == "raid" and "raid" or "dungeon"))
+			page.hint:SetText(("Killed in a %s, which has no map."):format(m.instance == "raid" and "raid" or "dungeon"))
 		end
 		return "screen"
 	end
@@ -360,8 +360,8 @@ function ST.Paint(page, m)
 	local a = m and m.map and V.MapArt(m.map)
 	local spots = J.Spots(m)
 	if not a or #spots == 0 or pw <= 0 or ph <= 0 then
-		map.note:SetText(#spots == 0 and "No kill spot on record yet. Your next kill of it marks one."
-			or "The game has no map of that place.")
+		map.note:SetText(#spots == 0 and "No kills marked yet. Kill one to mark the map."
+			or "The game has no map of this zone.")
 		if page.reset then
 			page.reset:Hide()
 		end

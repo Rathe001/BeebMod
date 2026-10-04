@@ -216,9 +216,8 @@ end
 
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod redraws the game's dropdown and right-click menus. Every entry does what it did before. "
+	page:Note("BeebMod redraws the game's dropdown and right-click menus. Every entry works as before. "
 		.. "The highlight under the pointer and the ticks are still the game's.")
-	page:Note("Switched off, the menus look like the game's again.", true)
 	page:Layout()
 end
 

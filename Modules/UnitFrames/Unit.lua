@@ -16,6 +16,8 @@
 --                     WrapString - into a string that is itself secret, and set
 --   range             SetAlphaFromBoolean on the secret answer to UnitInRange
 --   your target       the same, on the outline, when UnitIsUnit is secret
+--   a shield          clamped by the client's calculator, which also says
+--                     whether it fitted; that answer picks the bar shown
 --   cast bars         a Duration object from UnitCastingDuration, run by the bar
 --   combo points      five bars from i - 1 to i, as the resource display draws them
 --
@@ -255,21 +257,42 @@ function Live:Gone() return self:Dead() or self:Offline() end
 function Live:HealthMax() return raw(UnitHealthMax, self.unit) end
 function Live:Health() return raw(UnitHealth, self.unit) end
 function Live:Heals() return raw(UnitGetIncomingHeals, self.unit) end
-function Live:Shield()
-	-- the calculator clamps a shield to the room left, inside the client, where
-	-- secret arithmetic is allowed; the plain total is the fallback
-	if CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction then
-		self.calc = self.calc or F.calc or CreateUnitHealPredictionCalculator()
-		F.calc = self.calc
-		local ok = pcall(UnitGetDetailedHealPrediction, self.unit, nil, self.calc)
-		if ok and self.calc.GetDamageAbsorbs then
-			local okA, amount = pcall(self.calc.GetDamageAbsorbs, self.calc)
-			if okA then
-				return amount
-			end
+-- THE SHIELD, TWO WAYS (2026-10-04, after Dander's Frames: "Dander's
+-- default"). The client's calculator clamps a shield inside the client, where
+-- secret arithmetic is allowed, and says whether it had to. Clamped to the
+-- health missing, it is the shield that fits after the health, and the "had
+-- to" says it did not fit. Clamped to the unit's most health, it is the whole
+-- shield, as far as the bar can show it. One calculator for each, made once.
+-- Its own default is the health missing: drawn from the bar's end, a shield
+-- at full health came out as nothing ("Not seeing the shield at all").
+local function absorbs(unit, mode)
+	F.calcs = F.calcs or {}
+	local c = F.calcs[mode]
+	if c == nil then
+		local ok, made = pcall(CreateUnitHealPredictionCalculator)
+		c = ok and type(made) == "table" and made or false
+		if c and c.SetDamageAbsorbClampMode then
+			pcall(c.SetDamageAbsorbClampMode, c, mode)
+		end
+		F.calcs[mode] = c
+	end
+	if not c or not c.GetDamageAbsorbs or not pcall(UnitGetDetailedHealPrediction, unit, nil, c) then
+		return nil
+	end
+	return pass(pcall(c.GetDamageAbsorbs, c))
+end
+-- what fits after the health, the whole shield, and whether it was too big
+-- to fit; with no calculator, the plain total and no word on fitting
+function Live:Shields()
+	local modes = Enum and Enum.UnitDamageAbsorbClampMode
+	if modes and CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction then
+		local fit, tooBig = absorbs(self.unit, modes.MissingHealth)
+		local whole = absorbs(self.unit, modes.MaximumHealth)
+		if whole ~= nil then
+			return fit, whole, tooBig
 		end
 	end
-	return raw(UnitGetTotalAbsorbs, self.unit)
+	return nil, raw(UnitGetTotalAbsorbs, self.unit), nil
 end
 function Live:PowerType()
 	local _, token = raw(UnitPowerType, self.unit)
@@ -352,7 +375,14 @@ function Live:InRange()
 	if UnitInParty and (plain(UnitInParty, unit) or plain(UnitInRaid, unit)) then
 		return (raw(UnitInRange, unit))
 	end
-	-- within 28 yards; no answer at all is in reach, not faded
+	-- within 28 yards; no answer at all is in reach, not faded.
+	-- OUT OF A FIGHT ONLY (2026-10-04: "Interface action failed because of
+	-- an AddOn"). In one the client refuses the question from an addon; the
+	-- saved record caught it on a target frame shown mid-fight. Refused, it
+	-- answered nothing anyway, so a fight changes nothing that showed.
+	if InCombatLockdown and InCombatLockdown() then
+		return true
+	end
 	local near = raw(CheckInteractDistance, unit, 4)
 	if not secret(near) and near == nil then
 		return true
@@ -433,22 +463,69 @@ function Live:Cast()
 	if dur == nil then
 		return nil
 	end
-	-- one call each: the name first, whether it can be kicked seventh (a
-	-- channel) or eighth (a cast). Only a true-or-false is that answer: on
-	-- an older layout the same place holds the spell's number.
-	local name, shield
+	-- one call each: the name first, its picture third, whether it can be
+	-- kicked seventh (a channel) or eighth (a cast). Only a true-or-false is
+	-- that answer: on an older layout the same place holds the spell's number.
+	-- THE PICTURE TOO (Josh 2026-10-04: "The target unit frame and nameplates
+	-- don't show the name of the spell or icon on the cast bar").
+	local name, icon, shield, spell
 	if channel then
-		local n, _, _, _, _, _, noKick = raw(UnitChannelInfo, unit)
-		name, shield = n, noKick
+		local n, _, t, _, _, _, noKick, id = raw(UnitChannelInfo, unit)
+		name, icon, shield, spell = n, t, noKick, id
 	else
-		local n, _, _, _, _, _, _, noKick = raw(UnitCastingInfo, unit)
-		name, shield = n, noKick
+		local n, _, t, _, _, _, _, noKick, id = raw(UnitCastingInfo, unit)
+		name, icon, shield, spell = n, t, noKick, id
 	end
-	if type(shield) ~= "boolean" then
+	if not secret(shield) and type(shield) ~= "boolean" then
 		shield = nil
 	end
-	return { duration = dur, name = name, shielded = shield, channel = channel }
+	-- A CAST TO STOP (Josh 2026-10-04: "highlights high priority casts that
+	-- should be interrupted ... If it is a list, probably forget it"). Not a
+	-- list: the game's own word, C_Spell.IsSpellImportant - "a spell that's
+	-- lethal if not interrupted" - which takes the spell's hidden number and
+	-- gives a true-or-false that may be hidden too, for the bar to show as is
+	local important
+	if C_Spell and C_Spell.IsSpellImportant and (secret(spell) or spell ~= nil) then
+		important = raw(C_Spell.IsSpellImportant, spell)
+	end
+	F.NoteCast(unit, name, icon, shield, important)
+	return { duration = dur, name = name, icon = icon, shielded = shield, important = important, channel = channel }
 end
+
+-- WHAT THE GAME GAVE FOR A CAST, ONCE A KIND OF UNIT (the same day: the
+-- nameplate showed "Fireball" while the target frame's bar, the same enemy's
+-- cast, showed no name). Into the saved file the first time a target, a
+-- nameplate, a focus, a boss or a party member casts in a session, so the
+-- next reload says which answers come back empty or hidden.
+F.castNotes = {}
+local function describe(v)
+	if secret(v) then
+		return "SECRET(" .. type(v) .. ")"
+	end
+	if type(v) == "string" then
+		return ("%q"):format(v:sub(1, 30))
+	end
+	return tostring(v)
+end
+function F.NoteCast(unit, name, icon, shield, important)
+	local kind = type(unit) == "string" and unit:gsub("%d+$", "") or "?"
+	if F.castNotes[kind] then
+		return
+	end
+	F.castNotes[kind] = ("%s (%s): name=%s icon=%s noKick=%s important=%s"):format(kind, tostring(unit),
+		describe(name), describe(icon), describe(shield), describe(important))
+	if type(BeebModDB) == "table" then
+		local lines = {}
+		for _, line in pairs(F.castNotes) do
+			lines[#lines + 1] = line
+		end
+		table.sort(lines)
+		BeebModDB.castDump = { at = BT.Util.Now(), lines = lines }
+	end
+end
+BT.Record("castDump", function()
+	return next(F.castNotes) and 1 or nil
+end)
 function Live:Combo()
 	local display = BT.GetModule and BT.GetModule("resourcedisplay")
 	if display and display.Combo then
@@ -486,7 +563,12 @@ function Fake:Gone() return self:Dead() or self:Offline() end
 function Fake:HealthMax() return self.d.max or 100 end
 function Fake:Health() return self:Gone() and 0 or (self.d.max or 100) * (self.d.hp or 100) / 100 end
 function Fake:Heals() return (self.d.max or 100) * (self.d.heal or 0) / 100 end
-function Fake:Shield() return (self.d.max or 100) * (self.d.shield or 0) / 100 end
+function Fake:Shields()
+	local most = self.d.max or 100
+	local whole = most * (self.d.shield or 0) / 100
+	local room = math.max(0, most - self:Health() - self:Heals())
+	return math.min(whole, room), math.min(whole, most), whole > room
+end
 function Fake:PowerType() return self.d.power or (self.d.class == "WARRIOR" and "RAGE") or (self.d.class == "ROGUE" and "ENERGY") or "MANA" end
 function Fake:PowerMax() return 100 end
 function Fake:Power() return self.d.mana or 70 end
@@ -518,7 +600,8 @@ function Fake:Cast()
 	if not self.d.cast then
 		return nil
 	end
-	return { value = self.d.cast.p, name = self.d.cast.name, shielded = self.d.cast.shielded }
+	return { value = self.d.cast.p, name = self.d.cast.name, icon = self.d.cast.icon, shielded = self.d.cast.shielded,
+		important = self.d.cast.important }
 end
 function Fake:Combo() return self.d.combo or 0, 5, self.d.combo ~= nil end
 
@@ -546,6 +629,26 @@ end
 -- how far past the end of the health bar a heal may show, as a share of
 -- the bar's width, on the frames that allow it (`overheal` below)
 F.OVERHEAL = 0.08
+-- A SHIELD IS A HONEYCOMB (Josh 2026-10-04: "C: honeycomb"). It was a white
+-- wash, then the game's white hatching at half strength ("Shields are very
+-- hard to see"), then Dander's Frames' cyan stripes, which read but were
+-- somebody else's ("looks more like BeebMod instead of a Dander's Frames
+-- copy"). A lattice drawn as the dispel patterns are (scripts/make-
+-- patterns.py), its white tinted this ice blue and its dark lines left dark,
+-- in the toolkit's one-pixel rim: a neutral colour, since the theme's accent
+-- is a class colour and would vanish on that class's own bar.
+F.SHIELD_PATTERN = "Interface\\AddOns\\BeebMod\\Art\\Patterns\\shield"
+F.SHIELD_COLOUR = { 0.72, 0.90, 1.00, 1 }
+-- A FINER ONE ON A SHORT BAR (Josh 2026-10-04: "scale down the textures of
+-- the raid unit frames a bit? Doesn't read quite as well as player/target
+-- frames"). On a raid cell's bar, forty tall, a shield showed two or three
+-- hexagons. Any bar shorter than this wears the finer lattice - the raid,
+-- the tanks, the focus, the bosses, the pets and the plates - and the target
+-- and the party, fifty-four tall, keep the larger.
+F.SHIELD_FINE = "Interface\\AddOns\\BeebMod\\Art\\Patterns\\shield-fine"
+F.SHIELD_FINE_BELOW = 45
+F.SHIELD_RIM = { 0.72, 0.90, 1.00, 0.9 }
+F.SHIELD_EDGE = { 0.02, 0.03, 0.03, 0.9 }
 
 local function bar(parent, level)
 	local b = CreateFrame("StatusBar", nil, parent)
@@ -556,6 +659,54 @@ local function bar(parent, level)
 		b:SetFrameLevel((parent:GetFrameLevel() or 1) + level)
 	end
 	return b
+end
+
+-- A shield bar's honeycomb. The bar's own fill stays unseen; a frame laid
+-- on it cuts to it, and the lattice inside covers the whole bar and holds
+-- still, so a shield wearing away uncovers less of it rather than sliding it
+-- along. Round it the toolkit's one-pixel rim: light along the top and the
+-- bottom, and at the left end - where the shield meets the health, or how
+-- far it reaches back over it - a dark line with a light one inside.
+-- which lattice a kind of frame wears, by how tall its health bar is
+function F.ShieldPattern(k)
+	local power = k and k.power or 0
+	local tall = (k and k.h or 0) - (power > 0 and power + 1 or 0)
+	return tall < F.SHIELD_FINE_BELOW and F.SHIELD_FINE or F.SHIELD_PATTERN
+end
+
+function F.ShieldLattice(shield, pattern)
+	shield:SetStatusBarColor(1, 1, 1, 0)
+	local cut = CreateFrame("Frame", nil, shield)
+	cut:SetFrameLevel((shield:GetFrameLevel() or 1) + 1)
+	cut:SetAllPoints(shield:GetStatusBarTexture())
+	if cut.SetClipsChildren then
+		cut:SetClipsChildren(true)
+	end
+	local c = F.SHIELD_COLOUR
+	cut.lattice = cut:CreateTexture(nil, "ARTWORK")
+	cut.lattice:SetAllPoints(shield)
+	cut.lattice:SetTexture(pattern or F.SHIELD_PATTERN, "REPEAT", "REPEAT")
+	pcall(cut.lattice.SetHorizTile, cut.lattice, true)
+	pcall(cut.lattice.SetVertTile, cut.lattice, true)
+	cut.lattice:SetVertexColor(c[1], c[2], c[3], c[4])
+	local px = BT.Pill.Px(shield, 1) or 1
+	local function line(colour, a, b, x, size, wide)
+		local t = cut:CreateTexture(nil, "OVERLAY")
+		t:SetColorTexture(colour[1], colour[2], colour[3], colour[4])
+		t:SetPoint(a, cut, a, x, 0)
+		t:SetPoint(b, cut, b, x, 0)
+		if wide then
+			t:SetHeight(size)
+		else
+			t:SetWidth(size)
+		end
+		return t
+	end
+	cut.top = line(F.SHIELD_RIM, "TOPLEFT", "TOPRIGHT", 0, px, true)
+	cut.bottom = line(F.SHIELD_RIM, "BOTTOMLEFT", "BOTTOMRIGHT", 0, px, true)
+	cut.edge = line(F.SHIELD_EDGE, "TOPLEFT", "BOTTOMLEFT", 0, px)
+	cut.inner = line(F.SHIELD_RIM, "TOPLEFT", "BOTTOMLEFT", px, px)
+	return cut
 end
 
 -- What each kind of frame wears.
@@ -684,8 +835,9 @@ function F.Dress(b, kind)
 	b.health:SetPoint("TOPLEFT", inset + (k.levelTab or 0), -inset)
 	b.health:SetPoint("TOPRIGHT", -inset, -inset)
 	b.health:SetPoint("BOTTOM", b, "BOTTOM", 0, inset + (powerH > 0 and (powerH + 1) or 0))
-	-- the heal and the shield hang off the end of the health, inside it: a
-	-- heal worth more than the missing health runs into the clip, not past it
+	-- the heal hangs off the end of the health and the shield lies over it,
+	-- both inside it: a heal worth more than the missing health runs into the
+	-- clip, not past it
 	if b.health.SetClipsChildren then
 		b.health:SetClipsChildren(true)
 	end
@@ -712,11 +864,32 @@ function F.Dress(b, kind)
 	b.heals = bar(healParent, 1)
 	b.heals:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
 	b.heals:SetPoint("BOTTOMLEFT", fill, "BOTTOMRIGHT", 0, 0)
-	b.shield = bar(b.health, 2)
+	-- THE SHIELD (F.SHIELD_PATTERN, above), AS DANDER'S FRAMES DRAWS IT (Josh
+	-- 2026-10-04: "Dander's default"). While it fits in the health missing,
+	-- it goes straight after the heal, so health, heal and shield read as one
+	-- length. When it is too big to fit, that one hides and the whole shield
+	-- shows from the bar's right-hand end back over the health, as long
+	-- against the bar as the shield is against the unit's most health. Which
+	-- one shows is the client's word (Live:Shields), never a sum of ours.
+	-- Each is a bar with its own fill unseen and the honeycomb laid over the
+	-- fill (F.ShieldLattice). On the way: a light blue wash after the heal, then white
+	-- hatching from the bar's end ("The shield should grow over the health
+	-- bar from the right side"), hard to see, and only ever the too-big case
+	-- in Dander's Frames' pictures.
 	local healEnd = b.heals:GetStatusBarTexture()
+	-- (a level under the words: the honeycomb sits a level above its bar)
+	b.shield = bar(b.health, 2)
 	b.shield:SetPoint("TOPLEFT", healEnd, "TOPRIGHT", 0, 0)
 	b.shield:SetPoint("BOTTOMLEFT", healEnd, "BOTTOMRIGHT", 0, 0)
-	b.shield:SetStatusBarColor(1, 1, 1, 0.35)
+	b.shieldOver = bar(b.health, 2)
+	b.shieldOver:SetPoint("TOPRIGHT", b.health, "TOPRIGHT", 0, 0)
+	b.shieldOver:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", 0, 0)
+	if b.shieldOver.SetReverseFill then
+		pcall(b.shieldOver.SetReverseFill, b.shieldOver, true)
+	end
+	b.shieldOver.bmBackwards = true
+	b.shieldLattice = F.ShieldLattice(b.shield, F.ShieldPattern(k))
+	b.shieldOverLattice = F.ShieldLattice(b.shieldOver, F.ShieldPattern(k))
 
 	if powerH > 0 then
 		b.power = bar(b, 1)
@@ -945,8 +1118,24 @@ function F.Dress(b, kind)
 		-- smaller on a cast bar thinner than the usual
 		local castText = (k.castH and k.castH <= 10 and 8) or (k.castH and k.castH < 14 and 9) or 10
 		b.cast.text = text(b.cast, castText, "LEFT", "name")
-		b.cast.text:SetPoint("LEFT", 5, 0)
 		b.cast.text:SetPoint("RIGHT", -5, 0)
+		-- the spell's picture at the bar's left end, as tall as the bar, and
+		-- the name after it; with no picture, the name where the picture was
+		local tall = k.castH or (k.castOverPower and powerH > 0 and powerH) or 14
+		b.cast.icon = b.cast:CreateTexture(nil, "OVERLAY")
+		b.cast.icon:SetSize(tall, tall)
+		b.cast.icon:SetPoint("LEFT", b.cast, "LEFT", 0, 0)
+		b.cast.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		b.cast.icon:Hide()
+		F.CastTextAt(b, false)
+		-- a cast the game calls important: a red rim a pixel out from the bar
+		b.cast.rim = CreateFrame("Frame", nil, b.cast)
+		b.cast.rim:SetPoint("TOPLEFT", -1, 1)
+		b.cast.rim:SetPoint("BOTTOMRIGHT", 1, -1)
+		b.cast.rim.ring = BT.Pill.Ring(b.cast.rim, "OVERLAY", 1)
+		BT.Pill.PlaceRing(b.cast.rim.ring, b.cast.rim, 0, 1, 0)
+		BT.Pill.PaintRing(b.cast.rim.ring, F.IMPORTANT)
+		b.cast.rim:SetAlpha(0)
 		b.cast:Hide()
 	end
 	if k.combo then
@@ -1044,8 +1233,7 @@ F.RANK_ROOM = BT.Ornament.ROOM
 -- nothing of ours could tween them - but the client can: SetValue takes an
 -- interpolation, and the bar slides to its new value on the client's side
 -- (the unit probe found GetInterpolatedValue and IsInterpolating on this
--- build's bars). The heal and the shield ride on the health's edge, so they
--- follow it. A frame that has just been handed somebody else - a new target,
+-- build's bars). The heal rides on the health's edge, so it follows it. A frame that has just been handed somebody else - a new target,
 -- a raid slot re-dealt - is F.Fresh and jumps, rather than sliding from the
 -- last one's health; so does one that is not on screen.
 local function easing(ease)
@@ -1145,18 +1333,19 @@ local function levelText(src)
 	if cls == "rare" or cls == "rareelite" then
 		tag = tag .. " R"
 	end
-	-- difficulty in the client's own colours where it will say
-	local c = _G.GetQuestDifficultyColor and level > 0 and _G.GetQuestDifficultyColor(level)
-	if c and c.r then
+	-- how hard, by the shared rule (Core/Util.lua, U.LevelColour): the
+	-- client's own answer is the modern game's on this build
+	local c = BT.Util.LevelColour(level)
+	if c then
 		local function hex(v) return math.floor(v * 255 + 0.5) end
-		return ("|cff%02x%02x%02x%s|r "):format(hex(c.r), hex(c.g), hex(c.b), tag)
+		return ("|cff%02x%02x%02x%s|r "):format(hex(c[1]), hex(c[2]), hex(c[3]), tag)
 	end
 	return tag .. " "
 end
 
 -- the level alone, for a tab of its own: "??" for one too far above you to
--- say, and the difficulty's colour where the client will give it. The rank is
--- the brackets' to show.
+-- say, and how hard it is in colour (U.LevelColour). The rank is the
+-- brackets' to show.
 function F.LevelTag(src)
 	local level = src:Level()
 	if type(level) ~= "number" then
@@ -1165,10 +1354,10 @@ function F.LevelTag(src)
 	if level < 0 then
 		return "|cffff4a3d??|r"
 	end
-	local c = _G.GetQuestDifficultyColor and level > 0 and _G.GetQuestDifficultyColor(level)
-	if c and c.r then
+	local c = BT.Util.LevelColour(level)
+	if c then
 		local function hex(v) return math.floor(v * 255 + 0.5) end
-		return ("|cff%02x%02x%02x%d|r"):format(hex(c.r), hex(c.g), hex(c.b), level)
+		return ("|cff%02x%02x%02x%d|r"):format(hex(c[1]), hex(c[2]), hex(c[3]), level)
 	end
 	return tostring(level)
 end
@@ -1198,7 +1387,7 @@ local function easeOf(b, src)
 	return ease
 end
 
--- health, and the heal and shield past its end
+-- health, the heal past its end, and the shield after it or over it
 local function paintHealth(b, src, gone, ease)
 	local r, g, bl = deepen(F.HealthColour(src))
 	b.health:SetStatusBarColor(r, g, bl, 1)
@@ -1207,22 +1396,39 @@ local function paintHealth(b, src, gone, ease)
 		b.health:SetMinMaxValues(0, max)
 		b.heals:SetMinMaxValues(0, max)
 		b.shield:SetMinMaxValues(0, max)
+		b.shieldOver:SetMinMaxValues(0, max)
 	end
 	-- the frame's own width, not a measurement: before the client has laid
 	-- the bar out it measures nothing, and the heal came out zero wide
 	local width = BT.Pill.Number(b:GetWidth(), 0)
-	width = (width > 0 and width or b.bmSpec.w) - 4 - (b.bmSpec.levelTab or 0)
+	-- AS WIDE AS THE HEALTH BAR ITSELF, so a heal or a shield is as long
+	-- against it as it is against the health: it ran edge to edge once the
+	-- dark border went (2026-09-28), and four were still taken off for it
+	width = (width > 0 and width or b.bmSpec.w) - (b.bmSpec.levelTab or 0)
 	b.heals:SetWidth(width)
 	b.shield:SetWidth(width)
+	b.shieldOver:SetWidth(width)
 	if gone then
 		setBar(b.health, 0, ease)
 		b.heals:SetValue(0)
 		b.shield:SetValue(0)
+		b.shieldOver:SetValue(0)
 	else
 		setBar(b.health, src:Health() or 0, ease)
 		b.heals:SetStatusBarColor(r, g, bl, 0.45)
 		b.heals:SetValue(src:Heals() or 0)
-		b.shield:SetValue(src:Shield() or 0)
+		local fit, whole, tooBig = src:Shields()
+		b.shield:SetValue(fit or 0)
+		b.shieldOver:SetValue(whole or 0)
+		-- after the health while it fits, from the bar's end when it does
+		-- not; with no word on fitting, from the end
+		if tooBig == nil then
+			b.shieldLattice:SetAlpha(0)
+			b.shieldOverLattice:SetAlpha(1)
+		else
+			alphaFrom(b.shieldLattice, tooBig, 0, 1)
+			alphaFrom(b.shieldOverLattice, tooBig, 1, 0)
+		end
 	end
 end
 
@@ -1504,6 +1710,25 @@ function F.Paint(b, src)
 	F.PaintCombo(b, src)
 end
 
+-- the rim round a cast the game calls important: red, warmer than the
+-- target's white outline and the threat ring's red so it reads as its own
+F.IMPORTANT = { 1.00, 0.36, 0.25, 1 }
+
+-- the cast's name after the picture, or at the bar's left end without one
+function F.CastTextAt(b, withIcon)
+	if b.cast.bmTextAfter == withIcon then
+		return
+	end
+	b.cast.bmTextAfter = withIcon
+	b.cast.text:ClearAllPoints()
+	b.cast.text:SetPoint("RIGHT", -5, 0)
+	if withIcon then
+		b.cast.text:SetPoint("LEFT", b.cast.icon, "RIGHT", 4, 0)
+	else
+		b.cast.text:SetPoint("LEFT", 5, 0)
+	end
+end
+
 -- the cast bar: a Duration the bar runs itself, and the colour says whether
 -- a kick will land - grey for a cast you cannot interrupt
 local CAN_KICK = { 0.90, 0.78, 0.29 }
@@ -1534,7 +1759,25 @@ function F.PaintCast(b, src)
 		local col = c.shielded and NO_KICK or CAN_KICK
 		b.cast:SetStatusBarColor(col[1], col[2], col[3], 0.9)
 	end
-	b.cast.text:SetText(c.name or "")
+	-- a name or a picture the client keeps hidden goes to the widget as it
+	-- came: nothing here may test it, so only a plain one is looked at
+	local name = c.name
+	if not secret(name) and name == nil then
+		name = ""
+	end
+	b.cast.text:SetText(name)
+	local icon = c.icon
+	if b.cast.icon and (secret(icon) or icon ~= nil) then
+		b.cast.icon:SetTexture(icon)
+		b.cast.icon:Show()
+		F.CastTextAt(b, true)
+	elseif b.cast.icon then
+		b.cast.icon:Hide()
+		F.CastTextAt(b, false)
+	end
+	if b.cast.rim then
+		alphaFrom(b.cast.rim, c.important, 1, 0)
+	end
 	b.cast:Show()
 end
 
