@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.23
 
 - **An NPC's title is back on its tooltip.** An innkeeper's tooltip said
   "Humanoid", with "Innkeeper" on a line of its own: this client writes an
