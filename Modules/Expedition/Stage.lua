@@ -4,8 +4,8 @@
 --
 -- The stage holds the enemy's model; a switch in its corner, Model · Map, puts
 -- the map of the zone it was first killed in there instead: the whole zone,
--- fitted to the stage, and a dot for each place it was killed (J.Spots), the
--- first kill's larger. The choice is kept, so the next enemy opens the same way.
+-- fitted to the stage, and a dot for each kill (J.Spots), all one size. The
+-- choice is kept, so the next enemy opens the same way.
 --
 -- ZOOMED AND MOVED LIKE THE MODEL ("if we could zoom and pan the map here,
 -- that would be awesome"): the wheel comes closer to where the pointer is, a
@@ -29,22 +29,17 @@ V.Stage = ST
 
 -- the dots: the journal's own warm gold, on a dark ring so they read on any map
 local DOT = { 1.00, 0.78, 0.30 }
--- ROUND, SEE-THROUGH, SMALLER AS THEY GATHER (Josh 2026-09-28: "it might be
--- too large if there are several ... I also think circle would be better,
--- and slightly transparent"). A disc - the client's round portrait mask,
--- white, tinted - the map showing through it, and a size that shrinks with
--- how many there are: 10 for one, 5 for four, never under ST.SMALLEST. The
--- first kill's stays ST.FIRST_MORE bigger than the rest.
+-- ROUND AND SEE-THROUGH (Josh 2026-09-28: "I also think circle would be
+-- better, and slightly transparent"). A disc - the client's round portrait
+-- mask, white, tinted - with the map showing through it.
+-- ONE SIZE (Josh 2026-10-03: "All the map pins should be the same size"):
+-- they shrank as there were more of them, and the first kill's was drawn
+-- larger than the rest. Each is ST.DOT across now, on a ring a unit wider.
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
-ST.LARGEST, ST.SMALLEST, ST.FIRST_MORE = 10, 4, 3
+ST.DOT = 6
 local DOT_ALPHA, RING_ALPHA = 0.75, 0.55
 -- how close the map comes, and how much a notch of the wheel moves it
 ST.ZOOM_MAX, ST.ZOOM_STEP = 8, 1.25
-
--- how big each dot is, with `n` of them on the map
-function ST.DotSize(n)
-	return math.max(ST.SMALLEST, math.floor(ST.LARGEST / math.sqrt(math.max(1, n)) + 0.5))
-end
 
 -- which the stage shows, kept with the window's other choices
 function ST.Mode()
@@ -322,6 +317,10 @@ function ST.Paint(page, m)
 	local onMap = mode == "map"
 	page.model:SetShown(not onMap)
 	map:SetShown(onMap)
+	-- the man-or-woman marks belong to the model (Window.lua, V.PaintLooks)
+	if V.PaintLooks then
+		V.PaintLooks(page)
+	end
 	if page.reset then
 		page.reset:Show()
 	end
@@ -380,9 +379,8 @@ function ST.Paint(page, m)
 		t:SetTexCoord(p.l, p.r, p.t, p.b)
 		t:Show()
 	end
-	local each = ST.DotSize(#spots)
 	for i = 1, #spots do
-		local size = i == 1 and (each + ST.FIRST_MORE) or each
+		local size = ST.DOT
 		local ring = texture(map.dots, i * 2 - 1, map.canvas, "OVERLAY")
 		local dot = texture(map.dots, i * 2, map.canvas, "OVERLAY")
 		ring:SetSize(size + 2, size + 2)
@@ -391,22 +389,19 @@ function ST.Paint(page, m)
 		dot:SetSize(size, size)
 		dot:SetTexture(DISC)
 		dot:SetVertexColor(DOT[1], DOT[2], DOT[3], DOT_ALPHA)
-		-- THE DOT OVER ITS RING, AND THE FIRST UNDER THE REST (Josh
-		-- 2026-09-28: "I just see a single black square", then "It looks like
-		-- one dot is large"): textures on one layer draw in no promised order,
-		-- so each has a sublevel of its own - the first kill's lowest, so the
-		-- smaller dots near it are drawn over it
-		local base = i == 1 and 1 or 3
-		ring:SetDrawLayer("OVERLAY", base)
-		dot:SetDrawLayer("OVERLAY", base + 1)
+		-- THE DOT OVER ITS RING (Josh 2026-09-28: "I just see a single black
+		-- square"): textures on one layer draw in no promised order, so the
+		-- rings have a sublevel and the dots the one above it
+		ring:SetDrawLayer("OVERLAY", 1)
+		dot:SetDrawLayer("OVERLAY", 2)
 		ring:Show()
 		dot:Show()
 	end
 	place(map)
 	if page.hint then
 		-- short: Reset view shares the line
-		page.hint:SetText((#spots == 1 and "Your first kill." or
-			("%d places, the larger the first."):format(#spots)) .. " Wheel: zoom · Drag: move")
+		page.hint:SetText((#spots == 1 and "1 kill marked." or
+			("%d kills marked."):format(#spots)) .. " Wheel: zoom · Drag: move")
 	end
 	return "map", #pieces, #spots
 end

@@ -281,3 +281,39 @@ with open(path, "wb") as f:
 print("wrote", path, os.path.getsize(path), "bytes")
 for y in range(0, H, 2):
     print("".join("#" if buf[y][x] > 0.6 else ("+" if buf[y][x] > 0.2 else ".") for x in range(W)))
+
+
+# ---------------------------------------------------------------------------
+# Art/sex.tga: a fourth sheet (Josh 2026-10-03: "could we add male/female
+# icons to switch between male/female models"), for the Expedition's cards
+# and the enemy's page. 64x32, two slots of 0.5.
+#
+#   0  male        a ring with an arrow off its top right
+#   1  female      a ring with a cross under it
+# ---------------------------------------------------------------------------
+W, H = 64, 32
+buf = [[0.0] * W for _ in range(H)]
+
+# ---- male: the ring low and left, the arrow out of its upper right
+circle(13, 19, 7.5, 2.6)
+line(18.5, 13.5, 26.5, 5.5, 2.6)
+poly([(27.5, 4.5), (19, 4.5), (27.5, 13)])
+
+# ---- female: the ring high, a stem and a bar under it
+FX = 32 + 16
+circle(FX, 11, 7.5, 2.6)
+line(FX, 18.5, FX, 29, 2.6)
+line(FX - 5.5, 24.5, FX + 5.5, 24.5, 2.6)
+
+pixels = bytearray()
+for y in range(H):
+    for x in range(W):
+        pixels += bytes((255, 255, 255, int(round(buf[y][x] * 255))))
+header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, W, H, 32, 0x28)
+path = os.path.join(dest, "sex.tga")
+with open(path, "wb") as f:
+    f.write(header)
+    f.write(pixels)
+print("wrote", path, os.path.getsize(path), "bytes")
+for y in range(0, H, 2):
+    print("".join("#" if buf[y][x] > 0.6 else ("+" if buf[y][x] > 0.2 else ".") for x in range(W)))

@@ -455,36 +455,12 @@ function M.Apply()
 	end
 	M.lastCount = n
 	M.Pips(M.Combo())
-	-- your target's damage over time, over the bars (UnitFrames/Timers.lua)
-	local T = BT.UnitFrames and BT.UnitFrames.Timers
-	if T then
-		T.OnResourceDisplay(plate and M.TopAnchor() or nil)
-	end
 	return n
-end
-
--- the top of the display: the health bar, where the plate names it
-function M.TopAnchor()
-	if not plate then
-		return nil
-	end
-	local uf = bars(plate)
-	for _, key in ipairs({ "healthBar", "HealthBarsContainer" }) do
-		local f = uf[key]
-		if type(f) == "table" and BT.Furniture.Call(f, "IsShown") then
-			return f
-		end
-	end
-	return uf
 end
 
 -- the client's plate back as it came, and the pips away
 function M.Release()
 	dresser:Undress()
-	local T = BT.UnitFrames and BT.UnitFrames.Timers
-	if T then
-		T.OnResourceDisplay(nil)
-	end
 	if pips then
 		pips:Hide()
 		pips:SetParent(UIParent)
@@ -598,10 +574,6 @@ end
 function M:OnEnable()
 	M.Watch()
 	M.Apply()
-	-- your target's damage leaves the target frame for the bars
-	if BT.UnitFrames and BT.UnitFrames.Timers then
-		BT.UnitFrames.Timers.Rebuild()
-	end
 end
 
 -- a book bound (a login, a loading screen) is the same setup
@@ -609,10 +581,6 @@ M.OnBind = M.OnEnable
 
 function M:OnDisable()
 	M.Release()
-	-- your target's damage goes back over the target frame
-	if BT.UnitFrames and BT.UnitFrames.Timers then
-		BT.UnitFrames.Timers.Rebuild()
-	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -651,17 +619,8 @@ function M:BuildTab(panel)
 	-- the foot of the panel it sat on the rows once the page grew
 	self.status = BT.Widgets.Row(plateSection, "On screen", " ")
 	self.found = self.status.blurb
-	-- YOUR TARGET'S DAMAGE OVER TIME, OVER THESE BARS (Josh 2026-09-24:
-	-- "need to move the options as well"): which spells, in what order, and
-	-- the countdown - here, where the lanes are (UnitFrames/Timers.lua). The
-	-- same lanes stand over the focus and the bosses.
-	local T = BT.UnitFrames and BT.UnitFrames.Timers
-	if T then
-		self.dots = T.DotSection(page)
-		if self.dots then
-			self.blinkRow = T.BlinkRow(self.dots, "dot")
-		end
-	end
+	-- (your damage over time went over these bars until 2026-10-03; it is on
+	-- every enemy's nameplate now, and its options are on the Nameplates page)
 	page:Layout()
 end
 

@@ -5,6 +5,78 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Enemy nameplates in BeebMod's style.** A new Nameplates module, under
+  Unit frames. An enemy's plate has its level in a tab at the left, and its
+  name and how much health it has left inside the bar. A ring shows when it
+  is attacking you, a white outline marks your target, and gold or silver
+  brackets mark an elite or a rare. Its casts show under the plate, and your
+  damage over time shows above it in lanes as wide as the plate, on every
+  enemy you have it on. While you have a target the other plates fade a
+  little; a switch on the Nameplates page turns that off. Friendly plates
+  stay as the game draws them.
+
+- **An enemy's abilities are in view on its page.** They were a section of
+  the lore and scrolled away with it. They have a panel of their own now,
+  under the mastery ladder, and the lore starts under that. An enemy with
+  no abilities has no panel.
+
+- **A shorter target frame, its health as tall as yours.** The target
+  frame is 200 wide instead of 220, and 7 taller, so its health bar is the
+  same height as yours while its power bar keeps room for its figure. A
+  cast covers the power bar, the same height. The target's target and
+  your focus stay beside it, level with it.
+
+- **Your target's damage over time is on its nameplate, not over your own
+  bars.** Every enemy's plate shows your damage over time, your target's
+  included, so the lanes over the personal resource display are gone. With
+  the Nameplates module off, they show over the target frame again. The
+  spells, their order and the blink are set on the Nameplates page now.
+
+- **Damage over time lanes show the spell, and close up.** Each lane has
+  the spell's picture at its left, and the lanes are taller to hold it.
+  Only the spells that are up show, stacked in the order you set with no
+  gaps between them; a spell that is not up no longer leaves an empty lane.
+  A damage lane starts to blink in its last 3 seconds instead of 5; a
+  heal's lane still starts at 5.
+
+- **A smaller, quicker journal for a long career.** In a simulated level 60
+  career of 44,000 kills, the Expedition's map pins took 1.9 MB of the
+  saved file and 4.3 MB of memory. Each enemy's pins are one short string
+  now, which brings the Expedition's share of the file to about 0.8 MB and
+  its memory to 1.4 MB. A kill of an enemy already in the journal no longer
+  counts the whole journal again for the commendations, so a kill takes a
+  tenth of the time and no longer makes the game pause now and then. Older
+  pins are packed the first time the journal loads.
+
+- **Old Testing page records clear themselves.** A record is kept for a
+  day, long enough to be read after the /reload that saves it, and dropped
+  at the next load after that. They were 0.8 MB of a 3 MB saved file.
+
+- **A pin for every kill on an enemy's map, all one size.** A kill close
+  to one already marked was taken for the same camp and got no pin of its
+  own, so eight kills could show three pins. Each kill gets its own pin
+  now, for the last 100 kills of each enemy. The pins no longer shrink as
+  there are more of them, and the first kill's is no longer larger. Kills
+  already merged into one pin stay merged.
+
+- **An enemy that comes as a man and as a woman can be shown as either.**
+  Its card and its page in the Expedition wear a pair of marks, male and
+  female. The lit one is the look shown. Click the other to see that one
+  on the card, in the list and on the page, and the choice is kept. The
+  game draws one of an enemy's looks at random each time, so BeebMod learns
+  them from every portrait it draws, and asks for the other one in the
+  background, out of combat, every few seconds. Enemies already in your
+  journal get their marks without new kills; an enemy that only ever comes
+  one way gets none.
+
+- **No round band on the square minimap.** Where a quest area runs past
+  the edge of the minimap, the game draws a hatched band along that edge.
+  It drew it on a circle, the edge of the round minimap, so a ring ran
+  through the middle of the square one. The band is gone; the quest areas
+  themselves still reach the minimap's edges.
+
 ## 0.1.0-beta.21
 
 - **The game's experience and reputation bars stay hidden when you unwatch

@@ -51,7 +51,7 @@ local XP_WINDOW = 15
 local FORGET = 300
 
 -- what went where, for the tests to read
-K.stats = { watched = 0, dead = 0, xp = 0, loot = 0, notOurs = 0, xpUnmatched = 0 }
+K.stats = { watched = 0, dead = 0, xp = 0, loot = 0, notOurs = 0, xpUnmatched = 0, looks = 0, lookMisses = 0 }
 
 local function secret(v)
 	return issecretvalue ~= nil and issecretvalue(v) and true or false
@@ -97,12 +97,88 @@ local FACTS = {
 	{ "boss", function(u) return UnitIsBossMob and UnitIsBossMob(u) end },
 }
 
+-- WHICH LOOK (Josh 2026-10-03: "could we add male/female icons to switch
+-- between male/female models (if they exist)?"). An enemy drawn from a
+-- playable race's model is a man in one spawn and a woman in the next, and
+-- the game has no call that lists an enemy's looks. So each is learnt as it
+-- is met: UnitSex says which this one is (2 or 3; a beast or an elemental is
+-- 1, and has no other to show), and a hidden model shown the unit says which
+-- look that is (GetDisplayInfo). Once for each enemy and sex in a session,
+-- and not at all once the journal has it (K.KnowsLook, set by Expedition.lua).
+local looked, lookTries = {}, {}
+local LOOK_TRIES = 3
+local probe
+
+-- the look a unit is drawn with, or nil when the game will not say
+function K.Look(unit)
+	if not probe then
+		if type(CreateFrame) ~= "function" then
+			return nil
+		end
+		local ok, m = pcall(CreateFrame, "PlayerModel", nil, UIParent)
+		if not (ok and m) then
+			return nil
+		end
+		m:SetSize(1, 1)
+		m:SetPoint("TOPRIGHT", UIParent, "TOPLEFT", -4, 0)
+		pcall(m.SetAlpha, m, 0)
+		probe = m
+	end
+	if not (probe.SetUnit and probe.GetDisplayInfo) then
+		return nil
+	end
+	if not pcall(probe.SetUnit, probe, unit) then
+		return nil
+	end
+	local id = ask(probe.GetDisplayInfo, probe)
+	pcall(probe.ClearModel, probe)
+	if type(id) == "number" and id > 0 then
+		return id
+	end
+	return nil
+end
+
+local function learnLook(w, unit)
+	if w.sex == nil then
+		local sex = ask(UnitSex, unit)
+		if type(sex) ~= "number" then
+			return
+		end
+		w.sex = (sex == 2 or sex == 3) and sex or false
+	end
+	if not w.sex or w.look ~= nil then
+		return
+	end
+	local key = w.npc .. ":" .. w.sex
+	if looked[key] == nil then
+		if K.KnowsLook and K.KnowsLook(w.npc, w.sex) then
+			looked[key] = false
+		else
+			local id = K.Look(unit)
+			if id then
+				looked[key] = id
+				K.stats.looks = K.stats.looks + 1
+			else
+				K.stats.lookMisses = K.stats.lookMisses + 1
+				lookTries[key] = (lookTries[key] or 0) + 1
+				-- a few tries, on a few of its spawns, then left alone
+				if lookTries[key] >= LOOK_TRIES then
+					looked[key] = false
+				end
+				return
+			end
+		end
+	end
+	w.look = looked[key]
+end
+
 local function learn(w, unit)
 	for _, f in ipairs(FACTS) do
 		if w[f[1]] == nil then
 			w[f[1]] = ask(f[2], unit)
 		end
 	end
+	learnLook(w, unit)
 	if w.zone == nil then
 		w.zone = ask(GetRealZoneText) or ask(GetZoneText)
 	end
@@ -143,6 +219,7 @@ local function info(guid, w)
 	return {
 		guid = guid, npc = w.npc, name = w.name, kind = w.kind, family = w.family,
 		rank = w.rank, level = w.level, zone = w.zone, instance = w.instance, boss = w.boss == true,
+		sex = w.sex or nil, look = w.look or nil,
 		myLevel = ask(UnitLevel, "player"),
 		map = map, mx = x, my = y,
 	}

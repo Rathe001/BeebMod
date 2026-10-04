@@ -676,6 +676,55 @@ function BT.ClearRecords()
 	return n
 end
 
+-- OLD RECORDS GO BY THEMSELVES (Josh 2026-10-03, the level 60 simulation:
+-- records left in the saved file were 0.8 MB of its 3 MB). A record is read
+-- from the saved file after the /reload that writes it, and a /reload is a
+-- logout too, so a record cannot go at logout. It is kept for a day and
+-- dropped at the first load after that; one with no time on it, at once.
+BT.RECORD_KEEP = 86400
+
+-- when a record was written: its own time, or a list of runs' newest
+local function recordedAt(rec)
+	if type(rec) ~= "table" then
+		return nil
+	end
+	if type(rec.at) == "number" then
+		return rec.at
+	end
+	local newest
+	for _, run in ipairs(rec) do
+		if type(run) == "table" and type(run.at) == "number" then
+			newest = math.max(newest or 0, run.at)
+		end
+	end
+	return newest
+end
+
+function BT.DropOldRecords(now)
+	if type(BeebModDB) ~= "table" then
+		return 0
+	end
+	now = now or BT.Util.Now()
+	local keys = {}
+	for _, r in ipairs(records) do
+		keys[r.key] = true
+	end
+	for _, key in ipairs(BT.Rename and BT.Rename.OldRecords() or {}) do
+		keys[key] = true
+	end
+	local n = 0
+	for key in pairs(keys) do
+		if BeebModDB[key] ~= nil then
+			local at = recordedAt(BeebModDB[key])
+			if not at or now - at > BT.RECORD_KEEP then
+				BeebModDB[key] = nil
+				n = n + 1
+			end
+		end
+	end
+	return n
+end
+
 -- ---------------------------------------------------------------------------
 -- THE BOOK
 -- ---------------------------------------------------------------------------
@@ -834,8 +883,11 @@ function BT.Bind(realm, faction)
 	-- and its rows under "Name@Realm"; every key of every book, the Ledger's
 	-- too, is folded back to the name alone below, and the list goes.
 	BeebModDB.servers = nil
-	-- the record of enemy casts, from the abilities list that is gone
-	BeebModDB.expeditionDump = nil
+	-- records more than a day old (BT.DropOldRecords). The record of enemy
+	-- casts, from the abilities list that is gone, was dropped here at every
+	-- load; it was older than a day long ago, and the key is the looks
+	-- record's now.
+	BT.DropOldRecords()
 	if BT.Notes and BT.Notes.FoldRealms then
 		local n = BT.Notes.FoldRealms(rname)
 		BT.unsplitOnLoad = n > 0 and n or nil

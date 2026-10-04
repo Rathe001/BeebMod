@@ -64,27 +64,26 @@ T.COLOURS = {
 }
 
 -- which frames carry which, and how tall a lane is on them
---
--- YOUR TARGET'S, OVER YOUR OWN BARS (Josh 2026-09-24: "they should be
--- displayed above the personal resource bars instead of on the target
--- frame"). The DoTs you are keeping up on your target go over the resource
--- display under your character - "resourcedisplay", a holder of ours the
--- Resource display module keeps on top of the bars - which is where the eye
--- is while you cast. With that module off there are no bars to sit on, and
--- they go back over the target frame.
 T.KINDS = {
 	party = { "hot" }, raid = { "hot" }, tank = { "hot" },
-	target = { "hot", "dot" }, focus = { "dot" }, boss = { "dot" }, resourcedisplay = { "dot" },
+	target = { "hot", "dot" }, focus = { "dot" }, boss = { "dot" },
+	-- OVER EVERY ENEMY (Josh 2026-10-03: "a way for multi dot classes to track
+	-- their debuffs on all mobs"), on its nameplate (Modules/Nameplates)
+	plate = { "dot" },
 }
 
--- whether the resource display carries your target's damage
-function T.OnDisplay()
-	return BT.Enabled and BT.Enabled("resourcedisplay") and true or false
+-- YOUR TARGET'S, ON ITS PLATE (Josh 2026-10-03: "Remove the DoT bar from the
+-- personal resource display - the nameplates version deprecates that"). They
+-- went over the resource display under your character from 2026-09-24; every
+-- enemy's plate has them now, your target's included, so they are on the
+-- plate alone, and back over the target frame while the plates are off.
+function T.OnPlates()
+	return BT.Enabled and BT.Enabled("nameplates") and true or false
 end
 
 -- what a frame of this kind shows today
 function T.Kinds(kind)
-	if kind == "target" and T.OnDisplay() then
+	if kind == "target" and T.OnPlates() then
 		return { "hot" }
 	end
 	return T.KINDS[kind]
@@ -94,19 +93,46 @@ T.LANE_H = { party = 3, target = 3, focus = 3, boss = 3, raid = 2, tank = 2 }
 -- thicker and add a bit of transparency?"). Above the frame they have the
 -- room, and they are over the world rather than over the frame, where a
 -- solid bar reads as something stuck to the screen.
-T.DOT_H = 5
+-- TALLER, FOR THE SPELL'S PICTURE (Josh 2026-10-03: "Can we include small
+-- spell icons on the dot timers ... Probably have to make the bars a bit
+-- taller too"): five was a line; ten holds a picture you can tell apart
+T.DOT_H = 10
 T.DOT_ALPHA, T.DOT_BACK = 0.75, 0.3
+-- OVER A NAMEPLATE (Josh 2026-10-03: "make them a bit thicker and much
+-- shorter so they are readable above nameplates", then "make them the same
+-- width as the bar"): as wide as the plate kind says (laneW), and this thick
+T.PLATE_H = 9
 
 -- how tall a lane is: a heal's by the frame's size, damage's thicker
 function T.Height(kind, which)
+	if kind == "plate" then
+		return T.PLATE_H
+	end
 	if which == "dot" then
 		return T.DOT_H
 	end
 	return T.LANE_H[kind] or 3
 end
+
+-- how wide a lane is on a frame, and how far in from its left edge: the
+-- frame's width less two at each side, or a plate's short lane, centred
+function T.LaneWidth(b)
+	local spec = b and b.bmSpec or {}
+	return spec.laneW or ((spec.w or 100) - 4)
+end
+
+local function laneX(b)
+	local spec = b and b.bmSpec or {}
+	if spec.laneW and spec.w then
+		return math.floor((spec.w - spec.laneW) / 2 + 0.5)
+	end
+	return 2
+end
 T.MAX_LANES = { hot = 1, dot = 4 }
--- the last seconds, counted down; a blink gets shorter the nearer the end
-T.BLINK_FROM = 5
+-- the last seconds, counted down; a blink gets shorter the nearer the end.
+-- DAMAGE FROM THREE (Josh 2026-10-03: "I think we should start the dot
+-- blinker at 3 seconds"); a heal's lane still from five.
+T.BLINK_FROM = { hot = 5, dot = 3 }
 
 local function inCombat()
 	return InCombatLockdown and InCombatLockdown() or false
@@ -137,9 +163,8 @@ function T.Colour(which, name, class)
 end
 
 -- YOUR ORDER (Josh 2026-09-24: "allow the player to change the order of
--- dots, so they can stack them however they'd like"). A lane is only there
--- while its spell is, so an empty one leaves a gap in the stack: the ones you
--- always keep up go nearest the frame, the ones you cast now and then on top.
+-- dots, so they can stack them however they'd like"). The spells that are up
+-- stack in this order with no gaps between them (dotStack).
 -- The class's spells in the order you left them, first to last - first
 -- being the lane nearest the frame. A spell your list has not heard of (a
 -- class list that grew) goes after the rest; one it names that the class no
@@ -188,7 +213,7 @@ function T.Move(which, name, dir)
 	local s = BT.settings.unitframes
 	s.timerOrder = type(s.timerOrder) == "table" and s.timerOrder or {}
 	s.timerOrder[myClass() or ""] = list
-	-- only where they sit changes: the containers stay as they are
+	-- the stack of damage is made again in the new order
 	T.Rebuild()
 	return true
 end
@@ -218,7 +243,7 @@ end
 -- part flashes red, under the bar that is left: the countdown number that
 -- started this went ("I think we can completely remove the number countdown
 -- now. This is attention grabbing enough"). One switch for heals, on the Unit
--- frames page, and one for damage, on the Resource display's; on unless you
+-- frames page, and one for damage, on the Nameplates page; on unless you
 -- switch it off.
 local BLINK_KEY = { hot = "timerBlinkHot", dot = "timerBlinkDot" }
 
@@ -377,31 +402,34 @@ T.seen = { inits = 0, bars = 0, texts = 0 }
 -- lane's size, red. The curve switches it on and off in the last seconds,
 -- each half-blink shorter than the last (under a tenth of a second at the
 -- very end, half a second when it starts), and keeps it out of sight before.
-local curve
-function T.BlinkCurve()
-	if curve then
-		return curve
+-- One curve for heals and one for damage, each from its own T.BLINK_FROM.
+local curves = {}
+function T.BlinkCurve(which)
+	which = which == "hot" and "hot" or "dot"
+	if curves[which] then
+		return curves[which]
 	end
+	local from = T.BLINK_FROM[which]
 	pcall(function()
 		local c = C_CurveUtil.CreateColorCurve()
 		c:SetType(Enum.LuaCurveType.Step)
 		local at, lit = 0, true
-		while at < T.BLINK_FROM do
+		while at < from do
 			c:AddPoint(at, CreateColor(1, 1, 1, lit and 1 or 0))
 			at = at + 0.07 + 0.09 * at
 			lit = not lit
 		end
-		c:AddPoint(T.BLINK_FROM, CreateColor(1, 1, 1, 0))
-		curve = c
+		c:AddPoint(from, CreateColor(1, 1, 1, 0))
+		curves[which] = c
 	end)
-	return curve
+	return curves[which]
 end
 
 -- the options the flash is handed over with: the lane-sized red picture as
 -- its whole text, our own binding (looked at every frame, the blink being in
--- its colour), and the curve
-local function flashOptions(w, h)
-	local c = T.BlinkCurve()
+-- its colour), and the curve for heals or for damage
+local function flashOptions(w, h, which)
+	local c = T.BlinkCurve(which)
 	local prop = Enum and Enum.DurationTextBindingProperty and Enum.DurationTextBindingProperty.RemainingDuration
 	if not (c and prop) then
 		return nil
@@ -433,6 +461,12 @@ T.FlashOptions = flashOptions
 -- has run out flashes red behind it. Each is a frame of its own, a level
 -- apart, because a frame always draws over its parent's own textures - the
 -- flash, as the button's own text, was hidden under the bar at first.
+-- the room the spell's picture takes at a lane's left end: a square as tall as
+-- the lane, and a pixel after it; none on a heal's lane
+function T.IconRoom(h, above)
+	return above and (h + 1) or 0
+end
+
 local function laneButton(w, h, colour, blinks, above)
 	return function(b)
 		T.seen.inits = T.seen.inits + 1
@@ -440,19 +474,42 @@ local function laneButton(w, h, colour, blinks, above)
 		pcall(b.SetMouseClickEnabled, b, false)
 		pcall(b.SetMouseMotionEnabled, b, false)
 		local level = b:GetFrameLevel() or 1
+		-- THE SPELL'S PICTURE AT THE LEFT (Josh 2026-10-03: "Can we include
+		-- small spell icons on the dot timers"): on damage's lanes, a square as
+		-- tall as the lane with the aura's own picture in it, which the client
+		-- puts there as on any aura button (SetIcon), and the bar after it. A
+		-- heal's lane is a hairline along a cell, with no room for one.
+		local left = T.IconRoom(h, above)
+		if left > 0 then
+			local edge = b:CreateTexture(nil, "BACKGROUND", nil, 1)
+			edge:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+			edge:SetSize(h, h)
+			edge:SetColorTexture(0, 0, 0, 0.85)
+			local icon = b:CreateTexture(nil, "ARTWORK")
+			icon:SetPoint("TOPLEFT", b, "TOPLEFT", 1, -1)
+			icon:SetSize(h - 2, h - 2)
+			icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+			if b.SetIcon then
+				pcall(b.SetIcon, b, icon)
+			end
+			b.bmIcon = icon
+		end
+		local bw = w - left
 		local bg = b:CreateTexture(nil, "BACKGROUND")
-		bg:SetAllPoints()
+		bg:SetPoint("TOPLEFT", b, "TOPLEFT", left, 0)
+		bg:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
 		bg:SetColorTexture(0, 0, 0, above and T.DOT_BACK or 0.5)
 		-- OVERSIZED, AND CUT TO THE LANE (Josh 2026-09-24: "the red bar
 		-- still doesn't cover the full rail"): the client drew the picture
 		-- short of the lane's end - by whatever it scales a text's picture
 		-- by - so it is made twice the lane's width and a few pixels taller,
 		-- and the frame it is on clips it to the lane's own edges
-		local opts = blinks and flashOptions(w * 2, h + 6) or nil
+		local opts = blinks and flashOptions(bw * 2, h + 6, above and "dot" or "hot") or nil
 		if opts and b.SetDurationText then
 			-- the client only asks that the text be somewhere inside the button
 			local under = CreateFrame("Frame", nil, b)
-			under:SetAllPoints()
+			under:SetPoint("TOPLEFT", b, "TOPLEFT", left, 0)
+			under:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
 			under:SetFrameLevel(level + 1)
 			if under.SetClipsChildren then
 				under:SetClipsChildren(true)
@@ -461,8 +518,8 @@ local function laneButton(w, h, colour, blinks, above)
 			local text = under:CreateFontString(nil, "OVERLAY")
 			pcall(text.SetFont, text, BT.Fonts.Face("num") or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF",
 				BT.Fonts.Size(10), "")
-			-- from the lane's left edge, as wide as the picture makes it
-			text:SetPoint("LEFT", b, "LEFT", 0, 0)
+			-- from where the bar starts, as wide as the picture makes it
+			text:SetPoint("LEFT", b, "LEFT", left, 0)
 			text:SetJustifyH("LEFT")
 			text:SetWordWrap(false)
 			local ok, err = pcall(b.SetDurationText, b, text, opts)
@@ -473,7 +530,8 @@ local function laneButton(w, h, colour, blinks, above)
 			end
 		end
 		local bar = CreateFrame("StatusBar", nil, b)
-		bar:SetAllPoints()
+		bar:SetPoint("TOPLEFT", b, "TOPLEFT", left, 0)
+		bar:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
 		bar:SetFrameLevel(level + 2)
 		bar:SetStatusBarTexture(BLANK)
 		bar:SetStatusBarColor(colour[1], colour[2], colour[3], above and T.DOT_ALPHA or 1)
@@ -498,7 +556,7 @@ T.LaneButton = laneButton
 local function laneFor(b, set, lane)
 	local kind = set.kind
 	local h = T.Height(kind, lane.which)
-	local w = (b.bmSpec and b.bmSpec.w or 100) - 4
+	local w = T.LaneWidth(b)
 	local spells = T.Ids(lane.name)
 	if not (spells and next(spells)) then
 		return nil
@@ -528,18 +586,94 @@ function T.Above(which)
 	return which == "dot"
 end
 
-local function place(c, b, i, kind, which)
+-- how far above a frame its damage starts: a pixel clear of it, and over a
+-- plate clear of the threat ring and the target's outline outside it as well
+local function clearOf(b)
+	return (b.bmSpec and b.bmSpec.plate) and 5 or 1
+end
+
+-- `dx` moves it right of the lane's start (a made-up lane's bar, after its
+-- picture: T.Show)
+local function place(c, b, i, kind, which, dx)
 	local h = T.Height(kind, which)
 	c:ClearAllPoints()
 	if T.Above(which) then
-		-- the lane's top edge, so the first one's bottom is a pixel clear of
-		-- the frame and each next one a lane higher
-		c:SetPoint("TOPLEFT", b, "TOPLEFT", 2, 1 + h + (i - 1) * (h + 1))
+		-- the lane's top edge, so the first one's bottom is clear of the
+		-- frame and each next one a lane higher
+		c:SetPoint("TOPLEFT", b, "TOPLEFT", laneX(b) + (dx or 0), clearOf(b) + h + (i - 1) * (h + 1))
 	else
 		c:SetPoint("TOPLEFT", b.health, "TOPLEFT", 0, -(i - 1) * (h + 1))
 	end
 end
 T.Place = place
+
+-- ALL YOUR DAMAGE IN ONE STACK, NO GAPS (Josh 2026-10-03: "can we collapse
+-- them down now so we don't have blank bars for missing dots? They would just
+-- be sorted by the order in the options"). Each spell had a container of its
+-- own, kept in its place whether the spell was up or not. They are one
+-- container now, a group in it for each spell in your order, each group on a
+-- line of its own, growing up from the frame. The client's flow layout gives
+-- a line only to a group with an aura in it, so the spells that are up stack
+-- with nothing between them - in a fight too, as the client lays them out
+-- itself. Each group has its spell's own button, so its own colour.
+local function dotSignature(lanes)
+	local parts = {}
+	for _, lane in ipairs(lanes) do
+		parts[#parts + 1] = lane.name .. "=" .. signature(T.Ids(lane.name))
+	end
+	return table.concat(parts, ";")
+end
+
+local function dotStack(b, set, lanes)
+	local h = T.Height(set.kind, "dot")
+	local w = T.LaneWidth(b)
+	local ok, c = pcall(CreateFrame, "AuraContainer", nil, set.host, "CustomAuraContainerTemplate")
+	if not (ok and c and c.AddAuraGroup) then
+		return nil
+	end
+	pcall(c.SetEditModePreviewEnabled, c, false)
+	local dir = AnchorUtil and AnchorUtil.FlowDirection
+	if c.SetFlowLayoutAnchorPoint then
+		pcall(c.SetFlowLayoutAnchorPoint, c, "BOTTOMLEFT")
+	end
+	if dir and c.SetFlowLayoutGrowthDirection then
+		pcall(c.SetFlowLayoutGrowthDirection, c, dir.Right, dir.Up)
+	end
+	if c.SetFlowLayoutMaximumLineSize then
+		pcall(c.SetFlowLayoutMaximumLineSize, c, w)
+	end
+	pcall(c.SetUnit, c, set.unit or b.bmUnit or "player")
+	local made = 0
+	for i, lane in ipairs(lanes) do
+		local spells = T.Ids(lane.name)
+		if spells and next(spells) then
+			local added = pcall(c.AddAuraGroup, c, lane.name, "HARMFUL|PLAYER", {
+				maxFrameCount = 1,
+				initializeFrame = laneButton(w, h, lane.colour, T.Blinks("dot"), true),
+				candidateFilters = { includeSpellIDs = spells },
+				layout = { elementSpacing = 1, lineSpacing = 1, groupLineSpacing = 1, forceNewLine = true,
+					elementWidth = w, elementHeight = h, layoutIndex = i },
+			})
+			if added then
+				made = made + 1
+			end
+		end
+	end
+	if made == 0 then
+		c:Hide()
+		return nil
+	end
+	c.bmSig = dotSignature(lanes)
+	c.bmCountdown = T.LaneStyle("dot")
+	return c
+end
+T.DotStack = dotStack
+
+-- the stack's foot on the frame's top edge, at the lanes' left
+local function placeStack(c, b)
+	c:ClearAllPoints()
+	c:SetPoint("BOTTOMLEFT", b, "TOPLEFT", laneX(b), clearOf(b))
+end
 
 local function drop(set, c)
 	pcall(c.SetEnabled, c, false)
@@ -554,10 +688,6 @@ end
 -- every button that wears lanes, to lay them out again when a choice changes
 local wearing = setmetatable({}, { __mode = "k" })
 local pending, regen
--- the frame over the resource display (made below, by displayFrame): declared
--- here so T.Rebuild reads this and not a global of the same name, which is
--- always nil
-local display
 
 local function afterFight()
 	pending = true
@@ -587,25 +717,32 @@ function T.Build(b, remake)
 	wearing[b] = true
 	set.timers = set.timers or {}
 	local want = {}
+	local dots = {}
 	for _, lane in ipairs(T.Lanes(set.kind)) do
-		local key = lane.which .. ":" .. lane.name
-		want[key] = true
-		local c = set.timers[key]
-		local spells = T.Ids(lane.name)
-		if c and (remake or c.bmSig ~= signature(spells) or c.bmCountdown ~= T.LaneStyle(lane.which)) then
+		if lane.which == "dot" then
+			-- your damage goes in one stack (dotStack, below)
+			dots[#dots + 1] = lane
+		else
+			T.BuildLane(b, set, lane, want, remake)
+		end
+	end
+	if #dots > 0 then
+		want.dot = true
+		local c = set.timers.dot
+		if c and (remake or c.bmSig ~= dotSignature(dots) or c.bmCountdown ~= T.LaneStyle("dot")) then
 			drop(set, c)
 			c = nil
 		end
 		if not c then
-			c = laneFor(b, set, lane)
+			c = dotStack(b, set, dots)
 			if c then
 				set.list[#set.list + 1] = c
 				pcall(c.SetEnabled, c, not set.off and not set.paused)
 			end
-			set.timers[key] = c
+			set.timers.dot = c
 		end
 		if c then
-			place(c, b, lane.slot, set.kind, lane.which)
+			placeStack(c, b)
 			c:Show()
 		end
 	end
@@ -621,6 +758,30 @@ function T.Build(b, remake)
 	return shown
 end
 
+-- one heal's lane, a container of its own, made or moved
+function T.BuildLane(b, set, lane, want, remake)
+	local key = lane.which .. ":" .. lane.name
+	want[key] = true
+	local c = set.timers[key]
+	local spells = T.Ids(lane.name)
+	if c and (remake or c.bmSig ~= signature(spells) or c.bmCountdown ~= T.LaneStyle(lane.which)) then
+		drop(set, c)
+		c = nil
+	end
+	if not c then
+		c = laneFor(b, set, lane)
+		if c then
+			set.list[#set.list + 1] = c
+			pcall(c.SetEnabled, c, not set.off and not set.paused)
+		end
+		set.timers[key] = c
+	end
+	if c then
+		place(c, b, lane.slot, set.kind, lane.which)
+		c:Show()
+	end
+end
+
 -- every button, after a choice or a new rank
 function T.Rebuild(remake)
 	if inCombat() then
@@ -628,19 +789,8 @@ function T.Rebuild(remake)
 		return
 	end
 	ids = nil
-	local off = display and not T.OnDisplay()
-	if off then
-		display:Hide()
-		F.Auras.Pause(display, true)
-	end
 	for b in pairs(wearing) do
-		if b == display and off then
-			-- a display that is off is not built for: it is built again when
-			-- it is back (T.OnResourceDisplay builds what is not worn)
-			wearing[b] = nil
-		else
-			T.Build(b, remake)
-		end
+		T.Build(b, remake)
 	end
 end
 
@@ -656,7 +806,8 @@ end
 -- the blink, as a row, for heals or for damage
 function T.BlinkRow(section, which, changed)
 	return BT.Widgets.SwitchRow(section, "Blink as it runs out",
-		"In the last 5 seconds, the empty part of the lane flashes red",
+		("In the last %d seconds, the empty part of the lane flashes red"):format(
+			T.BLINK_FROM[which] or T.BLINK_FROM.dot),
 		function() return T.Blinks(which) end,
 		function(on)
 			T.SetBlinks(on, which)
@@ -748,7 +899,7 @@ function T.DotSection(page, changed)
 	end
 	orderRows(dots, nil)
 	W.Row(dots, "Nearest the bars at the bottom",
-		"A lane shows only while its spell is up. Keep the ones you always use at the bottom.")
+		"Only the spells that are up show, in this order, with no gaps between them.")
 	return dots
 end
 
@@ -794,107 +945,17 @@ function T.Report()
 	if s.textRefused then
 		say("  |cffff6b6bflash refused|r " .. s.textRefused:sub(1, 120))
 	end
-	if (T.Blinks("hot") or T.Blinks("dot")) and not T.BlinkCurve() then
+	if (T.Blinks("hot") or T.Blinks("dot")) and not (T.BlinkCurve("hot") and T.BlinkCurve("dot")) then
 		say("  |cffff6b6bno colour curve|r, so BeebMod can't draw the flash")
 	end
 end
 
 -- a new rank learned, or the book read for the first time at login
--- ---------------------------------------------------------------------------
--- Over the resource display
--- ---------------------------------------------------------------------------
---
--- A frame of ours standing in for a unit frame: as wide as the display's
--- bars, its top edge on theirs, so the lanes stack above them exactly as they
--- stack above a frame. Its containers watch "target", and are bounced when
--- the target changes, as the target frame's are. The Resource display module
--- says where the bars are (T.OnResourceDisplay) whenever it lays them out;
--- the frame is ours and unprotected, so it may follow them in a fight.
--- (`display` itself is declared with the lanes above, which hide it.)
-
-local function displayFrame()
-	if display then
-		return display
-	end
-	display = CreateFrame("Frame", nil, UIParent)
-	display:SetSize(203, 1)
-	display:Hide()
-	display.health = display
-	display.bmSpec = { w = 203 }
-	local host = CreateFrame("Frame", nil, display)
-	host:SetAllPoints()
-	display.bmAuras = { host = host, list = {}, kind = "resourcedisplay", unit = "target", off = false }
-	return display
-end
-T.Display = function() return display end
-
--- `anchor` is the display's top bar, or nil when there is none to sit on
-function T.OnResourceDisplay(anchor)
-	if not T.OnDisplay() or not anchor then
-		if display then
-			display:Hide()
-			-- switched off, its lanes stop reading your target (A.Pause in
-			-- Auras.lua). Not for a plate gone for the moment: one that comes
-			-- back in a fight could not have them switched on again.
-			if not T.OnDisplay() then
-				F.Auras.Pause(display, true)
-			end
-		end
-		return false
-	end
-	local d = displayFrame()
-	local width = BT.Pill.Number(BT.Furniture.Call(anchor, "GetWidth"), 199)
-	pcall(function()
-		d:ClearAllPoints()
-		-- two to the left, as a unit frame's health sits two inside it
-		d:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", -2, 0)
-		local strata = BT.Furniture.Call(anchor, "GetFrameStrata")
-		if type(strata) == "string" then
-			d:SetFrameStrata(strata)
-		end
-		d:SetFrameLevel(BT.Pill.Number(BT.Furniture.Call(anchor, "GetFrameLevel"), 1) + 5)
-		-- a nameplate is drawn at a scale of its own: ours matches it, so a
-		-- width measured off the bars is the bars' width here too
-		local theirs = BT.Pill.Number(BT.Furniture.Call(anchor, "GetEffectiveScale"), 0)
-		local mine = BT.Pill.Number(UIParent:GetEffectiveScale(), 0)
-		if theirs > 0 and mine > 0 then
-			d:SetScale(theirs / mine)
-		end
-	end)
-	-- the lanes are as wide as the bars; a lane is the client's button, made
-	-- to a width, so a new width is new lanes (out of combat)
-	local w = math.floor(width + 0.5) + 4
-	local remake = d.bmSpec.w ~= w
-	d.bmSpec.w = w
-	d:SetWidth(w)
-	d:Show()
-	F.Auras.Pause(d, false)
-	if remake or not wearing[d] then
-		T.Build(d, remake)
-	end
-	return true
-end
-
--- a new target: its lanes read again (A.Refresh does the same for the frame)
-local function bounce()
-	local set = display and display.bmAuras
-	if set and display:IsShown() then
-		set.host:Hide()
-		set.host:Show()
-	end
-end
-T.Bounce = bounce
-
 local watch = CreateFrame and CreateFrame("Frame")
 if watch then
 	watch:RegisterEvent("SPELLS_CHANGED")
 	watch:RegisterEvent("PLAYER_ENTERING_WORLD")
-	watch:RegisterEvent("PLAYER_TARGET_CHANGED")
-	watch:SetScript("OnEvent", function(_, event)
-		if event == "PLAYER_TARGET_CHANGED" then
-			bounce()
-			return
-		end
+	watch:SetScript("OnEvent", function()
 		T.Rebuild()
 	end)
 end
@@ -931,10 +992,35 @@ function T.Show(b, kind)
 				b.bmFakeTimers[n] = f
 			end
 			local h = T.Height(kind, lane.which)
-			f:SetFrameLevel((b:GetFrameLevel() or 1) + 4)
-			f:SetSize((b.bmSpec and b.bmSpec.w or 100) - 4, h)
-			place(f, b, n, kind, lane.which)
 			local above = T.Above(lane.which)
+			-- the spell's picture at the lane's left, the bar after it, as on
+			-- a real one (laneButton)
+			local left = T.IconRoom(h, above)
+			f:SetFrameLevel((b:GetFrameLevel() or 1) + 4)
+			f:SetSize(T.LaneWidth(b) - left, h)
+			place(f, b, n, kind, lane.which, left)
+			if above then
+				if not f.icon then
+					f.edge = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+					f.edge:SetColorTexture(0, 0, 0, 0.85)
+					f.icon = f:CreateTexture(nil, "ARTWORK")
+					f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+				end
+				f.edge:ClearAllPoints()
+				f.edge:SetPoint("TOPRIGHT", f, "TOPLEFT", -1, 0)
+				f.edge:SetSize(h, h)
+				f.icon:ClearAllPoints()
+				f.icon:SetPoint("TOPLEFT", f.edge, "TOPLEFT", 1, -1)
+				f.icon:SetSize(h - 2, h - 2)
+				local ids = T.Ids(lane.name)
+				local id = ids and next(ids)
+				f.icon:SetTexture(id and F.Auras.SpellIcon(id) or 134400)
+				f.edge:Show()
+				f.icon:Show()
+			elseif f.icon then
+				f.edge:Hide()
+				f.icon:Hide()
+			end
 			f.bg:SetColorTexture(0, 0, 0, above and T.DOT_BACK or 0.5)
 			f:SetStatusBarColor(lane.colour[1], lane.colour[2], lane.colour[3], above and T.DOT_ALPHA or 1)
 			-- the last one nearly run out, and blinking, as it would with a

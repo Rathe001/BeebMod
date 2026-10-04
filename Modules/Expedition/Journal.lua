@@ -229,6 +229,76 @@ function J.Body(npc, id)
 	return true
 end
 
+-- A MAN AND A WOMAN (Josh 2026-10-03: "male/female icons to switch between
+-- male/female models (if they exist)"). The game's own numbers for them, as
+-- UnitSex says them. m.looks[J.MALE] and m.looks[J.FEMALE] are the game's
+-- display id of each look, or true for a look seen whose id the game would not
+-- give. They are learnt three ways: from every model the journal draws (the
+-- game picks one of a creature's looks each time - Window.lua, V.LearnLook),
+-- from a hidden model asking again for the one not yet seen (Expedition.lua,
+-- M.Probe), and from an enemy met in the world (Kills.lua, learnLook).
+J.MALE, J.FEMALE = 2, 3
+
+-- a model file's sex, by its folder or name (SexData.lua); nil for one that
+-- is neither, or unknown
+function J.SexOfFile(id)
+	local sexes = BT.ExpeditionSexes
+	if not sexes or type(id) ~= "number" or (issecretvalue and issecretvalue(id)) then
+		return nil
+	end
+	return sexes[id]
+end
+
+-- a look of `sex` written onto page `m`: a display id where the game gave
+-- one, true where it did not; an id is kept over a bare true, and the first
+-- id over a later one. Whether it was news.
+function J.AddLook(m, sex, look)
+	if not (m and (sex == J.MALE or sex == J.FEMALE)) then
+		return false
+	end
+	if type(look) ~= "number" or (issecretvalue and issecretvalue(look)) or look <= 0 then
+		look = true
+	end
+	m.looks = type(m.looks) == "table" and m.looks or {}
+	local had = m.looks[sex]
+	if had == nil or (had == true and look ~= true) then
+		m.looks[sex] = look
+		return had == nil
+	end
+	return false
+end
+
+-- a look of an enemy in the book, by its npc (on the page it goes on)
+function J.LearnLook(npc, sex, look)
+	local s = J.Store()
+	if not (s and npc) then
+		return false
+	end
+	local to = s.same and s.same[npc]
+	return J.AddLook(s.enemies[to or npc] or s.enemies[npc], sex, look)
+end
+
+-- both looks, when both have been seen; nil while only one has (or none)
+function J.Looks(m)
+	local looks = m and m.looks
+	if type(looks) == "table" and looks[J.MALE] and looks[J.FEMALE] then
+		return looks
+	end
+	return nil
+end
+
+-- whether the journal has this enemy's look of this sex already, on the
+-- page it goes on
+function J.HasLook(npc, sex)
+	local s = J.Store()
+	if not (s and npc) then
+		return false
+	end
+	local to = s.same and s.same[npc]
+	local m = s.enemies[to or npc] or s.enemies[npc]
+	return m ~= nil and type(m.looks) == "table" and m.looks[sex] ~= nil
+end
+
 -- Every page that speaks of the enemy, its own first: { { kind, title, text,
 -- how } }. A page is taken once, however many ways it is reached.
 function J.WikiLore(m)
@@ -565,6 +635,11 @@ function J.Store()
 	end
 	s.enemies = s.enemies or {}
 	s.chars = s.chars or {}
+	-- an older book's map pins, packed once (J.PackAll)
+	if not s.spotsPacked then
+		J.PackAll(s)
+		s.spotsPacked = true
+	end
 	return s
 end
 
@@ -641,6 +716,10 @@ function J.Learn(info, now)
 	end
 	if info.boss == true then
 		m.boss = true
+	end
+	-- its looks, a man's and a woman's (J.AddLook)
+	if info.sex == J.MALE or info.sex == J.FEMALE then
+		J.AddLook(m, info.sex, info.look)
 	end
 	local lvl = tonumber(info.level)
 	if lvl then
@@ -786,6 +865,8 @@ end
 -- one page into another: what it is, and every character's kills of it
 local function merge(s, to, from)
 	local m, d = s.enemies[to], s.enemies[from]
+	-- the counts move between pages: the commendations' kept count is stale
+	J.kept = nil
 	if d.lo then
 		m.lo = math.min(m.lo or d.lo, d.lo)
 	end
@@ -799,7 +880,14 @@ local function merge(s, to, from)
 	end
 	m.skull = m.skull or d.skull
 	m.boss = m.boss or d.boss
-	for _, sp in ipairs(d.spots or {}) do
+	for sex, look in pairs(type(d.looks) == "table" and d.looks or {}) do
+		J.AddLook(m, sex, look)
+	end
+	-- the asking starts over for the page made of both (Expedition.lua)
+	if d.looks then
+		m.oneLook, m.lookTries = nil, nil
+	end
+	for _, sp in ipairs(J.SpotList(d)) do
 		J.AddSpot(m, sp[1], sp[2], sp[3])
 	end
 	if (not m.mx or m.spotGuess) and d.mx and not d.spotGuess then
@@ -902,32 +990,118 @@ end
 -- WHERE IT WAS KILLED, NOT ONLY FIRST (Josh 2026-09-28: "are we able to show a
 -- little map where these were killed on the details modal?"). The first spot
 -- was all a card's background needed; the page's map wants each place.
--- Up to J.SPOTS of them, as { map, x, y } in m.spots, and a spot almost on
--- one already kept (J.NEAR of the map's width) is the same camp, not a new
--- place. Kills from before this have their first spot and no more.
-J.SPOTS = 25
--- A CAMP IS A DOT (Josh 2026-09-28, two kills a few steps apart drawn as one
--- dot on the other): a fortieth of the map, a dot's width on the page's map
-J.NEAR = 0.025
+-- Kept as { map, x, y } in m.spots. Kills from before this have their first
+-- spot and no more.
+--
+-- EVERY KILL, NOT EVERY CAMP (Josh 2026-10-03: "I should see one for each
+-- kill"). A kill a fortieth of the map from one already kept was taken for
+-- the same camp and not kept, so eight Ravaged Corpses made three dots. Each
+-- kill keeps its own spot now: the last J.SPOTS of them, the oldest giving
+-- way, so an enemy farmed for its platinum does not grow the saved file
+-- without end.
+J.SPOTS = 100
+-- the same spot, as packing leaves it (four digits, below)
+J.SAME = 0.0002
+
+-- PACKED (Josh 2026-10-03, the level 60 simulation: 44,000 kills kept 34,600
+-- pins, 1.9 MB of the saved file and 4.3 MB of memory as a table of three
+-- numbers each). An enemy's pins are one string: "@1438" for the map, then
+-- eight digits a pin - four for x and four for y, in ten-thousandths of the
+-- map - and another "@" where the map changes: "@1438,45673214,45683215".
+-- About 330 KB of the file and 0.9 MB of memory for the same career. m.spotN
+-- is how many pins the string holds, so a kill need not count them. A book
+-- from before keeps tables until J.PackAll packs them, and is read either way.
+local function digits(v)
+	return math.floor(math.max(0, math.min(1, v)) * 9999 + 0.5)
+end
+
+local function packPin(x, y)
+	return ("%04d%04d"):format(digits(x), digits(y))
+end
+
+-- every pin of an enemy, in the order kept: { map, x, y }
+function J.SpotList(m)
+	local out = {}
+	local sp = m and m.spots
+	if type(sp) == "table" then
+		for _, p in ipairs(sp) do
+			out[#out + 1] = { p[1], p[2], p[3] }
+		end
+	elseif type(sp) == "string" then
+		local map
+		for token in sp:gmatch("[^,]+") do
+			if token:sub(1, 1) == "@" then
+				map = tonumber(token:sub(2))
+			elseif map and #token == 8 then
+				out[#out + 1] = { map, tonumber(token:sub(1, 4)) / 9999, tonumber(token:sub(5, 8)) / 9999 }
+			end
+		end
+	end
+	return out
+end
+
+-- a list of { map, x, y } as one string
+function J.PackSpots(list)
+	local parts, map = {}, nil
+	for _, p in ipairs(list) do
+		if p[1] ~= map then
+			map = p[1]
+			parts[#parts + 1] = "@" .. map
+		end
+		parts[#parts + 1] = packPin(p[2], p[3])
+	end
+	return table.concat(parts, ",")
+end
+
+-- the oldest pin off the front, and its map's mark with it when it was the
+-- map's last
+local function dropOldest(str)
+	local head, rest = str:match("^(@%d+),%d%d%d%d%d%d%d%d,?(.*)$")
+	if not head then
+		return ""
+	end
+	if rest == "" or rest:sub(1, 1) == "@" then
+		return rest
+	end
+	return head .. "," .. rest
+end
+
+-- an older book's tables, packed: once, at load (J.Store)
+function J.PackAll(s)
+	local n = 0
+	for _, m in pairs(s and s.enemies or {}) do
+		if type(m.spots) == "table" then
+			local list = J.SpotList(m)
+			m.spots = #list > 0 and J.PackSpots(list) or nil
+			m.spotN = #list > 0 and #list or nil
+			n = n + 1
+		end
+	end
+	return n
+end
 
 function J.AddSpot(m, map, x, y)
 	if not (m and type(map) == "number" and type(x) == "number" and type(y) == "number") then
 		return false
 	end
-	m.spots = m.spots or {}
-	if #m.spots >= J.SPOTS then
-		return false
+	if type(m.spots) == "table" then
+		local list = J.SpotList(m)
+		m.spots, m.spotN = J.PackSpots(list), #list
 	end
-	for _, sp in ipairs(m.spots) do
-		if sp[1] == map and math.abs(sp[2] - x) < J.NEAR and math.abs(sp[3] - y) < J.NEAR then
-			return false
-		end
+	local str = type(m.spots) == "string" and m.spots or ""
+	local n = m.spotN or #J.SpotList(m)
+	while n >= J.SPOTS and str ~= "" do
+		str = dropOldest(str)
+		n = n - 1
 	end
-	-- four places are enough for a map a few hundred units across
-	local function short(v)
-		return math.floor(v * 10000 + 0.5) / 10000
+	-- the map the last pin is on, to say a new one only where it changes
+	local last = tonumber(str:match(".*@(%d+)"))
+	local piece = packPin(x, y)
+	if last ~= map then
+		piece = "@" .. map .. "," .. piece
 	end
-	m.spots[#m.spots + 1] = { map, short(x), short(y) }
+	m.spots = str == "" and piece or (str .. "," .. piece)
+	m.spotN = n + 1
 	return true
 end
 
@@ -947,10 +1121,14 @@ function J.Spots(m, map)
 	if first then
 		out[1] = first
 	end
-	for _, sp in ipairs(m.spots or {}) do
+	-- the first kill's own entry in the list, once: it is already drawn
+	local skipped = first == nil
+	for _, sp in ipairs(J.SpotList(m)) do
 		if sp[1] == map then
-			local same = first and math.abs(sp[2] - first.x) < J.NEAR and math.abs(sp[3] - first.y) < J.NEAR
-			if not same then
+			local same = not skipped and math.abs(sp[2] - first.x) < J.SAME and math.abs(sp[3] - first.y) < J.SAME
+			if same then
+				skipped = true
+			else
 				out[#out + 1] = { x = sp[2], y = sp[3] }
 			end
 		end
@@ -996,6 +1174,16 @@ function J.EncounterWon(name)
 end
 
 -- a GUID counted, remembered past a reload; the oldest goes first
+-- what the commendations count of an enemy, in one string: a kill that
+-- leaves it the same changes nothing they count but the total (J.Check)
+local function factsOf(m)
+	if not m then
+		return ""
+	end
+	return (m.kind or "") .. "|" .. (m.family or "") .. "|" .. (m.rank or "") .. "|" .. (m.zone or "")
+		.. "|" .. J.Category(m)
+end
+
 function J.Remember(c, guid)
 	if not (c and guid) then
 		return
@@ -1018,6 +1206,8 @@ function J.Kill(info, now)
 	now = now or U.Now()
 	-- an enemy of a name the book has is that page's (J.PageOf)
 	info.npc = J.PageOf(info)
+	local s = J.Store()
+	local before = factsOf(s.enemies[info.npc])
 	J.Learn(info, now)
 	local npc = info.npc
 	local was = c.kills[npc] or 0
@@ -1028,6 +1218,7 @@ function J.Kill(info, now)
 	c.last = { npc = npc, at = now }
 	J.Remember(c, info.guid)
 	-- the feats are about the moment, so they are decided now
+	local skull, up5 = c.feats.skull, c.feats.up5
 	local lvl, mine = tonumber(info.level), tonumber(info.myLevel)
 	if lvl and mine then
 		if lvl < 0 then
@@ -1036,7 +1227,11 @@ function J.Kill(info, now)
 			c.feats.up5 = c.feats.up5 or now
 		end
 	end
-	return was == 0, J.Check(c, now, npc, was)
+	-- one more of an enemy already counted, the same as it was, and no feat:
+	-- only the total moved (J.Check)
+	local onlyTotal = was > 0 and before == factsOf(s.enemies[npc])
+		and skull == c.feats.skull and up5 == c.feats.up5
+	return was == 0, J.Check(c, now, npc, was, onlyTotal)
 end
 
 -- ---------------------------------------------------------------------------
@@ -1316,10 +1511,55 @@ end
 -- What this character has just earned: every commendation now met that has no
 -- date yet (dated now, and handed back for a toast), and the mastery this one
 -- kill of `npc` reached, if it reached one.
-function J.Check(c, now, npc, was)
+-- ONE MORE OF THE SAME IS ONE MORE (Josh 2026-10-03, the level 60
+-- simulation: a kill counted every enemy in the book and built the whole
+-- list of commendations again, nearly all of a kill's time, and the tables it
+-- threw away were what made Lua stop now and then to clear them - 12 to 37 ms,
+-- a dropped frame). The count and the list are kept for the character. A kill
+-- of an enemy already counted, with nothing about it changed and no feat
+-- earned (`onlyTotal`, from J.Kill), moves the total alone: the kept count
+-- takes one more and only the total's commendations are looked at again.
+-- Anything else counts it all again, as does a character or a book the kept
+-- count is not for; a merge of pages throws it away (merge, above). And it is
+-- checked against the counts themselves each time - their sum and how many
+-- there are, which makes nothing to clear up - so a count written any other
+-- way cannot leave it wrong.
+J.kept = nil
+
+local function tally(kills)
+	local total, n = 0, 0
+	for _, k in pairs(kills) do
+		total, n = total + k, n + 1
+	end
+	return total, n
+end
+
+local function stillKept(kept, c)
+	if not (kept and kept.c == c and kept.kills == c.kills) then
+		return false
+	end
+	local total, n = tally(c.kills)
+	return total == kept.st.total + 1 and n == kept.st.uniques
+end
+
+function J.Check(c, now, npc, was, onlyTotal)
 	local news = {}
-	local st = J.Stats(c.kills, c.feats)
-	for _, a in ipairs(J.List(st)) do
+	local kept = J.kept
+	local st, list
+	if onlyTotal and stillKept(kept, c) then
+		st, list = kept.st, kept.list
+		st.total = st.total + 1
+		for _, a in ipairs(list) do
+			if a.group == "slaughter" then
+				a.have = st.total
+			end
+		end
+	else
+		st = J.Stats(c.kills, c.feats)
+		list = J.List(st)
+		J.kept = { c = c, kills = c.kills, st = st, list = list }
+	end
+	for _, a in ipairs(list) do
 		if a.have >= a.need and not c.earned[a.id] then
 			c.earned[a.id] = now
 			-- WHERE IT WAS EARNED (Josh 2026-09-28, the page redrawn: "Earned

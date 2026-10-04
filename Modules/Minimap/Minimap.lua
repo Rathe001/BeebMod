@@ -59,6 +59,34 @@ local ICON = 18
 -- we could not read what it had.
 local ROUND = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 
+-- THE RING ROUND A QUEST AREA (Josh 2026-10-03: "The circular glow on the
+-- minimap needs to be square, and extend to the edge of the minimap"). Where
+-- a quest area runs on past the edge of the map, the client draws a hatched
+-- band along that edge: a circle, the edge of the round map it expects. On a
+-- square map the band cut a circle through the middle, and the corners
+-- outside it were left plain. The client has no square band to draw, so the
+-- band goes. The areas themselves are drawn into the corners already, out to
+-- the square's edge. The same band is drawn for bonus objectives ("Task")
+-- and archaeology ("Arch").
+--
+-- There is no call to read the band's settings back. Put back, it is drawn
+-- whole and at full strength, which is how the client draws it unless told
+-- otherwise.
+local RINGS = { "Quest", "Task", "Arch" }
+
+function M.Rings(map, on)
+	local n = 0
+	for _, kind in ipairs(RINGS) do
+		for _, part in ipairs({ "RingAlpha", "RingScalar" }) do
+			local set = map and map["Set" .. kind .. "Blob" .. part]
+			if type(set) == "function" and pcall(set, map, on and 1 or 0) then
+				n = n + 1
+			end
+		end
+	end
+	return n
+end
+
 -- WHAT THE CLIENT HANGS ON IT. Each is art or a button belonging to the ring,
 -- and each is put back exactly as it was when the module is switched off.
 -- (The world map button is not one: it has the bottom-left corner - see WHERE.
@@ -1262,6 +1290,7 @@ function M.Apply(plain)
 		if map.SetMaskTexture and was.mask then
 			pcall(map.SetMaskTexture, map, was.mask)
 		end
+		M.Rings(map, true)
 		if map.SetAlpha then
 			pcall(map.SetAlpha, map, was.alpha or 1)
 		end
@@ -1289,6 +1318,8 @@ function M.Apply(plain)
 	if map.SetMaskTexture then
 		pcall(map.SetMaskTexture, map, "Interface\\Buttons\\WHITE8X8")
 	end
+	-- and no round band inside it (M.Rings)
+	M.Rings(map, false)
 
 	-- SOLID, AND NOW WE KNOW WHY (Josh 2026-09-22). The map's alpha was tried
 	-- again as a setting, with a hole cut in the panel's fill under it: at any

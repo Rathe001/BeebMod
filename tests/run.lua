@@ -1006,6 +1006,8 @@ do
 	-- every old name there was: the switches, the order, a feature, four
 	-- modules' own options and seven records
 	local sessions = { char = { start = 100, earned = 5000 } }
+	-- written within the day, or the load drops them as old (BT.DropOldRecords)
+	local at = BT.Util.Now() - 100
 	_G.BeebModDB = {
 		schema = BT.SCHEMA,
 		settings = {
@@ -1022,8 +1024,8 @@ do
 			barPos = { point = "TOPLEFT", rel = "TOPLEFT", x = 40, y = -120 },
 		},
 		realms = {},
-		prdDump = { at = 1 }, menuDump = { at = 2 }, menusDump = { at = 3 }, framesDump = { at = 4 },
-		bagDump = { at = 5 }, sheetDump = { at = 6 }, meterDump = { at = 7 },
+		prdDump = { at = at + 1 }, menuDump = { at = at + 2 }, menusDump = { at = at + 3 }, framesDump = { at = at + 4 },
+		bagDump = { at = at + 5 }, sheetDump = { at = at + 6 }, meterDump = { at = at + 7 },
 	}
 	BT.boot, BT.baked = nil, nil
 	BT.Bind("Whitemane", "Alliance")
@@ -1056,9 +1058,9 @@ do
 	check(s.dockPos and s.dockPos.x == 40 and s.dockPos.y == -120 and s.barPos == nil,
 		"and the dock stays where you dragged it")
 	local db = _G.BeebModDB
-	check(db.resourcedisplayDump.at == 1 and db.gamemenuDump.at == 2 and db.dropdownsDump.at == 3
-		and db.unitframesDump.at == 4 and db.bagwindowDump.at == 5 and db.charsheetDump.at == 6
-		and db.damagemeterDump.at == 7 and db.prdDump == nil and db.framesDump == nil,
+	check(db.resourcedisplayDump.at == at + 1 and db.gamemenuDump.at == at + 2 and db.dropdownsDump.at == at + 3
+		and db.unitframesDump.at == at + 4 and db.bagwindowDump.at == at + 5 and db.charsheetDump.at == at + 6
+		and db.damagemeterDump.at == at + 7 and db.prdDump == nil and db.framesDump == nil,
 		"the Testing page's records take their modules' names")
 	check(s.renamed == #BT.Rename.STEPS and BT.renamedOnLoad ~= nil,
 		"and the file says which step ran")
@@ -2009,6 +2011,30 @@ do
 	check(gold and gold.name == "Gold" and gold.tier == 3 and gold.points == 5
 		and J.Mine().earned["mastery:251918:3"] and blooded,
 		"the 150th bandit is Gold mastery, and the hundredth kill is Blooded")
+	-- ONE MORE OF THE SAME IS ONE MORE (Josh 2026-10-03, the level 60
+	-- simulation): another bandit, as it was, moves the kept count by one and
+	-- builds nothing again; the total's commendations still come on time
+	do
+		local c = J.Mine()
+		local had, hadEarned = c.kills[251918], c.earned["total:500"]
+		local kept = J.kept
+		J.Kill(bandit({ guid = "g4a" }), T + 301)
+		check(J.kept == kept and J.kept.st.total == J.Stats(J.Mine().kills, J.Mine().feats).total,
+			"a bandit more is the kept count plus one, the same as counting it all")
+		-- a count written another way: two short of Hunter's 500
+		c.kills[251918] = c.kills[251918] + (498 - J.kept.st.total)
+		J.Kill(bandit({ guid = "g5" }), T + 302)
+		check(J.kept ~= kept and J.kept.st.total == 499, "a count written another way is counted again, not trusted")
+		local before = J.kept
+		local _, got = J.Kill(bandit({ guid = "g6" }), T + 303)
+		local hunter
+		for _, a in ipairs(got) do
+			hunter = hunter or a.id == "total:500"
+		end
+		check(J.kept == before and hunter and c.earned["total:500"],
+			"and the 500th, one more of the same, earns Hunter on time")
+		c.kills[251918], c.earned["total:500"], J.kept = had, hadEarned, nil
+	end
 	local _, got151 = J.Kill(bandit({ guid = "g3b" }), T + 301)
 	local again151 = false
 	for _, a in ipairs(got151) do again151 = again151 or a.mastery end
@@ -2200,25 +2226,56 @@ do
 		J.SearchFields = real
 	end
 
-	-- WHERE IT WAS KILLED, NOT ONLY FIRST (Josh 2026-09-28): up to J.SPOTS
-	-- places, a camp once, the first spot where there is no more
+	-- WHERE IT WAS KILLED, NOT ONLY FIRST (Josh 2026-09-28), EVERY KILL (Josh
+	-- 2026-10-03: "I should see one for each kill"): the last J.SPOTS kills,
+	-- the first spot where there is no more
 	do
 		local m = { map = 1438, mx = 0.5, my = 0.5 }
 		check(#J.Spots(m) == 1 and J.Spots(m)[1].x == 0.5, "an enemy from before keeps its first spot")
-		check(J.AddSpot(m, 1438, 0.30, 0.40) and not J.AddSpot(m, 1438, 0.305, 0.404),
-			"a new place is kept; one almost on it is the same camp")
-		check(J.AddSpot(m, 1439, 0.30, 0.40) and #J.Spots(m) == 2 and #J.Spots(m, 1439) == 1,
+		check(J.AddSpot(m, 1438, 0.30, 0.40) and J.AddSpot(m, 1438, 0.305, 0.404),
+			"a kill a few steps from another is a kill of its own")
+		check(J.AddSpot(m, 1439, 0.30, 0.40) and #J.Spots(m) == 3 and #J.Spots(m, 1439) == 1,
 			"a spot on another map is its own, and each map's spots are its own")
-		-- THE FIRST KILL FIRST (Josh 2026-09-28: "It looks like one dot is
-		-- large"): the first spot leads the list begun after it
+		-- THE FIRST KILL FIRST (Josh 2026-09-28): the first spot leads the list
+		-- begun after it
 		local spots = J.Spots(m)
-		check(spots[1].x == 0.5 and spots[2].x == 0.30, "the first kill's spot first, then the places kept since")
-		J.AddSpot(m, 1438, 0.51, 0.50)
-		check(#J.Spots(m) == 2, "a kept place on the first spot is not drawn twice")
-		for k = 1, 40 do
-			J.AddSpot(m, 1438, (k % 20) / 20, math.floor(k / 20) / 3)
+		check(spots[1].x == 0.5 and math.abs(spots[2].x - 0.30) < J.SAME, "the first kill's spot first, then the kills since")
+		-- the first kill's own entry, when the list has it, is not drawn twice;
+		-- a second kill on that very spot is
+		local n = #J.Spots(m)
+		J.AddSpot(m, 1438, 0.5, 0.5)
+		check(#J.Spots(m) == n, "the first kill's own entry is not drawn twice")
+		J.AddSpot(m, 1438, 0.5, 0.5)
+		check(#J.Spots(m) == n + 1, "but another kill on the same spot is")
+		for k = 1, J.SPOTS + 20 do
+			J.AddSpot(m, 1438, (k % 20) / 20, math.floor(k / 20) / 9)
 		end
-		check(#m.spots == J.SPOTS, "no more than " .. J.SPOTS .. " places")
+		local list = J.SpotList(m)
+		check(#list == J.SPOTS and m.spotN == J.SPOTS, "no more than " .. J.SPOTS .. " kills kept")
+		local last = list[#list]
+		check(math.abs(last[2] - ((J.SPOTS + 20) % 20) / 20) < J.SAME, "the newest kept, the oldest given way")
+		-- PACKED (Josh 2026-10-03, the level 60 simulation): one string, the
+		-- map said where it changes, eight digits a pin
+		local p = { map = 1, mx = 0.5, my = 0.5 }
+		J.AddSpot(p, 1438, 0.1234, 0.5678)
+		J.AddSpot(p, 1438, 0.9, 0.05)
+		J.AddSpot(p, 1439, 0, 1)
+		check(p.spots == "@1438,12345677,89990500,@1439,00009999", "pins are one short string: " .. tostring(p.spots))
+		local back = J.SpotList(p)
+		check(#back == 3 and back[3][1] == 1439 and math.abs(back[1][2] - 0.1234) < J.SAME
+			and math.abs(back[1][3] - 0.5678) < J.SAME, "and read back to the same places")
+		-- the oldest off the front takes its map's mark when it was the last there
+		local q = { spots = "@1438,10002000,@1439,30004000", spotN = 2 }
+		local was = J.SPOTS
+		J.SPOTS = 2
+		J.AddSpot(q, 1439, 0.5, 0.6)
+		J.SPOTS = was
+		check(q.spots == "@1439,30004000,50005999", "the oldest goes, and the map it was alone on: " .. tostring(q.spots))
+		-- an older book's tables are packed at load, and read either way
+		local old = { map = 1438, mx = 0.5, my = 0.5, spots = { { 1438, 0.2, 0.3 }, { 1438, 0.6, 0.7 } } }
+		check(#J.Spots(old) == 3, "a table of pins from before is still read")
+		check(J.PackAll({ enemies = { [1] = old } }) == 1 and type(old.spots) == "string" and old.spotN == 2
+			and #J.Spots(old) == 3, "and packed once, the same pins")
 		check(#J.Spots({ map = 1438, mx = 0.5, my = 0.5, spotGuess = true }) == 0, "a guessed spot is not a kill")
 		-- a kill keeps its spot as it learns the enemy
 		J.Learn({ npc = 777001, name = "Spot Test", map = 1438, mx = 0.2, my = 0.3 })
@@ -2349,6 +2406,107 @@ do
 	check(K.XPName("Vuldren dies, you gain 50 experience. (25 exp Rested bonus)") == "Vuldren",
 		"the rested form of the XP line names the enemy too")
 	K.plates.nameplate1 = nil
+
+	-- WHICH LOOK (Josh 2026-10-03: "male/female icons to switch between
+	-- male/female models (if they exist)"): a man and a woman of one enemy,
+	-- learnt from the units met, each once, and kept on its page
+	do
+		local function convert(tag)
+			return "Creature-0-1-2-3-1506-" .. tag
+		end
+		local looksOf = { [convert("M1")] = 3021, [convert("M2")] = 3023, [convert("F1")] = 3022 }
+		local sexOf = { M1 = 2, M2 = 2, M3 = 2, F1 = 3, W1 = 1 }
+		local shown = 0
+		local wasFrame = _G.CreateFrame
+		-- the hidden model the look is read from: shown a unit, it says its look
+		_G.CreateFrame = function(kind, ...)
+			if kind ~= "PlayerModel" then
+				return wasFrame(kind, ...)
+			end
+			local m = {}
+			for _, k in ipairs({ "SetSize", "SetPoint", "SetAlpha", "ClearModel" }) do
+				m[k] = function() end
+			end
+			m.SetUnit = function(self, u)
+				self.unit = u
+				shown = shown + 1
+			end
+			m.GetDisplayInfo = function(self)
+				local u = units[self.unit]
+				return u and looksOf[u.guid] or 0
+			end
+			return m
+		end
+		_G.UnitSex = function(t)
+			local u = units[t]
+			return u and sexOf[u.guid:match("%-(%w+)$")] or nil
+		end
+		K.KnowsLook = J.HasLook
+		K.onKill = function(info)
+			J.Kill(info, T + 600)
+		end
+		_G.UnitTokenFromGUID = function() return nil end
+		_G.GetNumLootItems = function() return 1 end
+		local looted
+		_G.GetLootSourceInfo = function() return looted, 1 end
+		local function meet(tag, at)
+			units.target = enemy(convert(tag), "Scarlet Convert")
+			K.Scan(at)
+			return K.watch[convert(tag)]
+		end
+		local function loot(tag, at)
+			looted = convert(tag)
+			units.target = nil
+			K.Loot(at)
+		end
+
+		local w = meet("M1", T + 50)
+		check(w.sex == 2 and w.look == 3021 and shown == 1, "a man met is learnt as one, his look read from a hidden model")
+		w = meet("M2", T + 51)
+		check(w.look == 3021 and shown == 1, "the next man of that enemy takes that look, and no model is shown")
+		loot("M1", T + 60)
+		local page = J.Store().enemies[1506]
+		check(page and page.looks and page.looks[2] == 3021 and J.Looks(page) == nil,
+			"killed, his look is on the page; one look is not a pair")
+		w = meet("F1", T + 70)
+		check(w.sex == 3 and w.look == 3022 and shown == 2, "a woman of the same enemy is learnt as one")
+		loot("F1", T + 80)
+		check(J.Looks(page) and page.looks[3] == 3022, "and with her, the page has both")
+		-- a look the journal has is not read again, in a session that never saw it
+		J.Store().enemies[1507] = { name = "Scarlet Initiate", looks = { [2] = 5000 } }
+		units.target = enemy("Creature-0-1-2-3-1507-M3", "Scarlet Initiate")
+		K.Scan(T + 90)
+		check(K.watch["Creature-0-1-2-3-1507-M3"].look == false and shown == 2, "a look already on file is not read again")
+		-- a creature with no sex to show is never shown to the model
+		units.target = enemy("Creature-0-1-2-3-1508-W1", "Rotting Ghoul")
+		K.Scan(T + 91)
+		check(K.watch["Creature-0-1-2-3-1508-W1"].sex == false and shown == 2, "a creature that is neither is left alone")
+		-- A MODEL'S FILE SAYS ITS SEX (Josh 2026-10-03): by SexData.lua, a
+		-- man's 2 and a woman's 3, nothing for a wolf
+		local hadSexes = BT.ExpeditionSexes
+		BT.ExpeditionSexes = { [119940] = 2, [119563] = 3 }
+		check(J.SexOfFile(119940) == 2 and J.SexOfFile(119563) == 3 and J.SexOfFile(123388) == nil
+			and J.SexOfFile(nil) == nil, "a model file is a man's, a woman's, or neither")
+		BT.ExpeditionSexes = hadSexes
+		-- a look seen with no id is kept as seen, and an id put in its place;
+		-- the first id stays
+		local seen = {}
+		check(J.AddLook(seen, 2, nil) and seen.looks[2] == true, "a look seen with no id is kept as seen")
+		check(not J.AddLook(seen, 2, 3021) and seen.looks[2] == 3021, "its id goes in its place, and is no news")
+		check(not J.AddLook(seen, 2, 3099) and seen.looks[2] == 3021, "the first id stays")
+		check(not J.AddLook(seen, 1, 7) and seen.looks[1] == nil, "a creature that is neither has no look to keep")
+		-- two pages made one keep both looks
+		local book = J.Store()
+		book.enemies[1600] = { name = "Defias Pillager", kind = "Humanoid", looks = { [3] = 61 } }
+		book.enemies[1601] = { name = "Defias Pillager", kind = "Humanoid", looks = { [2] = 60 } }
+		J.MergeSame()
+		check(J.Looks(book.enemies[1600]) and book.enemies[1600].looks[2] == 60, "two pages made one keep both looks")
+		for _, npc in ipairs({ 1506, 1507, 1508, 1600 }) do
+			book.enemies[npc] = nil
+		end
+		_G.CreateFrame, _G.UnitSex, K.KnowsLook = wasFrame, nil, nil
+		units.target = nil
+	end
 	for _, g in ipairs({ "GetTime", "UnitExists", "UnitGUID", "UnitName", "UnitCreatureType", "UnitClassification",
 		"UnitLevel", "UnitPlayerControlled", "UnitIsDead", "UnitIsTapDenied", "UnitThreatSituation",
 		"UnitAffectingCombat", "GetNumLootItems", "GetLootSourceInfo", "UnitTokenFromGUID", "GetUnitName" }) do

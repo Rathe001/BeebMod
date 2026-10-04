@@ -14,7 +14,7 @@ local ok = true
 -- the Ledger's row and the Expedition's line have a tab in the Dock's block too,
 -- at their places in the dock (Josh 2026-09-27)
 ALL_TABS = "settings,testing,dock,map,dock:ledger,progress,dock:expedition,metrics,tracker,micro,"
-	.. "buffs,damagemeter,resourcedisplay,unitframes,"
+	.. "buffs,damagemeter,nameplates,resourcedisplay,unitframes,"
 	.. "bars,bagwindow,charsheet,chat,allmenus,tooltips"
 local function fail(msg)
 	print("FAIL " .. msg)
@@ -1395,7 +1395,7 @@ if ok then
 				"General, then the features' tabs: " .. table.concat(named, ","))
 			assert(table.concat(BT.Window.GroupKeys("dock"), ",") == "dock,map,dock:ledger,progress,dock:expedition,metrics,tracker,micro",
 				"the Dock: its own page first, then in the dock's order: " .. table.concat(BT.Window.GroupKeys("dock"), ","))
-			assert(table.concat(BT.Window.GroupKeys("unitframes"), ",") == "buffs,damagemeter,resourcedisplay,unitframes",
+			assert(table.concat(BT.Window.GroupKeys("unitframes"), ",") == "buffs,damagemeter,nameplates,resourcedisplay,unitframes",
 				"Unit frames, A to Z by name: " .. table.concat(BT.Window.GroupKeys("unitframes"), ","))
 			assert(table.concat(BT.Window.GroupKeys("interface"), ",") == "bars,bagwindow,charsheet,chat,allmenus,tooltips",
 				"Interface: " .. table.concat(BT.Window.GroupKeys("interface"), ","))
@@ -4051,14 +4051,22 @@ if ok then
 			-- A PATTERN A TYPE: stripes for magic, a crosshatch for a curse
 			assert(doomed.bmFakeDispel.pattern.path:find("magic$"), "the doom's stripes")
 			assert(cursed.bmFakeDispel.pattern.path:find("curse$"), "the curse's crosshatch")
-			-- THE TARGET SAYS MORE: its health as a number beside its share, and
-			-- its power as a figure on the bar
+			-- THE TARGET SAYS MORE: its health as a number beside its share
 			local t = mod.previewTarget
 			assert(t and t.hpText._text == "1.1K", "the target's health, abbreviated: " .. tostring(t and t.hpText._text))
 			assert(t.value._text == "72%", "beside its share: " .. tostring(t.value._text))
-			assert(t.power.text._text == "45", "and its rage on the bar: " .. tostring(t.power.text._text))
 			assert(t:GetHeight() >= F.KINDS.party.h and t:GetWidth() == F.KINDS.target.w and F.KINDS.target.w > F.KINDS.party.w,
 				"wider than a cell, for its level, name and threat on one line")
+			-- ITS HEALTH AS TALL AS YOURS, ITS POWER BAR TALL (Josh 2026-10-03):
+			-- the frame taller than your cell by as much as its power bar is, so
+			-- the two health bars are one height, with the figure on the bar
+			local K, P = F.KINDS.target, F.KINDS.party
+			assert(K.h - K.power == P.h - P.power and K.power > P.power, "the target's health as tall as yours, its power bar taller")
+			assert(t.power.text._text == "45", "and its rage on the bar: " .. tostring(t.power.text._text))
+			-- the cast covers the power bar, the same height
+			local cp = t.cast._points
+			assert(cp.BOTTOMLEFT.rel == t.power and cp.BOTTOMRIGHT.rel == t.power and t.cast._height == K.power,
+				"the cast covers the power bar")
 			assert(F.KINDS.party.w == 160 and F.KINDS.party.h == 60, "and a party cell the size the player frame was")
 			-- A LIGHT UNDER THE POINTER, on every unit frame
 			t:GetScript("OnEnter")(t)
@@ -4695,6 +4703,33 @@ if ok then
 			local gapNear, gapFar = points[2][1] - points[1][1], points[#points - 1][1] - points[#points - 2][1]
 			assert(gapNear < gapFar, "faster the nearer the end: " .. gapNear .. " then " .. gapFar)
 			assert(points[1][2].a == 1 and points[2][2].a == 0, "lit, then dark, then lit")
+			-- DAMAGE FROM THREE (Josh 2026-10-03: "start the dot blinker at 3
+			-- seconds"): a heal's still from five, each its own curve
+			assert(points[#points][1] == T.BLINK_FROM.hot and T.BLINK_FROM.hot == 5,
+				"a heal's lane blinks from 5 seconds: " .. tostring(points[#points][1]))
+			points = {}
+			local dotCurve = T.BlinkCurve("dot")
+			assert(dotCurve and dotCurve ~= T.BlinkCurve("hot"), "damage has a curve of its own")
+			if #points > 0 then
+				assert(points[#points][1] == 3, "and blinks from 3 seconds: " .. tostring(points[#points][1]))
+			end
+			do
+				local sec = BT.Widgets.Stack(realCF("Frame", nil, _G.UIParent)):Section("Test")
+				local dotRow, hotRow = T.BlinkRow(sec, "dot"), T.BlinkRow(sec, "hot")
+				local function said(r)
+					for _, region in ipairs(r._regions or {}) do
+						if tostring(region._text or ""):find("seconds", 1, true) then return region._text end
+					end
+					for _, child in ipairs(r._children or {}) do
+						for _, region in ipairs(child._regions or {}) do
+							if tostring(region._text or ""):find("seconds", 1, true) then return region._text end
+						end
+					end
+					return ""
+				end
+				assert(said(dotRow):find("last 3 seconds", 1, true) and said(hotRow):find("last 5 seconds", 1, true),
+					"and each switch says its own: " .. said(dotRow) .. " / " .. said(hotRow))
+			end
 			-- one switch for heals, one for damage; off, a lane without it
 			T.SetBlinks(false, "hot")
 			assert(not T.Blinks("hot") and BT.settings.unitframes.timerBlinkHot == false and T.Blinks("dot"),
@@ -4729,39 +4764,56 @@ if ok then
 			T.SetOn("Rejuvenation", true)
 
 			-- the target: your damage over time, over the frame while there
-			-- is no resource display to put it on
-			local hadDisplay = BT.Enabled("resourcedisplay")
-			BT.SetEnabled("resourcedisplay", false)
+			-- are no nameplates of ours to put it on
+			local hadPlates = BT.Enabled("nameplates")
+			BT.SetEnabled("nameplates", false)
 			local target = F.Build(_G.UIParent, "target", nil, true)
 			F.Auras.Attach(target, "target")
 			-- DAMAGE GOES ABOVE THE FRAME (Josh 2026-09-24): stacked inside,
 			-- a warlock's third lane ran through the enemy's name
-			local moon = target.bmAuras.timers["dot:Moonfire"]
-			local at = moon and moon._points.TOPLEFT
-			assert(moon and moon.groups.timer.filter == "HARMFUL|PLAYER" and at.rel == target and at.y == 6,
-				"your debuffs on an enemy, just above the frame, five pixels thick")
-			assert(target.bmAuras.timers["dot:Insect Swarm"]._points.TOPLEFT.y == 12,
-				"a lane each, stacked upwards, as many as a warlock needs")
+			-- ONE STACK, NO GAPS (Josh 2026-10-03: "collapse them down now so we
+			-- don't have blank bars for missing dots"): one container, a group
+			-- a spell in your order, each on a line of its own, growing up from
+			-- just above the frame. The client gives a line only to a group with
+			-- an aura in it, so a spell that is not up leaves no gap.
+			local stack = target.bmAuras.timers.dot
+			local foot = stack and stack._points.BOTTOMLEFT
+			local moonGroup = stack and stack.groups.Moonfire
+			assert(moonGroup and moonGroup.filter == "HARMFUL|PLAYER" and foot.rel == target
+				and foot.relPoint == "TOPLEFT" and foot.y == 1,
+				"your debuffs on an enemy, in one stack from just above the frame")
+			local ml, il = moonGroup.opts.layout, stack.groups["Insect Swarm"].opts.layout
+			assert(ml.forceNewLine and il.forceNewLine and moonGroup.opts.maxFrameCount == 1
+				and ml.layoutIndex == 1 and il.layoutIndex == 2,
+				"a line each, in the class's order, one aura to a line")
+			assert(target.bmAuras.timers["dot:Moonfire"] == nil, "and no container a spell any more")
 			local dotButton = realCF("Button")
 			dotButton.SetDurationBar = function() end
 			dotButton.SetDurationText = function() end
-			moon.groups.timer.opts.initializeFrame(dotButton)
+			local pictured
+			dotButton.SetIcon = function(_, tex) pictured = tex end
+			moonGroup.opts.initializeFrame(dotButton)
 			assert(dotButton:GetHeight() == T.DOT_H and T.DOT_H > T.LANE_H.target, "thicker than a heal's")
+			-- THE SPELL'S PICTURE (Josh 2026-10-03: "include small spell icons
+			-- on the dot timers"): a square at the left the client fills, and
+			-- the bar after it
+			assert(pictured and pictured == dotButton.bmIcon and pictured._width == T.DOT_H - 2,
+				"the client puts the spell's picture in a square at the lane's left")
+			assert(dotButton.bmBar._points.TOPLEFT.x == T.DOT_H + 1, "and the bar starts after it")
 			T.SetBlinks(false, "dot")
-			assert(T.LaneStyle("dot") == "still" and target.bmAuras.timers["dot:Moonfire"] ~= moon,
+			assert(T.LaneStyle("dot") == "still" and target.bmAuras.timers.dot ~= stack,
 				"the damage's switch makes its lanes again")
 			T.SetBlinks(true, "dot")
-			moon = target.bmAuras.timers["dot:Moonfire"]
 			-- YOUR ORDER (Josh 2026-09-24): the lanes stack as you set them,
 			-- each spell keeping its colour wherever it goes
 			local moonColour = T.Colour("dot", "Moonfire")
 			assert(T.Ordered("dot")[1] == "Moonfire", "the class's order to begin with")
 			assert(T.Move("dot", "Insect Swarm", -1), "moved nearer the frame")
 			assert(T.Ordered("dot")[1] == "Insect Swarm" and T.Ordered("dot")[2] == "Moonfire", "and the order says so")
-			assert(target.bmAuras.timers["dot:Insect Swarm"]._points.TOPLEFT.y == 6
-				and target.bmAuras.timers["dot:Moonfire"]._points.TOPLEFT.y == 12,
-				"the lanes swap places")
-			assert(target.bmAuras.timers["dot:Moonfire"] == moon, "the same containers, only moved")
+			local again = target.bmAuras.timers.dot
+			assert(again.groups["Insect Swarm"].opts.layout.layoutIndex == 1
+				and again.groups.Moonfire.opts.layout.layoutIndex == 2,
+				"the stack is made again in the new order")
 			assert(T.Colour("dot", "Moonfire") == moonColour, "and Moonfire keeps its colour")
 			assert(not T.Move("dot", "Insect Swarm", -1), "nothing is nearer than the nearest")
 			assert(BT.settings.unitframes.timerOrder.DRUID[1] == "Insect Swarm", "kept for the class")
@@ -4794,40 +4846,17 @@ if ok then
 			BT.settings.unitframes.timerOrder = nil
 			T.Rebuild()
 
-			-- YOUR TARGET'S, OVER YOUR OWN BARS (Josh 2026-09-24): with the
-			-- resource display on, the lanes leave the target frame for a
-			-- holder on top of its bars
-			BT.SetEnabled("resourcedisplay", true)
-			assert(target.bmAuras.timers["dot:Moonfire"] == nil, "off the target frame")
-			local bars = realCF("Frame", nil, _G.UIParent)
-			bars:SetSize(199, 8)
-			assert(T.OnResourceDisplay(bars), "the display says where its bars are")
-			local d = T.Display()
-			local dmoon = d and d.bmAuras.timers["dot:Moonfire"]
-			assert(dmoon and dmoon.unit == "target" and dmoon.groups.timer.filter == "HARMFUL|PLAYER",
-				"your damage on your target, over the bars")
-			assert(d._points.BOTTOMLEFT.rel == bars and d._points.BOTTOMLEFT.relPoint == "TOPLEFT"
-				and dmoon._points.TOPLEFT.rel == d and dmoon._points.TOPLEFT.y == 6,
-				"stacked upwards from the top of the bars")
-			assert(dmoon.groups.timer.opts.layout.elementWidth == 199, "as wide as the bars")
-			d.bmAuras.host:Hide()
-			T.Bounce()
-			assert(d.bmAuras.host._shown ~= false, "a new target: read again")
-			T.OnResourceDisplay(nil)
-			assert(not d:IsShown(), "no bars, nothing over them")
-			-- a plate gone for the moment keeps its lanes on: one back in a fight
-			-- could not have them switched on again
-			assert(dmoon.enabled ~= false, "a plate gone for the moment leaves the lanes reading")
-			-- SWITCHED OFF, NOT READING (Josh 2026-09-30, review): and T.Rebuild
-			-- reads its own frame, not a global of the same name
-			BT.SetEnabled("resourcedisplay", false)
-			d:Show()
-			T.Rebuild()
-			assert(not d:IsShown() and dmoon.enabled == false, "the display switched off: hidden, its lanes not reading")
-			BT.SetEnabled("resourcedisplay", true)
-			assert(T.OnResourceDisplay(bars) and dmoon.enabled ~= false, "and on again, they read")
-			T.OnResourceDisplay(nil)
-			BT.SetEnabled("resourcedisplay", hadDisplay)
+			-- YOUR TARGET'S, ON ITS PLATE (Josh 2026-10-03: "Remove the DoT bar
+			-- from the personal resource display - the nameplates version
+			-- deprecates that"): with the plates on, the target frame has no
+			-- lanes of damage, and nothing goes over the resource display
+			BT.SetEnabled("nameplates", true)
+			assert(target.bmAuras.timers.dot == nil, "off the target frame, on its plate")
+			assert(T.KINDS.resourcedisplay == nil and T.OnResourceDisplay == nil and T.Display == nil,
+				"and no lanes over your own bars")
+			BT.SetEnabled("nameplates", false)
+			assert(target.bmAuras.timers.dot ~= nil, "the plates switched off, back over the target frame")
+			BT.SetEnabled("nameplates", hadPlates)
 			-- a raid cell: the one lane, one container
 			local raid = F.Build(_G.UIParent, "raid", nil, true)
 			F.Auras.Attach(raid, "raid")
@@ -8757,6 +8786,134 @@ if ok then
 			BT.SetEnabled("buttons", true)
 			assert(not section:IsShown(), "with the buttons gone, no line")
 		end },
+		{ "enemy nameplates wear ours, and the game's comes back when the enemy goes", function()
+			local F, T = BT.UnitFrames, BT.UnitFrames.Timers
+			-- THE PLATE (Josh 2026-10-03, design D): the level in a tab, the
+			-- name and the health's share inside the bar, brackets for rank
+			local b = F.Build(_G.UIParent, "plate", nil, false)
+			assert(b.health._points.TOPLEFT.x == F.KINDS.plate.levelTab, "the bar starts after the level's tab")
+			F.Paint(b, F.Fake({ name = "Defias Overseer", level = 18, classification = "elite",
+				reaction = "hostile", hp = 88 }))
+			assert(tostring(b.levelText._text):find("18", 1, true), "the level is in its tab: " .. tostring(b.levelText._text))
+			assert(not tostring(b.levelText._text):find("+", 1, true), "with no + for an elite: the brackets say that")
+			assert(b.name._text == "Defias Overseer", "the name, without the level again: " .. tostring(b.name._text))
+			assert(b.value._text == "88%", "and the health's share: " .. tostring(b.value._text))
+			local gold = F.RANK.elite.colour
+			assert(b.brackets[1]._shown and b.brackets[2]._shown and b.brackets[1].parts[1]._color[1] == gold[1],
+				"an elite in gold brackets")
+			F.Paint(b, F.Fake({ name = "Foe Reaper 4000", level = 20, classification = "rare", reaction = "hostile" }))
+			assert(b.brackets[1].parts[1]._color[3] == F.RANK.rare.colour[3], "a rare in silver")
+			F.Paint(b, F.Fake({ name = "Defias Thug", level = 12, reaction = "hostile" }))
+			assert(not b.brackets[1]._shown, "and a plain one in none")
+			F.Paint(b, F.Fake({ name = "Defias Thug", level = -1, reaction = "hostile" }))
+			assert(tostring(b.levelText._text):find("??", 1, true), "too high to say is ??")
+			-- the lanes: short and centred over it, a little thicker
+			-- AS WIDE AS THE PLATE (Josh 2026-10-03: "make them the same width
+			-- as the bar"), a little taller, and clear of the rings
+			local ph = T.PLATE_H
+			assert(T.LaneWidth(b) == F.KINDS.plate.w and T.Height("plate", "dot") == ph, "a plate's lanes are its width")
+			local lane = _G.CreateFrame("Frame", nil, _G.UIParent)
+			T.Place(lane, b, 2, "plate", "dot")
+			assert(lane._points.TOPLEFT.x == 0 and lane._points.TOPLEFT.y == 5 + ph + (ph + 1),
+				"from its left edge, clear of the rings, the second one a lane up: "
+					.. tostring(lane._points.TOPLEFT.x) .. ", " .. tostring(lane._points.TOPLEFT.y))
+			-- the outline a pixel off the bar (Josh 2026-10-03), the ring outside it
+			assert(b.outline._points.TOPLEFT.x == -2 and b.threat._points.TOPLEFT.x == -4,
+				"your target a pixel off the bar, aggro outside that, neither over the name")
+			-- SMALLER AND TIGHTER (Josh 2026-10-03): the words three in from the
+			-- ends and four apart
+			assert(b.name._points.LEFT.x == 3 and b.value._points.RIGHT.x == -3 and b.name._points.RIGHT.x == -4,
+				"the name and its share close to the ends")
+
+			-- THE MODULE: ours on an enemy's plate, the game's at no alpha
+			local mod = BT.GetModule("nameplates")
+			local function plate(withBars)
+				local p = _G.CreateFrame("Frame", nil, _G.UIParent)
+				p.UnitFrame = _G.CreateFrame("Button", nil, p)
+				p.UnitFrame.selectionHighlight = p.UnitFrame:CreateTexture()
+				p.UnitFrame.selectionHighlight:SetAlpha(0.25)
+				if withBars then
+					p.UnitFrame.HealthBarsContainer = _G.CreateFrame("Frame", nil, p.UnitFrame)
+					p.UnitFrame.CastBarsContainer = _G.CreateFrame("Frame", nil, p.UnitFrame)
+				end
+				return p
+			end
+			local plates = { nameplate1 = plate(true), nameplate2 = plate(), nameplate3 = plate(), nameplate21 = plate() }
+			local wasPlates, wasAttack, wasHook = _G.C_NamePlate, _G.UnitCanAttack, _G.hooksecurefunc
+			-- the client's: our function after its own
+			_G.hooksecurefunc = function(obj, name, fn)
+				local orig = obj[name]
+				obj[name] = function(...)
+					local r = orig(...)
+					fn(...)
+					return r
+				end
+			end
+			_G.C_NamePlate = { GetNamePlateForUnit = function(token) return plates[token] end }
+			-- the second is a friend
+			_G.UnitCanAttack = function(_, unit) return unit ~= "nameplate2" end
+			BT.SetEnabled("nameplates", true)
+			assert(mod.MakeAll() == mod.PLATES, "a frame for each of the first plates, made before any fight")
+			local fire = mod.events:GetScript("OnEvent")
+			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate1")
+			local s, uf = mod.skins.nameplate1, plates.nameplate1.UnitFrame
+			assert(s._shown and s._parent == plates.nameplate1, "ours is on the enemy's plate")
+			assert(s._mouse == false, "and the plate takes the click")
+			-- IN THE GAME'S SPOT (Josh 2026-10-03: "moved down a bit so it is in
+			-- the same spot as the default one"): centred on the game's health
+			-- bar and level badge, down to its cast bar's room
+			local game = plates.nameplate1.UnitFrame
+			assert(s._point.rel == s.bmSpot and s._point.point == "CENTER", "centred on where the game draws its bar")
+			assert(s.bmSpot._points.TOPLEFT.rel == game.HealthBarsContainer
+				and s.bmSpot._points.BOTTOMRIGHT.rel == game.CastBarsContainer
+				and s.bmSpot._points.BOTTOMRIGHT.relPoint == "TOPRIGHT",
+				"which runs from its health bar's top left to the top right of its cast bar's room")
+			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate3")
+			local other = mod.skins.nameplate3
+			assert(other._point.rel == plates.nameplate3 and other._point.point == "CENTER",
+				"a plate without those parts has ours in its middle")
+			fire(mod.events, "NAME_PLATE_UNIT_REMOVED", "nameplate3")
+			assert(uf._alpha == 0 and uf.selectionHighlight._alpha == 0,
+				"the game's own is put away, its target highlight too")
+			-- KEPT AWAY (Josh 2026-10-03: "the default bar is not hidden"): the
+			-- client puts its frame back to full as the enemy goes into a fight
+			uf:SetAlpha(1)
+			assert(uf._alpha == 0, "the game setting its plate back to full does not bring it back")
+			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate2")
+			assert(not mod.skins.nameplate2._shown and (plates.nameplate2.UnitFrame._alpha or 1) == 1,
+				"a friend's plate is left as the game draws it")
+			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate21")
+			assert(mod.skins.nameplate21 == nil and (plates.nameplate21.UnitFrame._alpha or 1) == 1,
+				"and one past the first twenty keeps the game's")
+
+			-- THE OTHERS STEP BACK while you have a target
+			assert(F.PlateDim() == mod.DIM, "the others are dimmed")
+			F.PaintRange(s, F.Fake({ name = "Defias Thug", reaction = "hostile", target = false }))
+			assert(s._alpha == mod.DIM and s.outline._alpha == 0, "one that is not your target steps back")
+			F.PaintRange(s, F.Fake({ name = "Defias Thug", reaction = "hostile", target = true }))
+			assert(s._alpha == 1 and s.outline._alpha == 1, "your target is whole, and outlined")
+			mod.SetOpt("dim", false)
+			F.PaintRange(s, F.Fake({ name = "Defias Thug", reaction = "hostile", target = false }))
+			assert(s._alpha == 1, "with dimming off, none do")
+			mod.SetOpt("dim", nil)
+
+			-- the enemy goes: the game's frame goes back to its pool as it came
+			fire(mod.events, "NAME_PLATE_UNIT_REMOVED", "nameplate1")
+			assert(not s._shown and s._parent == _G.UIParent, "ours comes off the plate")
+			assert(uf._alpha == 1 and uf.selectionHighlight._alpha == 0.25, "and the game's is given back whole")
+			uf:SetAlpha(0.5)
+			assert(uf._alpha == 0.5, "and once it is the game's again, its alpha is the game's to set")
+
+			-- switched off: every plate back as the game draws it
+			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate1")
+			assert(uf._alpha == 0, "on again with the enemy back")
+			BT.SetEnabled("nameplates", false)
+			assert(uf._alpha == 1 and not s._shown, "switched off, the game's plate is back")
+			assert(F.PlateDim() == nil, "and nothing is dimmed")
+			BT.SetEnabled("nameplates", true)
+			_G.C_NamePlate, _G.UnitCanAttack, _G.hooksecurefunc = wasPlates, wasAttack, wasHook
+			mod.Sweep()
+		end },
 		{ "the client's own experience and reputation bars go while ours are up", function()
 			local SB = BT.StatusBars
 			-- this build's two containers, each holding one bar of every kind
@@ -9572,6 +9729,23 @@ if ok then
 			assert(text:find("CharacterFrame.Inset", 1, true), "a child with no name is known by its key: " .. text)
 			BT.ClearRecords()
 			assert(_G.BeebModDB.charsheetDump == nil, "and Clear on the Testing page takes it out")
+			-- OLD RECORDS GO BY THEMSELVES (Josh 2026-10-03): a day old, at the
+			-- next load; a fresh one stays to be read after its /reload
+			do
+				local now, day = 1790000000, BT.RECORD_KEEP
+				local db = _G.BeebModDB
+				db.charsheetDump = { at = now - day - 1, lines = { "old" } }
+				db.statusbarsDump = { at = now - 60, lines = { "fresh" } }
+				db.unitProbe = { { at = now - 3 * day }, { at = now - 2 * day } }
+				db.pvpDump = { lines = { "no time" } }
+				db.notARecord = { at = 0 }
+				local n = BT.DropOldRecords(now)
+				assert(db.charsheetDump == nil and db.unitProbe == nil and db.pvpDump == nil,
+					"a record more than a day old goes, a list of runs by its newest, one with no time at once")
+				assert(db.statusbarsDump ~= nil and n == 3, "a fresh one stays: " .. tostring(n))
+				assert(db.notARecord ~= nil, "and nothing that is not a record is touched")
+				db.statusbarsDump, db.notARecord = nil, nil
+			end
 			_G.CharacterFrame = nil
 			for name in pairs(slots) do
 				_G["Character" .. name .. "Slot"] = nil
@@ -10189,6 +10363,13 @@ if ok then
 			map:SetMaskTexture("Interface\\Round")
 			map.IsIgnoringParentAlpha = function(self) return self._ignoresParent == true end
 			map.SetIgnoreParentAlpha = function(self, on) self._ignoresParent = on end
+			-- the band the client draws round a quest area, at the map's edge
+			map._rings = {}
+			for _, kind in ipairs({ "Quest", "Task", "Arch" }) do
+				for _, part in ipairs({ "RingAlpha", "RingScalar" }) do
+					map["Set" .. kind .. "Blob" .. part] = function(self, v) self._rings[kind .. part] = v end
+				end
+			end
 			_G.Minimap = map
 			local ring = _G.CreateFrame("Frame", "MinimapBorder", _G.UIParent)
 			local zoom = _G.CreateFrame("Frame", "MinimapZoomIn", _G.UIParent)
@@ -10212,6 +10393,12 @@ if ok then
 			-- NOR THE DOCK'S FADE (Josh 2026-09-27): a dock faded in a fight
 			-- would take the terrain with it, so the map keeps its own alpha
 			assert(map._ignoresParent == true, "the map does not fade with the dock")
+			-- NO ROUND BAND ON A SQUARE MAP (Josh 2026-10-03: "The circular
+			-- glow on the minimap needs to be square"): the hatched band round
+			-- a quest area is drawn on a circle, so it goes
+			for key, v in pairs({ QuestRingAlpha = 0, QuestRingScalar = 0, TaskRingAlpha = 0, ArchRingScalar = 0 }) do
+				assert(map._rings[key] == v, "the band at a quest area's edge is off: " .. key .. " " .. tostring(map._rings[key]))
+			end
 			local tab = _G.CreateFrame("Frame", nil, _G.UIParent)
 			mod:BuildTab(tab)
 			assert(mod.alphaPlus == nil and mod.alphaText == nil, "and there is no opacity on its tab")
@@ -10673,6 +10860,8 @@ if ok then
 			mod:OnDisable()
 			assert(map._parent == _G.UIParent, "back where the client had it")
 			assert(map._mask == "Interface\\Round", "round again")
+			assert(map._rings.QuestRingAlpha == 1 and map._rings.QuestRingScalar == 1,
+				"and the band round a quest area is back with it")
 			assert(map._ignoresParent == false, "and faded with its parent again, as the client had it")
 
 			-- AND ROUND EVEN WHEN THE CLIENT WOULD NOT SAY WHAT IT HAD (Josh
@@ -11796,6 +11985,155 @@ if ok then
 				and b.page.ladder.togo == nil and b.page.ladder.rungs[4].tick:IsShown(),
 				"with its kills, and a tick on the bar for each metal (no \"to go\")")
 			assert(b.page.count:GetText():find("^1 of 12") and b.page.next:IsShown(), "and where it is among the grid's")
+			-- A MAN OR A WOMAN (Josh 2026-10-03: "male/female icons to switch
+			-- between male/female models (if they exist)"): an enemy met as
+			-- both wears a pair on its card and over its page's model; a click
+			-- shows the other look on both, and is kept
+			do
+				local npc = c.npc
+				local m = J.Store().enemies[npc]
+				local ST = V.Stage
+				ST.SetMode("model")
+				ST.Paint(b.page, b.page.enemy)
+				assert(not c.sexes:IsShown() and not b.page.sexes:IsShown(), "an enemy met as one look has no pair")
+				m.looks = { [J.MALE] = 4001, [J.FEMALE] = 4002 }
+				V.Refresh()
+				local card
+				for _, k in ipairs(b.cards) do
+					if k.npc == npc and k:IsShown() then
+						card = k
+					end
+				end
+				assert(card and card.sexes:IsShown() and b.page.sexes:IsShown(),
+					"met as both, its card and its page wear the pair")
+				local asked = {}
+				local function set(model)
+					return function(_, id, look)
+						asked[#asked + 1] = model .. " " .. tostring(id) .. ":" .. tostring(look)
+					end
+				end
+				card.portrait.SetCreature, b.page.model.SetCreature = set("card"), set("page")
+				local woman = card.sexes.marks[J.FEMALE]
+				woman:GetScript("OnClick")(woman)
+				local said = table.concat(asked, ", ")
+				assert(BT.settings.expeditionUI.looks[npc] == J.FEMALE, "the choice is kept")
+				assert(said:find("card " .. npc .. ":4002", 1, true) and said:find("page " .. npc .. ":4002", 1, true),
+					"and the card and the page both show her: " .. said)
+				assert(woman.lit and not card.sexes.marks[J.MALE].lit and b.page.sexes.marks[J.FEMALE].lit,
+					"her mark is lit on both")
+				-- the other sex's model file is not a new body (and a redraw, and back)
+				local wasBody, bodies = J.Body, 0
+				J.Body = function() bodies = bodies + 1 end
+				card.portrait.GetModelFileID = function() return 119563 end
+				V.LearnBody(card.portrait)
+				assert(bodies == 0, "a look you chose is not learnt as the enemy's body")
+				J.Body, card.portrait.GetModelFileID = wasBody, nil
+				-- the pointer on a mark keeps the card lifted
+				card:GetScript("OnEnter")(card)
+				local man = card.sexes.marks[J.MALE]
+				man:GetScript("OnEnter")(man)
+				assert(card.lifted and man.hot, "the card stays lifted with the pointer on a mark")
+				man:GetScript("OnLeave")(man)
+				assert(not card.lifted, "and settles when the pointer leaves it for somewhere else")
+				-- the page's pair is the model's, not the map's
+				ST.SetMode("map")
+				ST.Paint(b.page, b.page.enemy)
+				assert(not b.page.sexes:IsShown(), "there is no pair over the map")
+				ST.SetMode("model")
+				ST.Paint(b.page, b.page.enemy)
+				V.SetLook(npc, nil)
+				card.portrait.SetCreature, b.page.model.SetCreature = nil, nil
+				m.looks = nil
+				V.Refresh()
+
+				-- A MODEL DRAWN IS A LOOK SEEN (Josh 2026-10-03: the card drew a
+				-- man and the page a woman): each says which, by its file
+				local MAN, WOMAN = 119940, 119563
+				local function draws(model, files, ids)
+					local i = 0
+					model.ClearModel = function(self) self.file = nil end
+					model.SetCreature = function(self)
+						i = i + 1
+						self.file = files[((i - 1) % #files) + 1]
+					end
+					model.GetModelFileID = function(self) return self.file or 0 end
+					model.GetDisplayInfo = function(self) return ids and ids[self.file] or 0 end
+					return function() return i end
+				end
+				local ids = { [MAN] = 4001, [WOMAN] = 4002 }
+				draws(card.portrait, { MAN }, ids)
+				card.portrait:SetCreature(npc)
+				V.LearnLook(card.portrait)
+				assert(m.looks and m.looks[J.MALE] == 4001 and not card.sexes:IsShown(),
+					"a portrait drawn as a man says so; one look is not a pair")
+				draws(b.page.model, { WOMAN }, ids)
+				b.page.model:SetCreature(npc)
+				V.LearnLook(b.page.model)
+				assert(m.looks[J.FEMALE] == 4002 and card.sexes:IsShown() and b.page.sexes:IsShown(),
+					"the page drawn as a woman, and the card and the page wear the pair at once")
+				-- chosen with no id to ask by: asked again until the game draws her
+				m.looks[J.FEMALE] = true
+				local asks = draws(card.portrait, { MAN, WOMAN })
+				local wasRerolls = V.lookStats.rerolls
+				V.SetLook(npc, J.FEMALE)
+				assert(card.portrait.file == WOMAN and asks() == 2 and V.lookStats.rerolls == wasRerolls + 1,
+					"chosen with no id, the card is asked again until it draws her: " .. asks())
+				assert(card.sexes.marks[J.FEMALE].lit and not card.sexes.marks[J.MALE].lit, "and her mark is lit")
+				-- a game that never draws her: asked a few times, then left
+				asks = draws(card.portrait, { MAN })
+				V.ShowLook(npc)
+				assert(asks() == 1 + V.REROLLS, "asked again no more than " .. V.REROLLS .. " times: " .. asks())
+				V.SetLook(npc, nil)
+
+				-- THE OTHER LOOK, ASKED FOR in the background, the open page's first
+				local exp = BT.GetModule("expedition")
+				local hadModel, hadOpen = exp.probeModel, V.open
+				local probe = _G.CreateFrame("PlayerModel")
+				exp.probeModel = probe
+				m.looks, m.lookTries, m.oneLook = { [J.MALE] = 4001 }, nil, nil
+				V.open = npc
+				draws(probe, { MAN, MAN, WOMAN }, ids)
+				_G.InCombatLockdown = function() return true end
+				assert(exp.ProbeTick() == "fight" and exp.probing == nil, "nothing is asked in a fight")
+				_G.InCombatLockdown = function() return false end
+				assert(exp.ProbeTick() == "asked" and exp.probing == npc, "out of it, the open enemy is asked for first")
+				exp.ProbeTick()
+				exp.ProbeTick()
+				assert(exp.ProbeTick() == "read" and J.Looks(m) and m.looks[J.FEMALE] == 4002 and m.lookTries == 3,
+					"a man, a man, then a woman: both found in three tries")
+				assert(not exp.WantsLook(npc, m) and b.page.sexes:IsShown(), "and asked no more, the pair on its page")
+				-- the same sex every time: settled as one look
+				m.looks, m.lookTries = { [J.MALE] = 4001 }, nil
+				draws(probe, { MAN }, ids)
+				for _ = 1, exp.PROBE_TRIES + 1 do
+					exp.ProbeTick()
+				end
+				assert(m.oneLook and m.lookTries == exp.PROBE_TRIES and not exp.WantsLook(npc, m),
+					"a man every time: one look, and not asked again")
+				-- a wolf's model is neither: settled after two
+				m.looks, m.lookTries, m.oneLook = nil, nil, nil
+				exp.probing = nil
+				draws(probe, { 123388 })
+				for _ = 1, exp.PROBE_NEITHER + 1 do
+					exp.ProbeTick()
+				end
+				assert(m.oneLook and m.lookTries == exp.PROBE_NEITHER and m.looks == nil,
+					"a model that is neither, twice: nothing to switch")
+				-- not drawn yet: asked again, and given up on for the session
+				m.oneLook, m.lookTries = nil, nil
+				exp.probing = nil
+				probe.SetCreature = function() end
+				probe.GetModelFileID = function() return 0 end
+				exp.ProbeTick()
+				assert(exp.ProbeTick() == "missed" and m.lookTries == nil, "a model not drawn is no try")
+				exp.probing, exp.probeModel, V.open = nil, hadModel, hadOpen
+				m.looks, m.lookTries, m.oneLook = nil, nil, nil
+				card.portrait.SetCreature, card.portrait.ClearModel = nil, nil
+				card.portrait.GetModelFileID, card.portrait.GetDisplayInfo = nil, nil
+				b.page.model.SetCreature, b.page.model.ClearModel = nil, nil
+				b.page.model.GetModelFileID, b.page.model.GetDisplayInfo = nil, nil
+				V.Refresh()
+			end
 			-- THE WHOLE LADDER (Josh 2026-09-27): Mor'Ladim at exactly Gold
 			-- (10 of 2/5/10/20) showed an empty bar; it runs under the names now
 			local share = V.LadderShare
@@ -11849,11 +12187,11 @@ if ok then
 				and lp[1].text:GetText() == "Bog beasts, Fel Moss and all.", "the best page first, bare, its links plain")
 			assert(lp[2].rule:IsShown() and lp[2].head:GetText() == "ELEMENTAL", "the next under its title, an ornament over it")
 			assert(lp[3].head:GetText() == "TIMBER WOLF", "a heading leaves off the wiki's \"(mob)\": " .. tostring(lp[3].head:GetText()))
-			-- an enemy the database gives no spells has no Abilities heading
-			for _, piece in ipairs(lp) do
-				assert(not (piece.head:IsShown() and tostring(piece.head:GetText()):find("ABILITIES")),
-					"no abilities heading without abilities")
-			end
+			-- an enemy the database gives no spells has no Abilities panel, and
+			-- the lore starts under the ladder
+			assert(not b.page.abilities:IsShown(), "no abilities panel without abilities")
+			local loreAt = b.page.loreBox._points.TOPLEFT.y
+			assert(loreAt == -b.page.loreTop, "the lore under the ladder: " .. tostring(loreAt))
 			assert(b.page.loreFrom == nil,
 				"and no credit under the enemy: it is on the Expedition's settings page")
 			-- ABILITIES FROM THE DATABASE (Josh 2026-09-30): the enemy's spells
@@ -11870,12 +12208,25 @@ if ok then
 				end }
 				data[npc] = { 5884, 133, 143, 999999 }
 				V.Refresh()
-				local piece = b.page.lorePieces[2]
-				assert(piece.head:GetText() == "ABILITIES", "its abilities, under its own page: " .. tostring(piece.head:GetText()))
+				-- IN VIEW (Josh 2026-10-03: "the abilities need to be in a more
+				-- prominent position"): a panel of their own under the ladder,
+				-- and the lore under that
+				local panel, piece = b.page.abilities, b.page.abilityRow
+				assert(panel:IsShown() and piece.icons._parent == panel, "its abilities, in a panel of their own")
+				-- a frame with no size is not drawn, nor what is in it
+				local pts = piece.icons._points
+				assert(pts.TOPLEFT and pts.TOPLEFT.rel == panel and pts.RIGHT and pts.RIGHT.rel == panel,
+					"the row is held at both sides of the panel, so it has a width")
+				assert(b.page.loreBox._points.TOPLEFT.y < loreAt,
+					"and the lore starts under them: " .. tostring(b.page.loreBox._points.TOPLEFT.y))
+				for _, lore in ipairs(b.page.lorePieces) do
+					assert(not (lore.head:IsShown() and tostring(lore.head:GetText()):find("ABILITIES")),
+						"not a section of the lore any more")
+				end
 				-- A ROW OF ICONS (Josh 2026-10-01): two ranks as one, an unknown
 				-- spell left out, side by side, and no words
 				local cells = piece.icons and piece.icons.cells
-				assert(piece.icons:IsShown() and not piece.text:IsShown(), "the abilities are icons, not lines of words")
+				assert(piece.icons:IsShown(), "the abilities are icons")
 				assert(cells[1]:IsShown() and cells[2]:IsShown() and not (cells[3] and cells[3]:IsShown()),
 					"one icon for each ability")
 				assert(cells[1].spell.name == "Banshee Curse" and cells[2].spell.name == "Fireball",
@@ -11883,7 +12234,7 @@ if ok then
 				local _, _, _, x1, y1 = cells[1]:GetPoint(1)
 				local _, _, _, x2, y2 = cells[2]:GetPoint(1)
 				assert(y1 == y2 and x2 - x1 == 38, "on one line, a margin between: " .. tostring(x2 - x1))
-				assert(b.page.lorePieces[3].head:GetText() == "ELEMENTAL", "and the wiki's next page after it")
+				assert(b.page.lorePieces[2].head:GetText() == "ELEMENTAL", "and the lore's pages one after another")
 				-- the game's own card for an ability: its name and description
 				local tip, asked = _G.GameTooltip, nil
 				local hadSet = tip.SetSpellByID
@@ -11894,9 +12245,9 @@ if ok then
 				tip.SetSpellByID = hadSet
 				data[npc], _G.C_Spell = nil, hadSpell
 				V.Refresh()
-				assert(not piece.icons:IsShown() or b.page.lorePieces[2].head:GetText() ~= "ABILITIES",
-					"and an enemy without abilities has no icons")
+				assert(not panel:IsShown() and not piece.icons:IsShown(), "and an enemy without abilities has no panel")
 				assert(not cells[1]:IsShown(), "none at all")
+				assert(b.page.loreBox._points.TOPLEFT.y == loreAt, "and the lore moves back up")
 			end
 			MJ.WikiLore = wiki
 			V.Refresh()
@@ -11938,18 +12289,16 @@ if ok then
 			local drawn, tiles, dots = ST.Paint(pg, enemy)
 			assert(drawn == "map" and tiles == 12 and dots == 2 and not pg.model:IsShown() and pg.map:IsShown(),
 				"the map instead of the model, with a dot for each kill: " .. tostring(drawn))
-			-- ROUND, SEE-THROUGH, SMALLER AS THEY GATHER (Josh 2026-09-28)
-			local each = ST.DotSize(2)
-			assert(pg.map.dots[2]._width == each + ST.FIRST_MORE and pg.map.dots[4]._width == each,
-				"the first kill's dot the larger: " .. tostring(pg.map.dots[2]._width) .. " and " .. tostring(pg.map.dots[4]._width))
-			assert(ST.DotSize(1) == 10 and ST.DotSize(4) == 5 and ST.DotSize(25) == ST.SMALLEST,
-				"smaller as there are more of them, and never smaller than " .. ST.SMALLEST)
+			-- ROUND AND SEE-THROUGH (Josh 2026-09-28), ONE SIZE (Josh 2026-10-03:
+			-- "All the map pins should be the same size")
+			assert(pg.map.dots[2]._width == ST.DOT and pg.map.dots[4]._width == ST.DOT,
+				"every kill's dot the same size: " .. tostring(pg.map.dots[2]._width) .. " and " .. tostring(pg.map.dots[4]._width))
 			assert(tostring(pg.map.dots[2]._texture):find("TempPortraitAlphaMask", 1, true),
 				"a disc, not a square")
 			assert(pg.map.dots[2]._drawSub == 2 and pg.map.dots[1]._drawSub == 1
-				and pg.map.dots[4]._drawSub == 4 and pg.map.dots[3]._drawSub == 3,
-				"each dot drawn over its ring, and the first kill's under the rest")
-			assert(pg.hint:GetText():find("2 places", 1, true) and pg.hint:GetText():find("Wheel: zoom", 1, true),
+				and pg.map.dots[4]._drawSub == 2 and pg.map.dots[3]._drawSub == 1,
+				"each dot drawn over its ring")
+			assert(pg.hint:GetText():find("2 kills marked", 1, true) and pg.hint:GetText():find("Wheel: zoom", 1, true),
 				"and the hint says so: " .. tostring(pg.hint:GetText()))
 			-- the wheel over the map, then Reset view: the whole zone again
 			local hadCursor = _G.GetCursorPosition

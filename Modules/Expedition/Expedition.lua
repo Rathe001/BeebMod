@@ -137,6 +137,232 @@ function M.Kill(info, how)
 end
 
 K.onKill = M.Kill
+-- a look the journal has is not asked for again (Kills.lua, learnLook)
+K.KnowsLook = J.HasLook
+
+-- ---------------------------------------------------------------------------
+-- A man and a woman, asked for in the background
+-- ---------------------------------------------------------------------------
+--
+-- THE OTHER LOOK, ASKED FOR (Josh 2026-10-03: the Scarlet Convert's card drew
+-- a man and its page a woman). The game picks one of a creature's looks each
+-- time a model is drawn, and every model the journal draws keeps the one it
+-- got (Window.lua, V.LearnLook). A hidden model of ours asks again for the
+-- enemies in the book with one look known and not the other, or none known
+-- yet: one ask every few seconds, out of combat only, until both are found.
+-- An enemy that comes back the same sex every time is marked as having one
+-- look and not asked again; one whose model is neither a man's nor a woman's
+-- (a wolf, an elemental) is marked after two.
+M.PROBE_EVERY = 3
+M.PROBE_TRIES = 6
+M.PROBE_NEITHER = 2
+M.PROBE_MISSES = 3
+M.probeStats = { asked = 0, learnt = 0, misses = 0, done = 0 }
+
+-- this session's enemies the game would not draw for us: left alone
+local unloadable = {}
+
+local function plainNumber(fn, model)
+	if type(fn) ~= "function" then
+		return nil
+	end
+	local ok, v = pcall(fn, model)
+	if ok and type(v) == "number" and not (issecretvalue and issecretvalue(v)) and v > 0 then
+		return v
+	end
+	return nil
+end
+
+-- the hidden model: shown, so the client loads into it, and at no alpha
+function M.ProbeModel()
+	if M.probeModel then
+		return M.probeModel
+	end
+	local ok, m = pcall(CreateFrame, "PlayerModel", nil, UIParent)
+	if not (ok and m and m.SetCreature) then
+		return nil
+	end
+	m:SetSize(1, 1)
+	m:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
+	pcall(m.SetAlpha, m, 0)
+	pcall(m.EnableMouse, m, false)
+	M.probeModel = m
+	return m
+end
+
+-- whether this enemy still wants asking
+function M.WantsLook(npc, m)
+	if type(npc) ~= "number" or type(m) ~= "table" or m.oneLook or J.Looks(m) or unloadable[npc] then
+		return false
+	end
+	return (m.lookTries or 0) < M.PROBE_TRIES
+end
+
+-- the next enemy to ask for: the open page's first, then one with a look
+-- known, then any
+function M.NextLook()
+	local s = J.Store()
+	if not s or J.demo then
+		return nil
+	end
+	local open = BT.ExpeditionWindow.open
+	if open and M.WantsLook(open, s.enemies[open]) then
+		return open
+	end
+	local any
+	for npc, m in pairs(s.enemies) do
+		if M.WantsLook(npc, m) then
+			if type(m.looks) == "table" and next(m.looks) then
+				return npc
+			end
+			any = any or npc
+		end
+	end
+	return any
+end
+
+-- what the hidden model drew for `npc`, written down: true when it drew
+local function readProbe(model, npc)
+	local s = J.Store()
+	local m = s and s.enemies[npc]
+	if not m then
+		return true
+	end
+	local file = plainNumber(model.GetModelFileID, model)
+	if not file then
+		return false
+	end
+	m.lookTries = (m.lookTries or 0) + 1
+	local sex = J.SexOfFile(file)
+	if sex and J.AddLook(m, sex, plainNumber(model.GetDisplayInfo, model)) then
+		M.probeStats.learnt = M.probeStats.learnt + 1
+		BT.ExpeditionWindow.LookLearnt(npc)
+	end
+	if J.Looks(m) then
+		M.probeStats.done = M.probeStats.done + 1
+	elseif not (type(m.looks) == "table" and next(m.looks)) and m.lookTries >= M.PROBE_NEITHER then
+		-- neither a man's model nor a woman's, twice: nothing to switch
+		m.oneLook = true
+		M.probeStats.done = M.probeStats.done + 1
+	elseif m.lookTries >= M.PROBE_TRIES then
+		m.oneLook = true
+		M.probeStats.done = M.probeStats.done + 1
+	end
+	return true
+end
+
+-- One step: what the last ask drew is read, and the next enemy asked for.
+-- What it did, for the tests: "fight", "read", "missed", "asked" or "idle".
+function M.ProbeTick()
+	if InCombatLockdown and InCombatLockdown() then
+		return "fight"
+	end
+	local model = M.ProbeModel()
+	if not model then
+		return "idle"
+	end
+	local said
+	local npc = M.probing
+	if npc then
+		M.probing = nil
+		if readProbe(model, npc) then
+			said = "read"
+		else
+			-- the client had to send for it: asked again next time, a few times
+			M.probeStats.misses = M.probeStats.misses + 1
+			M.probeMisses = M.probeMisses or {}
+			M.probeMisses[npc] = (M.probeMisses[npc] or 0) + 1
+			if M.probeMisses[npc] >= M.PROBE_MISSES then
+				unloadable[npc] = true
+			end
+			said = "missed"
+		end
+	end
+	npc = M.NextLook()
+	if not npc then
+		return said or "idle"
+	end
+	M.probing = npc
+	M.probeStats.asked = M.probeStats.asked + 1
+	pcall(model.ClearModel, model)
+	pcall(model.SetCreature, model, npc)
+	return said or "asked"
+end
+
+function M.Probe(on)
+	if on and not M.prober and C_Timer and C_Timer.NewTicker then
+		M.prober = C_Timer.NewTicker(M.PROBE_EVERY, function()
+			if BT.Enabled("expedition") then
+				M.ProbeTick()
+			end
+		end)
+	elseif not on and M.prober then
+		M.prober:Cancel()
+		M.prober = nil
+		M.probing = nil
+	end
+end
+
+-- WHAT THE LOOKS CAME TO (Josh 2026-10-03), for the Testing page's Record:
+-- whether this client has the calls a look is learnt and shown with, what
+-- each way of learning one has found this session, and every enemy with a
+-- look on file.
+function M.Dump()
+	local lines = {}
+	local function add(s) lines[#lines + 1] = s end
+	-- one model, kept, only to ask which calls it has
+	M.callsProbe = M.callsProbe or CreateFrame("PlayerModel", nil, UIParent)
+	local probe = M.callsProbe
+	probe:Hide()
+	add(("calls: UnitSex %s · SetUnit %s · GetDisplayInfo %s · SetCreature %s · GetModelFileID %s"):format(
+		tostring(type(UnitSex) == "function"), tostring(type(probe.SetUnit) == "function"),
+		tostring(type(probe.GetDisplayInfo) == "function"), tostring(type(probe.SetCreature) == "function"),
+		tostring(type(probe.GetModelFileID) == "function")))
+	local files = 0
+	for _ in pairs(BT.ExpeditionSexes or {}) do
+		files = files + 1
+	end
+	add(("model files known to be a man's or a woman's: %d"):format(files))
+	for _, unit in ipairs({ "target", "mouseover" }) do
+		if UnitExists and UnitExists(unit) then
+			local okS, sex = pcall(UnitSex, unit)
+			add(("%s: %s · UnitSex %s · look %s"):format(unit, tostring(UnitName(unit)),
+				okS and tostring(sex) or "refused", tostring(K.Look(unit))))
+		end
+	end
+	local V, P = BT.ExpeditionWindow, M.probeStats
+	add(("this session, from portraits: learnt %d · asked again for the sex chosen %d"):format(
+		V.lookStats.portraits, V.lookStats.rerolls))
+	add(("this session, from the hidden model: asked %d · learnt %d · not drawn %d · settled %d · asking %s"):format(
+		P.asked, P.learnt, P.misses, P.done, tostring(M.probing)))
+	add(("this session, from enemies met: learnt %d · missed %d"):format(K.stats.looks or 0, K.stats.lookMisses or 0))
+	local s = J.Store()
+	local n, both, one, tries = 0, 0, 0, 0
+	for npc, m in pairs(s and s.enemies or {}) do
+		tries = tries + (m.lookTries or 0)
+		if m.oneLook then
+			one = one + 1
+		end
+		if type(m.looks) == "table" then
+			n = n + 1
+			if J.Looks(m) then
+				both = both + 1
+			end
+			add(("  %s %s · male %s · female %s · tries %d%s"):format(tostring(npc), tostring(m.name),
+				tostring(m.looks[J.MALE]), tostring(m.looks[J.FEMALE]), m.lookTries or 0,
+				m.oneLook and " · one look" or ""))
+		end
+	end
+	add(("enemies with a look: %d · with both: %d · settled on one: %d · tries spent in all: %d"):format(
+		n, both, one, tries))
+	BT.EnsureBound()
+	BeebModDB.expeditionDump = {
+		at = BT.Util and BT.Util.Now and BT.Util.Now() or 0,
+		lines = lines,
+	}
+	return #lines
+end
+BT.Record("expeditionDump", function() return M.Dump() end, "expedition")
 
 -- ---------------------------------------------------------------------------
 -- The line and the bar
@@ -506,6 +732,7 @@ function M.Show(show)
 	if show then
 		frame:Show()
 		M.Update()
+		M.Probe(true)
 		if not M.ticker and C_Timer and C_Timer.NewTicker then
 			M.ticker = C_Timer.NewTicker(SCAN_EVERY, function()
 				if BT.Enabled("expedition") then
@@ -519,6 +746,7 @@ function M.Show(show)
 			M.ticker:Cancel()
 			M.ticker = nil
 		end
+		M.Probe(false)
 		BT.ExpeditionWindow.Hide()
 	end
 	BT.Dock.Relayout()

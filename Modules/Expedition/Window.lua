@@ -530,16 +530,17 @@ local function spellLeave(self)
 	end
 end
 
--- the piece's row of icons, as tall as its rows; hidden without spells
-function V.SpellIcons(page, p, spells)
+-- the piece's row of icons, as tall as its rows; hidden without spells. On
+-- the lore's body unless given a `parent`, and as wide as it, or `width`.
+function V.SpellIcons(page, p, spells, parent, width)
 	if not p.icons then
-		p.icons = CreateFrame("Frame", nil, page.loreBody)
+		p.icons = CreateFrame("Frame", nil, parent or page.loreBody)
 		p.icons.cells = {}
 	end
 	local row, cells = p.icons, p.icons.cells
 	local n = spells and #spells or 0
 	-- how many fit across: the page's width, or the box's before it is laid out
-	local w = BT.Pill.Number(page.loreBody:GetWidth(), 0)
+	local w = width or BT.Pill.Number(page.loreBody:GetWidth(), 0)
 	if w < SPELL_ICON then
 		w = MODAL_W - 2 * MODAL_PAD - 24
 	end
@@ -583,6 +584,39 @@ function V.SpellIcons(page, p, spells)
 	row:SetHeight(math.max(1, rows * SPELL_ICON + math.max(0, rows - 1) * SPELL_GAP))
 	row:SetShown(n > 0)
 	return row
+end
+
+-- the abilities' panel, as tall as its icons, and the lore box under it; with
+-- no abilities, no panel and the lore where the panel would be
+local ABIL_HEAD, ABIL_FOOT = 27, 11
+function V.PaintAbilities(page, spells)
+	local abil = page.abilities
+	if not abil then
+		return 0
+	end
+	local n = spells and #spells or 0
+	local inner = MODAL_W - 2 * MODAL_PAD
+	local row = V.SpellIcons(page, page.abilityRow, n > 0 and spells or nil, abil, inner - 24)
+	local loreY = page.loreTop
+	if n > 0 then
+		row:ClearAllPoints()
+		row:SetPoint("TOPLEFT", abil, "TOPLEFT", 12, -ABIL_HEAD)
+		-- AS WIDE AS THE PANEL (Josh 2026-10-03: "Abilities aren't showing"):
+		-- held by its top left alone, the row had a height and no width, and
+		-- the client draws nothing of a frame with no size, the icons in it
+		-- included. In the lore it was pinned at both sides.
+		row:SetPoint("RIGHT", abil, "RIGHT", -12, 0)
+		local h = ABIL_HEAD + BT.Pill.Number(row:GetHeight(), SPELL_ICON) + ABIL_FOOT
+		abil:SetHeight(h)
+		abil:Show()
+		loreY = page.abilY + h + 12
+	else
+		abil:Hide()
+	end
+	page.loreBox:ClearAllPoints()
+	page.loreBox:SetPoint("TOPLEFT", MODAL_PAD, -loreY)
+	page.loreBox:SetPoint("BOTTOMRIGHT", -MODAL_PAD, FOOT_H + 6)
+	return n
 end
 
 function V.BuildPage(b)
@@ -722,8 +756,14 @@ function V.BuildPage(b)
 		V.Stand(self)
 		-- through V: learnBody is a local further down this file
 		V.LearnBody(self)
+		V.LearnLook(self)
+		V.PaintLooks(page)
 	end)
 	page.model = model
+	-- a man or a woman, in the stage's corner across from Model · Map
+	page.sexes = V.SexPair(stage, 16)
+	page.sexes:SetPoint("TOPLEFT", stage, "TOPLEFT", 6, -6)
+	page.sexes:SetFrameLevel((model:GetFrameLevel() or 1) + 5)
 
 	page.hint = W.Label(page, WORDS:format("Drag: turn · Right-drag: move · Wheel: zoom"), "small")
 	page.hint:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
@@ -790,10 +830,30 @@ function V.BuildPage(b)
 		ladder.rungs[i] = { name = name, need = need, tick = tick }
 	end
 
+	-- WHAT IT CAN CAST, IN VIEW (Josh 2026-10-03: "I think the abilities need
+	-- to be in a more prominent position on this page"). They were a section
+	-- of the lore, under its first page, and scrolled away with it. They have
+	-- a panel of their own under the ladder now, headed as the ladder is, and
+	-- the lore starts under that. An enemy with none has no panel, and the
+	-- lore moves up into its room (V.PaintAbilities).
+	local abilY = ladderY + LADDER_H + 8
+	local abil = CreateFrame("Frame", nil, page)
+	abil:SetPoint("TOPLEFT", MODAL_PAD, -abilY)
+	abil:SetSize(inner, 1)
+	W.Panel(abil, W.FILL, W.HAIR)
+	abil.head = W.Label(abil, string.upper("Abilities"), "small", DIM[1], DIM[2], DIM[3])
+	abil.head:SetPoint("TOPLEFT", 12, -9)
+	abil:Hide()
+	page.abilities = abil
+	-- the row's own piece, as a lore section's would be (V.SpellIcons)
+	page.abilityRow = {}
+	page.abilY = abilY
+
 	-- the lore in full, in a place that scrolls: its own page, a tribe, a
 	-- race and a type can run well past the popup's foot between them. No
 	-- heading over it (Josh 2026-09-26: "Let's remove the "Lore" heading")
 	local loreY = ladderY + LADDER_H + 12
+	page.loreTop = loreY
 	page.loreBox = W.Scroller(page, 6)
 	page.loreBox:SetPoint("TOPLEFT", MODAL_PAD, -loreY)
 	page.loreBox:SetPoint("BOTTOMRIGHT", -MODAL_PAD, FOOT_H + 6)
@@ -851,12 +911,10 @@ function V.Facts(npc, kills)
 	if #f.lore == 0 then
 		f.lore[1] = { text = f.loreLine }
 	end
-	-- WHAT IT CAN CAST (J.Abilities), under its own page's lore: a row of
-	-- icons (V.SpellIcons). An enemy the database gives no spells has no heading.
+	-- WHAT IT CAN CAST (J.Abilities): a row of icons in a panel of its own
+	-- over the lore (V.PaintAbilities). An enemy the database gives no spells
+	-- has no panel.
 	f.abilities = J.Abilities(npc)
-	if #f.abilities > 0 then
-		table.insert(f.lore, math.min(2, #f.lore + 1), { head = "Abilities", spells = f.abilities })
-	end
 	-- EVERY PART, NOT UP TO THE FIRST GAP (Josh 2026-09-27: "The details dont
 	-- have any indicator if the enemy is rare or elite"). The parts were walked
 	-- with ipairs, which stops at the first nil: an enemy with no beast family -
@@ -1092,7 +1150,9 @@ V.Freeze = freeze
 -- Drawn again when that changes what the journal says.
 local function learnBody(model)
 	local npc = model.npc
-	if not npc or not model.GetModelFileID then
+	-- not from a look you chose (V.SetLook): the other sex's model file would
+	-- be a new body, the window drawn again, and so on back and forth
+	if not npc or model.wantSex or not model.GetModelFileID then
 		return
 	end
 	local ok, id = pcall(model.GetModelFileID, model)
@@ -1137,17 +1197,33 @@ local function loaded(model)
 	return ok and type(id) == "number" and id > 0
 end
 
+-- The look you chose for the enemy (V.SetLook) is drawn: by its display id
+-- where the game gave one, and where it did not (or the id drew the other
+-- sex), by asking again until the game's pick is the sex chosen
+-- (V.LearnLook). Otherwise the game picks, as it always did.
 function V.Creature(model, npc, after)
-	model.npc = npc
+	local sex, look = V.LookFor(npc)
+	model.npc, model.wantSex, model.look, model.rerolls = npc, sex, look, 0
 	pcall(model.ClearModel, model)
-	pcall(model.SetCreature, model, npc)
+	local function set()
+		if look then
+			pcall(model.SetCreature, model, npc, look)
+		else
+			pcall(model.SetCreature, model, npc)
+		end
+	end
+	set()
+	-- a model the client already had loads at once, with no event
+	if loaded(model) then
+		V.LearnLook(model)
+	end
 	if not (C_Timer and C_Timer.After) then
 		return
 	end
 	for _, t in ipairs(ASK_AGAIN) do
 		C_Timer.After(t, function()
-			if model.npc == npc and not loaded(model) then
-				pcall(model.SetCreature, model, npc)
+			if model.npc == npc and model.wantSex == sex and not loaded(model) then
+				set()
 				if after then
 					after(model)
 				end
@@ -1169,6 +1245,267 @@ local function settle(model)
 			end
 		end)
 	end
+end
+
+-- ---------------------------------------------------------------------------
+-- A man or a woman
+-- ---------------------------------------------------------------------------
+--
+-- (Josh 2026-10-03: "could we add male/female icons to switch between
+-- male/female models (if they exist)?") An enemy met as both (J.Looks) wears
+-- a pair of marks on its card and over its page's model: the one lit is the
+-- look shown, and a click on the other shows that one instead, on the card,
+-- the list and the page alike. The choice is kept with the window's others.
+
+local SEX_ART = "Interface\\AddOns\\BeebMod\\Art\\sex"
+local SEX_LIT, SEX_HOT = { 1, 0.82, 0.30 }, { 1, 1, 1 }
+
+local function chosen()
+	local u = BT.settings and BT.settings.expeditionUI
+	return u and type(u.looks) == "table" and u.looks or nil
+end
+
+-- the display id of the look chosen for this enemy, or nil for the game's own
+-- The sex chosen for this enemy, and its display id where the game gave one:
+-- nil while nothing is chosen, or while the journal knows only one look.
+function V.LookFor(npc)
+	local sex = npc and (chosen() or {})[npc]
+	if not sex then
+		return nil
+	end
+	local s = BT.Expedition.Store()
+	local looks = BT.Expedition.Looks(s and s.enemies[npc])
+	if not looks then
+		return nil
+	end
+	local look = looks[sex]
+	return sex, type(look) == "number" and look or nil
+end
+
+-- a number the game handed back plainly, or nil
+local function plainCall(model, method)
+	local fn = model and model[method]
+	if type(fn) ~= "function" then
+		return nil
+	end
+	local ok, v = pcall(fn, model)
+	if ok and type(v) == "number" and not (issecretvalue and issecretvalue(v)) and v > 0 then
+		return v
+	end
+	return nil
+end
+
+-- the sex of the look a model is showing: by the file it drew, else by its
+-- display id against the ones the journal has
+function V.ShownSex(model, m)
+	local J = BT.Expedition
+	local sex = J.SexOfFile(plainCall(model, "GetModelFileID"))
+	if sex then
+		return sex
+	end
+	local looks = J.Looks(m)
+	local id = model and (model.look or plainCall(model, "GetDisplayInfo"))
+	if not (looks and id) then
+		return nil
+	end
+	if id == looks[J.MALE] then
+		return J.MALE
+	elseif id == looks[J.FEMALE] then
+		return J.FEMALE
+	end
+	return nil
+end
+
+-- what the looks came to, for the Testing page's record (Expedition.lua)
+V.lookStats = { portraits = 0, rerolls = 0 }
+-- how many times a model is asked again for the sex chosen, at most
+V.REROLLS = 8
+
+-- every place this enemy's marks are, painted again
+function V.LookLearnt(npc)
+	local b = frame and frame.journal
+	if not b then
+		return 0
+	end
+	local s = BT.Expedition.Store()
+	local m = s and s.enemies[npc]
+	local n = 0
+	for _, c in pairs(b.cards or {}) do
+		if c.npc == npc then
+			V.PaintSexes(c.sexes, npc, m, c.portrait)
+			n = n + 1
+		end
+	end
+	if b.page and b.page.model and b.page.model.npc == npc then
+		V.PaintLooks(b.page)
+		n = n + 1
+	end
+	return n
+end
+
+-- A MODEL DRAWN IS A LOOK SEEN (Josh 2026-10-03: the Scarlet Convert's card
+-- drew a man and its page a woman). The game picks one of a creature's looks
+-- each time a model is drawn, so each one the journal draws says one of them:
+-- its file says the sex, and its display id which look it is. Kept on the
+-- enemy's page, and the marks painted again when that is news. A model drawn
+-- in the sex you chose is asked again, a few times, while the game's pick is
+-- the other.
+function V.LearnLook(model)
+	local npc = model and model.npc
+	if not npc then
+		return false
+	end
+	local J = BT.Expedition
+	local sex = J.SexOfFile(plainCall(model, "GetModelFileID"))
+	if not sex then
+		return false
+	end
+	local news = J.LearnLook(npc, sex, plainCall(model, "GetDisplayInfo"))
+	if news then
+		V.lookStats.portraits = V.lookStats.portraits + 1
+		V.LookLearnt(npc)
+	end
+	if model.wantSex and sex ~= model.wantSex and (model.rerolls or 0) < V.REROLLS then
+		model.rerolls = (model.rerolls or 0) + 1
+		V.lookStats.rerolls = V.lookStats.rerolls + 1
+		-- the id drew the other sex, or there is none: the game's own pick
+		model.look = nil
+		pcall(model.ClearModel, model)
+		pcall(model.SetCreature, model, npc)
+		if loaded(model) then
+			return V.LearnLook(model) or news
+		end
+	elseif model.wantSex and sex == model.wantSex then
+		-- the marks follow what is shown
+		V.LookLearnt(npc)
+	end
+	return news
+end
+
+local function paintMark(b)
+	local c = b.hot and SEX_HOT or (b.lit and SEX_LIT or DIM)
+	b.icon:SetVertexColor(c[1], c[2], c[3], (b.lit or b.hot) and 1 or 0.8)
+end
+
+-- The pair of marks, `size` square each, on a small dark plate. `keep` is run
+-- when the pointer comes onto a mark, so a card stays lifted under it.
+function V.SexPair(parent, size, keep, letGo)
+	local J, W = BT.Expedition, BT.Widgets
+	local pair = CreateFrame("Frame", nil, parent)
+	pair:SetSize(2 * size + 8, size + 4)
+	W.Panel(pair, { 0.02, 0.03, 0.03, 0.8 }, W.HAIR)
+	pair.marks = {}
+	for i, sex in ipairs({ J.MALE, J.FEMALE }) do
+		local b = CreateFrame("Button", nil, pair)
+		b:SetSize(size, size)
+		b:SetPoint("LEFT", pair, "LEFT", 2 + (i - 1) * (size + 4), 0)
+		b.icon = b:CreateTexture(nil, "ARTWORK")
+		b.icon:SetAllPoints()
+		b.icon:SetTexture(SEX_ART)
+		b.icon:SetTexCoord((i - 1) * 0.5, i * 0.5, 0, 1)
+		b.sex = sex
+		b:SetScript("OnClick", function(self)
+			if pair.npc then
+				V.SetLook(pair.npc, self.sex)
+			end
+		end)
+		b:SetScript("OnEnter", function(self)
+			self.hot = true
+			paintMark(self)
+			if keep then
+				keep()
+			end
+		end)
+		b:SetScript("OnLeave", function(self)
+			self.hot = false
+			paintMark(self)
+			if letGo then
+				letGo()
+			end
+		end)
+		paintMark(b)
+		pair.marks[sex] = b
+	end
+	pair:Hide()
+	return pair
+end
+
+-- the pair for enemy `m` (its npc `npc`) over `model`: shown only when both
+-- looks are known and nothing says to hide it; the look shown lit
+function V.PaintSexes(pair, npc, m, model, hidden)
+	if not pair then
+		return false
+	end
+	pair.npc = npc
+	local both = not hidden and BT.Expedition.Looks(m) ~= nil
+	pair:SetShown(both)
+	if not both then
+		return false
+	end
+	local shown = V.ShownSex(model, m)
+	for sex, b in pairs(pair.marks) do
+		b.lit = shown == sex
+		paintMark(b)
+	end
+	return true
+end
+
+-- every model of this enemy in the window, drawn again in its chosen look:
+-- how many
+function V.ShowLook(npc)
+	local b = frame and frame.journal
+	if not b then
+		return 0
+	end
+	local s = BT.Expedition.Store()
+	local m = s and s.enemies[npc]
+	local n = 0
+	for _, c in pairs(b.cards or {}) do
+		if c.npc == npc then
+			V.Creature(c.portrait, npc, settle)
+			settle(c.portrait)
+			V.PaintSexes(c.sexes, npc, m, c.portrait)
+			n = n + 1
+		end
+	end
+	for _, r in pairs(b.rows or {}) do
+		if r.npc == npc then
+			V.Creature(r.face, npc, settle)
+			settle(r.face)
+			n = n + 1
+		end
+	end
+	local page = b.page
+	if page and page.model and page.model.npc == npc then
+		-- the view you had stays: the client's framing is put back on load,
+		-- and ours over it (V.Stand)
+		V.Creature(page.model, npc, V.Stand)
+		V.Stand(page.model)
+		V.PaintLooks(page)
+		n = n + 1
+	end
+	return n
+end
+
+-- show this enemy as a man (J.MALE) or a woman (J.FEMALE), from now on
+function V.SetLook(npc, sex)
+	if not (npc and BT.settings) then
+		return 0
+	end
+	BT.settings.expeditionUI = BT.settings.expeditionUI or {}
+	local u = BT.settings.expeditionUI
+	u.looks = type(u.looks) == "table" and u.looks or {}
+	u.looks[npc] = sex
+	return V.ShowLook(npc)
+end
+
+-- the page's pair: over the model, and not over the map
+function V.PaintLooks(page)
+	if not (page and page.sexes) then
+		return false
+	end
+	local onMap = V.Stage and V.Stage.Mode() == "map"
+	return V.PaintSexes(page.sexes, page.model and page.model.npc, page.enemy, page.model, onMap)
 end
 
 -- NO PORTRAITS UNDER THE POPUP'S MODEL (Josh 2026-09-26: "Seeing a black
@@ -1348,11 +1685,25 @@ local function card(i)
 		return c
 	end
 	c = Card.New(b.grid.content)
+	-- a man or a woman, in the portrait's lower right corner, over the
+	-- ornaments; the card stays lifted while the pointer is on a mark
+	c.sexes = V.SexPair(c.over, 12, function()
+		V.Zoom(c, true)
+	end, function()
+		if not (c.IsMouseOver and c:IsMouseOver()) then
+			V.Zoom(c, false)
+		end
+	end)
+	c.sexes:SetPoint("BOTTOMRIGHT", c.portrait, "BOTTOMRIGHT", -3, 3)
+	c.sexes:SetFrameLevel((c.over:GetFrameLevel() or 1) + 3)
 	-- the client loads a model a beat after it is asked for, and forgets the
 	-- zoom when it does: framed again when it arrives
 	pcall(c.portrait.SetScript, c.portrait, "OnModelLoaded", function(self)
 		settle(self)
 		V.LearnBody(self)
+		V.LearnLook(self)
+		local s = BT.Expedition.Store()
+		V.PaintSexes(c.sexes, c.npc, s and s.enemies[c.npc], self)
 	end)
 	c:SetScript("OnClick", function(self)
 		V.Open(self.npc)
@@ -1364,6 +1715,10 @@ local function card(i)
 		V.Zoom(self, true)
 	end)
 	c:SetScript("OnLeave", function(self)
+		-- onto one of its own marks is not off the card
+		if self.IsMouseOver and self:IsMouseOver() then
+			return
+		end
 		V.Zoom(self, false)
 	end)
 	b.cards[i] = c
@@ -1381,6 +1736,8 @@ local function bind(c, e, w)
 		-- a model the client already had loads at once, with no event
 		learnBody(c.portrait)
 	end
+	-- before the dressing below is skipped: a look learnt since is news
+	V.PaintSexes(c.sexes, e.npc, e.m, c.portrait)
 	-- the map, painted again when the enemy, its spot or the card's width moves
 	local artKey = ("%s:%s:%s:%s"):format(tostring(e.m.map), tostring(e.m.mx), tostring(e.m.my), tostring(w))
 	if c.artKey ~= artKey then
@@ -1536,6 +1893,7 @@ local function listRow(i)
 	pcall(r.face.SetScript, r.face, "OnModelLoaded", function(self)
 		settle(self)
 		V.LearnBody(self)
+		V.LearnLook(self)
 	end)
 	-- a cell a column, placed when the row learns its width (bindRow)
 	r.cells = {}
@@ -1900,6 +2258,8 @@ function V.DrawPage(npc, kills)
 	page.enemy = s and s.enemies[npc] or nil
 	if V.Stage then
 		V.Stage.Paint(page, page.enemy)
+	else
+		V.PaintLooks(page)
 	end
 	page.name:SetText(f.name)
 	local c = f.color or { 1, 1, 1 }
@@ -1933,6 +2293,9 @@ function V.DrawPage(npc, kills)
 	L.fill:SetWidth(math.max(1, math.floor(track * k + 0.5)))
 	L.fill:SetColorTexture(fc[1], fc[2], fc[3], 1)
 	L.fill:SetShown(k > 0)
+
+	-- its abilities over the lore, and the lore under them
+	V.PaintAbilities(page, f.abilities)
 
 	-- the lore, piece under piece, as tall as it measures
 	local body, prev, tall = page.loreBody, nil, 0

@@ -578,9 +578,15 @@ F.KINDS = {
 	-- "Defias Rogue Wizard" and your threat on one line were cut to "Defias
 	-- Rogue..." at a party cell's 160. The column beside it (its target, the
 	-- focus) hangs off its right edge and moves with it.
-	target = { w = 220, h = 60, power = 12, name = 12, text = "percent", stack = true, hpValue = true, castOverPower = true,
-		threat = true, overheal = true,
-		powerValue = true, cast = true, combo = true },
+	-- A LITTLE SHORTER, AND ITS HEALTH AS TALL AS YOURS (Josh 2026-10-03: "the
+	-- target [frame] is just a bit too long, and the health bar should be
+	-- taller to match the player's"), AND ITS POWER BAR TALL (the same day:
+	-- "The energy/power/mana/cast bar on the target frame should be taller"):
+	-- 200 wide, the power bar twelve tall with its figure on it, and the frame
+	-- as much taller than your cell as its power bar is, so the two health
+	-- bars are one height. The cast covers the power bar, the same height.
+	target = { w = 200, h = 67, power = 12, name = 12, text = "percent", stack = true, hpValue = true, castOverPower = true,
+		threat = true, overheal = true, powerValue = true, cast = true, combo = true },
 	focus = { w = 110, h = 30, power = 0, name = 11, text = "percent", cast = true, castGap = 10 },
 	tot = { w = 110, h = 22, power = 0, name = 10, text = "none" },
 	pet = { w = 110, h = 22, power = 0, name = 10, text = "none" },
@@ -609,6 +615,22 @@ F.KINDS = {
 	-- health, not added, so the party below keeps its spacing.
 	gpet = { w = 80, h = 16, power = 3, name = 9, text = "none", mini = true },
 	gtarget = { w = 96, h = 22, power = 0, name = 9, text = "none", mini = true },
+	-- AN ENEMY'S NAMEPLATE (Josh 2026-10-03, design D on the nameplates
+	-- canvas: "I like the name, level, and [health] % of option C, but
+	-- everything else option A"). The level in a tab of its own at the left,
+	-- the name and the health's share inside the bar; gold or silver brackets
+	-- at the ends for an elite or a rare, in place of the ornate border; the
+	-- cast bar under it; your damage over time in short lanes above
+	-- (Timers.lua). Modules/Nameplates/Nameplates.lua puts one on each plate.
+	-- SMALLER, AND TIGHTER INSIDE (Josh 2026-10-03, first look in game: "overall
+	-- width smaller, smaller text, tighter padding so more of the name shows"):
+	-- 136 by 16 cut "Ravaged Corpse" to "Ravaged Cor...", with six units of
+	-- padding at each end of the words and between them
+	-- ITS LANES AS WIDE AS IT (Josh 2026-10-03: "make them the same width as
+	-- the bar"), now each has its spell's picture at its left
+	plate = { w = 120, h = 14, power = 0, name = 9, text = "percent", mini = true, plate = true,
+		levelTab = 14, textInset = 3, textGap = 4, brackets = true, cast = true, castGap = 5, castH = 10,
+		laneW = 120 },
 }
 
 -- whether you are resting, for the Zzz on your own cell
@@ -658,7 +680,8 @@ function F.Dress(b, kind)
 	local inset = 0
 	local powerH = k.power or 0
 	b.health = bar(b, 1)
-	b.health:SetPoint("TOPLEFT", inset, -inset)
+	-- after the level's tab, on a frame that has one
+	b.health:SetPoint("TOPLEFT", inset + (k.levelTab or 0), -inset)
 	b.health:SetPoint("TOPRIGHT", -inset, -inset)
 	b.health:SetPoint("BOTTOM", b, "BOTTOM", 0, inset + (powerH > 0 and (powerH + 1) or 0))
 	-- the heal and the shield hang off the end of the health, inside it: a
@@ -727,24 +750,71 @@ function F.Dress(b, kind)
 		b.name:SetPoint("RIGHT", b.health, "RIGHT", -3, 0)
 		b.value:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", -3, 3)
 	else
-		b.name:SetPoint("LEFT", b.health, "LEFT", 6, 0)
-		b.name:SetPoint("RIGHT", b.value, "LEFT", -6, 0)
-		b.value:SetPoint("RIGHT", b.health, "RIGHT", -6, 0)
+		local inset, gap = k.textInset or 6, k.textGap or 6
+		b.name:SetPoint("LEFT", b.health, "LEFT", inset, 0)
+		b.name:SetPoint("RIGHT", b.value, "LEFT", -gap, 0)
+		b.value:SetPoint("RIGHT", b.health, "RIGHT", -inset, 0)
 	end
-	b.status = text(b.over, k.stack and 11 or 10, "RIGHT", "num")
+	b.status = text(b.over, k.stack and 11 or (k.plate and k.name) or 10, "RIGHT", "num")
 	b.status:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", k.stack and -5 or -3, k.stack and 5 or 3)
 	if not (k.group or k.stack) then
 		b.status:ClearAllPoints()
-		b.status:SetPoint("RIGHT", b.health, "RIGHT", -6, 0)
+		b.status:SetPoint("RIGHT", b.health, "RIGHT", -(k.textInset or 6), 0)
 	end
 	b.status:SetTextColor(0.80, 0.84, 0.82)
+
+	-- the level in its tab, in the colour of how hard the enemy is
+	if k.levelTab then
+		b.levelText = text(b.over, k.name or 10, "CENTER", "name")
+		b.levelText:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+		b.levelText:SetPoint("BOTTOMRIGHT", b, "BOTTOMLEFT", k.levelTab, 0)
+	end
+
+	-- AN ELITE OR A RARE IN BRACKETS: an upright and two feet turned in at
+	-- each end, gold or silver as the ornate border would be (F.Paint)
+	if k.brackets then
+		b.brackets = {}
+		for _, side in ipairs({ "LEFT", "RIGHT" }) do
+			local br = CreateFrame("Frame", nil, b)
+			br:SetFrameLevel((b:GetFrameLevel() or 1) + 6)
+			-- clear of the threat ring and the target's outline
+			br:SetSize(6, k.h + 14)
+			if side == "LEFT" then
+				br:SetPoint("RIGHT", b, "LEFT", -6, 0)
+			else
+				br:SetPoint("LEFT", b, "RIGHT", 6, 0)
+			end
+			local up = br:CreateTexture(nil, "OVERLAY")
+			up:SetPoint("TOP" .. side, br, "TOP" .. side, 0, 0)
+			up:SetPoint("BOTTOM" .. side, br, "BOTTOM" .. side, 0, 0)
+			up:SetWidth(2)
+			local top = br:CreateTexture(nil, "OVERLAY")
+			top:SetPoint("TOPLEFT", br, "TOPLEFT", 0, 0)
+			top:SetPoint("TOPRIGHT", br, "TOPRIGHT", 0, 0)
+			top:SetHeight(2)
+			local foot = br:CreateTexture(nil, "OVERLAY")
+			foot:SetPoint("BOTTOMLEFT", br, "BOTTOMLEFT", 0, 0)
+			foot:SetPoint("BOTTOMRIGHT", br, "BOTTOMRIGHT", 0, 0)
+			foot:SetHeight(2)
+			br.parts = { up, top, foot }
+			br:Hide()
+			b.brackets[#b.brackets + 1] = br
+		end
+	end
 
 	-- AGGRO IS THE WHOLE EDGE (Josh 2026-09-23). It was a two-pixel line
 	-- across the top, which nobody saw; with the theme's rim gone the edge is
 	-- free, and a ring round the frame in the client's own threat colours -
 	-- yellow, orange, red - is the one thing on it.
 	b.threat = CreateFrame("Frame", nil, b)
-	b.threat:SetAllPoints()
+	if k.plate then
+		-- OUTSIDE A PLATE: inside a bar fourteen tall it would cover the name.
+		-- Past the target's outline, which is a pixel off the bar (below).
+		b.threat:SetPoint("TOPLEFT", b, "TOPLEFT", -4, 4)
+		b.threat:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 4, -4)
+	else
+		b.threat:SetAllPoints()
+	end
 	b.threat:SetFrameLevel((b:GetFrameLevel() or 1) + 4)
 	b.threat.ring = BT.Pill.Ring(b.threat, "OVERLAY", 2)
 	BT.Pill.PlaceRing(b.threat.ring, b.threat, 0, 2, 0)
@@ -777,7 +847,13 @@ function F.Dress(b, kind)
 	b.top:SetFrameLevel((b:GetFrameLevel() or 1) + 9)
 	b.marker = b.top:CreateTexture(nil, "OVERLAY")
 	b.marker:SetSize(k.group and 12 or 16, k.group and 12 or 16)
-	b.marker:SetPoint(k.group and "TOPRIGHT" or "CENTER", b.health, k.group and "TOPRIGHT" or "TOP", k.group and -2 or 0, k.group and -2 or 0)
+	if k.plate then
+		-- a plate's at its left, clear of a bracket, where the lanes are not
+		b.marker:SetSize(14, 14)
+		b.marker:SetPoint("RIGHT", b, "LEFT", k.brackets and -14 or -6, 0)
+	else
+		b.marker:SetPoint(k.group and "TOPRIGHT" or "CENTER", b.health, k.group and "TOPRIGHT" or "TOP", k.group and -2 or 0, k.group and -2 or 0)
+	end
 	b.marker:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
 	b.marker:Hide()
 	b.ready = b.over:CreateTexture(nil, "OVERLAY")
@@ -832,6 +908,10 @@ function F.Dress(b, kind)
 
 	-- your target: a one-pixel outline round the whole frame, in white
 	b.outline = CreateFrame("Frame", nil, b)
+	-- A PIXEL OFF THE BAR (Josh 2026-10-03: "Maybe just 1px of margin inside
+	-- the selected box"): the outline is a pixel thick and two out, so one
+	-- pixel shows between it and the bar. On a plate the threat ring goes
+	-- outside it.
 	b.outline:SetPoint("TOPLEFT", -2, 2)
 	b.outline:SetPoint("BOTTOMRIGHT", 2, -2)
 	b.outline:SetFrameLevel((b:GetFrameLevel() or 1) + 6)
@@ -846,20 +926,25 @@ function F.Dress(b, kind)
 			-- THE TARGET CASTS OVER ITS POWER BAR (Josh 2026-09-23: "why is this
 			-- aura icon floating off in space?"). A cast bar under the target
 			-- needed room kept for it, and the debuffs under that hung in the
-			-- gap whenever nothing was being cast. The power bar is the cast
-			-- bar's height: while the target casts, the cast covers it, and
-			-- nothing below the frame moves.
-			b.cast:SetAllPoints(b.power)
+			-- gap whenever nothing was being cast. While the target casts, the
+			-- cast covers the power bar, and nothing below the frame moves.
+			-- TALLER THAN A THIN POWER BAR (Josh 2026-10-03): from the frame's
+			-- foot up, as tall as castH says, short of the health's figures
+			b.cast:SetPoint("BOTTOMLEFT", b.power, "BOTTOMLEFT", 0, 0)
+			b.cast:SetPoint("BOTTOMRIGHT", b.power, "BOTTOMRIGHT", 0, 0)
+			b.cast:SetHeight(k.castH or powerH)
 			b.cast:SetFrameLevel((b:GetFrameLevel() or 1) + 6)
 		else
 			-- below the ornate border's bottom corners, on a frame that can wear one
 			local gap = k.castGap or 3
-			b.cast:SetHeight(14)
+			b.cast:SetHeight(k.castH or 14)
 			b.cast:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -gap)
 			b.cast:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT", 0, -gap)
 		end
 		BT.Pill.Panel(b.cast, W.FILL, NO_EDGE)
-		b.cast.text = text(b.cast, 10, "LEFT", "name")
+		-- smaller on a cast bar thinner than the usual
+		local castText = (k.castH and k.castH <= 10 and 8) or (k.castH and k.castH < 14 and 9) or 10
+		b.cast.text = text(b.cast, castText, "LEFT", "name")
 		b.cast.text:SetPoint("LEFT", 5, 0)
 		b.cast.text:SetPoint("RIGHT", -5, 0)
 		b.cast:Hide()
@@ -1069,6 +1154,25 @@ local function levelText(src)
 	return tag .. " "
 end
 
+-- the level alone, for a tab of its own: "??" for one too far above you to
+-- say, and the difficulty's colour where the client will give it. The rank is
+-- the brackets' to show.
+function F.LevelTag(src)
+	local level = src:Level()
+	if type(level) ~= "number" then
+		return ""
+	end
+	if level < 0 then
+		return "|cffff4a3d??|r"
+	end
+	local c = _G.GetQuestDifficultyColor and level > 0 and _G.GetQuestDifficultyColor(level)
+	if c and c.r then
+		local function hex(v) return math.floor(v * 255 + 0.5) end
+		return ("|cff%02x%02x%02x%d|r"):format(hex(c.r), hex(c.g), hex(c.b), level)
+	end
+	return tostring(level)
+end
+
 -- A NAME IS WRITTEN FROM EMPTY EVERY TIME (Josh 2026-09-23: "after
 -- restarting the game, my name is missing", the second time). The names that
 -- went blank were the ones written once and never changed - yours, the
@@ -1107,7 +1211,7 @@ local function paintHealth(b, src, gone, ease)
 	-- the frame's own width, not a measurement: before the client has laid
 	-- the bar out it measures nothing, and the heal came out zero wide
 	local width = BT.Pill.Number(b:GetWidth(), 0)
-	width = (width > 0 and width or b.bmSpec.w) - 4
+	width = (width > 0 and width or b.bmSpec.w) - 4 - (b.bmSpec.levelTab or 0)
 	b.heals:SetWidth(width)
 	b.shield:SetWidth(width)
 	if gone then
@@ -1174,9 +1278,10 @@ local function paintName(b, src, gone)
 			b.name:SetTextColor(1, 1, 1)
 		end
 	elseif name ~= nil then
-		-- a secret name is still a string: the client joins it for us
+		-- a secret name is still a string: the client joins it for us. A
+		-- frame with a tab for the level does not say it twice.
 		local ok, line = pcall(function()
-			return (k.text ~= "none" and levelText(src) or "") .. name
+			return (k.text ~= "none" and not k.levelTab and levelText(src) or "") .. name
 		end)
 		writeName(b.name, ok and line or name)
 	else
@@ -1226,6 +1331,19 @@ local function paintRange(b, src)
 		alphaFrom(b, src:InRange(), 1, F.Far(true))
 		b.outline:Show()
 		alphaFrom(b.outline, src:IsTarget(), 1, 0)
+	elseif k.plate then
+		-- a plate is always in reach: what it says is whether it is your
+		-- target, by the outline, and the others step back while you have
+		-- one (F.PlateDim, the Nameplates module's choice)
+		local target = src:IsTarget()
+		b.outline:Show()
+		alphaFrom(b.outline, target, 1, 0)
+		local dim = F.PlateDim and F.PlateDim()
+		if dim and plain(UnitExists, "target") then
+			alphaFrom(b, target, 1, dim)
+		else
+			b:SetAlpha(1)
+		end
 	elseif not k.mini then
 		-- a single frame fades less than a cell: a target you are walking
 		-- towards is still read
@@ -1264,6 +1382,25 @@ function F.Paint(b, src)
 			placeCombo(b)
 			if F.Auras and b.bmAuras then
 				F.Auras.Place(b)
+			end
+		end
+	end
+
+	-- the level's tab, and the brackets for an elite or a rare
+	if b.levelText then
+		b.levelText:SetText(F.LevelTag(src))
+	end
+	if b.brackets then
+		local style = (not gone) and F.RANK[src:Classification() or ""] or nil
+		for _, br in ipairs(b.brackets) do
+			if style then
+				local c = style.colour
+				for _, t in ipairs(br.parts) do
+					t:SetColorTexture(c[1], c[2], c[3], 1)
+				end
+				br:Show()
+			else
+				br:Hide()
 			end
 		end
 	end

@@ -46,7 +46,8 @@ local FOOT_H = 16
 -- for the Expedition's, Josh 2026-09-25)
 -- (taller by two tabs, Josh 2026-09-27: the Ledger's row and the Expedition's
 -- line have tabs in the Dock's block too, and the rail has to hold them)
-local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 728
+-- (a tab's stride more, Josh 2026-10-03, for Nameplates under Unit frames)
+local TITLE_H, WINDOW_W, WINDOW_H = 40, 760, 750
 -- the page's own header: its name, a line under it, and its switch
 local HEADER_H = 54
 

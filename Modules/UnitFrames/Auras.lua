@@ -103,6 +103,9 @@ A.SPECS = {
 		{ key = "mechanics", filter = "HELPFUL", max = 3, size = 16, at = "RIGHT",
 			candidate = { isBossAura = true, maxDuration = A.TIMED_MAX }, helpfulRing = true },
 	},
+	-- AN ENEMY'S NAMEPLATE: no rows, only your damage over time in lanes above
+	-- it (Timers.lua), which hang off this holder like any frame's
+	plate = {},
 }
 
 -- The colour of a dispel type, as a curve the client evaluates in its own
