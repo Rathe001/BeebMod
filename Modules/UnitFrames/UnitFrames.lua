@@ -1158,7 +1158,7 @@ local PARTY = {
 			dispel = "Disease" } },
 	-- a hunter, with a boar that is only content: the happiness square
 	{ name = "Ashby", class = "HUNTER", level = 32, hp = 47, max = 1210, mana = 80, aim = SKULL,
-		pet = { name = "Bristleback", reaction = "friendly", hp = 83, happy = 2 },
+		pet = { name = "Bristleback", reaction = "friendly", hp = 83, happy = 2, power = "FOCUS", mana = 60 },
 		auras = { debuffs = { { spell = SP.corruption, type = "Curse" } }, mine = { { spell = SP.rejuv } },
 			dispel = "Curse" } },
 }

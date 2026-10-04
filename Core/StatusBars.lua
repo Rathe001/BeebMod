@@ -8,13 +8,25 @@
 -- WHICH BAR IS WHERE IS THE CLIENT'S BUSINESS. This build uses the modern
 -- status bars: two containers (MainStatusTrackingBarContainer and
 -- SecondaryStatusTrackingBarContainer, both Edit Mode systems - its layout
--- file names the first), each showing one bar at a time and moving bars
--- between them as they come and go. So a container is not "the experience
--- bar"; it is asked what it is showing, every time that might have changed,
--- and faded only while that is a bar you have asked to hide.
+-- file names the first), each holding one bar of every kind, showing one at a
+-- time and moving bars between them as they come and go.
+--
+-- THE BARS GO, NOT THE CONTAINERS (Josh 2026-10-03: unticking "Show as
+-- Experience Bar" brought both of the client's bars back, empty). The client
+-- reads a container's own alpha before it changes the bar in it: at no alpha
+-- it skips the fade-out, and the end of the fade-out is what tells it to
+-- finish moving a bar across and to hide a container left empty. On this
+-- client a watched faction takes the first container, so unwatching one moves
+-- experience across; with both containers at no alpha, both were left shown
+-- and empty, and this file, seeing them hold nothing, gave them their alpha
+-- back. So a container's own alpha is the client's. What is faded is inside
+-- it: every bar of a kind you have asked to hide, in either container, and
+-- the frame and dividers of a container while the bar it holds is one of
+-- those. The client never sets a bar's own alpha, and its fades multiply with
+-- ours, so nothing it plays brings a hidden bar back.
 --
 -- FADED, NOT MOVED: Edit Mode owns those containers and puts back anything
--- that is reparented or hidden. At no alpha and taking no mouse, they are
+-- that is reparented or hidden. At no alpha and taking no mouse, the bars are
 -- simply not there to see or to point at. The older single-bar frames are
 -- covered too, for a build that still has them.
 local _, BT = ...
@@ -38,6 +50,16 @@ local function index(kind)
 	return (e and e.Reputation) or 1
 end
 
+-- what a bar is, by its place in a container's list: "xp", "rep" or nil
+local function kindOf(i)
+	if i == index("xp") then
+		return "xp"
+	elseif i == index("rep") then
+		return "rep"
+	end
+	return nil
+end
+
 -- what a container is showing: "xp", "rep" or nil
 function S.ShownKind(container)
 	if type(container) ~= "table" then
@@ -51,35 +73,19 @@ function S.ShownKind(container)
 			end
 		end
 	end
-	if shown == nil then
-		return nil
-	end
-	if shown == index("xp") then
-		return "xp"
-	elseif shown == index("rep") then
-		return "rep"
-	end
-	return nil
+	return kindOf(shown)
 end
 
 -- remembered per frame: whether it took the mouse before we faded it
 local faded = setmetatable({}, { __mode = "k" })
 
+-- A bar takes the mouse on its own, for its tooltip, so a faded one is told
+-- not to.
 local function fade(f, away)
 	if type(f) ~= "table" or not f.SetAlpha then
 		return
 	end
 	if away then
-		-- THE CLIENT FADES A NEW BAR IN (Josh 2026-09-29: the reputation bar
-		-- came back when a faction was newly watched). Its fade-in animation
-		-- sets the alpha every frame it plays, over ours; stopped, it cannot.
-		local anim = f.FadeInAnimation
-		if type(anim) == "table" and anim.IsPlaying and anim.Stop then
-			local ok, playing = pcall(anim.IsPlaying, anim)
-			if ok and playing then
-				pcall(anim.Stop, anim)
-			end
-		end
 		if faded[f] == nil then
 			local ok, mouse = pcall(function() return f.IsMouseEnabled and f:IsMouseEnabled() end)
 			faded[f] = { mouse = ok and mouse or false }
@@ -88,26 +94,10 @@ local function fade(f, away)
 		if f.EnableMouse then
 			pcall(f.EnableMouse, f, false)
 		end
-		-- the bars inside take the mouse on their own, for their tooltips
-		for _, bar in pairs(type(f.bars) == "table" and f.bars or {}) do
-			if type(bar) == "table" and bar.EnableMouse then
-				if faded[bar] == nil then
-					local ok, mouse = pcall(function() return bar.IsMouseEnabled and bar:IsMouseEnabled() end)
-					faded[bar] = { mouse = ok and mouse or false }
-				end
-				pcall(bar.EnableMouse, bar, false)
-			end
-		end
 	elseif faded[f] then
 		pcall(f.SetAlpha, f, 1)
 		if f.EnableMouse then
 			pcall(f.EnableMouse, f, faded[f].mouse)
-		end
-		for _, bar in pairs(type(f.bars) == "table" and f.bars or {}) do
-			if faded[bar] and bar.EnableMouse then
-				pcall(bar.EnableMouse, bar, faded[bar].mouse)
-				faded[bar] = nil
-			end
 		end
 		faded[f] = nil
 	end
@@ -116,9 +106,26 @@ end
 function S.Apply()
 	for _, name in ipairs(CONTAINERS) do
 		local c = _G[name]
-		if c then
+		if type(c) == "table" then
+			-- every bar by its kind, shown or not, so a bar the client puts
+			-- up is faded already
+			local isBar = {}
+			for i, bar in pairs(type(c.bars) == "table" and c.bars or {}) do
+				isBar[bar] = true
+				local kind = kindOf(i)
+				fade(bar, kind ~= nil and S.wanted[kind] == true)
+			end
+			-- the frame round the bar, and the dividers on it, go with the
+			-- bar it holds; Edit Mode's outline stays, for moving it
 			local kind = S.ShownKind(c)
-			fade(c, kind ~= nil and S.wanted[kind] == true)
+			local away = kind ~= nil and S.wanted[kind] == true
+			fade(c.BarFrameTexture, away)
+			local ok, children = pcall(function() return { c:GetChildren() } end)
+			for _, child in ipairs(ok and children or {}) do
+				if not isBar[child] and child ~= c.Selection then
+					fade(child, away)
+				end
+			end
 		end
 	end
 	for kind, names in pairs(OLD) do
@@ -194,8 +201,9 @@ function S.Dump()
 		if type(c) ~= "table" then
 			add(name .. ": none")
 		else
-			add(("%s: shown=%s alpha=%s shownBarIndex=%s kind=%s at %s"):format(name, shown(c), alpha(c),
-				tostring(c.shownBarIndex), tostring(S.ShownKind(c)), where(c)))
+			add(("%s: shown=%s alpha=%s frame=%s shownBarIndex=%s pending=%s kind=%s at %s"):format(name,
+				shown(c), alpha(c), type(c.BarFrameTexture) == "table" and alpha(c.BarFrameTexture) or "none",
+				tostring(c.shownBarIndex), tostring(c.pendingBarToShowIndex), tostring(S.ShownKind(c)), where(c)))
 			for i, bar in pairs(type(c.bars) == "table" and c.bars or {}) do
 				local bn = type(bar) == "table" and bar.GetName and bar:GetName()
 				add(("  bars[%s] %s shown=%s alpha=%s"):format(tostring(i), tostring(bn),
@@ -250,12 +258,21 @@ function S.Watch()
 		pcall(S.events.RegisterEvent, S.events, event)
 	end
 	S.events:SetScript("OnEvent", later)
-	-- and whenever a container starts fading a bar in, or finishes
+	-- and whenever a container changes the bar it holds, and at the start and
+	-- end of its fades, for a build that changes it some other way
 	for _, name in ipairs(CONTAINERS) do
-		local anim = type(_G[name]) == "table" and _G[name].FadeInAnimation
-		if type(anim) == "table" and anim.HookScript then
-			pcall(anim.HookScript, anim, "OnPlay", later)
-			pcall(anim.HookScript, anim, "OnFinished", later)
+		local c = _G[name]
+		if type(c) == "table" then
+			if type(c.ApplyPendingBarToShow) == "function" and hooksecurefunc then
+				pcall(hooksecurefunc, c, "ApplyPendingBarToShow", later)
+			end
+			for _, key in ipairs({ "FadeInAnimation", "FadeOutAnimation", "MaxLevelFadeOutAnimation" }) do
+				local anim = c[key]
+				if type(anim) == "table" and anim.HookScript then
+					pcall(anim.HookScript, anim, "OnPlay", later)
+					pcall(anim.HookScript, anim, "OnFinished", later)
+				end
+			end
 		end
 	end
 	-- and after the manager lays the bars out itself

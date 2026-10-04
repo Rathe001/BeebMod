@@ -5,6 +5,26 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The game's experience and reputation bars stay hidden when you unwatch
+  a faction.** Unticking "Show as Experience Bar" left two empty bars
+  across the top of the screen. BeebMod hid the bars' holders, and the
+  game needs those to fade before it moves experience into the place the
+  faction had. BeebMod now hides the bars inside and leaves the holders
+  to the game.
+
+- **Pet frames show the pet's power.** A thin bar along the bottom of each
+  pet frame shows its mana, focus or other power. The frames are no
+  taller, so the party column keeps its spacing.
+
+- **An enemy's tooltip is drawn again when it should be.** The fix in
+  beta.19 for lines such as "0/8 Large Candle" never worked. To redraw a
+  tooltip, BeebMod asked the game which enemy it was for, and the game had
+  forgotten once BeebMod restyled it. BeebMod now remembers the enemy
+  itself. A note or a tag written while a tooltip is up, and a change to a
+  tooltip setting, now show on it straight away too.
+
 ## 0.1.0-beta.20
 
 - **Long quest lines wrap in the dock.** A quest title or objective too long

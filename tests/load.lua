@@ -2172,6 +2172,48 @@ if ok then
 				T.Restack, _G.C_Timer.After = hadRestack, hadAfter
 				T.dataID, T.redraws, T.redrawn = nil, 0, false
 			end
+			-- WHO IT WAS FOR (Josh 2026-10-03: no "0/8 Large Candle" on a
+			-- Kobold Miner). A rebuilt tooltip has been cleared, and a cleared
+			-- tooltip has forgotten its unit; the redraw finds it all the same.
+			do
+				local T = BT.UnitTip
+				local gt = _G.GameTooltip
+				local hadUtil, hadToken, hadGuid = _G.TooltipUtil, _G.UnitTokenFromGUID, _G.UnitGUID
+				local hadShown, hadSet = gt.IsShown, gt.SetUnit
+				local miner = "Creature-0-5-0-12-40-00001A2B3C"
+				-- the game's own answer, once the tooltip is cleared: none
+				_G.TooltipUtil = { GetDisplayedUnit = function() return nil end }
+				_G.UnitTokenFromGUID = function(g) return g == miner and "mouseover" or nil end
+				gt.IsShown = function() return true end
+				local set
+				gt.SetUnit = function(_, u) set = u end
+				T.Gone()
+				T.Drawn({ dataInstanceID = 50, guid = miner })
+				assert(T.Restack() and set == "mouseover", "found again by its GUID: " .. tostring(set))
+				-- no GUID to go on: the token it was drawn for
+				T.Gone()
+				set = nil
+				T.Drawn({ dataInstanceID = 51 })
+				T.unit = "target"
+				assert(T.Restack() and set == "target", "or by the token it was drawn for: " .. tostring(set))
+				-- but not once that token is somebody else
+				T.Gone()
+				set = nil
+				_G.UnitTokenFromGUID = function() return nil end
+				_G.UnitGUID = function() return "Creature-0-5-0-12-99-00000000FF" end
+				T.Drawn({ dataInstanceID = 52, guid = miner })
+				T.unit = "target"
+				assert(not T.Restack() and set == nil, "a token that has moved on to another unit is not redrawn")
+				-- gone from the screen, nothing to draw
+				T.Gone()
+				assert(not T.Restack() and set == nil, "a tooltip that has gone is not drawn again")
+				-- only the game's tooltip is kept: a tooltip of our own is not it
+				T.Fill(tip, "target")
+				assert(T.unit == nil, "another tooltip's unit is not kept")
+				_G.TooltipUtil, _G.UnitTokenFromGUID, _G.UnitGUID = hadUtil, hadToken, hadGuid
+				gt.IsShown, gt.SetUnit = hadShown, hadSet
+				T.Gone()
+			end
 			BT.UnitTip.RestoreFonts()
 			assert(BT.UnitTip.Touched() == 0, "and lets go of them once they are back")
 			assert(select(2, _G.TestTipTextLeft1:GetFont()) ~= wasHead
@@ -4073,6 +4115,13 @@ if ok then
 			-- A HUNTER'S PET, AND HOW IT FEELS: content is amber
 			assert(voidwalker.happy._shown ~= false and voidwalker.happy._color[2] > 0.6 and voidwalker.happy._color[3] < 0.4,
 				"a content pet's square is amber")
+			-- ITS FOCUS UNDER ITS HEALTH (Josh 2026-10-03), whatever kind of
+			-- power it is, and taken from the health so the party keeps its spacing
+			local pc = voidwalker.power and voidwalker.power._barColor
+			assert(voidwalker.power and voidwalker.power._shown ~= false and pc and pc[1] > 0.8 and pc[3] < 0.4,
+				"a pet's power bar shows, in focus orange")
+			assert(voidwalker:GetHeight() == 16 and voidwalker.power._height == F.KINDS.gpet.power,
+				"and the pet is no taller for it")
 			-- YOUR THREAT on the made-up target
 			assert(mod.previewTarget.threatText._text == "82%", "your threat on the target: " .. tostring(mod.previewTarget.threatText._text))
 			assert(voidwalker:GetWidth() == F.KINDS.party.w / 2 and voidwalker._points.TOPRIGHT,
@@ -8710,55 +8759,89 @@ if ok then
 		end },
 		{ "the client's own experience and reputation bars go while ours are up", function()
 			local SB = BT.StatusBars
-			-- this build's two containers, each showing one bar at a time
+			-- this build's two containers, each holding one bar of every kind
+			-- and showing one at a time, in a frame with dividers on it
 			local function container(name, shown)
 				local c = _G.CreateFrame("Frame", name, _G.UIParent)
 				c.bars = { [4] = _G.CreateFrame("Frame", nil, c), [1] = _G.CreateFrame("Frame", nil, c) }
+				for _, bar in pairs(c.bars) do
+					bar.IsMouseEnabled = function(self) return self._mouse ~= false end
+				end
+				c.BarFrameTexture = c:CreateTexture()
+				c.divider = _G.CreateFrame("Frame", nil, c)
+				c.Selection = _G.CreateFrame("Frame", nil, c)
 				c.shownBarIndex = shown
-				c.IsMouseEnabled = function(self) return self._mouse ~= false end
-				c.EnableMouse = function(self, on) self._mouse = on end
 				return c
 			end
 			local main = container("MainStatusTrackingBarContainer", 4)
 			local second = container("SecondaryStatusTrackingBarContainer", 1)
 			assert(SB.ShownKind(main) == "xp" and SB.ShownKind(second) == "rep",
 				"each container is asked what it is showing")
+			local function gone(c, i)
+				return c.bars[i]._alpha == 0 and c.bars[i]._mouse == false
+			end
+			local function there(c, i)
+				return (c.bars[i]._alpha or 1) == 1 and c.bars[i]._mouse ~= false
+			end
+			local function framed(c)
+				return (c.BarFrameTexture._alpha or 1) == 1 and (c.divider._alpha or 1) == 1
+			end
+			local function unframed(c)
+				return c.BarFrameTexture._alpha == 0 and c.divider._alpha == 0
+			end
 
 			local xp, rep = BT.GetModule("xp"), BT.GetModule("rep")
 			BT.SetEnabled("xp", true)
 			BT.SetEnabled("rep", true)
 			xp.SetHideClient(true)
 			rep.SetHideClient(false)
-			assert(main._alpha == 0 and main._mouse == false,
-				"the experience bar is put away, and cannot be pointed at")
-			assert((second._alpha or 1) == 1, "the reputation bar stays while its switch is off")
+			assert(gone(main, 4) and unframed(main),
+				"the experience bar is put away with its frame, and cannot be pointed at")
+			assert(gone(second, 4), "and so is the one waiting in the other container")
+			assert(there(second, 1) and framed(second), "the reputation bar stays while its switch is off")
 			rep.SetHideClient(true)
-			assert(second._alpha == 0, "and goes when it is on")
+			assert(gone(second, 1) and unframed(second) and gone(main, 1), "and goes when it is on")
+			assert((main.Selection._alpha or 1) == 1, "Edit Mode's outline is left for moving the bar")
 
 			-- the client moves bars between containers: the fade follows
 			rep.SetHideClient(false)
 			main.shownBarIndex, second.shownBarIndex = 1, 4
 			SB.Apply()
-			assert((main._alpha or 1) == 1 and second._alpha == 0,
+			assert(there(main, 1) and framed(main) and gone(second, 4) and unframed(second),
 				"it is the bar that is hidden, whichever container it is in")
-			main.shownBarIndex, second.shownBarIndex = 4, 1
+
+			-- UNTICKING "SHOW AS EXPERIENCE BAR" (Josh 2026-10-03: both of the
+			-- client's bars came back, empty). The client fades a container out
+			-- before it changes the bar in it, and skips that for one at no
+			-- alpha, so the containers' own alpha is never touched; on the way
+			-- through, a container holds nothing.
+			rep.SetHideClient(true)
+			main.shownBarIndex, second.shownBarIndex = -1, -1
 			SB.Apply()
+			assert(main._alpha == nil and second._alpha == nil,
+				"the containers' own alpha is the client's, so its fades run")
+			main.shownBarIndex = 4
+			SB.Apply()
+			assert(gone(main, 4) and unframed(main) and gone(main, 1),
+				"and once experience has moved across, it is still hidden")
+			second.shownBarIndex = 1
 
 			-- on by default, and switching the module off gives the bar back
 			BT.settings.hideClientXP = nil
 			assert(xp.HideClient(), "hiding the client's bar is on unless you turn it off")
 			BT.SetEnabled("xp", false)
-			assert(main._alpha == 1 and main._mouse ~= false,
+			assert(there(main, 4) and framed(main),
 				"with the Experience line off, the client's bar comes back")
 			BT.SetEnabled("xp", true)
-			assert(main._alpha == 0, "and goes again when it is back on")
+			assert(gone(main, 4) and unframed(main), "and goes again when it is back on")
 
 			-- the switch on the tab
 			local tab = _G.CreateFrame("Frame", nil, _G.UIParent)
 			xp:BuildTab(tab)
 			assert(xp.hideSwitch:IsOn(), "the tab's switch shows it on")
 			xp.hideSwitch:GetScript("OnClick")(xp.hideSwitch)
-			assert(BT.settings.hideClientXP == false and main._alpha == 1, "and turning it off brings the bar back")
+			assert(BT.settings.hideClientXP == false and there(main, 4) and framed(main),
+				"and turning it off brings the bar back")
 			xp.SetHideClient(true)
 			BT.settings.hideClientXP, BT.settings.hideClientRep = nil, nil
 			SB.Set("xp", false)

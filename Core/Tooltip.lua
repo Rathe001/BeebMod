@@ -334,7 +334,13 @@ function T.Fill(tip, unit)
 		return
 	end
 	T.fills = T.fills + 1
+	-- kept before anybody clears it, for T.ShownUnit
+	if tip == GameTooltip then
+		T.unit = unit
+	end
+	T.filling = true
 	run(parts, tip, unit)
+	T.filling = false
 end
 
 function T.FillItem(tip)
@@ -353,13 +359,8 @@ function T.Restack()
 	if not (GameTooltip and GameTooltip.IsShown and GameTooltip:IsShown()) then
 		return false
 	end
-	local unit
-	if TooltipUtil and TooltipUtil.GetDisplayedUnit then
-		unit = select(2, TooltipUtil.GetDisplayedUnit(GameTooltip))
-	elseif GameTooltip.GetUnit then
-		unit = select(2, GameTooltip:GetUnit())
-	end
-	if not (unit and UnitExists and UnitExists(unit)) then
+	local unit = T.ShownUnit()
+	if not unit then
 		return false
 	end
 	GameTooltip:SetUnit(unit)
@@ -382,6 +383,12 @@ if GameTooltip and GameTooltip.HookScript then
 	-- the unit contributors run after that and put back what the new unit
 	-- needs.
 	GameTooltip:HookScript("OnTooltipCleared", function()
+		-- the game clearing it for whatever comes next: the unit it was for is
+		-- not this one's (T.ShownUnit). Our own rebuild clears it too, and that
+		-- is still the same unit.
+		if not T.filling then
+			T.guid, T.unit = nil, nil
+		end
 		for _, fn in ipairs(hiders) do
 			pcall(fn)
 		end
@@ -412,8 +419,43 @@ local function plainID(v)
 	return v
 end
 
--- a unit drawn: its data's id, and a fresh count of redraws unless this is
--- one of them
+-- WHO IT WAS FOR (Josh 2026-10-03: a Kobold Miner's tooltip with no "0/8
+-- Large Candle"). The redraw above never happened. Clearing the tooltip makes
+-- the game forget its data, and the game's TooltipUtil.GetDisplayedUnit reads
+-- the unit from that data, so after the Tooltips module's rebuild there was no
+-- unit to ask for, and T.Restack quietly gave up. That was every redraw of a
+-- rebuilt tooltip, not only this one: a note or a tag written while the
+-- tooltip was up, a tooltip setting changed, the module switched on or off.
+-- So the unit is kept here as it is drawn: its GUID from the data, and the
+-- token T.Fill was handed. The game's answer still comes first.
+function T.ShownUnit()
+	local unit
+	if TooltipUtil and TooltipUtil.GetDisplayedUnit then
+		local ok, _, u = pcall(TooltipUtil.GetDisplayedUnit, GameTooltip)
+		unit = ok and plainID(u) or nil
+	elseif GameTooltip and GameTooltip.GetUnit then
+		local ok, _, u = pcall(GameTooltip.GetUnit, GameTooltip)
+		unit = ok and plainID(u) or nil
+	end
+	if not unit and T.guid and UnitTokenFromGUID then
+		local ok, u = pcall(UnitTokenFromGUID, T.guid)
+		unit = ok and plainID(u) or nil
+	end
+	if not unit and T.unit then
+		-- the token we were handed, while it is still the same one
+		local guid = T.guid and UnitGUID and plainID(UnitGUID(T.unit))
+		if not (guid and guid ~= T.guid) then
+			unit = T.unit
+		end
+	end
+	if not (type(unit) == "string" and UnitExists and UnitExists(unit)) then
+		return nil
+	end
+	return unit
+end
+
+-- a unit drawn: its data's id and GUID, and a fresh count of redraws unless
+-- this is one of them
 function T.Drawn(data)
 	local id = plainID(type(data) == "table" and data.dataInstanceID or nil)
 	if T.redrawn then
@@ -422,6 +464,7 @@ function T.Drawn(data)
 		T.redraws = 0
 	end
 	T.dataID = id
+	T.guid = plainID(type(data) == "table" and data.guid or nil)
 end
 
 function T.DataUpdated(id)
@@ -456,6 +499,7 @@ end
 -- what this is for.
 function T.Gone()
 	T.dataID, T.redraws, T.redrawn = nil, 0, false
+	T.guid, T.unit = nil, nil
 end
 
 if processor and Enum.TooltipDataType.Unit then

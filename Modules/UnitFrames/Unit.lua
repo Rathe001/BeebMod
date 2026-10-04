@@ -603,7 +603,11 @@ F.KINDS = {
 	-- beside it: a bar and a name, no more (Josh 2026-09-23)
 	-- half a member's width, under its right-hand end (Josh 2026-09-23): a
 	-- pet is the smaller thing, and hangs off its owner rather than matching it
-	gpet = { w = 80, h = 16, power = 0, name = 9, text = "none", mini = true },
+	-- ITS MANA OR FOCUS UNDER ITS HEALTH (Josh 2026-10-03: "Can we add a
+	-- resource bar to the pet unit frames?"), whatever kind it is: an imp's
+	-- mana and a boar's focus both say when it can act. Taken from the
+	-- health, not added, so the party below keeps its spacing.
+	gpet = { w = 80, h = 16, power = 3, name = 9, text = "none", mini = true },
 	gtarget = { w = 96, h = 22, power = 0, name = 9, text = "none", mini = true },
 }
 
