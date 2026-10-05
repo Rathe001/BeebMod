@@ -33,7 +33,6 @@ local M = BT.Module({
 	key = "bagwindow",
 	feature = "interface",
 	title = "Bag window",
-	blurb = "Draws your bag windows flat",
 	order = 57,
 })
 

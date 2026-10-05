@@ -39,36 +39,15 @@ local M = BT.Module({
 	key = "damagemeter",
 	feature = "unitframes",
 	title = "Damage meter",
-	blurb = "Draws the game's own damage meter flat",
 	order = 58,
 })
 
 local dresser = BT.Furniture.New({ flatBars = true })
 
 -- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
--- supposed to be an opinionated solution, not fully customizable"). Figures per second, and the fight's length.
-M.FIXED = { perSecond = true, clock = true }
-
-local function opt(name, fallback)
-	if M.FIXED[name] ~= nil then
-		return M.FIXED[name]
-	end
-	local s = BT.settings and BT.settings.damagemeter
-	if not s or s[name] == nil then
-		return fallback
-	end
-	return s[name]
-end
-M.Opt = opt
-
-local function setOpt(name, value)
-	BT.EnsureBound()
-	BT.settings.damagemeter = BT.settings.damagemeter or {}
-	BT.settings.damagemeter[name] = value
-	M.Unextras()
-	M.StyleAll()
-end
-M.SetOpt = setOpt
+-- supposed to be an opinionated solution, not fully customizable"). Figures
+-- per second, and the fight's length. (2026-10-05, cleanup) Nothing reads
+-- the old switches now, so the code that read them is gone.
 local F_INK = BT.Furniture.INK
 
 -- ---------------------------------------------------------------------------
@@ -145,17 +124,29 @@ end
 -- ---------------------------------------------------------------------------
 
 -- how many frames a window is made of, as deep as a dress goes
+-- THE CHILDREN ARE COUNTED (2026-10-05, cleanup). This runs every two
+-- seconds, and it made a function and a list of children for every frame
+-- in the meter. Now it counts what GetChildren hands back and keeps none of
+-- it.
 local sizes = setmetatable({}, { __mode = "k" })
-local function size(f, depth)
+local size
+local function sizeOfKids(depth, ok, ...)
+	local n = 1
+	if ok then
+		for i = 1, select("#", ...) do
+			n = n + size((select(i, ...)), depth + 1)
+		end
+	end
+	return n
+end
+size = function(f, depth)
 	if type(f) ~= "table" or depth > 10 then
 		return 0
 	end
-	local n = 1
-	local ok, kids = pcall(function() return { f:GetChildren() } end)
-	for _, kid in ipairs(ok and kids or {}) do
-		n = n + size(kid, depth + 1)
+	if type(f.GetChildren) ~= "function" then
+		return 1
 	end
-	return n
+	return sizeOfKids(depth, pcall(f.GetChildren, f))
 end
 
 -- Dresses every meter window there is; `plain` puts the client's look back.
@@ -403,7 +394,7 @@ local function decorate(fs)
 	-- the client has written this one: the total remembered from its last
 	-- is old, and is not the one to put back (Josh 2026-09-30, review)
 	shown[fs] = nil
-	if not BT.Enabled("damagemeter") or not opt("perSecond", true) then
+	if not BT.Enabled("damagemeter") then
 		return
 	end
 	local row = fs.beebsRow
@@ -546,7 +537,7 @@ function M.Tick(win)
 	if not clock then
 		return
 	end
-	local secs = BT.Enabled("damagemeter") and opt("clock", true) and M.Duration(win)
+	local secs = BT.Enabled("damagemeter") and M.Duration(win)
 	clock:SetText(secs and M.Clock(secs) or "")
 	clock:SetShown(secs ~= nil)
 	-- after the name as written now (the type is picked from a menu, and
@@ -644,20 +635,17 @@ function M.Hook()
 end
 
 -- the two-second look: a meter shown that has grown since it was dressed is
--- dressed again (M.Grown)
--- AND EVERY TEN SECONDS ALL THE SAME: a row the client hands to another
--- combatant is not a new frame, and if it paints that row's bar again, only a
--- whole pass puts ours back. Ten seconds is how long that can show.
-M.LOOK_ALL = 5
-local looks = 0
+-- dressed again (M.Grown), and never in a fight
+-- (2026-10-05, cleanup) It also dressed the whole meter every ten seconds,
+-- grown or not and in a fight too, for a row the client hands to another
+-- combatant and paints again. The end of a fight dresses the meter again
+-- (M.Watch), and so does the meter laying out its own rows (M.Hook).
 function M.Look()
-	if not BT.Enabled("damagemeter") then
+	if not BT.Enabled("damagemeter") or (InCombatLockdown and InCombatLockdown()) then
 		return false
 	end
-	looks = looks + 1
 	for _, root in ipairs(roots) do
-		if BT.Furniture.Call(root, "IsShown") and (looks >= M.LOOK_ALL or M.Grown(root)) then
-			looks = 0
+		if BT.Furniture.Call(root, "IsShown") and M.Grown(root) then
 			M.StyleAll()
 			return true
 		end

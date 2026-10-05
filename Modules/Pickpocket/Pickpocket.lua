@@ -25,14 +25,12 @@ local U = BT.Util
 local M = BT.Module({
 	key = "pickpocket",
 	title = "Pick Pocket",
-	blurb = "Coin from pockets, and what the items sell for",
 	order = 39.7,
 	-- on the right panel, and only for rogues
 	dock = true,
 	-- one of the Metrics, switched from its tab (Josh 2026-09-22)
 	part = "metrics",
 	class = "ROGUE",
-	kind = "readout",
 })
 
 local PICK_POCKET = 921
@@ -317,10 +315,15 @@ function M.Build()
 	end
 	M.chip = BT.Dock.Chip("pickpocket", "pockets", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
-	-- a right-click clears the record (M.Reset)
+	-- a right-click clears the record (M.Reset), and the open tooltip says so
+	-- at once (2026-10-05, audit): it went on showing the old record, so the
+	-- click looked as if it had done nothing
 	M.chip:SetScript("OnMouseUp", function(_, button)
 		if button == "RightButton" then
 			M.Reset()
+			if BT.Tip and BT.Tip.IsShown() then
+				M.Tip()
+			end
 		end
 	end)
 	M.chip:SetScript("OnLeave", function()

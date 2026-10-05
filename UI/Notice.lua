@@ -91,8 +91,28 @@ end
 
 local function paintBand(owner, on)
 	local f, c = owner.frame, owner.colour
-	local band = f and f.beebsBand
+	if not f then
+		return
+	end
+	local band = f.beebsBand
+	-- A SLIM LINE HAS NO BAND (2026-10-05, audit): the journals' lines lost
+	-- theirs when the meters went level-first, and a notice changed the words
+	-- alone. The line gets a wash of its colour for the notice only.
 	if not band then
+		if not (on or f.beebsFlash) then
+			return
+		end
+		if not f.beebsFlash then
+			f.beebsFlash = f:CreateTexture(nil, "BACKGROUND")
+			f.beebsFlash:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -1)
+			f.beebsFlash:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 2)
+		end
+		if on and c then
+			f.beebsFlash:SetColorTexture(c[1], c[2], c[3], Nt.FLASH_ALPHA)
+			f.beebsFlash:Show()
+		else
+			f.beebsFlash:Hide()
+		end
 		return
 	end
 	if on and c then
@@ -287,4 +307,3 @@ function Nt.Bar(owner, it)
 	return b
 end
 
-function Nt.BarFrame() return bar end

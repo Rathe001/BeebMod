@@ -18,9 +18,7 @@ local CreateFrame, C_Timer = BT.Cpu.For("Modules/PvP/PvP.lua")
 local M = BT.Module({
 	key = "pvp",
 	feature = "dock",
-	onPage = "progress",
 	title = "PvP",
-	blurb = "Your PvP rank, and how far to the next",
 	order = 37.2,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -417,7 +415,6 @@ function M.Update()
 	end
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(c[1], c[2], c[3], 0.9)
-	BT.Dock.BandColor(M.frame, c)
 	-- a texture of no width is drawn as a whole one, so an empty bar is hidden
 	M.fill:SetShown(p.progress > 0)
 	M.fill:SetWidth(math.max(1, w * p.progress))

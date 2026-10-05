@@ -344,14 +344,13 @@ F.GROUP_FAR = 0.25
 -- health text is each frame's default (F.HEALTH_DEFAULT), and every heal and
 -- damage over time has its lane, in the class's order, blinking as it runs
 -- out. A saved answer to any of these is not read.
-F.FIXED = { fade = "strong", animate = true, targetBuffs = true }
-F.UNASKED = { health = true, timerOrder = true, timersOff = true, timerBlinkHot = true, timerBlinkDot = true }
+-- (The fade, the health text and the timers' order, switches and blinking
+-- are read nowhere now: F.Far, F.HealthMode, Timers.lua. 2026-10-05, cleanup.)
+F.FIXED = { animate = true, targetBuffs = true }
 
 function F.Opt(name, fallback)
 	if F.FIXED[name] ~= nil then
 		return F.FIXED[name]
-	elseif F.UNASKED[name] then
-		return fallback
 	end
 	local s = BT.settings and BT.settings.unitframes
 	if not s or s[name] == nil then
@@ -360,17 +359,17 @@ function F.Opt(name, fallback)
 	return s[name]
 end
 
--- HOW FAR, AS A CHOICE (Josh 2026-09-24): light, medium or strong - a group
--- cell and a single frame each, strong being what it always was
-F.FADES = { light = { 0.60, 0.70 }, medium = { 0.40, 0.50 }, strong = { F.GROUP_FAR, F.FAR_ALPHA } }
+-- HOW FAR OUT OF RANGE FADES: a group cell or a single frame. It was a
+-- choice of light, medium or strong (Josh 2026-09-24); strong, fixed since
+-- the settings canvas (2026-10-04).
 function F.Far(group)
-	local f = F.FADES[F.Opt("fade", "strong")] or F.FADES.strong
-	return group and f[1] or f[2]
+	return group and F.GROUP_FAR or F.FAR_ALPHA
 end
 
 -- WHAT THE HEALTH SAYS, A FRAME AT A TIME (Josh 2026-09-24): none, its share,
 -- the number, or both - for the party, the raid (main tanks with it), the
--- target, the focus and the bosses. What each said before is its default.
+-- target, the focus and the bosses. Each frame's own, fixed since the
+-- settings canvas (2026-10-04).
 F.HEALTH_KIND = { party = "party", raid = "raid", tank = "raid", target = "target", focus = "focus", boss = "boss" }
 F.HEALTH_DEFAULT = { party = "none", raid = "none", target = "both", focus = "percent", boss = "percent" }
 function F.HealthMode(kind, k)
@@ -378,8 +377,7 @@ function F.HealthMode(kind, k)
 	if not key then
 		return (k and k.text == "percent") and "percent" or "none"
 	end
-	local chosen = F.Opt("health", nil)
-	return (type(chosen) == "table" and chosen[key]) or F.HEALTH_DEFAULT[key]
+	return F.HEALTH_DEFAULT[key]
 end
 function Live:InRange()
 	local unit = self.unit
@@ -1630,6 +1628,54 @@ local function paintRange(b, src)
 	end
 end
 
+-- THE THREAT ALONE (2026-10-05, audit): the aggro ring and your threat as a
+-- figure. The threat events came with no painter of their own, so each one
+-- painted the whole frame - name, level, health, cast - and a pull's threat
+-- list moves several times a second on every enemy in view.
+function F.PaintThreat(b, src, gone)
+	if gone == nil then
+		gone = src:Gone()
+	end
+	-- aggro: 1 high threat, 2 about to pull it, 3 it is on them (or on you)
+	local threat = src:Threat()
+	if type(threat) == "number" and threat >= 1 and not gone then
+		local r, g, bl = 0.82, 0.27, 0.24
+		if _G.GetThreatStatusColor then
+			local ok, cr, cg, cb = pcall(_G.GetThreatStatusColor, threat)
+			if ok and type(cr) == "number" then
+				r, g, bl = cr, cg, cb
+			end
+		end
+		local c = b.threat.colour or {}
+		b.threat.colour = c
+		c[1], c[2], c[3], c[4] = r, g, bl, 1
+		BT.Pill.PaintRing(b.threat.ring, c)
+		b.threat.level = threat
+		b.threat:Show()
+	else
+		b.threat.level = nil
+		b.threat:Hide()
+	end
+	if b.threatText then
+		local pct, status = src:ThreatPercent()
+		if pct ~= nil then
+			local okF, line = pcall(string.format, "%d%%", pct)
+			b.threatText:SetText(okF and line or "")
+			local cr, cg, cb = 0.80, 0.84, 0.82
+			if type(status) == "number" and _G.GetThreatStatusColor then
+				local ok, r, g, bl = pcall(_G.GetThreatStatusColor, status)
+				if ok and type(r) == "number" then
+					cr, cg, cb = r, g, bl
+				end
+			end
+			b.threatText:SetTextColor(cr, cg, cb)
+			b.threatText:Show()
+		else
+			b.threatText:Hide()
+		end
+	end
+end
+
 -- The whole button, from its source. Every call is a setter, and nothing is
 -- laid out except the combo row. An event about one thing paints that thing
 -- alone (F.OnUnitEvent); this is everything else, and a frame's first paint.
@@ -1684,26 +1730,7 @@ function F.Paint(b, src)
 		end
 	end
 
-	-- aggro: 1 high threat, 2 about to pull it, 3 it is on them (or on you)
-	local threat = src:Threat()
-	if type(threat) == "number" and threat >= 1 and not gone then
-		local r, g, bl = 0.82, 0.27, 0.24
-		if _G.GetThreatStatusColor then
-			local ok, cr, cg, cb = pcall(_G.GetThreatStatusColor, threat)
-			if ok and type(cr) == "number" then
-				r, g, bl = cr, cg, cb
-			end
-		end
-		local c = b.threat.colour or {}
-		b.threat.colour = c
-		c[1], c[2], c[3], c[4] = r, g, bl, 1
-		BT.Pill.PaintRing(b.threat.ring, c)
-		b.threat.level = threat
-		b.threat:Show()
-	else
-		b.threat.level = nil
-		b.threat:Hide()
-	end
+	F.PaintThreat(b, src, gone)
 
 	-- the marks
 	local marker = src:Marker()
@@ -1750,24 +1777,6 @@ function F.Paint(b, src)
 			b.happy:Show()
 		else
 			b.happy:Hide()
-		end
-	end
-	if b.threatText then
-		local pct, status = src:ThreatPercent()
-		if pct ~= nil then
-			local okF, line = pcall(string.format, "%d%%", pct)
-			b.threatText:SetText(okF and line or "")
-			local cr, cg, cb = 0.80, 0.84, 0.82
-			if type(status) == "number" and _G.GetThreatStatusColor then
-				local ok, r, g, bl = pcall(_G.GetThreatStatusColor, status)
-				if ok and type(r) == "number" then
-					cr, cg, cb = r, g, bl
-				end
-			end
-			b.threatText:SetTextColor(cr, cg, cb)
-			b.threatText:Show()
-		else
-			b.threatText:Hide()
 		end
 	end
 	local ready = src:Ready()
@@ -1988,7 +1997,8 @@ end
 
 -- which painter each event goes to, by name; any other event paints it all
 local PIECE = { UNIT_HEALTH = "PaintHealth", UNIT_MAXHEALTH = "PaintHealth", UNIT_HEAL_PREDICTION = "PaintHealth",
-	UNIT_ABSORB_AMOUNT_CHANGED = "PaintHealth", UNIT_IN_RANGE_UPDATE = "PaintRange" }
+	UNIT_ABSORB_AMOUNT_CHANGED = "PaintHealth", UNIT_IN_RANGE_UPDATE = "PaintRange",
+	UNIT_THREAT_SITUATION_UPDATE = "PaintThreat", UNIT_THREAT_LIST_UPDATE = "PaintThreat" }
 for event in pairs(POWER) do
 	PIECE[event] = "PaintPower"
 end

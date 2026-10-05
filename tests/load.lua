@@ -764,8 +764,7 @@ if ok then
 			assert(table.concat(lines, " | "):find("Good", 1, true),
 				"tags and all: " .. table.concat(lines, " | "))
 			BT.Tooltip.HidePills()
-			-- the other two places a measurement is read
-			BT.Dock.Update()
+			-- the other place a measurement is read
 			BT.Find.Refresh()
 			_G.secretMeasurements = false
 		end },
@@ -875,18 +874,17 @@ if ok then
 			local q = _G.BeebModDock
 			assert(q and q:IsShown(), "the dock exists and is up")
 			assert(q:GetScript("OnEnter") == nil, "the dock itself carries no tooltip")
-			local cell = {}
-			for _, c in ipairs(BT.Dock.Cells()) do
-				cell[c.cellKey] = c
-			end
-			assert(cell.mark and cell.cog, "the core's mark and cog are there")
-			assert(cell.who == nil and cell.dots == nil, "and nothing of the Ledger's")
-			BT.Dock.Update()
-			assert(not BT.Dock.RowWanted() and not BT.Dock.Row():IsShown(), "so there is no row")
-			assert(cell.cog:IsShown(), "and the cog is in the header")
+			-- THE ONE SIZE, AT LOGIN TOO (2026-10-05, audit): the dock is made at
+			-- the Size on General, not at the old dock-only size the rework cut
+			assert(q._scale ~= nil and q._scale == BT.Scale(), "the dock is made at the Size: " .. tostring(q._scale))
+			-- nor any of the code that laid a row out (Josh 2026-10-05)
+			assert(BT.Dock.Cell == nil and BT.Dock.Cells == nil and BT.Dock.Row == nil and BT.Dock.Update == nil,
+				"the row's code is gone")
+			local cog = BT.Dock.Cog()
+			assert(cog and cog:IsShown() and cog:GetParent() == BT.Dock.Header(), "the cog is in the header")
 			-- the cog goes to the settings, which is where you turn things on
 			if BT.Window.IsShown() then BT.Window.Toggle() end
-			cell.cog.button:GetScript("OnClick")(cell.cog.button)
+			cog.button:GetScript("OnClick")(cog.button)
 			assert(BT.Window.IsShown() and BT.Window.View() == "settings", "the cog opens the settings")
 			BT.Window.Toggle()
 		end },
@@ -1370,22 +1368,31 @@ if ok then
 			assert(BT.Find.Showing(), "the Find tab open")
 			local wasTime, clock = _G.GetTime, 500
 			_G.GetTime = function() return clock end
+			BT.Find.Search("") -- nothing typed: the list of everyone
 			BT.Find.Tick() -- the first tick after opening always draws once
 			assert(not BT.Find.Tick(), "a tick with nothing new does nothing")
 			-- A SIGHTING IS NOT A NOTE (Josh 2026-09-30, review): a census
 			-- change redraws the list at most every ten seconds, and alone
 			local docked = 0
-			local wasDock = BT.Dock.Update
-			BT.Dock.Update = function(...) docked = docked + 1 return wasDock(...) end
+			local wasDock = BT.Dock.Relayout
+			BT.Dock.Relayout = function(...) docked = docked + 1 return wasDock(...) end
 			BT.DB.Note(BT.db, "Walked Past", nil, { class = "ROGUE" })
 			assert(not BT.Find.Tick(), "a sighting a moment after a redraw waits")
 			clock = clock + 10
 			assert(BT.Find.Tick(), "a new sighting makes a later tick redraw")
 			assert(docked == 0, "the list only: a sighting does not lay the dock out again")
 			assert(not BT.Find.Tick(), "and then it settles again")
+			-- A TYPED SEARCH IS ASKED ONCE (2026-10-05, audit): a sighting does
+			-- not search the whole census again
+			BT.Find.Search("Walked")
+			BT.Find.Tick()
+			BT.DB.Note(BT.db, "Walked Past Too", nil, { class = "ROGUE" })
+			clock = clock + 10
+			assert(not BT.Find.Tick(), "with a search typed, a sighting redraws nothing")
+			BT.Find.Search("")
 			-- what you write is drawn on the next tick, whatever the clock says
 			BT.Notes.Touched(true)
-			assert(BT.Find.Tick() and docked == 0, "a note redraws the list at once, and has no dock row to redraw")
+			assert(BT.Find.Tick() and docked == 0, "a note redraws the list at once, and lays nothing of the dock out")
 			-- and with "My notes" on, the census is not in the list at all
 			local mineButton = BT.Find.MineButton()
 			mineButton:GetScript("OnClick")(mineButton)
@@ -1393,7 +1400,7 @@ if ok then
 			BT.DB.Note(BT.db, "Walked Past Again", nil, { class = "ROGUE" })
 			assert(not BT.Find.Tick(), "a sighting does not redraw a list of only your notes")
 			mineButton:GetScript("OnClick")(mineButton)
-			BT.Dock.Update, _G.GetTime = wasDock, wasTime
+			BT.Dock.Relayout, _G.GetTime = wasDock, wasTime
 			BT.CensusWindow.Hide()
 			BT.DB.Note(BT.db, "Unseen Two", nil, {})
 			assert(not BT.Find.Tick(), "a closed window costs nothing")
@@ -1604,8 +1611,12 @@ if ok then
 			assert(line.frame:IsShown() and line.text:GetText():find("Fine Print", 1, true),
 				"and the Ledger's its commendation, its row back with the Dock: " .. tostring(line.text:GetText()))
 			assert(BT.Notice.Saying(exp) and exp.noticeClick == nil, "with nothing to open for a made-up one")
+			-- A NOTICE STILL LIGHTS THE LINE (2026-10-05, audit): a slim line
+			-- has no band, so a wash of its colour while the notice is said
+			assert(exp.frame.beebsFlash and exp.frame.beebsFlash:IsShown(), "a notice lights the slim line")
 			-- and when its moment is up, the line is its rank and points again
 			later()
+			assert(not exp.frame.beebsFlash:IsShown(), "and the wash goes with it")
 			_G.C_Timer.After = hadAfter
 			assert(not BT.Notice.Saying(exp) and exp.text:GetText():find("Expedition", 1, true)
 				and exp.eta:GetText():find("pts", 1, true), "and the line goes back: " .. tostring(exp.text:GetText()))
@@ -2133,6 +2144,10 @@ if ok then
 			assert(row("Nesingwary's Expedition") and row("Rank toasts")._alpha < 1,
 				"off, the feature's switch above the dimmed part")
 			BT.SetFeature("expedition", hadExp)
+			-- the line every feature's switch shares finds nothing on its own
+			-- (2026-10-05, audit: "off" brought 53 of 78 rows)
+			Win.Search("whole feature")
+			assert(#shown() == 0, "a feature's switch is found by its name, not its line: " .. #shown())
 			-- other spellings and old names
 			Win.Search("color")
 			local colours = row("Colours")
@@ -2165,6 +2180,14 @@ if ok then
 			Win.Search("quest")
 			box:GetScript("OnEscapePressed")(box)
 			assert(not Win.Searching() and Win.Panel("dock")._shown, "so does Escape, back to the page")
+			-- and Escape in an empty box lets go of the keyboard (2026-10-05, audit)
+			local cleared = 0
+			local wasClear = box.ClearFocus
+			box.ClearFocus = function(self) cleared = cleared + 1 end
+			box:SetText("")
+			box:GetScript("OnEscapePressed")(box)
+			box.ClearFocus = wasClear
+			assert(cleared >= 1, "Escape in an empty box lets go of the keys")
 			box:SetText("quest")
 			Win.Search("quest")
 			f.search.clear:GetScript("OnClick")(f.search.clear)
@@ -2179,15 +2202,7 @@ if ok then
 		{ "switching a utility off takes it off the rail and the bar", function()
 			BT.Window.Show()
 			BT.Dock.Create()
-			local function barHas(key)
-				for _, c in ipairs(BT.Dock.Cells()) do
-					if c.cellKey == key then
-						return true
-					end
-				end
-				return false
-			end
-			assert(barHas("cog") and not barHas("who"), "the core's cog is there, and no Ledger row (2026-10-05)")
+			assert(BT.Dock.Cog():IsShown(), "the core's cog is there")
 
 			-- THROUGH THE MODULE'S OWN TAB, the way a person does it now: the
 			-- switch is at the top of the thing it switches (Josh 2026-09-20)
@@ -2214,26 +2229,21 @@ if ok then
 			local ledgerPanel = switchOn("ledger")
 			assert(not BT.Enabled("ledger"), "the Ledger is off")
 			assert(ledgerPanel.rows[1]._alpha < 1, "and its page is dimmed")
-			assert(barHas("cog") and BT.Dock.Cog():IsShown(), "the cog belongs to the core and stays")
+			assert(BT.Dock.Cog():IsShown(), "the cog belongs to the core and stays")
 			ledgerPanel.enable:GetScript("OnClick")(ledgerPanel.enable)
 			assert(BT.Enabled("ledger"), "and it comes back on")
 
-			-- ONLY THE ROW'S OWN CELLS (same review): Unit frames' list of its
-			-- group cells is called Cells too, and the dock took them in and hid
-			-- your own frame on every target change after
-			local frames = BT.GetModule("unitframes")
 			local wasFrames = BT.Enabled("unitframes")
+			-- a module switched off and on again lays the dock out, and leaves
+			-- the unit frames up (the row once took their cells in, 2026-09-30)
+			local frames = BT.GetModule("unitframes")
 			BT.SetEnabled("unitframes", true)
 			local mine = CreateFrame("Button", nil, frames.headers[1], "SecureUnitButtonTemplate")
 			mine.GetAttribute = function(_, k) if k == "unit" then return "player" end end
 			frames.Sweep()
 			assert(mine.bmUnit == "player", "your own cell is in the party column")
 			BT.Dock.Rebuild()
-			for _, c in ipairs(BT.Dock.Cells()) do
-				assert(c ~= mine, "no unit frame is taken onto the dock")
-			end
-			BT.Dock.Update()
-			assert(mine:IsShown(), "and a target change leaves your frame up")
+			assert(mine:IsShown(), "and a rebuild of the dock leaves your frame up")
 			mine.bmUnit = nil
 			BT.SetEnabled("unitframes", wasFrames)
 			local named = {}
@@ -2296,10 +2306,12 @@ if ok then
 
 			-- FIXED, NOT ASKED (the settings canvas, 2026-10-04): a saved "off"
 			-- from before changes nothing
-			tips.SetOpt("guild", false)
+			BT.EnsureBound()
+			BT.settings.tooltips = BT.settings.tooltips or {}
+			BT.settings.tooltips.guild = false
 			tips.Compose(tip, "target")
 			assert(lines[3]:find("Nightwatch", 1, true), "the guild shows whatever was saved: " .. lines[3])
-			tips.SetOpt("guild", nil)
+			BT.settings.tooltips.guild = nil
 
 			-- and switching the module off puts the client's border back
 			BT.SetEnabled("tooltips", false)
@@ -2568,6 +2580,50 @@ if ok then
 			mod.SetOpt("hideDone", nil)
 			mod.Update()
 		end },
+		{ "only the tracker's header drags the dock, and the dock moves only for a new size", function()
+			-- (2026-10-05, cleanup) the same quest log as above, one quest followed
+			local mod = BT.GetModule("tracker")
+			BT.SetEnabled("tracker", true)
+			mod.Update()
+			assert(mod.Frame():IsShown(), "the list shows")
+			for _, r in ipairs(mod.Rows()) do
+				if r:IsShown() then
+					local drags = r:GetScript("OnDragStart") ~= nil
+					assert(drags == (r.isHeader == true),
+						("a %s row drags the dock: %s"):format(tostring(r.kind), tostring(drags)))
+				end
+			end
+			-- a row that was the header and is laid out as a quest lets go of the drag
+			local reused
+			for _, r in ipairs(mod.Rows()) do
+				reused = reused or (r:IsShown() and r.kind == "title" and r) or nil
+			end
+			assert(reused, "a quest is listed")
+			BT.Dock.MakeHandle(reused)
+			reused.handle = true
+			mod.Update()
+			assert(reused:GetScript("OnDragStart") == nil and reused:GetScript("OnDragStop") == nil,
+				"a row that held the header and now holds a quest does not drag the dock")
+			local relayout, laid = BT.Dock.Relayout, 0
+			BT.Dock.Relayout = function(...)
+				laid = laid + 1
+				return relayout(...)
+			end
+			mod.Update()
+			local same = laid
+			-- folded, the list is one line: a new height, so the dock is laid out
+			BT.EnsureBound()
+			BT.settings.tracker = BT.settings.tracker or {}
+			local wasFolded = BT.settings.tracker.collapsed
+			BT.settings.tracker.collapsed = true
+			mod.Update()
+			local folded = laid - same
+			BT.settings.tracker.collapsed = wasFolded
+			mod.Update()
+			BT.Dock.Relayout = relayout
+			assert(same == 0, ("the same list does not lay the dock out again (%d times)"):format(same))
+			assert(folded == 1, ("a list of a new height does, once (%d times)"):format(folded))
+		end },
 		{ "nothing edits a tooltip after it has been drawn", function()
 			-- THE TINY TEXT ALONG THE BOTTOM EDGE (Josh 2026-09-19). A pass
 			-- that ran a frame later blanked the client's own footnote and
@@ -2804,7 +2860,6 @@ if ok then
 			-- overwritten with a tall bottom edge and the empty band under the
 			-- last line comes back.
 			BT.SetEnabled("tooltips", true)
-			BT.GetModule("tooltips").SetOpt("healthBar", false)
 			local tip = _G.GameTooltip
 			BT.GetModule("tooltips").Dress(tip)
 			local _, mine, _, top = tip:GetPadding()
@@ -2849,7 +2904,6 @@ if ok then
 			-- quietly undone by it, which is why the empty band under the last
 			-- line survived three goes at this.
 			BT.SetEnabled("tooltips", true)
-			BT.GetModule("tooltips").SetOpt("healthBar", false)
 			local wasPlayer = _G.UnitIsPlayer
 			_G.UnitIsPlayer = function() return false end
 			local lines = { "Frostmane Headhunter", "Level 9", "Humanoid" }
@@ -2882,9 +2936,6 @@ if ok then
 				_G["BandTipTextLeft" .. i] = fs
 				_G["BandTipTextRight" .. i] = _G.CreateFrame("FontString")
 			end
-			-- with no bar asked for: with one, the bottom carries its height
-			-- as well, which is a different number and a different test
-			BT.GetModule("tooltips").SetOpt("healthBar", false)
 			BT.GetModule("tooltips").Compose(tip, "target")
 			-- THE EDGES ARE OURS, NOT THE CLIENT'S. Padding is ADDED to the
 			-- inset the client already leaves, so ours are negative: we ask
@@ -2913,7 +2964,6 @@ if ok then
 			-- room for its health bar.
 			local mod = BT.GetModule("tooltips")
 			BT.SetEnabled("tooltips", true)
-			mod.SetOpt("healthBar", false)
 			local lines = { "Frostmane Headhunter", "Humanoid", " " }
 			local tip = setmetatable({
 				NumLines = function() return #lines end,
@@ -4148,6 +4198,15 @@ if ok then
 				onEvent(target, event, "target")
 			end
 			assert(nameWrites == 0, "nor does power, reach, a cast or a shield")
+			-- THE THREAT ALONE (2026-10-05, audit): a pull's threat list moves
+			-- several times a second, and each move painted the whole frame
+			local wasThreat = _G.UnitThreatSituation
+			_G.UnitThreatSituation = function() return 3 end
+			for _, event in ipairs({ "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE" }) do
+				onEvent(target, event, "target")
+			end
+			_G.UnitThreatSituation = wasThreat
+			assert(nameWrites == 0 and target.threat.level == 3, "a threat change paints the ring and leaves the name")
 			-- a death is more than a number: the whole frame, "Dead" for the health
 			local wasDead = _G.UnitIsDeadOrGhost
 			_G.UnitIsDeadOrGhost = function() return true end
@@ -4970,13 +5029,19 @@ if ok then
 			-- FIXED, NOT ASKED (the settings canvas, 2026-10-04): both blink,
 			-- whatever was saved
 			BT.settings.unitframes.timerBlinkHot = false
-			assert(T.Blinks("hot") and T.Blinks("dot"), "heals and damage both blink, whatever was saved")
+			T.Rebuild(true)
+			local again, flashed = realCF("Button"), false
+			again.SetDurationBar = function() end
+			again.SetDurationText = function() flashed = true end
+			set.timers["hot:Rejuvenation"].groups.timer.opts.initializeFrame(again)
+			assert(flashed, "a heal's lane blinks, whatever was saved")
 			BT.settings.unitframes.timerBlinkHot = nil
 			_G.CreateColor, _G.C_DurationUtil, _G.C_StringUtil = wasColor, wasDU, wasSU
 
 			-- every spell has its lane, whatever was saved
 			BT.settings.unitframes.timersOff = { Rejuvenation = true }
-			assert(T.On("Rejuvenation"), "a saved \"off\" is not read")
+			local firstLane = T.Lanes("party")[1]
+			assert(firstLane and firstLane.name == "Rejuvenation", "a saved \"off\" is not read")
 			BT.settings.unitframes.timersOff = nil
 
 			-- the target: your damage over time, over the frame while there
@@ -5025,9 +5090,9 @@ if ok then
 			assert(moonGroup.opts.layout.elementHeight == laneH, "each line of the stack as tall as the picture")
 			-- THE CLASS'S ORDER (the settings canvas cut "your order",
 			-- 2026-10-04): a saved order is not read
-			assert(T.Ordered("dot")[1] == "Moonfire", "the class's order")
+			assert(T.Lanes("boss")[1].name == "Moonfire", "the class's order")
 			BT.settings.unitframes.timerOrder = { DRUID = { "Rip", "Moonfire" } }
-			assert(T.Ordered("dot")[1] == "Moonfire", "whatever was saved")
+			assert(T.Lanes("boss")[1].name == "Moonfire", "whatever was saved")
 			BT.settings.unitframes.timerOrder = nil
 
 			-- YOUR TARGET'S, ON ITS PLATE (Josh 2026-10-03: "Remove the DoT bar
@@ -6392,7 +6457,7 @@ if ok then
 			assert(one.face._grey == false, "the picture is left as it came")
 			assert(one.face._vertex and one.face._vertex[1] == 1,
 				"in its own colours, untinted")
-			assert(mod.Opt("colour") == nil,
+			assert(mod.Opt == nil,
 				"and there is no switch offering the other answer")
 			assert(one.button.FlashBorder._alpha == 0, "the nagging border is out of the way")
 
@@ -6470,7 +6535,7 @@ if ok then
 			-- OFF IS THE CLIENT'S OWN MENU (Josh 2026-09-22): no tile, no crop
 			assert((not tile or not tile.fill:IsShown()) and one.face._texCoord[1] == 0,
 				"and in its own art, exactly as it came")
-			assert(mod.InPanel() and BT.GetModule("micro").Opt("dock") == nil,
+			assert(mod.InPanel() and BT.GetModule("micro").Opt == nil,
 				"there is no switch between the panel and the corner")
 			_G.MicroMenu, _G.MicroMenuContainer = nil, nil
 			for _, m in ipairs(made) do
@@ -7445,22 +7510,6 @@ if ok then
 			assert(BT.Dock.Fade() == 1, "and when the fight is over")
 			BT.Dock.SetFade("off")
 			_G.InCombatLockdown = wasCombat
-
-			-- THE TOOLTIPS: in the corner, and shown in a fight (the settings
-			-- canvas fixed both, 2026-10-04)
-			local tips = BT.GetModule("tooltips")
-			BT.SetEnabled("tooltips", true)
-			local tip = _G.CreateFrame("Frame", nil, _G.UIParent)
-			tips.SetOpt("anchor", "cursor")
-			assert(not tips.AnchorDefault(tip, _G.UIParent), "in the corner, whatever was saved")
-			tips.SetOpt("anchor", nil)
-			_G.InCombatLockdown = function() return true end
-			local wasExists = _G.UnitExists
-			_G.UnitExists = function() return true end
-			tips.SetOpt("combatHide", true)
-			assert(not tips.CombatHidden(tip, "mouseover"), "and shown in a fight")
-			tips.SetOpt("combatHide", nil)
-			_G.InCombatLockdown, _G.UnitExists = wasCombat, wasExists
 		end },
 		{ "every page builds, and what the settings canvas fixed stays fixed", function()
 			-- (Josh 2026-09-24) every tab on the rail, opened: a page that throws
@@ -7485,7 +7534,7 @@ if ok then
 			local quests = { { title = "A", level = 5, index = 1, zone = "Darkshore" },
 				{ title = "B", level = 3, index = 2, zone = "Teldrassil" } }
 			BT.settings.tracker.hereOnly = true
-			assert(#tracker.Filter(quests, "Darkshore") == 2, "every zone, whatever was saved")
+			assert(#tracker.Sort(quests, "Darkshore") == 2, "every zone, whatever was saved")
 			BT.settings.tracker.hereOnly = nil
 			-- metrics: three to a line
 			BT.settings.metricsCols = 2
@@ -7495,7 +7544,16 @@ if ok then
 			local chat = BT.GetModule("chat")
 			BT.settings.chat = BT.settings.chat or {}
 			BT.settings.chat.timestamps = true
-			assert(chat.Stamp("hello") == "hello", "no time of ours, whatever was saved")
+			local chatWasOn = BT.Enabled("chat")
+			BT.SetEnabled("chat", true)
+			local line = _G.CreateFrame("Frame", nil, _G.UIParent)
+			local said
+			line.AddMessage = function(_, text) said = text end
+			chat.HookMessages(line)
+			line:AddMessage("hello")
+			assert(said == "hello", "no time of ours, whatever was saved: " .. tostring(said))
+			chat.HookMessages(line, true)
+			BT.SetEnabled("chat", chatWasOn)
 			BT.settings.chat.timestamps = nil
 			-- the micro menu: every button
 			local micro = BT.GetModule("micro")
@@ -7505,7 +7563,7 @@ if ok then
 			BT.settings.micro = nil
 			-- the damage meter: both its additions
 			local dm = BT.GetModule("damagemeter")
-			assert(dm.Opt("perSecond", true) == true and dm.Opt("clock", true) == true, "both on")
+			assert(dm.Opt == nil and dm.SetOpt == nil, "both on: there is no switch to read")
 			-- the dock: one width
 			BT.settings.dockWidth = 300
 			assert(BT.Dock.Width() == BT.Dock.WIDTH, "one width, whatever was saved")
@@ -7884,11 +7942,20 @@ if ok then
 			newRow.StatusBar.Value = newRow.StatusBar:CreateFontString()
 			assert(mod.Look() == true and newRow.StatusBar.Value.beebsHooked, "a new row is dressed and hooked")
 			assert(mod.Look() == false, "and once")
-			-- and the whole meter every fifth look, for a row handed to someone else
-			for _ = 1, mod.LOOK_ALL - 2 do
-				assert(mod.Look() == false, "nothing new for four looks")
+			-- (2026-10-05, cleanup) and no whole pass on a timer: nothing new is
+			-- nothing dressed, however many looks
+			for _ = 1, 6 do
+				assert(mod.Look() == false, "nothing new, nothing dressed")
 			end
-			assert(mod.Look() == true, "the fifth dresses it all again")
+			-- and no look in a fight: a row that came in one waits for its end
+			local wasFight = _G.InCombatLockdown
+			_G.InCombatLockdown = function() return true end
+			local fightRow = _G.CreateFrame("Button", nil, target)
+			fightRow.StatusBar = _G.CreateFrame("StatusBar", nil, fightRow)
+			fightRow.StatusBar.Value = fightRow.StatusBar:CreateFontString()
+			assert(mod.Look() == false and not fightRow.StatusBar.Value.beebsHooked, "not dressed in a fight")
+			_G.InCombatLockdown = wasFight
+			assert(mod.Look() == true and fightRow.StatusBar.Value.beebsHooked, "dressed once the fight is over")
 			-- off, its tickers stop; on, they start again
 			BT.SetEnabled("damagemeter", false)
 			assert(mod.ticker == nil and mod.clockTicker == nil, "switched off, nothing ticks")
@@ -8004,11 +8071,14 @@ if ok then
 			-- (its two switches were cut by the settings canvas, 2026-10-04)
 			mod.events:GetScript("OnEvent")(mod.events, "NAME_PLATE_UNIT_ADDED", "player")
 			assert(art._alpha == 0 and pips:IsShown(), "and it all comes back when the plate does")
-			mod.SetOpt("theme", false)
-			mod.SetOpt("combo", false)
+			BT.EnsureBound()
+			local saved = BT.settings.resourcedisplay or {}
+			BT.settings.resourcedisplay = saved
+			saved.theme, saved.combo = false, false
+			mod.Apply()
 			assert(art._alpha == 0 and pips:IsShown(), "themed with its pips, whatever was saved")
-			mod.SetOpt("theme", nil)
-			mod.SetOpt("combo", nil)
+			saved.theme, saved.combo = nil, nil
+			mod.Apply()
 			BT.SetEnabled("resourcedisplay", false)
 			assert(art._alpha == 1 and not pips:IsShown(), "switched off, nothing of ours is left")
 			BT.SetEnabled("resourcedisplay", true)
@@ -8621,6 +8691,14 @@ if ok then
 			assert(sub == "25% · 3,000 XP to go", "and under the bar, how far and what is left: " .. sub)
 			assert(section.wantHeight == 48 and mod.track._height == 6, "a row 48 tall, its bar 6")
 			assert(mod.sub:GetText() == sub and mod.restedWord._shown ~= false, "the words under the bar, and Rested")
+			-- THE TITLE HANGS FROM THE ROW, NOT THE TIME (2026-10-05: "Missing
+			-- level label"): with no pace yet the time is no text at all, and
+			-- the game drew nothing hung from it
+			for _, fs in ipairs({ mod.text, mod.sub }) do
+				for _, at in pairs(fs._points or {}) do
+					assert(at.rel ~= mod.eta and at.rel ~= mod.restedWord, "nothing hangs from the time or Rested")
+				end
+			end
 			for _, key in ipairs({ "xp", "rep", "pvp", "expedition", "ledgerline" }) do
 				local m = BT.GetModule(key)
 				m.Build()
@@ -9932,7 +10010,8 @@ if ok then
 			-- and nothing ticks for it (Josh 2026-09-30, review): nothing on the
 			-- line changes with time
 			assert(mod.ticker == nil, "no ticker")
-			assert(not mod.blurb:find("time", 1, true), "and the switch's line does not promise a time: " .. mod.blurb)
+			local line = BT.Window.LABELS.rep[2]
+			assert(not line:find("time", 1, true), "and the switch's line does not promise a time: " .. line)
 
 			-- another faction watched, then back: the first one's pace is kept
 			watched = { name = "Orgrimmar", reaction = 4, low = 0, high = 3000, value = 100 }
@@ -10365,7 +10444,7 @@ if ok then
 		end },
 		{ "performance is one row of the readout grid", function()
 			local mod = BT.GetModule("performance")
-			assert(mod and mod.kind == "readout", "the module is loaded, as a readout")
+			assert(mod and mod.part == "metrics", "the module is loaded, as a part of Metrics")
 			_G.GetFramerate = function() return 59.6 end
 			_G.GetNetStats = function() return 0, 0, 42, 310 end
 			BT.SetEnabled("performance", true)
@@ -10510,25 +10589,57 @@ if ok then
 			_G.IsShiftKeyDown, _G.GetTime = wasShift, wasTime
 			BT.settings.dockPos = nil
 		end },
-		{ "a target change lays nothing out", function()
-			-- THE ROW ALONE, MOST OF THE TIME (Josh 2026-09-30, review): tab-
-			-- targeting laid every section and readout out again each time. With
-			-- no row on the dock (2026-10-05) it lays out nothing at all.
-			local D = BT.Dock
-			local wasRelayout = D.Relayout
-			local laidOut = 0
-			D.Relayout = function(...)
-				laidOut = laidOut + 1
-				return wasRelayout(...)
-			end
-			local ok, err = pcall(function()
-				D.Update()
-				laidOut = 0
-				D.Update()
-				assert(laidOut == 0, "a new target lays nothing out: " .. laidOut)
-			end)
-			D.Relayout = wasRelayout
+		{ "a journal's line switched off while the Dock is off stays off", function()
+			-- (2026-10-05, audit): the Dock put both lines away, the lines were
+			-- switched off on its page, and the Dock brought them back
+			BT.SetEnabled("expedition", true)
+			BT.SetEnabled("ledgerline", true)
+			local exp, led = BT.GetModule("expedition"), BT.GetModule("ledgerline")
+			local hadExp, hadLed, hadDock = BT.settings.expeditionLine, BT.settings.ledgerLine, BT.FeatureOn("dock")
+			BT.SetFeature("dock", true)
+			assert(exp.Build():IsShown() and led.Build():IsShown(), "both lines up with the Dock on")
+			BT.SetFeature("dock", false)
+			exp:DockRow().set(false)
+			led:DockRow().set(false)
+			BT.SetFeature("dock", true)
+			assert(not exp.frame:IsShown() and not led.frame:IsShown(), "and they stay off when the Dock comes back")
+			exp:DockRow().set(true)
+			led:DockRow().set(true)
+			assert(exp.frame:IsShown() and led.frame:IsShown(), "until their own switches bring them back")
+			BT.settings.expeditionLine, BT.settings.ledgerLine = hadExp, hadLed
+			BT.SetFeature("dock", hadDock)
+		end },
+		{ "switching the Ledger off closes its window", function()
+			-- (2026-10-05, audit): left open on Find people, its cards still wrote
+			BT.SetEnabled("ledger", true)
+			BT.CensusWindow.Show("find")
+			assert(BT.CensusWindow.Frame():IsShown(), "the Ledger's window is open")
+			BT.SetEnabled("ledger", false)
+			assert(not BT.CensusWindow.Frame():IsShown(), "and goes with the Ledger")
+			BT.SetEnabled("ledger", true)
+		end },
+		{ "the Ledger looks after the census tidies, and says what it finds", function()
+			-- (2026-10-05, audit): it counted in the bind, before the census's
+			-- purge, and each loading screen's look dated what it found unsaid
+			local L = BT.LedgerRanks
+			BT.SetEnabled("ledger", true)
+			BT.SetEnabled("ledgerline", true)
+			L.characters = 999999
+			BT.DB.onRemoved(BT.db)
+			assert(L.characters == BT.DB.Count(BT.db), "rows the census took out are counted again: " .. tostring(L.characters))
+			-- a commendation met but not yet dated, found at a loading screen
+			BT.Notes.SetNote("Beeb Bob", "the best lol")
+			local book = L.Book()
+			assert(book and book.earned and book.earned["notes:1"], "the first note's commendation is dated")
+			book.earned["notes:1"] = nil
+			local said = {}
+			local wasSay = BT.Notice.Say
+			BT.Notice.Say = function(owner, it) said[#said + 1] = it.name end
+			local ok, err = pcall(BT.Boot.handlers.PLAYER_ENTERING_WORLD, nil, "PLAYER_ENTERING_WORLD", false, false)
+			BT.Notice.Say = wasSay
 			assert(ok, err)
+			assert(book.earned["notes:1"] and table.concat(said, ","):find("First Entry", 1, true),
+				"and said on the line, not dated quietly: " .. table.concat(said, ","))
 		end },
 		{ "the character sheet: item level on every slot", function()
 			local mod = BT.GetModule("charsheet")
@@ -11241,7 +11352,10 @@ if ok then
 			-- ALWAYS SOLID (Josh 2026-09-22). Below 100% the client stops drawing
 			-- the terrain and only the blips fade, so there is no setting: the map
 			-- is drawn solid whatever an earlier version saved.
-			mod.SetOpt("alpha", 0.6)
+			BT.EnsureBound()
+			BT.settings.minimap = BT.settings.minimap or {}
+			BT.settings.minimap.alpha = 0.6
+			mod.Apply()
 			assert((map._alpha or 1) == 1, "the map is solid, whatever was saved: " .. tostring(map._alpha))
 			-- NOR THE DOCK'S FADE (Josh 2026-09-27): a dock faded in a fight
 			-- would take the terrain with it, so the map keeps its own alpha
@@ -11252,7 +11366,7 @@ if ok then
 			for key, v in pairs({ QuestRingAlpha = 0, QuestRingScalar = 0, TaskRingAlpha = 0, ArchRingScalar = 0 }) do
 				assert(map._rings[key] == v, "the band at a quest area's edge is off: " .. key .. " " .. tostring(map._rings[key]))
 			end
-			mod.SetOpt("alpha", nil)
+			BT.settings.minimap.alpha = nil
 			mod.Apply()
 			-- and no second background of its own, and no hole in the dock's
 			assert(mod.skin.fill._shown == false, "the minimap paints no background of its own")
@@ -11694,18 +11808,6 @@ if ok then
 			assert((section.wantHeight or 0) > 0,
 				"the section takes up room in the layout")
 
-			-- and it sits ABOVE the row: the row is a strip of controls and a
-			-- picture belongs over it, the way the client's own corner has it
-			assert(section.above, "it asks to sit above the row")
-			BT.Dock.Relayout()
-			local mapAt = (section._points or {}).TOPLEFT
-			local rowAt = BT.Dock.Row() and BT.Dock.Row():IsShown() and (BT.Dock.Row()._points or {}).TOPLEFT
-			if mapAt and rowAt and rowAt.y then
-				assert(mapAt.y > rowAt.y,
-					("the map is above the row (%s vs %s)")
-						:format(tostring(mapAt.y), tostring(rowAt.y)))
-			end
-
 			-- and switching it off puts it back exactly where it was
 			mod:OnDisable()
 			assert(map._parent == _G.UIParent, "back where the client had it")
@@ -11863,6 +11965,18 @@ if ok then
 			assert(at and at.rel == _G.UIParent and at.relPoint == "BOTTOMLEFT", "a wide frame: at the mouse")
 			assert(at.x == 800 and at.y == 375, ("in UIParent's units, not the screen's (%s, %s)"):format(tostring(at.x), tostring(at.y)))
 			BT.Find.CloseEditor()
+			-- WHAT A UNIT SAID IS FOR ITS OWN PERSON (2026-10-05, audit): the
+			-- panel opened on a stranger, then a note on somebody else's card,
+			-- went in with the stranger's name and class over their own
+			BT.Find.OpenEditorFor("Zed Other", frame, { name = "Zed Other", class = "WARLOCK", guild = "Zed's Lot" })
+			BT.Find.CloseEditor()
+			BT.Find.Select("Beeb Bob")
+			BT.Find.SaveText("Beeb Bob", "solid tank, healer too")
+			local bob = BT.Notes.Get("Beeb Bob")
+			assert(bob and bob.note == "solid tank, healer too" and bob.name == "Beeb Bob" and bob.class ~= "WARLOCK"
+				and bob.guild ~= "Zed's Lot", "a card's note keeps its own person's name and class: " .. tostring(bob and bob.name))
+			BT.Find.Select(nil)
+			BT.Notes.SetNote("Beeb Bob", "the best lol")
 		end },
 		{ "the health bar cannot put itself back", function()
 			-- THE FLICKER (Josh 2026-09-19). Hiding the bar once per rebuild
@@ -11873,10 +11987,9 @@ if ok then
 			local onShow = bar:GetScript("OnShow")
 			assert(onShow, "something is listening for the bar showing itself")
 			BT.SetEnabled("tooltips", true)
-			BT.GetModule("tooltips").SetOpt("healthBar", false)
 			bar:Show()
 			onShow(bar)
-			assert(not bar:IsShown(), "with the bar switched off it is told no")
+			assert(not bar:IsShown(), "it is told no")
 		end },
 		{ "item tooltips are hooked whatever the unit hook chose", function()
 			-- THE HALF-DEAD SETTING (Josh 2026-09-19). The two hooks used to be
@@ -12223,7 +12336,6 @@ if ok then
 			local headTall = header._height or 0
 			assert(headTall > 0, "with a height of its own")
 			local tall = dock._height or 0
-			assert(not BT.Dock.Row():IsShown(), "no row between the header and the quests")
 			assert(tall >= headTall + (section.wantHeight or 0) - 1,
 				("the dock is as tall as everything in it (%s)"):format(tostring(tall)))
 			assert(tall < headTall + 4 + (section.wantHeight or 0),
@@ -12262,14 +12374,12 @@ if ok then
 			local titleW = BT.Dock.Frame().header.title:GetStringWidth()
 			assert(dock:GetWidth() >= 5 + 1 + titleW + 4 + 22 + 5,
 				("the dock fits its header (%s)"):format(tostring(dock:GetWidth())))
-			assert(not BT.Dock.Row():IsShown(), "and no row under them")
 			BT.SetEnabled("ledger", true)
 			BT.SetEnabled("tracker", true)
 
 			-- THE ROW IS THE MODULES' (Josh 2026-09-19). The mark and the cog
 			-- belong to the core and are not a reason to draw a band: no
 			-- module puts cells on the row now, the Ledger on or off
-			assert(not BT.Dock.RowWanted() and not BT.Dock.Row():IsShown(), "no module wants the row, so there is no row")
 			assert(BT.Dock.Frame().cog:IsShown(), "but the way into the toolkit stays")
 			assert(section:IsShown(), "and the quests still are")
 			-- THE COG GONE AFTER A SWITCH (Josh 2026-10-05: "the options cog
@@ -12278,8 +12388,7 @@ if ok then
 			-- and the next target change hid it until a reload.
 			BT.SetEnabled("tracker", false)
 			BT.SetEnabled("tracker", true)
-			BT.Dock.Update()
-			assert(BT.Dock.Frame().cog:IsShown(), "the cog survives a switch and a new target")
+			assert(BT.Dock.Frame().cog:IsShown(), "the cog survives a switch")
 
 			-- ONE WIDTH, WHATEVER IS IN IT (Josh 2026-09-24): the quests no
 			-- longer make the dock wider, nor their absence narrower
@@ -13475,7 +13584,7 @@ if ok then
 				"cropped to the shield, at its own place in the toast")
 			-- the next toast with an icon has the whole of it again, where icons go
 			TT.Next()
-			TT.Push({ head = "Expedition", text = "An icon", icon = TT.HunterIcon("mastery") })
+			TT.Push({ head = "Expedition", text = "An icon", icon = TT.RANK_ICON })
 			assert(toastFrame.icon._texCoord and toastFrame.icon._texCoord[3] == 0
 				and toastFrame.icon:GetHeight() == TT.ICON_SIZE and toastFrame.icon._points.CENTER
 				and toastFrame.icon._points.CENTER.x == TT.SLOT_X,

@@ -71,7 +71,6 @@ local M = BT.Module({
 	key = "tracker",
 	feature = "dock",
 	title = "Quest tracker",
-	blurb = "The quests you track, in the dock",
 	order = 40,
 	-- on the right panel, so it has a tab on the rail (Josh 2026-09-22)
 	dock = true,
@@ -113,14 +112,13 @@ local frame, rows, header
 local band, paintBand
 
 -- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
--- supposed to be an opinionated solution, not fully customizable"). By level and under zone headings, every zone, the panel hidden with
--- nothing tracked, and finished quests and fights changing nothing.
-M.FIXED = { byLevel = true, zones = true, hereOnly = false, combatFold = false, hideEmpty = true, hideDone = false }
-
+-- supposed to be an opinionated solution, not fully customizable"). By
+-- level and under zone headings, every zone, the panel hidden with nothing
+-- tracked, and finished quests and fights changing nothing.
+-- (2026-10-05, cleanup) Nothing reads the old switches now, so the code for
+-- their other answers is gone. The one thing still saved is whether the
+-- list is folded, by a click on its header.
 local function opt(name, fallback)
-	if M.FIXED[name] ~= nil then
-		return M.FIXED[name]
-	end
 	local s = BT.settings and BT.settings.tracker
 	if not s or s[name] == nil then
 		return fallback
@@ -696,9 +694,18 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 	row.kind = kind
 	row.isHeader = (kind == "head")
 	row.chevron:SetShown(row.isHeader)
+	-- A HANDLE ONLY WHILE IT IS THE HEADER (2026-10-05, cleanup). Rows are
+	-- reused, and a quest row that kept the header's drag would move the dock
+	-- on a Shift-drag, where Shift-click on a quest means untrack.
 	if row.isHeader then
 		BT.Dock.ChevronCoord(row.chevron, opt("collapsed", false))
 		BT.Dock.MakeHandle(row) -- the one line of the dock that is not a control
+		row.handle = true
+	elseif row.handle and row.RegisterForDrag then
+		row:RegisterForDrag()
+		row:SetScript("OnDragStart", nil)
+		row:SetScript("OnDragStop", nil)
+		row.handle = nil
 	end
 
 	if mark == "strike" then
@@ -772,7 +779,7 @@ M.LevelColour = levelColour
 -- zones not shown that read as no order at all. The zones are back as small
 -- headings - the one you are standing in first, the rest in the log's order
 -- - and inside each the lowest level comes first, the same level in the
--- log's order. "By level" off keeps the log's order inside a zone.
+-- log's order.
 function M.Sort(quests, here)
 	local rank, n = {}, 0
 	for _, q in ipairs(quests) do
@@ -785,39 +792,18 @@ function M.Sort(quests, here)
 	if here and rank[here] then
 		rank[here] = 0
 	end
-	local byLevel = opt("byLevel", true)
-	-- with no headings, no grouping either: a zone's quests together under
-	-- nothing that says so reads as no order (Josh 2026-09-24)
-	local grouped = opt("zones", true)
 	table.sort(quests, function(a, b)
 		local za, zb = rank[a.zone or ""], rank[b.zone or ""]
-		if grouped and za ~= zb then
+		if za ~= zb then
 			return za < zb
 		end
-		if byLevel then
-			local la, lb = a.level or 0, b.level or 0
-			if la ~= lb then
-				return la < lb
-			end
+		local la, lb = a.level or 0, b.level or 0
+		if la ~= lb then
+			return la < lb
 		end
 		return (a.index or 0) < (b.index or 0)
 	end)
 	return quests
-end
-
--- ONLY HERE, IF YOU LIKE (Josh 2026-09-24): the quests of the zone you are
--- standing in, and none from elsewhere; all of them where it cannot be told
-function M.Filter(quests, here)
-	if not (opt("hereOnly", false) and here) then
-		return quests
-	end
-	local out = {}
-	for _, q in ipairs(quests) do
-		if q.zone == here then
-			out[#out + 1] = q
-		end
-	end
-	return out
 end
 
 -- the zone you are standing in, as the quest log names zones
@@ -882,8 +868,8 @@ end
 -- THE CLOCK STOPS WITH THE LIST (Josh 2026-09-30, review). A row keeps its
 -- own shown flag while the list is hidden around it, so a clock left on one
 -- kept the ticker writing to a list nobody could see, once a second, for the
--- rest of the session: after the last quest went with "Hide when empty" on,
--- or with the tracker switched off. Drawing the list again starts it.
+-- rest of the session: after the last quest went and the empty list hid, or
+-- with the tracker switched off. Drawing the list again starts it.
 local function stopClocks()
 	for _, row in ipairs(rows or {}) do
 		row.endsAt = nil
@@ -946,32 +932,41 @@ function M.QuestTip(owner, q)
 	end })
 end
 
+-- THE DOCK IS LAID OUT ONLY WHEN THE LIST ASKS FOR SOMETHING NEW (2026-10-05,
+-- cleanup). Update runs on every quest event, and each one laid out the whole
+-- dock again. Now Update asks the dock only when the list's height, its floor
+-- or whether it shows has changed; otherwise it fits the rows again inside
+-- the height the dock already gave the list.
 function M.Update()
 	if not frame then
 		return 0
 	end
+	local wasShown = frame:IsShown()
 	if not BT.Enabled("tracker") then
 		stopClocks()
 		frame:Hide()
-		BT.Dock.Relayout()
+		if wasShown then
+			BT.Dock.Relayout()
+		end
 		return 0
 	end
 	local here = hereZone()
-	local quests = M.Sort(M.Filter(Q.Watched(), here), here)
+	local quests = M.Sort(Q.Watched(), here)
 	M.lastCount = #quests
-	if #quests == 0 and opt("hideEmpty", true) then
+	if #quests == 0 then
 		band(nil)
 		stopClocks()
 		frame:Hide()
-		BT.Dock.Relayout()
+		if wasShown then
+			BT.Dock.Relayout()
+		end
 		return 0
 	end
 	frame:Show()
 
 	local tracked = Q.SuperTracked()
-	-- folded by its chevron, or for the length of a fight when asked
+	-- folded by its chevron
 	local shut = opt("collapsed", false)
-		or (opt("combatFold", false) and InCombatLockdown and InCombatLockdown() and true or false)
 	local i, y = 0, PAD
 	i = i + 1
 	y = setRow(i, y, "head", string.upper("Quests") .. "   " .. tint(MUTED, tostring(#quests)), nil, MUTED, nil)
@@ -981,7 +976,7 @@ function M.Update()
 	local zone = false
 	for _, quest in ipairs(shut and {} or quests) do
 		-- a heading where the zone changes (a quest filed under none has none)
-		if opt("zones", true) and quest.zone ~= zone then
+		if quest.zone ~= zone then
 			zone = quest.zone
 			if zone then
 				i = i + 1
@@ -1031,8 +1026,7 @@ function M.Update()
 			end
 		end
 		-- a failed quest's objectives are no longer worth reading
-		if not quest.failed and not folded(quest)
-			and not (quest.complete and opt("hideDone", false)) then
+		if not quest.failed and not folded(quest) then
 			for _, o in ipairs(quest.objectives) do
 				i = i + 1
 				local count = ""
@@ -1062,8 +1056,13 @@ function M.Update()
 	M.laidWidth = listWidth()
 	M.listTop = PAD + ROW + GAP
 	M.bandTop, M.bandFoot = bandTop, bandFoot
+	local minHeight = math.min(content, M.listTop + MIN_LINES * ROW + PAD)
+	if wasShown and frame.wantHeight == content and frame.minHeight == minHeight then
+		M.Fit(M.maxHeight)
+		return i
+	end
 	frame.wantHeight = content
-	frame.minHeight = math.min(content, M.listTop + MIN_LINES * ROW + PAD)
+	frame.minHeight = minHeight
 	frame:SetHeight(content)
 	M.maxHeight = content
 	BT.Dock.Relayout()
@@ -1333,7 +1332,7 @@ function M.Watch()
 	end
 	-- the items: a cooldown that changed, and the end of a fight for a
 	-- button that could not be given its item during one
-	for _, event in ipairs({ "BAG_UPDATE_COOLDOWN", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED" }) do
+	for _, event in ipairs({ "BAG_UPDATE_COOLDOWN", "PLAYER_REGEN_ENABLED" }) do
 		pcall(M.events.RegisterEvent, M.events, event)
 	end
 	M.events:SetScript("OnEvent", function(_, event)
@@ -1353,13 +1352,8 @@ function M.Watch()
 		if event == "BAG_UPDATE_COOLDOWN" then
 			M.UpdateCooldowns()
 		elseif event == "PLAYER_REGEN_ENABLED" then
-			if M.itemsPending or opt("combatFold", false) then
+			if M.itemsPending then
 				M.itemsPending = false
-				M.Queue()
-			end
-		elseif event == "PLAYER_REGEN_DISABLED" then
-			-- folded for the fight, if asked
-			if opt("combatFold", false) then
 				M.Queue()
 			end
 		else

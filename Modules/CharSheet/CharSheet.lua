@@ -17,7 +17,6 @@ local M = BT.Module({
 	key = "charsheet",
 	feature = "interface",
 	title = "Character sheet",
-	blurb = "Item level on every slot, and BeebMod's look",
 	order = 57,
 })
 

@@ -731,6 +731,8 @@ function J.Learn(info, now)
 		return nil
 	end
 	local m = s.enemies[info.npc]
+	-- what the commendations count of it, before (J.FactsOf, and below)
+	local before = m and J.FactsOf(m)
 	if not m then
 		m = {}
 		s.enemies[info.npc] = m
@@ -777,6 +779,11 @@ function J.Learn(info, now)
 	-- a name to go by: any quest already kept that speaks of it
 	if m.name and not m.lore then
 		J.FindLore(m)
+	end
+	-- an enemy the count J.Check kept knows, now with other facts: that count
+	-- is of the old ones, and the next kill or score counts again (J.KeptScore)
+	if before and J.FactsOf(m) ~= before then
+		J.kept = nil
 	end
 	return m
 end
@@ -1215,6 +1222,7 @@ local function factsOf(m)
 	return (m.kind or "") .. "|" .. (m.family or "") .. "|" .. (m.rank or "") .. "|" .. (m.zone or "")
 		.. "|" .. J.Category(m)
 end
+J.FactsOf = factsOf
 
 function J.Remember(c, guid)
 	if not (c and guid) then
@@ -1618,6 +1626,33 @@ function J.Check(c, now, npc, was, onlyTotal)
 		end
 	end
 	return news
+end
+
+-- THE SCORE FROM WHAT J.CHECK KEPT (2026-10-05, audit): a kill counted the
+-- whole journal twice more for the dock's line, once for the rank before it
+-- and once after - every kind three times over and the sixty-odd
+-- commendations built again, each time, for every enemy in a pack. The
+-- stats and the list J.Check keeps are the ones J.Points would build; only
+-- the unique kills' and the masteries' points are counted. A kept count
+-- that is not this character's, or whose totals no longer match the kills,
+-- is no use: then it is J.Score.
+function J.KeptScore()
+	local c = J.Mine()
+	local kept = J.kept
+	if c and kept and kept.c == c and kept.kills == c.kills then
+		local total, n = tally(c.kills)
+		if total == kept.st.total and n == kept.st.uniques then
+			local points, count = J.KindPoints(c.kills) + J.Masteries(c.kills), 0
+			for _, a in ipairs(kept.list) do
+				if a.have >= a.need then
+					points = points + a.points
+					count = count + 1
+				end
+			end
+			return points, count, kept.st
+		end
+	end
+	return J.Score()
 end
 
 -- ---------------------------------------------------------------------------

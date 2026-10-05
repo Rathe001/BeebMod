@@ -11,7 +11,7 @@
 --                             [ ] Bad
 --                             New tag
 --                             -----------
---                             Edit note
+--                             Edit note    (Write a note, with none yet)
 --                             Rating   >
 --
 -- A tag is ticked and unticked with the menu still open. A note opens the

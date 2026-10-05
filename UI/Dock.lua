@@ -4,29 +4,22 @@
 -- ONE PANEL, NOT THREE. It started as a bar; then the quest tracker turned up
 -- with a panel of its own, in the same skin, floating a few hundred pixels
 -- away. Two panels that look identical and move separately are two things to
--- arrange every time you touch your UI. So this is one: a row of cells along
--- the top, and under it whatever sections the modules have to show.
+-- arrange every time you touch your UI. So this is one: a header with
+-- BeebMod's name and the cog, and under it whatever sections the modules have
+-- to show.
 --
---   BT.Dock.Cell(key, w)         a cell on the row - a target, a dot, a way in
---   BT.Dock.Section(key, order)  a panel of your own underneath it
+--   BT.Dock.Section(key, order)  a panel of your own under the header
+--   BT.Dock.HeaderItem(frame)    something small at the header's right end
 --
 -- The dock owns where it sits, how big it is and what it is wearing; a module
 -- owns what goes inside its own section and how tall that is. Nothing in here
 -- knows what a quest is.
 --
--- IT GROWS WITH WHAT YOU SWITCH ON. With everything off it is a small mark
--- that opens the window, and with everything on it is:
---
---   [class] [ who you are pointing at ]      [ ••• ] [cog]
---   [ what you wrote about them                          ]
---
--- A cell says which line it is on (`line`), which end it hangs from (`side`),
--- and whether it stretches across whatever is left (`stretch`).
---
--- Cells appear and disappear rather than text reflowing, so the dock changes in
--- steps you can predict instead of sliding about. A cell declares its own
--- width: asking a frame how wide it is before it has been drawn is how the
--- layout used to end up a pile on top of itself.
+-- THE ROW OF CELLS IS GONE (Josh 2026-10-05). The header used to sit over a
+-- row of cells - your target's class, their name, a dot per tag, a pencil -
+-- that modules filled through BT.Dock.Cell. The Ledger was the only module
+-- that did, and its notes moved to the game's right-click menu
+-- (Modules/Ledger/Menu.lua), so the row and everything that laid it out went.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("UI/Dock.lua")
 
@@ -38,13 +31,10 @@ local ICONS = "Interface\\AddOns\\BeebMod\\Art\\icons"
 -- the sheet is EIGHT slots wide; these pick one. Written out rather than
 -- unpacked from a table: `unpack` is a global in the game's Lua and a member of
 -- `table` in the one the headless tests run (Josh 2026-09-19).
-function B.NoteCoord(tex) tex:SetTexCoord(0, 0.125, 0, 1) end
 function B.SearchCoord(tex) tex:SetTexCoord(0.125, 0.25, 0, 1) end
-function B.ChartCoord(tex) tex:SetTexCoord(0.25, 0.375, 0, 1) end
 function B.CheckCoord(tex) tex:SetTexCoord(0.375, 0.5, 0, 1) end
 function B.CogCoord(tex) tex:SetTexCoord(0.5, 0.625, 0, 1) end
 function B.CrossCoord(tex) tex:SetTexCoord(0.75, 0.875, 0, 1) end
-function B.PencilCoord(tex) tex:SetTexCoord(0.875, 1, 0, 1) end
 -- open points down, folded points up: one glyph, flipped
 function B.ChevronCoord(tex, folded)
 	if folded then
@@ -55,28 +45,14 @@ function B.ChevronCoord(tex, folded)
 end
 B.ICONS = ICONS
 
--- TWO LINES, BOTH ALWAYS THERE (Josh 2026-09-19). Who you are pointing at is
--- one line; their tags and your note are the line under it. That second line
--- keeps its height whether or not anything is on it, because a dock that grows
--- a row when you happen to point at somebody you have written about is a dock
--- that shoves the quest log down the screen while you are reading it.
--- TIGHT (Josh 2026-09-19). Every one of these came down once the dock had two
--- lines in it: a header that is mostly air reads as a widget, and this is
--- meant to read as part of the tracker under it.
-local BAR_H, MARKS_H, PAD = 22, 14, 5
--- THE ROW HAS EDGES (Josh 2026-09-19). Cells started at x=0, which is where
--- the spine is: the class icon was jammed against the border with all its air
--- on the other side. Everything on the row sits this far in from both ends.
+local PAD = 5
+-- how far in the header's name and its right-hand items sit
 local INSET = 5
 -- tall enough for a name and a cog, and no taller: this is a title, not a
 -- toolbar (Josh 2026-09-21)
 local HEADER_H = 20
--- CENTRED ON THE GAP, NOT ON THE BAND (Josh 2026-09-19). Both lines were
--- centred in their own band, which is not the same thing as looking centred:
--- the name is 12px of text in a 22px band and the note is 10px in a 14px one,
--- so the air between them came to seven pixels and the air under the note to
--- two. The second line rides up by this much, and the two gaps even out.
-local LINE2_LIFT = 3
+-- the least room under the header the dock asks the screen for (B.Room)
+local MIN_ROOM = 22
 local savePosition -- MakeHandle needs it, and it is written further down
 B.PAD = PAD
 local MIN_W = 34
@@ -84,46 +60,27 @@ local MIN_W = 34
 -- the right panel wider"). The dock was as wide as its widest part, so the
 -- quest list's 230 made it jump when the tracker came and went - and without
 -- it the dock shrank until the XP line and the Ledger's prompt were cut off.
--- It is a width of its own now, a setting, and everything in it follows.
--- Never under 200: the narrowest the XP line, the readouts and the prompt
--- all fit.
-B.WIDTH, B.WIDTH_MIN, B.WIDTH_MAX, B.WIDTH_STEP = 230, 200, 320, 10
-local dock, cells, row, sections, ordered, rowWidth
+-- It is a width of its own now, and everything in it follows (one width
+-- since the settings canvas cut the choice, 2026-10-04).
+B.WIDTH = 230
+local dock, sections, ordered
 
-function B.SetCellWidth(c, w)
-	c.cellWidth = w
-	c:SetWidth(w)
-end
-
--- Every cell is the same shape: a frame, a hairline on its left, and whatever
--- it holds. Building them this way is what makes the layout a loop rather than
--- a pile of anchors.
--- No dividers between cells. They were there when the row was six cells long
--- and read as one strip; with a class icon, a name and a cog they were a line
--- between a picture and the name of the thing in it (Josh 2026-09-19).
-local function cell(key, width)
-	local c = CreateFrame("Frame", nil, row)
-	c:SetHeight(BAR_H - 2)
-	B.SetCellWidth(c, width or 20)
-	c.cellKey = key
-	return c
-end
-B.Cell = cell
-
--- An icon cell that opens the window on one tab: the two ways in that modules
--- keep asking for, made once.
-function B.WayIn(key, coord, view, tip)
-	local c = cell(key, 22)
+-- THE COG, beside the dock's name: the way into the settings (Josh
+-- 2026-09-19, 2026-09-22). It is the core's, and nothing switches it off.
+local COG_W = 22
+local function makeCog(parent)
+	local c = CreateFrame("Frame", nil, parent)
+	c:SetSize(COG_W, HEADER_H)
 	c.button = CreateFrame("Button", nil, c)
 	c.button:SetAllPoints()
 	c.icon = c.button:CreateTexture(nil, "ARTWORK")
 	c.icon:SetPoint("CENTER")
 	c.icon:SetSize(12, 12)
 	c.icon:SetTexture(ICONS)
-	coord(c.icon)
+	B.CogCoord(c.icon)
 	c.icon:SetVertexColor(0.55, 0.63, 0.59, 1)
 	c.button:SetScript("OnClick", function()
-		BT.Window.Show(view)
+		BT.Window.Show("settings")
 	end)
 	c.button:SetScript("OnEnter", function()
 		-- lit by hand, not through W.Tint: that REGISTERS the glyph, and the
@@ -131,10 +88,10 @@ function B.WayIn(key, coord, view, tip)
 		local a = BT.Widgets.ACCENT
 		c.icon:SetVertexColor(a[1], a[2], a[3], 1)
 		-- the dock's own tooltip (Josh 2026-09-27): its name, and its click
-		if tip and BT.Tip then
+		if BT.Tip then
 			BT.Tip.Show(c, { build = function(t)
-				t:Header({ icon = false, name = tip })
-				t:Foot({ { "Click", ("open %s"):format(tip:lower()) } })
+				t:Header({ icon = false, name = "Settings" })
+				t:Foot({ { "Click", "open settings" } })
 			end })
 		end
 	end)
@@ -144,15 +101,14 @@ function B.WayIn(key, coord, view, tip)
 			GameTooltip:Hide()
 		end
 	end)
-	c.wanted = true
 	return c
 end
 
--- EVERYTHING IN THE DOCK TAKES THE MOUSE (Josh 2026-09-19). The row is cells
--- you click and the tracker is quests you click, so there is no bare panel
+-- EVERYTHING IN THE DOCK TAKES THE MOUSE (Josh 2026-09-19). The meters and
+-- the tracker are things you point at and click, so there is no bare panel
 -- left to grab: the dock could only be dragged from a few pixels of edge.
--- Anything can be a handle for it instead, and the mark and the tracker's own
--- header both are.
+-- Anything can be a handle for it instead: the header, every section
+-- (B.Section) and the tracker's zone headings.
 --
 -- IT SHRINKS AS IT GOES DOWN (Josh 2026-09-23). The dock is held on the screen,
 -- and since it fills the room under its top edge exactly, its bottom already
@@ -253,35 +209,6 @@ function B.MakeHandle(child)
 	return child
 end
 
--- WHOEVER YOU ARE POINTING AT, IN THE FIRST SLOT (Josh 2026-09-19). The mark
--- is the toolkit's own glyph until you target a player, and then it is their
--- class - the one thing about a stranger this client will actually tell us.
--- Not their spec: nothing reveals a stranger's talents here, which is the same
--- reason the census has no spec chart.
-function B.SetMark(texture, coords, tint)
-	if not (dock and dock.mark and dock.mark.icon) then
-		return
-	end
-	local icon = dock.mark.icon
-	if texture then
-		-- not the theme's any more: its accent is for the toolkit's glyph,
-		-- and a class icon tinted with it was the wrong class colour
-		BT.Widgets.Untint(icon)
-		icon:SetTexture(texture)
-		if coords then
-			icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-		else
-			icon:SetTexCoord(0, 1, 0, 1)
-		end
-		local t = tint or { 1, 1, 1, 1 }
-		icon:SetVertexColor(t[1], t[2], t[3], t[4] or 1)
-	else
-		icon:SetTexture(ICONS)
-		B.NoteCoord(icon)
-		BT.Widgets.Tint(icon)
-	end
-end
-
 function B.Tip(frame, build)
 	if not GameTooltip then
 		return
@@ -290,105 +217,6 @@ function B.Tip(frame, build)
 	GameTooltip:ClearLines()
 	build()
 	GameTooltip:Show()
-end
-
--- Lay out whichever cells have something to say, left to right, and remember
--- how wide that came out: the dock is as wide as its widest part, and asking a
--- frame its width before it has been drawn is not arithmetic.
--- Has any MODULE asked for a place on the row? The mark and the cog belong to
--- the core and are not a reason to draw a row: with the Ledger switched off
--- they were a glyph and a cog sitting in a band of their own above the quest
--- list, which is chrome for nothing.
-local function moduleCells()
-	for _, c in ipairs(cells) do
-		if c ~= dock.mark and c ~= dock.cog and c.wanted then
-			return true
-		end
-	end
-	return false
-end
-
--- And does anything want the second line? With nothing that could ever go on
--- it, reserving its height is reserving room for nobody.
-local function wantsMarks()
-	for _, c in ipairs(cells) do
-		if c.line == 2 then
-			return true
-		end
-	end
-	return false
-end
-
--- what the last full layout was given by the row: its width and whether it
--- was wanted (see the end of layout)
-local laid = {}
-
-local function layout()
-	local top, marks, right = INSET, INSET, INSET
-	-- the right-hand end first, and backwards: the last cell in the list is
-	-- the one furthest right, so the cog stays at the end whatever a module
-	-- hangs beside it
-	for i = #cells, 1, -1 do
-		local c = cells[i]
-		if c == dock.cog then
-			-- placed by Relayout, in the header: it takes no room on the row.
-			-- Counting its width here left a cog-sized gap at the right end of
-			-- the row and a dock that much wider than its content
-		elseif c.side == "right" and c.wanted then
-			c:ClearAllPoints()
-			c:SetPoint("TOPRIGHT", row, "TOPRIGHT", -right, -1)
-			c:SetHeight(BAR_H - 2)
-			c:Show()
-			right = right + (c.cellWidth or 0)
-		end
-	end
-	for _, c in ipairs(cells) do
-		if c == dock.cog then
-			-- the header's, shown and placed by Relayout
-		elseif c.side == "right" then
-			if not c.wanted then
-				c:Hide()
-			end
-		elseif c.wanted then
-			local second = c.line == 2
-			c:ClearAllPoints()
-			c:SetHeight((second and MARKS_H or BAR_H) - 2)
-			if c.stretch then
-				-- across whatever is left, and counting for nothing in the
-				-- width: a note is as long as it is and must not decide how
-				-- wide the dock gets. `indent` lets it start under something
-				-- on the line above rather than at the panel's edge.
-				local x = second and (c.indent or INSET) or top
-				local y = second and -(BAR_H - LINE2_LIFT) or -1
-				c:SetPoint("TOPLEFT", row, "TOPLEFT", x, y)
-				c:SetPoint("TOPRIGHT", row, "TOPRIGHT", -INSET, y)
-			else
-				c:SetPoint("TOPLEFT", row, "TOPLEFT", second and marks or top,
-					second and -(BAR_H - LINE2_LIFT) or -1)
-				if second then
-					marks = marks + (c.cellWidth or 0)
-				else
-					top = top + (c.cellWidth or 0)
-				end
-			end
-			c:Show()
-		else
-			c:Hide()
-		end
-	end
-	rowWidth = math.max(MIN_W, top + right + 2, marks + INSET)
-	-- THE ROW ALONE, MOST OF THE TIME (Josh 2026-09-30, review). Every
-	-- target change laid the whole dock out again: every section stacked and
-	-- fitted, every readout placed, the quest list's rows anchored anew - and
-	-- tab-targeting in a fight does that several times a second. All the rest
-	-- of the dock learns from the row is how wide it is and whether it is
-	-- there, so only a change in one of those lays the rest out; the cells
-	-- themselves were placed above. A section that changes says so itself
-	-- (B.Relayout), as every one already does.
-	local w, want = math.max(B.Width(), rowWidth, MIN_W), B.RowWanted()
-	if w ~= laid.w or want ~= laid.want then
-		B.Relayout()
-	end
 end
 
 -- EACH BAND IN ITS OWN ROW'S COLOUR (Josh 2026-09-26: "you added the same
@@ -593,20 +421,13 @@ end
 -- module is disabled, should be the dock with logo and options cog. You
 -- should not be able to turn off that minimum state. Turning off the dock
 -- would turn off everything EXCEPT the logo and options cog"). With the Dock
--- switched off nothing else sits in it - no row, no section, no readout,
--- whatever feature it belongs to - and the header stays.
+-- switched off nothing else sits in it - no section, no readout, whatever
+-- feature it belongs to - and the header stays.
 function B.DockOn()
 	return not BT.FeatureOn or BT.FeatureOn("dock")
 end
 
-function B.RowWanted()
-	if not (dock and cells) then
-		return false
-	end
-	return B.DockOn() and moduleCells()
-end
-
--- A PANEL OF YOUR OWN, UNDER THE ROW. Give it the height and width it would
+-- A PANEL OF YOUR OWN, UNDER THE HEADER. Give it the height and width it would
 -- like in `wantHeight` and `wantWidth`, show or hide it, and call Relayout.
 function B.Section(key, order)
 	B.Create()
@@ -629,8 +450,8 @@ function B.Section(key, order)
 	return s.frame
 end
 
--- Stack the row and whatever sections are showing, and make the dock the size
--- of the result. The row shows only while a module has cells on it.
+-- Stack whatever sections are showing under the header, and make the dock the
+-- size of the result.
 -- THE DOCK IN YOUR ORDER (Josh 2026-09-22). A section belongs to the module of
 -- the same key, and the modules are in whatever order you dragged the tabs
 -- into - so the sections stack in that order too. A section with no module
@@ -999,7 +820,7 @@ function B.HeaderItem(frame)
 end
 
 -- HOW WIDE THE HEADER NEEDS TO BE (Josh 2026-09-24). The dock was as wide as
--- its row or its widest section, and never less than a sliver; with the
+-- its widest part, and never less than a sliver; with the
 -- Census alone there is neither, and the panel shrank to 34 pixels behind
 -- "Beeb" while "Mod", the icon and the cog hung off it over the world. The
 -- name, what sits beside it and whatever is at the right-hand end all fit.
@@ -1007,7 +828,7 @@ local function headerNeed()
 	local title = BT.Pill.Number(dock.header.title:GetStringWidth(), 52)
 	local w = INSET + 1 + title + 4
 	if dock.cog then
-		w = w + (dock.cog.cellWidth or 22)
+		w = w + COG_W
 	end
 	for _, f in ipairs(dock.headerItems or {}) do
 		if f:IsShown() then
@@ -1025,10 +846,9 @@ function B.Relayout()
 	-- readouts and the stack
 	local rank = moduleRank()
 	sortSections(rank)
-	local wantRow = B.RowWanted()
-	-- the dock's own width; only a row or a header that could not fit in it
-	-- (a setting narrower than its cells) makes it wider
-	local width, live = math.max(B.Width(), rowWidth or MIN_W, MIN_W), false
+	-- the dock's own width; only a header that could not fit in it makes it
+	-- wider
+	local width, live = math.max(B.Width(), MIN_W), false
 	local dockOn = B.DockOn()
 	for _, s in ipairs(ordered) do
 		-- the Dock off: every section away, whoever's it is
@@ -1043,7 +863,11 @@ function B.Relayout()
 			s.frame:Hide()
 		elseif dockOn and s.dockHid then
 			s.dockHid = nil
-			if not BT.GetModule(s.key) or BT.Enabled(s.key) then
+			-- and only if its own switch still wants it (2026-10-05, audit): a
+			-- journal's line switched off while the Dock was off came back
+			-- with the Dock (M.LineOn, the line's row on the Dock's page)
+			local m = BT.GetModule(s.key)
+			if not m or (BT.Enabled(s.key) and not (m.LineOn and not m.LineOn())) then
 				s.frame:Show()
 			end
 		end
@@ -1057,7 +881,6 @@ function B.Relayout()
 		live = true
 	end
 	local y = 0
-	local rowTall = BAR_H + (wantsMarks() and MARKS_H or 0)
 
 	-- the header is the top of the stack, above everything, always
 	dock.header:ClearAllPoints()
@@ -1067,14 +890,9 @@ function B.Relayout()
 	y = y + HEADER_H
 
 	-- EVERYTHING UNDER THE HEADER IN YOUR ORDER (Josh 2026-09-22). The minimap
-	-- used to sit above the row whatever the tabs said, and the row itself was
-	-- pinned second, so dragging either tab moved nothing. The row is the
-	-- Ledger's - its cells are who you are pointing at and what you wrote - so
-	-- it takes the Ledger's place, and every section takes its module's.
+	-- used to sit at the top whatever the tabs said, so dragging its tab moved
+	-- nothing. Every section takes its module's place.
 	local stack = {}
-	if wantRow then
-		stack[#stack + 1] = { row = true, rank = rank.ledger or 0 }
-	end
 	for i, s in ipairs(ordered) do
 		if s.frame:IsShown() then
 			local r = rank[s.key] or (1000 + s.order)
@@ -1091,34 +909,28 @@ function B.Relayout()
 		return (a.i or 0) < (b.i or 0)
 	end)
 
-	-- HOW TALL EACH PIECE WANTS TO BE, and then what it gets. The row keeps
-	-- its height; a section keeps what it asked for, unless the whole dock
-	-- would run off the bottom of the screen (see B.Room).
+	-- HOW TALL EACH PIECE WANTS TO BE, and then what it gets: a section keeps
+	-- what it asked for, unless the whole dock would run off the bottom of the
+	-- screen (see B.Room).
 	for _, item in ipairs(stack) do
-		item.tall = item.row and rowTall or (item.s.frame.wantHeight or 0)
+		item.tall = item.s.frame.wantHeight or 0
 	end
 	B.Squeeze(stack, HEADER_H, B.Room())
 
-	row:SetShown(wantRow)
 	-- A LINE UNDER EACH, EXCEPT THE LAST (Josh 2026-09-22). Each section used
 	-- to draw its own, so the quests had none and the frame rate kept one even
 	-- at the bottom of the panel. The dock knows which is last; it draws them.
 	for n, item in ipairs(stack) do
-		local f, rule
 		local tall = item.tall
-		if item.row then
-			f, rule = row, dock.marksRule
-		else
-			f = item.s.frame
-			if not f.beebsRule then
-				f.beebsRule = f:CreateTexture(nil, "ARTWORK")
-				f.beebsRule:SetHeight(1)
-				f.beebsRule:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 4, 0)
-				f.beebsRule:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 0)
-				BT.Widgets.Rule(f.beebsRule, nil, "h")
-			end
-			rule = f.beebsRule
+		local f = item.s.frame
+		if not f.beebsRule then
+			f.beebsRule = f:CreateTexture(nil, "ARTWORK")
+			f.beebsRule:SetHeight(1)
+			f.beebsRule:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 4, 0)
+			f.beebsRule:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 0)
+			BT.Widgets.Rule(f.beebsRule, nil, "h")
 		end
+		local rule = f.beebsRule
 		f:ClearAllPoints()
 		-- on whole screen pixels, top and bottom, so the line at its bottom
 		-- is one pixel and not a unit smeared across two
@@ -1131,25 +943,21 @@ function B.Relayout()
 		y = y + tall
 		-- a line under every section but the last; the two meters were once
 		-- left without one between them, and read as one bar with two labels
-		if rule then
-			rule:SetShown(n < #stack)
+		rule:SetShown(n < #stack)
+		-- A BAND BEHIND A METER (Josh 2026-09-26: "anything we can do to
+		-- make these rows look more distinct? Maybe a subtle background?"): a
+		-- faint strip in the meter's colour, inset from the panel's edge and
+		-- from the line under it. Level's row is the one meter with a band
+		-- since the meters went level-first; a slim line has none (2026-10-05,
+		-- B.SlimLine), and a notice washes it for a moment (UI/Notice.lua).
+		if item.kind == "meter" and not f.beebsBand then
+			f.beebsBand = f:CreateTexture(nil, "BACKGROUND")
+			f.beebsBand:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -1)
+			f.beebsBand:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 2)
+			B.PaintBand(f)
 		end
-		-- A BAND BEHIND EACH METER (Josh 2026-09-26: "anything we can do to
-		-- make these rows look more distinct? Maybe a subtle background?").
-		-- Experience, Reputation and the Expedition sat flush on one fill, the
-		-- hairline between them too fine to part them; each now sits on a
-		-- faint lightened strip, inset from the panel's edge and from the
-		-- line under it, so three rows read as three.
-		if f and not item.row then
-			if item.kind == "meter" and not f.beebsBand then
-				f.beebsBand = f:CreateTexture(nil, "BACKGROUND")
-				f.beebsBand:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -1)
-				f.beebsBand:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 2)
-				B.PaintBand(f)
-			end
-			if f.beebsBand then
-				f.beebsBand:SetShown(item.kind == "meter")
-			end
+		if f.beebsBand then
+			f.beebsBand:SetShown(item.kind == "meter")
 		end
 	end
 	B.stack = stack
@@ -1187,11 +995,9 @@ function B.Relayout()
 	-- edge. The cog used to hold that edge, but a time reads best where the
 	-- eye ends a line, and the way in belongs with the name that says whose
 	-- panel this is.
-	local prev = dock.header.title
 	if dock.cog then
 		dock.cog:ClearAllPoints()
-		dock.cog:SetParent(dock.header)
-		dock.cog:SetPoint("LEFT", prev, "RIGHT", prev == dock.header.title and 4 or 0, 0)
+		dock.cog:SetPoint("LEFT", dock.header.title, "RIGHT", 4, 0)
 		dock.cog:Show()
 	end
 	local right
@@ -1209,20 +1015,13 @@ function B.Relayout()
 			right = f
 		end
 	end
-	if dock.mark then
-		dock.mark:SetShown(wantRow)
-	end
-	dock:SetSize(B.Snap(width), B.Snap(math.max(BAR_H, y)))
-	if dock.marksRule and not wantRow then
-		dock.marksRule:Hide()
-	end
+	dock:SetSize(B.Snap(width), B.Snap(math.max(HEADER_H, y)))
 	-- a clock in the header is something to show too: the dock went with
 	-- the last panel module, clock and all, and with it the cog that is the
 	-- way into the settings (Josh 2026-09-23, audit)
 	-- ALWAYS THERE (Josh 2026-09-27): the logo and the cog are the way back
 	-- in, whatever is switched off, and nothing switches them off
 	dock:Show()
-	laid.w, laid.want = math.max(B.Width(), rowWidth or MIN_W, MIN_W), wantRow
 end
 
 -- THE DOCK STOPS AT THE BOTTOM OF THE SCREEN (Josh 2026-09-23). It grows
@@ -1251,7 +1050,7 @@ function B.Room()
 	if not top or top <= 0 then
 		return nil
 	end
-	return math.max(HEADER_H + BAR_H, top - BOTTOM_GAP)
+	return math.max(HEADER_H + MIN_ROOM, top - BOTTOM_GAP)
 end
 
 
@@ -1291,70 +1090,11 @@ function B.Squeeze(stack, above, room)
 	return given
 end
 
--- Ask every enabled module what it wants on the dock, in module order. Called
--- again whenever a module is switched on or off, so the dock is never showing a
--- cell belonging to something that is no longer running.
--- A MODULE'S CELLS ARE MADE ONCE (Josh 2026-09-30, review). Every rebuild
--- asked again, and the Ledger made a new name cell and a new row of tags each
--- time: the game never frees a frame, so every switch flicked and every tab
--- dragged left one more hidden copy behind. What a module hands over the
--- first time is handed back on every rebuild after; its Update says whether
--- it is wanted, as it always did.
--- ONLY THE ROW'S OWN CELLS (same review). Unit frames calls its list of group
--- cells `Cells` too, and the rebuild took those in: the next layout hid your
--- own frame and your party's, on every target change after, and in a fight
--- the client refused it. A cell is something B.Cell made.
-local made = {}
+-- A module switched on or off: the dock laid out again for what runs now. It
+-- also asked each module for cells on the row, until the row went (Josh
+-- 2026-10-05); a section comes and goes with its module (B.Relayout).
 function B.Rebuild()
-	if not dock then
-		return
-	end
-	-- THE COG IS NOT ASKED (2026-10-05). It is the core's and always wanted;
-	-- marked unwanted here with the modules' cells, it was hidden by the next
-	-- target change and stayed hidden until a reload
-	for _, c in ipairs(cells) do
-		if c ~= dock.cog then
-			c:Hide()
-			c.wanted = false
-		end
-	end
-	cells = { dock.mark }
-	for _, m in ipairs(BT.Live()) do
-		if m.Cells then
-			local list = made[m.key]
-			if not list then
-				local ok, got = pcall(m.Cells, m)
-				if ok and type(got) == "table" then
-					list = {}
-					for _, c in ipairs(got) do
-						if type(c) == "table" and c.cellKey ~= nil then
-							list[#list + 1] = c
-						end
-					end
-					made[m.key] = list
-				end
-			end
-			for _, c in ipairs(list or {}) do
-				cells[#cells + 1] = c
-			end
-		end
-	end
-	cells[#cells + 1] = dock.cog -- always last: it is the way out of everything
-	-- a new set of cells is laid out in full, whatever width it comes to
-	laid.w = nil
-	B.Update()
-end
-
-function B.Update()
-	if not dock then
-		return
-	end
-	for _, c in ipairs(cells) do
-		if c.Update then
-			c:Update()
-		end
-	end
-	layout()
+	B.Relayout()
 end
 
 -- ANCHORED BY ITS TOP, ALWAYS (Josh 2026-09-19). Dragging a frame leaves it
@@ -1445,7 +1185,7 @@ function B.Create()
 		return dock
 	end
 	dock = CreateFrame("Button", "BeebModDock", UIParent)
-	dock:SetSize(120, BAR_H)
+	dock:SetSize(120, HEADER_H)
 	dock:SetFrameStrata("MEDIUM")
 	dock:SetMovable(true)
 	dock:EnableMouse(true)
@@ -1453,24 +1193,13 @@ function B.Create()
 	dock:RegisterForDrag("LeftButton")
 	dock:RegisterForClicks("AnyUp")
 	dock:SetClampedToScreen(true)
-	cells, sections, ordered, rowWidth = {}, {}, {}, MIN_W
-	row = CreateFrame("Frame", nil, dock)
-	row:SetPoint("TOPLEFT")
-	row:SetSize(MIN_W, BAR_H + MARKS_H)
-	-- a hairline under the two lines, so the dock reads as a header over
-	-- whatever sections are beneath it
-	dock.marksRule = dock:CreateTexture(nil, "ARTWORK")
-	dock.marksRule:SetHeight(1)
-	dock.marksRule:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 4, 0)
-	dock.marksRule:SetPoint("TOPRIGHT", row, "BOTTOMRIGHT", -4, 0)
-	BT.Widgets.Rule(dock.marksRule, nil, "h")
+	sections, ordered = {}, {}
 
 	-- THE PANEL SAYS WHOSE IT IS (Josh 2026-09-21). The dock had no header:
 	-- it began with a row of target cells, so the first thing you read was a
 	-- piece of the Ledger rather than the panel itself. A header gives the
 	-- stack a top, gives the cog somewhere that is not a corner, and gives
-	-- the whole thing a handle that does not disappear when the row is
-	-- switched off - which is what left a lone cog floating before.
+	-- the whole thing a handle that is always there.
 	dock.header = CreateFrame("Button", nil, dock)
 	dock.header:SetHeight(HEADER_H)
 	dock.header:RegisterForDrag("LeftButton")
@@ -1496,33 +1225,11 @@ function B.Create()
 	-- as a panel drawn wrong rather than as an accent. The border is a
 	-- setting now and it is the same the whole way round.
 
-	-- the mark, which is the whole dock when nothing else is switched on
-	local mark = cell("mark", 20)
-	mark.wanted = true
-	mark.button = CreateFrame("Button", nil, mark)
-	mark.button:SetAllPoints()
-	mark.icon = mark.button:CreateTexture(nil, "ARTWORK")
-	mark.icon:SetPoint("CENTER", 1, 0)
-	mark.icon:SetSize(13, 13)
-	mark.icon:SetTexture(ICONS)
-	B.NoteCoord(mark.icon)
-	BT.Widgets.Tint(mark.icon)
-	mark.button:SetScript("OnClick", function() BT.Window.Toggle() end)
-	mark.Update = function(self) self.wanted = true end
-	B.MakeHandle(mark.button)
-	dock.mark = mark
-
-	-- ONE WAY IN, NOT THREE (Josh 2026-09-19). The row used to carry a
+	-- ONE WAY IN, NOT THREE (Josh 2026-09-19). The dock used to carry a
 	-- magnifier and a chart, one per module, which meant every new utility
 	-- wanted its own icon and the bar grew a toolbar. The window has tabs for
 	-- that. What belongs out here is the way to the settings.
-	dock.cog = B.WayIn("cog", B.CogCoord, "settings", "Settings")
-	dock.cog.side = "right" -- the way out of everything lives at the end
-	dock.cog.inHeader = true
-	-- parented to the DOCK rather than to the row, because it outlives it: with
-	-- every utility that puts cells on the row switched off, the row goes and
-	-- the cog moves to the corner (Josh 2026-09-19)
-	dock.cog:SetParent(dock)
+	dock.cog = makeCog(dock.header)
 
 	-- THE CHARTS' BUTTON IS GONE (Josh 2026-10-04: "Remove the census icon
 	-- from the header, and make a dedicated row for ledger, the same as
@@ -1550,12 +1257,13 @@ function B.Create()
 	end)
 
 	restorePosition()
-	if BT.settings and BT.settings.dockScale then
-		dock:SetScale(BT.settings.dockScale)
-	end
+	-- THE ONE SIZE, AT LOGIN TOO (2026-10-05, audit): this read the dock's
+	-- old size setting, which the settings rework cut and drops at bind, so
+	-- the Size on General reached the dock only when it was changed again and
+	-- every reload put the dock and its tooltips back at 100%
+	dock:SetScale(B.Scale())
 	-- the border is whole screen pixels at the scale it is drawn at
 	BT.Pill.RepaintAll()
-	B.Rebuild()
 	B.Relayout()
 	return dock
 end
@@ -1610,11 +1318,9 @@ end
 
 function B.Frame() return dock end
 
-function B.Row() return row end
 function B.Header() return dock and dock.header end
 function B.Cog() return dock and dock.cog end
 function B.Sections() return ordered or {} end
-function B.Cells() return cells end
 -- the readout grid's cells, every module's
 function B.Chips() return chips end
 

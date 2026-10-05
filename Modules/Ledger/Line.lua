@@ -21,7 +21,6 @@ local M = BT.Module({
 	key = "ledgerline",
 	feature = "ledger",
 	title = "Ledger",
-	blurb = "Your Ledger rank and points",
 	-- straight after the Expedition's line: the same number, and its key
 	-- comes after the Expedition's and before Metrics'
 	order = 38,
@@ -87,7 +86,6 @@ function M.Update(points)
 	local c = M.colour
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(c[1], c[2], c[3], 0.9)
-	BT.Dock.BandColor(M.frame, c)
 	M.fill:SetShown(share > 0)
 	M.fill:SetWidth(math.max(1, w * math.min(1, share)))
 end
@@ -129,12 +127,12 @@ function M.Tip()
 			pill = ("Rank %d / %d"):format(rank, #L.RANKS) })
 		t:Title(title, points > 0 and ("%s points"):format(big(points)) or nil)
 		if points == 0 then
-			t:Note("Nothing in the book yet. Every 100 characters you see is worth 1 point.")
+			t:Note("Nothing in the book yet. A note is worth 2 points and a tag 1, and every 100 characters recorded 1.")
 			if nextAt then
 				t:Section()
 				t:ListRow("Next rank", ("%s at %s"):format(nextTitle, big(nextAt)))
 			end
-			t:Foot({ { "Click", "open ledger" } })
+			t:Foot({ { "Click", "open Ledger" } })
 			return
 		end
 		if nextAt then
@@ -161,7 +159,7 @@ function M.Tip()
 				})
 			end
 		end
-		t:Foot({ { "Click", "open ledger" } })
+		t:Foot({ { "Click", "open Ledger" } })
 	end })
 end
 
@@ -284,31 +282,46 @@ function M.Show(show)
 	BT.Dock.Relayout()
 end
 
--- Bound: at login, and at every loading screen after it (BT.Rebind). The
--- census's book is counted once for each book, not at every zone-in - it can
--- hold 150,000 characters - and the session runs on until another book is
--- bound.
-local function start()
+-- The book looked at: at login and at every loading screen after it, and
+-- when the line is switched on. The census's book is counted once for each
+-- book, not at every zone-in - it can hold 150,000 characters - and again
+-- when the census takes rows out (Ranks.lua, DB.onRemoved). The session runs
+-- on until another book is bound.
+-- AFTER THE LOADING SCREEN'S OTHER WORK (2026-10-05, audit). This ran in the
+-- bind, before the census's purge and size cap later in the same loading
+-- screen (Core/Collect/Sightings.lua): the count kept the characters the purge
+-- then took, and a commendation reached that way was dated and never said.
+-- Each look also threw away what it found, so a commendation or a rank
+-- earned a moment before a loading screen was dated and not said either. The
+-- line shows at bind; the book is looked at once the census has done its
+-- tidying (BT.OnWorld, below), and what it finds is said as any change is
+-- (M.Changed). The very first look still writes down quietly (L.Check).
+local function look()
 	if L.countedFor ~= BT.db then
 		L.CountCharacters()
 		L.countedFor = BT.db
 	end
-	-- the first look writes down what the book has, quietly (L.Check)
-	local _, _, points, c = L.Check()
-	M.points = points
 	if not M.session or M.session.db ~= BT.db then
-		M.session = { db = BT.db, characters = L.characters or 0, notes = c and c.notes or 0, tags = c and c.tags or 0 }
+		local c = L.Counts()
+		M.session = { db = BT.db, characters = L.characters or 0, notes = c.notes or 0, tags = c.tags or 0 }
 	end
-	M.Show(true)
+	M.Changed()
 end
 
 function M:OnEnable()
-	start()
+	M.Show(true)
+	look()
 end
 
 function M:OnBind()
-	start()
+	M.Show(true)
 end
+
+BT.OnWorld(function()
+	if BT.Enabled("ledgerline") then
+		look()
+	end
+end)
 
 function M:OnDisable()
 	M.Show(false)

@@ -17,9 +17,7 @@ local M = BT.Module({
 	key = "metrics",
 	feature = "dock",
 	title = "Metrics",
-	blurb = "Money, bags, durability, item level, Pick Pocket, speed and performance",
 	order = 38,
 	-- a row of the dock, switched and dragged on the Dock's page
 	dock = true,
-	kind = "readout",
 })

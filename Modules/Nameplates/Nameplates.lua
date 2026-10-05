@@ -41,7 +41,6 @@ local M = BT.Module({
 	key = "nameplates",
 	feature = "unitframes",
 	title = "Nameplates",
-	blurb = "Enemy nameplates with your damage over time on them, and friends' names",
 	order = 58.6,
 })
 
@@ -83,10 +82,11 @@ function M.SetOpt(name, value)
 	BT.settings.nameplates[name] = value
 end
 
--- THE OTHERS STEP BACK (on unless you turn it off): read by a plate's paint
--- (Unit.lua, paintRange), the alpha the others go to, or nil for none
+-- THE OTHERS STEP BACK (always, since the settings canvas fixed it on,
+-- 2026-10-04): read by a plate's paint (Unit.lua, paintRange), the alpha the
+-- others go to, or nil for none
 F.PlateDim = function()
-	if not (BT.Enabled("nameplates") and opt("dim", true)) then
+	if not BT.Enabled("nameplates") then
 		return nil
 	end
 	return M.DIM
@@ -332,9 +332,12 @@ M.OWNER_TITLES = { "UNITNAME_TITLE_PET", "UNITNAME_TITLE_MINION", "UNITNAME_TITL
 M.OWNER_FORMS = { "%s's Pet", "%s's Minion", "%s's Guardian" }
 
 -- "<Luigi's pet>" from the line "Luigi's Pet", or nil for any other line
-function M.OwnerTag(line)
-	if type(line) ~= "string" or F.Secret(line) then
-		return nil
+-- the patterns an owner's line is matched against, built once (2026-10-05,
+-- audit: built again, nine of them, every time a pet's plate was painted)
+local ownerPatterns
+local function patterns()
+	if ownerPatterns then
+		return ownerPatterns
 	end
 	local forms = {}
 	for _, key in ipairs(M.OWNER_TITLES) do
@@ -346,9 +349,19 @@ function M.OwnerTag(line)
 	for _, form in ipairs(M.OWNER_FORMS) do
 		forms[#forms + 1] = form
 	end
-	for _, form in ipairs(forms) do
-		local pattern = (form:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"):gsub("%%%%s", "(.+)", 1))
-		local owner = line:match("^" .. pattern .. "$")
+	ownerPatterns = {}
+	for i, form in ipairs(forms) do
+		ownerPatterns[i] = "^" .. (form:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"):gsub("%%%%s", "(.+)", 1)) .. "$"
+	end
+	return ownerPatterns
+end
+
+function M.OwnerTag(line)
+	if type(line) ~= "string" or F.Secret(line) then
+		return nil
+	end
+	for _, pattern in ipairs(patterns()) do
+		local owner = line:match(pattern)
 		if owner then
 			return "<" .. owner .. line:sub(#owner + 1):lower() .. ">"
 		end
@@ -479,7 +492,22 @@ M.GUARDS = { Guard = true, Sentinel = true, Grunt = true, Deathguard = true, Blu
 M.CAPITALS = { [1453] = true, [1454] = true, [1455] = true, [1456] = true, [1457] = true, [1458] = true }
 M.CAPITAL_NAMES = { ["Stormwind City"] = true, Ironforge = true, Darnassus = true, Orgrimmar = true,
 	["Thunder Bluff"] = true, Undercity = true }
+-- ASKED NOW AND THEN, NOT FOR EVERY PLATE (2026-10-05, audit): an NPC with no
+-- role asked it each time its plate was painted, a map lookup and the zone's
+-- name, several times a second walking through a city. The answer is kept
+-- for M.CAPITAL_EVERY seconds; a capital is not left in less.
+M.CAPITAL_EVERY = 5
 function M.InCapital()
+	local now = type(GetTime) == "function" and GetTime() or nil
+	if now and M.capitalAt and now - M.capitalAt < M.CAPITAL_EVERY then
+		return M.capital
+	end
+	M.capital = M.ReadCapital()
+	M.capitalAt = now
+	return M.capital
+end
+
+function M.ReadCapital()
 	local get = C_Map and C_Map.GetBestMapForUnit
 	if get then
 		local ok, map = pcall(get, "player")
@@ -769,13 +797,21 @@ end
 M.titles = {}
 -- an NPC's title, from its tooltip the first time and kept after; nil for
 -- none, or for a tooltip not ready yet, which is asked again next time
+-- NO TITLE IS AN ANSWER TOO (2026-10-05, audit): most guards and townsfolk
+-- have none, and every time one's plate came up its tooltip was built again
+-- to find that out. Once the tooltip has said the name, its having no title
+-- is kept (as false) for that NPC, as a title is.
 function M.TitleOf(token)
 	local npc = npcOf(F.Plain(UnitGUID, token))
-	if npc and M.titles[npc] then
-		return M.titles[npc]
+	local kept = npc and M.titles[npc]
+	if kept ~= nil then
+		return kept or nil
 	end
-	local title = M.Subtitle(token)
+	local title, name = M.Subtitle(token)
 	if type(title) ~= "string" or F.Secret(title) then
+		if npc and name then
+			M.titles[npc] = false
+		end
 		return nil
 	end
 	if npc then

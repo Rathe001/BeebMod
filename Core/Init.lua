@@ -1,19 +1,17 @@
 -- BeebMod: a set of small utilities behind one window and one button
 -- (Josh 2026-09-19).
 --
--- THE CORE OWNS THE PARTS EVERY UTILITY WOULD OTHERWISE REINVENT: the window
--- with the tabs down its left side, the floating bar, the look of a button and
--- a pill, and the book - every player this client has ever told us about, kept
--- once and shared. A utility is a MODULE: it registers a tab, some cells on
--- the bar, maybe a slash command, and it can be switched off in Settings
--- without the rest noticing.
+-- THE CORE OWNS THE PARTS EVERY UTILITY WOULD OTHERWISE REINVENT: the
+-- settings window with its rail down the left, the dock, the look of a button
+-- and a pill, and the book - every player this client has ever told us about,
+-- kept once and shared. A utility is a MODULE: it has a row on its feature's
+-- page, maybe a section of the dock and a slash command, and it can be
+-- switched off without the rest noticing.
 --
---   Ledger   what you think of the people you meet: notes, tags, tooltips
---   Census   what the realm is made of: class, race, level, your own tags
---
--- Both read the same book, which is why the book belongs to the core: turning
--- Ledger off must not blind the Census, and turning the Census off must not
--- lose a note.
+-- The Ledger (what you think of the people you meet) and its census (what
+-- the realm is made of, recorded as you see it) read the same book, which is
+-- why the book belongs to the core: switching the census off must not lose a
+-- note.
 --
 -- ONE BOOK PER REALM AND FACTION. The saved file is account-wide, so every
 -- character you play writes into the same book as long as they stand on the
@@ -83,7 +81,7 @@ BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-10-05-testing-dev-only"
+BT.BUILD = "2026-10-05-audit"
 
 -- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
 -- to disable it in production builds so normal users don't see it?"). The
@@ -100,7 +98,6 @@ BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off
 	tooltip = true,        -- show notes and tags on unit tooltips
 	tooltipGuild = true,   -- ...and a guild change
-	collect = true,        -- write down players we see
 	-- auto-purge: a character you saw once three months ago and never wrote on
 	-- is noise, and the book gets slower and less true the more of them it
 	-- keeps. Anything you have written on is never purged, at any age.
@@ -128,7 +125,6 @@ BT.SETTINGS = {
 --     ShowTab = function(m) end,         -- called each time the tab is opened
 --     OnBind = function(m, db) end,      -- a book was bound (login, loading
 --                                        -- screen): set up again, migrate
---     Cells = function(m) return {...} end, -- what it adds to the floating bar
 --   })
 --
 -- Switching a module on calls its OnEnable, or its OnBind when it has none -
@@ -336,11 +332,11 @@ end
 -- toggle switch then, so users can easily turn on or off entire modules
 -- instead of 1 option at a time").
 --
--- Six of them, each a switch of its own over every module in it. Switching a
--- feature off takes all of its modules with it and remembers each one's own
--- switch, so switching it back on brings back exactly what you had. A
--- feature with one page (the Census, the Ledger, the Expedition) IS its
--- module: switched on, the module is on too.
+-- Each is a switch of its own over every module in it. Switching a feature
+-- off takes all of its modules with it and remembers each one's own switch,
+-- so switching it back on brings back exactly what you had. A feature with
+-- one page (the Ledger, the Expedition) IS its module: switched on, the
+-- module is on too.
 --
 -- The dock's logo and cog are none of these: they are always there, the way
 -- back into the settings whatever is switched off (UI/Dock.lua).
@@ -408,8 +404,9 @@ function BT.Feature(key)
 	return featureByKey[key]
 end
 
--- a module that still says the group it used to be filed under
-local FROM_GROUP = { dock = "dock", combat = "unitframes", windows = "interface" }
+-- a module that still says the group it used to be filed under (only the
+-- tooltips do now)
+local FROM_GROUP = { windows = "interface" }
 
 -- the feature a module (or a module's key) is part of: its own word, its
 -- owner's for a part, or what its older group meant
@@ -425,9 +422,6 @@ function BT.FeatureOf(m)
 	end
 	if m.part then
 		return BT.FeatureOf(byKey[m.part])
-	end
-	if m.group == "people" then
-		return featureByKey[m.key] and m.key or nil
 	end
 	return FROM_GROUP[m.group]
 end
@@ -463,6 +457,14 @@ function BT.MergeCensus()
 	if not census then
 		s.modules = s.modules or {}
 		s.modules.census = false
+	end
+	-- THE CENSUS BRINGS THE LEDGER ON WHOLE (2026-10-05, audit): with the
+	-- Ledger off and the Census on, the merged feature came on but the
+	-- Ledger's own switch stayed off - its page read Off while the census
+	-- recorded and the Ledger's line showed in the dock
+	if census and not ledger then
+		s.modules = s.modules or {}
+		s.modules.ledger = true
 	end
 	s.features.ledger = (ledger or census) and true or false
 	s.features.census = nil

@@ -267,6 +267,16 @@ function K.Observe(unit, t)
 		return w
 	end
 	if not w then
+		-- A FRIEND IS NOT A KILL (2026-10-05, audit): guards, vendors and
+		-- townsfolk were watched as enemies, five looks a second each, and each
+		-- kind's look asked for on first sight - dozens in a city with friendly
+		-- plates on. One the player cannot attack is passed over before it is
+		-- watched; asked again at every look, not kept, so a quest NPC that
+		-- turns on you is caught. An enemy already watched goes on being.
+		local can = UnitCanAttack and UnitCanAttack("player", unit)
+		if not secret(can) and can == false then
+			return nil
+		end
 		local npc = K.Parse(guid)
 		if not npc then
 			notEnemies[guid] = true

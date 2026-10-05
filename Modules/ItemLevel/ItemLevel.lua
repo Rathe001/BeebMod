@@ -22,12 +22,10 @@ local U = BT.Util
 local M = BT.Module({
 	key = "itemlevel",
 	title = "Item level",
-	blurb = "The average item level of what you wear",
 	order = 39.65,
 	dock = true,
 	-- one of the Metrics, switched from its tab
 	part = "metrics",
-	kind = "readout",
 })
 
 local UNIT = "|cff8a9894%s|r"

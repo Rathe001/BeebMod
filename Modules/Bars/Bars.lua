@@ -16,7 +16,7 @@
 --                        border baked into the corners of the image
 --   pushed / checked     flat colour instead of the client's bevels
 --   the hotkey           small, quiet, and in the corner
---   the macro name       off by default: you know what your own buttons do
+--   the macro name       hidden: you know what your own buttons do
 --
 -- It is a module like any other, so it can be switched off and the client's
 -- art comes straight back.
@@ -29,7 +29,6 @@ local M = BT.Module({
 	key = "bars",
 	feature = "interface",
 	title = "Action bars",
-	blurb = "Draws the action bar buttons flat",
 	order = 50,
 })
 
@@ -75,28 +74,9 @@ function M.Skins()
 end
 
 -- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
--- supposed to be an opinionated solution, not fully customizable"). Hotkeys shown, macro names not.
-M.FIXED = { hotkeys = true, macroNames = false }
-
-local function opt(name, fallback)
-	if M.FIXED[name] ~= nil then
-		return M.FIXED[name]
-	end
-	local s = BT.settings and BT.settings.bars
-	if not s or s[name] == nil then
-		return fallback
-	end
-	return s[name]
-end
-M.Opt = opt
-
-local function setOpt(name, value)
-	BT.EnsureBound()
-	BT.settings.bars = BT.settings.bars or {}
-	BT.settings.bars[name] = value
-	M.StyleAll()
-end
-M.SetOpt = setOpt
+-- supposed to be an opinionated solution, not fully customizable"). Hotkeys
+-- shown, macro names not. (2026-10-05, cleanup) Nothing reads the old
+-- switches now, so the code that read them is gone.
 
 -- ---------------------------------------------------------------------------
 -- One button
@@ -222,17 +202,18 @@ local function styleText(button, hide)
 	local name = button.GetName and button:GetName()
 	local hotkey = piece(button, "HotKey", "HotKey")
 	if hotkey then
-		-- `hide` here means "put the client's look back": its hotkeys show
-		hotkey:SetAlpha((hide or opt("hotkeys", true)) and 1 or 0)
+		-- shown either way: ours are only a quieter colour
+		hotkey:SetAlpha(1)
 		if not hide and hotkey.SetTextColor then
 			hotkey:SetTextColor(0.55, 0.63, 0.59)
 		end
 	end
 	local macro = piece(button, "Name", "Name")
 	if macro then
-		-- off by default: you know what your own buttons do, and the name
-		-- covers the bottom third of the icon saying so
-		macro:SetAlpha((not hide) and opt("macroNames", false) and 1 or (hide and 1 or 0))
+		-- hidden: you know what your own buttons do, and the name covers the
+		-- bottom third of the icon saying so. `hide` here means "put the
+		-- client's look back", and its names show.
+		macro:SetAlpha(hide and 1 or 0)
 	end
 	local count = piece(button, "Count", "Count")
 	if count and count.SetTextColor and not hide then

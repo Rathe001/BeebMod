@@ -171,7 +171,7 @@ local function redraw()
 		pcall(C.Tick)
 	end
 	for _, f in ipairs({ BT.Window and BT.Window.Refresh, BT.ExpeditionWindow and BT.ExpeditionWindow.Refresh,
-		BT.Find and BT.Find.Refresh, BT.Dock and BT.Dock.Update }) do
+		BT.Find and BT.Find.Refresh, BT.Dock and BT.Dock.Relayout }) do
 		pcall(f)
 	end
 end

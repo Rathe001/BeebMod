@@ -22,7 +22,6 @@ local M = BT.Module({
 	feature = "expedition",
 	-- (Nesingwary's Expedition to players, Josh 2026-09-27; see BT.FEATURES)
 	title = "Nesingwary's Expedition",
-	blurb = "A journal of the enemies you've killed",
 	order = 38,
 	-- A TAB OF ITS OWN (Josh 2026-09-25): on the right panel, so it goes where
 	-- its tab is dragged, and its settings have a page to grow into
@@ -86,7 +85,8 @@ function M.Kill(info, how)
 	if not BT.Enabled("expedition") then
 		return
 	end
-	local rankBefore = J.Rank((J.Score()))
+	-- (from what the last kill's check kept, not the whole journal: J.KeptScore)
+	local rankBefore = J.Rank((J.KeptScore()))
 	local new, news = J.Kill(info)
 	local s = M.session
 	if s then
@@ -103,6 +103,8 @@ function M.Kill(info, how)
 	if new then
 		local _, worth = J.Worth(J.Store().enemies[info.npc])
 		BT.Notice.Gain(M, worth)
+		-- a new kind may want its other look asked for (M.ProbeTick)
+		M.Probe(true)
 	end
 	for _, a in ipairs(news or {}) do
 		if a.mastery then
@@ -115,7 +117,7 @@ function M.Kill(info, how)
 	end
 	-- a new rank last, once everything that earned it has been shown
 	-- (the score worked out once, and the dock's line drawn from it)
-	local points, _, st = J.Score()
+	local points, _, st = J.KeptScore()
 	local rank, title = J.Rank(points)
 	if rank > rankBefore then
 		M.RankToast(rank, title)
@@ -268,6 +270,13 @@ function M.ProbeTick()
 	end
 	npc = M.NextLook()
 	if not npc then
+		-- NOTHING LEFT TO ASK (2026-10-05, audit): it went on every three
+		-- seconds for as long as the Expedition was on, walking the whole
+		-- journal each time, the last creature still loaded in the hidden
+		-- model. It stops, the model emptied, until a new kind is killed or a
+		-- page is opened (M.Kill, the journal's V.Open and V.Show).
+		pcall(model.ClearModel, model)
+		M.Probe(false)
 		return said or "idle"
 	end
 	M.probing = npc
@@ -408,11 +417,10 @@ function M.Update(points, st)
 	local share = nextAt and (points - prev) / (nextAt - prev) or 1
 	-- OWN COLOUR (Josh 2026-09-26): it wore Experience's accent, and two
 	-- orange rows read as one; it takes the loading screens' ink blue, for
-	-- its bar and for the band behind it
+	-- its bar (a slim line has no band behind it: UI/Dock.lua, B.SlimLine)
 	local a = M.INK
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(a[1], a[2], a[3], 0.9)
-	BT.Dock.BandColor(M.frame, a)
 	-- a texture of no width is drawn as a whole one, so an empty part is hidden
 	M.fill:SetShown(share > 0)
 	M.fill:SetWidth(math.max(1, w * math.min(1, share)))
@@ -482,8 +490,10 @@ function M.Build()
 	-- 2026-10-05)
 	M.badge = BT.Dock.LineIcon(M.frame)
 	M.text, M.eta, M.track, M.fill = BT.Dock.SlimLine(M.frame, M.badge)
+	-- a new width draws the bar again from the last score, as the Ledger's
+	-- line does, rather than counting the journal (2026-10-05, audit)
 	M.frame:SetScript("OnSizeChanged", function()
-		M.Update()
+		M.Redraw()
 	end)
 	M.frame:EnableMouse(true)
 	M.frame:SetScript("OnEnter", M.Tip)
@@ -652,7 +662,13 @@ pcall(M.events.RegisterEvent, M.events, "PLAYER_ENTERING_WORLD")
 -- QUIET WHILE OFF (Josh 2026-09-30, review). Every unit's health reached
 -- this frame whether the Expedition was on or not, to be turned away one by one. They are heard while it is
 -- on: from its OnBind or OnEnable, until its OnDisable.
-local HEARD = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "UNIT_FLAGS",
+-- HEALTH AND FLAGS FOR THE TARGET AND THE MOUSEOVER ONLY (2026-10-05, audit):
+-- heard for every unit, they came by the hundred a second in a raid, each one
+-- asked whether it was a unit being watched. The scan looks at every
+-- nameplate five times a second, and a plate that goes is heard on its own
+-- (NAME_PLATE_UNIT_REMOVED); these two only see a death between looks.
+local HEARD_UNITS = { "UNIT_HEALTH", "UNIT_FLAGS" }
+local HEARD = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
 	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "CHAT_MSG_COMBAT_XP_GAIN", "LOOT_READY", "QUEST_ACCEPTED",
 	"QUEST_LOG_UPDATE", "ENCOUNTER_END" }
 function M.Listen(on)
@@ -664,6 +680,15 @@ function M.Listen(on)
 	local ev = M.events
 	for _, event in ipairs(HEARD) do
 		pcall(on and ev.RegisterEvent or ev.UnregisterEvent, ev, event)
+	end
+	for _, event in ipairs(HEARD_UNITS) do
+		if on then
+			if ev.RegisterUnitEvent then
+				pcall(ev.RegisterUnitEvent, ev, event, "target", "mouseover")
+			end
+		else
+			pcall(ev.UnregisterEvent, ev, event)
+		end
 	end
 	-- your own casts, for Pick Pocket (Modules/Expedition/Kills.lua, K.Cast)
 	if on then

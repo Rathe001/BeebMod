@@ -330,10 +330,11 @@ do
 	check(DB.Get(other, "Beeb Straffe") == nil, "so does another realm")
 	check(#BT.OtherBooks() == 1, ("the book you are not in is listed (%d)"):format(#BT.OtherBooks()))
 	-- settings are account-wide, not per book
-	BT.settings.collect = false
+	local hadDays = BT.settings.pruneDays
+	BT.settings.pruneDays = 7
 	BT.Bind("Whitemane", "Alliance")
-	check(BT.settings.collect == false, "settings follow the account, not the book")
-	BT.settings.collect = true
+	check(BT.settings.pruneDays == 7, "settings follow the account, not the book")
+	BT.settings.pruneDays = hadDays
 end
 
 -- 6e2. THE MOVE (Josh 2026-09-26): every note, tag and rating an older version
@@ -959,11 +960,16 @@ do
 	check(BT.MergeCensus() and BT.settings.features.ledger == true and BT.settings.features.census == nil
 		and BT.settings.modules.census == false, "a Census switched off: the Ledger on, recording off")
 	check(not BT.MergeCensus(), "and only once")
+	local hadLedgerModule = BT.settings.modules.ledger
 	BT.settings.features = { ledger = false, census = true }
-	BT.settings.modules.census = true
+	BT.settings.modules.census, BT.settings.modules.ledger = true, false
 	check(BT.MergeCensus() and BT.settings.features.ledger == true and BT.settings.modules.census == true,
 		"a Census on and a Ledger off: the Ledger on, recording on")
+	-- and the Ledger's own switch with it (2026-10-05, audit): its page read
+	-- Off while the census recorded
+	check(BT.settings.modules.ledger == true, "the Ledger's own switch on too, so its page is not Off")
 	BT.settings.features, BT.settings.modules.census = hadFeatures, hadCensus
+	BT.settings.modules.ledger = hadLedgerModule
 	-- THE ANSWERS NOBODY ASKS ANY MORE (2026-10-04): taken out once, the
 	-- dock's size kept as everyone's
 	local hadCut = BT.settings.cutSettingsDropped
@@ -2031,6 +2037,8 @@ do
 	J.Learn({ npc = 104, rank = "elite" })
 	local _, _, _, withElite = J.Score("char")
 	check(withElite == 17, ("a rank read after the kill counts from then (%d)"):format(withElite))
+	-- facts read after a kill: the count J.Check kept is of the old ones
+	check(J.kept == nil, "facts read after a kill throw the kept count away")
 
 	-- MASTERIES (Josh 2026-09-25): the 150th bandit is Gold, and the kill
 	-- that makes it is the hundredth of anything, Blooded, as well
@@ -2182,6 +2190,35 @@ do
 
 	-- ONE NAME, ONE PAGE (Josh 2026-09-28: "Getting duplicates", two cards
 	-- called Skyhopper - one of them the quest's Enchanted Skyhopper)
+	-- THE SCORE FROM WHAT A KILL'S CHECK KEPT (2026-10-05, audit) is the full
+	-- count's, through new kinds and repeat kills; the kills are taken back
+	-- out after, so nothing below counts them
+	do
+		local book, me = J.Store(), J.Mine()
+		local hadEarned, hadLast = {}, me.last
+		for id in pairs(me.earned) do
+			hadEarned[id] = true
+		end
+		for i, npc in ipairs({ 7700, 7700, 7701, 7700, 7702 }) do
+			J.Kill({ npc = npc, name = "Kept " .. npc, kind = "Beast", family = "Cat" }, T + 450 + i)
+			local kept, keptCount = J.KeptScore()
+			local full, fullCount = J.Score()
+			check(kept == full and keptCount == fullCount,
+				("after kill %d the kept score is the full one (%s, %s)"):format(i, tostring(kept), tostring(full)))
+		end
+		for _, npc in ipairs({ 7700, 7701, 7702 }) do
+			book.enemies[npc], me.kills[npc], me.first[npc] = nil, nil, nil
+		end
+		for id in pairs(me.earned) do
+			if not hadEarned[id] then
+				me.earned[id] = nil
+				if me.earnedBy then
+					me.earnedBy[id] = nil
+				end
+			end
+		end
+		me.last, J.kept = hadLast, nil
+	end
 	do
 		local book, me = J.Store(), J.Mine()
 		local first = J.Kill({ npc = 251314, name = "Skyhopper", kind = "Beast", guid = "s1" }, T + 500)
@@ -2374,6 +2411,19 @@ do
 	K.Scan(T + 0.4)
 	units.mouseover = nil
 	check(#got == 1, "a corpse never seen alive is not counted")
+	-- A FRIEND IS NOT A KILL (2026-10-05, audit): a unit you cannot attack is
+	-- not watched, and is the moment it turns on you
+	local wasAttack = _G.UnitCanAttack
+	_G.UnitCanAttack = function(_, t) return not (units[t] and units[t].friend) end
+	local watched = K.stats.watched
+	units.mouseover = enemy("Creature-0-1-2-3-68-F", "Stormwind City Guard", { friend = true, combat = false })
+	K.Scan(T + 0.5)
+	check(K.stats.watched == watched, "a guard you cannot attack is not watched")
+	units.mouseover.friend = nil
+	K.Scan(T + 0.6)
+	check(K.stats.watched == watched + 1, "and is, the moment it turns on you")
+	units.mouseover = nil
+	_G.UnitCanAttack = wasAttack
 	-- seen alive, then out of sight when it died: the XP line counts it
 	units.nameplate1 = enemy("Creature-0-1-2-3-251661-E", "Galestrider")
 	K.Scan(T + 1)

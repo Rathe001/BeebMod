@@ -18,13 +18,11 @@ local U = BT.Util
 local M = BT.Module({
 	key = "durability",
 	title = "Durability",
-	blurb = "How worn your gear is. Hides the game's armour figure.",
 	order = 39.6,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
 	-- one of the Metrics, switched from its tab (Josh 2026-09-22)
 	part = "metrics",
-	kind = "readout",
 })
 
 local WORDS = "|cff8a9894%s|r"

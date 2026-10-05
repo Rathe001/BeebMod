@@ -22,8 +22,8 @@ end
 -- TAGS AS ROWS, NOT PILLS (Josh 2026-09-19). They were drawn as pills laid
 -- over blank lines reserved in the tooltip - the same shape they wear on a
 -- card. Everywhere else in the toolkit a tag is now a square of its colour
--- with its name beside it: the note panel, the dock. The tooltip was the last
--- place still rounding them off.
+-- with its name beside it: the note panel, the cards. The tooltip was the
+-- last place still rounding them off.
 --
 -- The tags on one line at the foot of the tooltip. The squares are laid over
 -- the gap the line starts with - Core/Tooltip.lua owns that - and the text is

@@ -21,9 +21,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "xp",
 	feature = "dock",
-	onPage = "progress",
 	title = "Experience",
-	blurb = "Your XP bar and time to level",
 	order = 37,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -445,8 +443,10 @@ function M.Build()
 	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -RIGHT, -TITLE_TOP)
 	M.eta:SetHeight(TITLE_H)
 	M.eta:SetJustifyH("RIGHT")
-	-- the title stops short of the time
-	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
+	-- NOT HUNG FROM THE TIME (2026-10-05: "Missing level label"). Its right
+	-- edge was the time's left edge, and with no pace yet the time is no text
+	-- at all - the game drew nothing hung from it, and the title went. The
+	-- two fit side by side whatever they say ("Level 60", "12h 30m to 61").
 	-- the bar: a faint track, the experience, and rested ahead of it
 	M.track = M.frame:CreateTexture(nil, "BORDER")
 	M.track:SetPoint("TOPLEFT", M.frame, "TOPLEFT", x, -BAR_TOP)
@@ -460,7 +460,8 @@ function M.Build()
 	M.restedWord:Hide()
 	M.sub = BT.Widgets.Label(M.frame, "", "small", 0.54, 0.60, 0.58)
 	M.sub:SetPoint("TOPLEFT", M.frame, "TOPLEFT", x, -SUB_TOP)
-	M.sub:SetPoint("TOPRIGHT", M.restedWord, "TOPLEFT", -8, 0)
+	-- (clear of "Rested", but not hung from it: see the title)
+	M.sub:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -(RIGHT + 50), -SUB_TOP)
 	M.sub:SetHeight(SUB_H)
 	M.sub:SetJustifyH("LEFT")
 	M.sub:SetWordWrap(false)

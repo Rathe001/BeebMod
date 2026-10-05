@@ -19,8 +19,6 @@
 --   Section   a hairline and a small heading, then its rows
 --   Row       a label and a value, and a small bar under it if it has one
 --   Stats     two or three small tiles side by side
---   Tags      coloured chips
---   Quote     a note in the lore face, and who wrote it
 --   Foot      every click, as a key and what it does
 --
 -- The text in it follows docs/writing-style.md.
@@ -37,7 +35,6 @@ BT.Tip = T
 local WIDTH, PAD = 280, 12
 T.NUMBER = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\FiraCode-Medium.ttf"
 T.TITLE = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\JosefinSans-Bold.ttf"
-T.LORE = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\Alegreya-Italic.ttf"
 
 -- the colours a value can be in, besides the text's own
 T.STATE = {
@@ -619,53 +616,6 @@ function Builder:Stats(tiles, valueSize)
 		k:SetWidth(w - 10)
 	end
 	self.y = y + size + 22
-end
-
--- coloured chips, wrapping: { { text, color }, ... }
-function Builder:Tags(tags)
-	local y = self.y + 6
-	local x = PAD
-	local rowH = 18
-	for _, tag in ipairs(tags) do
-		local c = colourOf(tag[2])
-		local label = text(11)
-		label:SetText(tag[1])
-		label:SetTextColor(c[1], c[2], c[3])
-		local lw = width(label, #tag[1] * 6) + 14
-		if x + lw > WIDTH - PAD and x > PAD then
-			x = PAD
-			y = y + rowH + 4
-		end
-		local chip = rect("ARTWORK", 1)
-		place(chip, x, y)
-		chip:SetSize(lw, rowH)
-		chip:SetColorTexture(c[1], c[2], c[3], 0.14)
-		label:SetPoint("CENTER", chip, "CENTER", 0, 0)
-		x = x + lw + 5
-	end
-	self.y = y + rowH
-end
-
--- a note in the lore face, and who wrote it and when
-function Builder:Quote(words, credit)
-	local y = self.y + 8
-	local fs = text(14, T.LORE)
-	fs:SetWordWrap(true)
-	fs:SetWidth(WIDTH - PAD * 2)
-	fs:SetText(("\"%s\""):format(words or ""))
-	fs:SetTextColor(0.92, 0.87, 0.77)
-	place(fs, PAD, y)
-	local lines = math.max(1, math.ceil(#(words or "") * 6.5 / (WIDTH - PAD * 2)))
-	y = y + height(fs, 14, lines)
-	if credit then
-		local cr = text(11)
-		cr:SetText(credit)
-		cr:SetTextColor(DIM[1], DIM[2], DIM[3])
-		cr:SetPoint("TOPRIGHT", frame.body, "TOPRIGHT", -PAD, -(y + 4))
-		cr:SetJustifyH("RIGHT")
-		y = y + 17
-	end
-	self.y = y
 end
 
 -- every click: { { "Click", "open your bags" }, ... }

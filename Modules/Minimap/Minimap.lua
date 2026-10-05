@@ -24,9 +24,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "minimap",
 	feature = "dock",
-	onPage = "map",
 	title = "Minimap",
-	blurb = "The game's minimap, in the dock",
 	order = 5,
 	-- on the right panel, so it has a tab on the rail (Josh 2026-09-22)
 	dock = true,
@@ -131,21 +129,10 @@ local hidden = setmetatable({}, { __mode = "k" })
 local was = {}
 
 -- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
--- supposed to be an opinionated solution, not fully customizable"). The zone's name and your coordinates shown, and the corner buttons on
--- hover.
-M.FIXED = { zoneName = true, coords = true, controls = "hover" }
-
-local function opt(name, fallback)
-	if M.FIXED[name] ~= nil then
-		return M.FIXED[name]
-	end
-	local s = BT.settings and BT.settings.minimap
-	if not s or s[name] == nil then
-		return fallback
-	end
-	return s[name]
-end
-M.Opt = opt
+-- supposed to be an opinionated solution, not fully customizable"). The
+-- zone's name and your coordinates shown, and the corner buttons on hover.
+-- (2026-10-05, cleanup) Nothing reads the old switches now, so the code for
+-- their other answers is gone.
 
 -- ALWAYS SOLID (Josh 2026-09-22). The map was see-through for a while, as a
 -- setting, and every value under 100% did the same thing: the client stops
@@ -157,14 +144,6 @@ M.Opt = opt
 function M.Opacity()
 	return 1
 end
-
-local function setOpt(name, value)
-	BT.EnsureBound()
-	BT.settings.minimap = BT.settings.minimap or {}
-	BT.settings.minimap[name] = value
-	M.Apply()
-end
-M.SetOpt = setOpt
 
 -- ---------------------------------------------------------------------------
 -- The chrome
@@ -281,9 +260,6 @@ function M.Build()
 			end)
 		end
 	end)
-	-- and it sits above the row rather than under it: the row is a strip of
-	-- controls, and a picture belongs over it
-	M.frame.above = true
 	M.skin = BT.Pill.Surface(M.frame, "BACKGROUND", -6)
 
 	-- THE CAPTION ROW IS OURS (Josh 2026-09-21, layout D). Six rounds went on
@@ -371,9 +347,8 @@ function M.Caption()
 	if not (M.zoneText and M.coordText) then
 		return
 	end
-	-- (either can be left off - Josh 2026-09-24)
-	M.zoneText:SetShown(opt("zoneName", true) and true or false)
-	M.coordText:SetShown(opt("coords", true) and true or false)
+	M.zoneText:Show()
+	M.coordText:Show()
 	local zone = call(_G.GetMinimapZoneText) or call(_G.GetZoneText) or ""
 	M.zoneText:SetText(zone)
 	local c = GROUND[call(_G.GetZonePVPInfo) or ""] or UNCLAIMED
@@ -1199,11 +1174,6 @@ end
 -- zero alpha they are invisible and still clickable, which is exactly what a
 -- control that appears under the cursor should be.
 function M.Reveal(on)
-	-- ALWAYS, IF YOU LIKE (Josh 2026-09-24): the corners up whether or not the
-	-- pointer is on the map
-	if opt("controls", "hover") == "always" then
-		on = true
-	end
 	local a = on and 1 or 0
 	for f in pairs(M.hovering or {}) do
 		if f.SetAlpha then
@@ -1368,7 +1338,7 @@ function M.Apply(plain)
 	-- which has events of its own, and with the panel hidden too.
 	if not M.ticker and C_Timer and C_Timer.NewTicker then
 		M.ticker = C_Timer.NewTicker(0.25, function()
-			if BT.Enabled("minimap") and opt("coords", true) and M.frame and M.frame:IsVisible() then
+			if BT.Enabled("minimap") and M.frame and M.frame:IsVisible() then
 				M.Coords()
 			end
 		end)

@@ -13,8 +13,8 @@
 -- WHAT IT KEEPS. Everything you would actually act on: who, how tough, what
 -- they are, who they run with. What it drops: the word "(Player)", the faction
 -- you can already see on the nameplate unless it is the OTHER one, the
--- right-click instruction, and the health bar - all switchable, because every
--- one of those is somebody's favourite.
+-- right-click instruction, and the health bar. None of them is a switch any
+-- more (the settings canvas, Josh 2026-10-04).
 --
 -- It rebuilds rather than hides: ClearLines and start again is the only way to
 -- make the tooltip actually SHRINK. Blanking lines leaves their height behind,
@@ -28,7 +28,6 @@ local M = BT.Module({
 	key = "tooltips",
 	group = "windows",
 	title = "Tooltips",
-	blurb = "Shorter tooltips on players and NPCs",
 	order = 30,
 })
 
@@ -113,14 +112,11 @@ local MAX_W = 340
 -- the air between the header and whatever the client says next: the rule
 -- sits inside it, RULE_DROP down, with a breath under it
 local HEADER_GAP = 7
--- five, not three: at tooltip scale three reads as a hairline that lost its
--- rim rather than as a bar with a level in it (Josh 2026-09-19)
-local BAR_H = 5
 
 -- WHAT THE HEALTH BAR WAS (Josh 2026-09-22). Compose sets its height to one
--- pixel or to BAR_H and paints it the accent, and switching the module off
--- only showed it again - a one-pixel sliver until the next /reload. Its own
--- height and colour are written down the first time it is touched.
+-- pixel and hides it, and switching the module off only showed it again - a
+-- one-pixel sliver until the next /reload. Its own height and colour are
+-- written down the first time it is touched.
 local barWas
 local function rememberBar(bar)
 	if barWas or not bar then
@@ -135,14 +131,8 @@ local function rememberBar(bar)
 	}
 end
 
--- THE BOTTOM EDGE IS NOT THE TOP EDGE (Josh 2026-09-19). With the health bar
--- on, the bar lives inside the tooltip's bottom padding - so the bottom has to
--- carry the bar AND the same breath of space the top has, or the gap under the
--- last line reads as twice the gap above the first. With the bar off it is
--- just the same two pixels as everywhere else.
--- both declared here and written below, where opt() exists: skin() sits above
--- the settings reader and these are what it needs from it
-local padBottom, repad
+-- declared here and written below: skin() sits above it and calls it
+local repad
 
 -- the same surface as every panel: a tooltip that is opaque while the window
 -- behind it is not looks like it belongs to a different addon
@@ -473,33 +463,13 @@ restoreFonts = function(tip) return BT.UnitTip.RestoreFonts(tip) end
 -- each of the page's switches said by default is what the tooltips do: the
 -- guild and another faction shown, the sell price small, an item's level,
 -- in the corner; no health bar, no targeting line, not hidden in a fight.
-M.FIXED = {
-	guild = true, faction = true, footer = true, itemLevel = true,
-	healthBar = false, targetLine = false, combatHide = false, anchor = "dock",
-}
-
-local function opt(name, fallback)
-	if M.FIXED[name] ~= nil then
-		return M.FIXED[name]
-	end
-	local s = BT.settings and BT.settings.tooltips
-	if not s or s[name] == nil then
-		return fallback
-	end
-	return s[name]
-end
-M.Opt = opt
+-- (2026-10-05, cleanup) Nothing reads the old switches now, so the code for
+-- their other answers is gone: the health bar, the targeting line, the
+-- tooltip at the pointer and the tooltip put away in a fight.
 
 -- the tests look at the edge a tooltip is wearing
 function M.Skins()
 	return skins
-end
-
-padBottom = function()
-	if opt("healthBar", false) then
-		return BAR_H + PAD_BOTTOM
-	end
-	return PAD_BOTTOM
 end
 
 -- what the module asked for, so a test can check the client kept it rather
@@ -539,10 +509,8 @@ repad = function(tip, s, force)
 	-- made it wider than the client had measured for.
 	local ours = s and s.ours
 	local right, left = ours and PAD_X or 0, ours and PAD_LEFT or 0
-	-- the bar needs its room on ANY tooltip the client puts one in; only how
-	-- tight the rest is depends on whether we wrote the lines
-	local base = ours and PAD_BOTTOM or PAD_Y
-	local bottom = opt("healthBar", false) and (BAR_H + base) or base
+	-- how tight the bottom is depends on whether we wrote the lines
+	local bottom = ours and PAD_BOTTOM or PAD_Y
 	local top = (s and s.wantTop) or PAD_Y
 	local want = true
 	if tip.GetPadding then
@@ -565,13 +533,6 @@ repad = function(tip, s, force)
 	end
 end
 M.Repad = repad
-
-local function setOpt(name, value)
-	BT.EnsureBound()
-	BT.settings.tooltips = BT.settings.tooltips or {}
-	BT.settings.tooltips[name] = value
-end
-M.SetOpt = setOpt
 
 -- How hard this thing is, in as few characters as it can be said: a level, and
 -- one mark for anything that is not an ordinary mob.
@@ -652,13 +613,11 @@ function detailLine(unit, isPlayer)
 		if guild then
 			spoken["<" .. guild .. ">"] = true
 			spoken[guild] = true
-			if opt("guild", true) then
-				local green = M.GUILD:format("<" .. guild .. ">")
-				if #bits > 0 then
-					bits[#bits] = bits[#bits] .. " " .. green
-				else
-					bits[#bits + 1] = green
-				end
+			local green = M.GUILD:format("<" .. guild .. ">")
+			if #bits > 0 then
+				bits[#bits] = bits[#bits] .. " " .. green
+			else
+				bits[#bits + 1] = green
 			end
 		end
 		-- the faction only when it is the one you are not: yours is not news
@@ -672,7 +631,7 @@ function detailLine(unit, isPlayer)
 			spoken[mine] = true
 			spoken[_G["FACTION_" .. mine:upper()] or mine] = true
 		end
-		if opt("faction", true) and theirs and mine and theirs ~= mine and theirs ~= "Neutral" then
+		if theirs and mine and theirs ~= mine and theirs ~= "Neutral" then
 			bits[#bits + 1] = theirs
 		end
 	else
@@ -935,11 +894,8 @@ end
 -- that line has words in it, so when the client rewrote it the words came back
 -- in a one-point font. This one is a space. Rewritten or not, a space at one
 -- point looks the same as no line at all.
---
--- With the bar switched on the line is left alone: that space is where the bar
--- goes, which is the whole reason the client reserved it.
 local function squeezeBlankTail(tip)
-	if opt("healthBar", false) or not tip.NumLines then
+	if not tip.NumLines then
 		return 0
 	end
 	local ok, n = pcall(tip.NumLines, tip)
@@ -1067,23 +1023,6 @@ function M.Compose(tip, unit)
 		end
 	end
 
-	-- WHO IT IS POINTING AT (Josh 2026-09-24), when asked for: a line of small
-	-- print. The name may be secret; the client joins it for us.
-	if opt("targetLine", false) then
-		local t = tostring(unit or "") .. "target"
-		local okE, exists = pcall(UnitExists, t)
-		if okE and exists == true then
-			local okN, who = pcall(UnitName, t)
-			if okN and who ~= nil then
-				local ok, line = pcall(function() return "Targeting " .. who end)
-				if ok then
-					tip:AddLine(line, DIM[1], DIM[2], DIM[3])
-					sizeLine(tip, BT.Pill.Number(tip.NumLines and tip:NumLines(), 0), SUB)
-				end
-			end
-		end
-	end
-
 	-- and the quests this one counts towards, put back in our own sizes: the
 	-- quest's name as a small heading, its objectives under it as footnotes
 	if quests then
@@ -1115,25 +1054,14 @@ function M.Compose(tip, unit)
 
 	if GameTooltipStatusBar then
 		rememberBar(GameTooltipStatusBar)
-		if opt("healthBar", false) then
-			-- flat and thin, like every other bar in the toolkit, rather than
-			-- the client's raised green pill
-			GameTooltipStatusBar:SetHeight(BAR_H)
-			if GameTooltipStatusBar.SetStatusBarColor then
-				local a = BT.Widgets.ACCENT
-				GameTooltipStatusBar:SetStatusBarColor(a[1], a[2], a[3])
-			end
-			GameTooltipStatusBar:Show()
-		else
-			-- HIDDEN IS NOT GONE (Josh 2026-09-19). The client sizes the
-			-- tooltip with room for this bar before we get to it, so hiding it
-			-- left its height behind as a band of empty space under the last
-			-- line. Nothing can be drawn in one pixel.
-			if GameTooltipStatusBar.SetHeight then
-				GameTooltipStatusBar:SetHeight(1)
-			end
-			GameTooltipStatusBar:Hide()
+		-- HIDDEN IS NOT GONE (Josh 2026-09-19). The client sizes the tooltip
+		-- with room for this bar before we get to it, so hiding it left its
+		-- height behind as a band of empty space under the last line. Nothing
+		-- can be drawn in one pixel.
+		if GameTooltipStatusBar.SetHeight then
+			GameTooltipStatusBar:SetHeight(1)
 		end
+		GameTooltipStatusBar:Hide()
 	end
 	-- the pull-up belongs to a unit tooltip: we wrote every line in it, so
 	-- the header may sit as close to the rim as the body does to the sides
@@ -1367,7 +1295,7 @@ function M.ItemLevelText(itemLink)
 end
 
 local function itemLevel(tip)
-	if not (opt("itemLevel", true) and tip.GetItem) then
+	if not tip.GetItem then
 		return nil
 	end
 	local ok, _, itemLink = pcall(tip.GetItem, tip)
@@ -1418,10 +1346,8 @@ function M.ComposeItem(tip)
 	--
 	-- An item name already says what it is by its quality colour. It does not
 	-- need to be bigger as well.
-	if opt("footer", true) then
-		quietFooter(tip)
-		shadowTitle(tip)
-	end
+	quietFooter(tip)
+	shadowTitle(tip)
 	-- before the Show below, which measures the tooltip with it in
 	itemLevel(tip)
 	-- NOT HERE (Josh 2026-09-21). Re-anchoring a line the client laid out
@@ -1495,7 +1421,7 @@ end
 -- of the tooltip. It is told no at the moment it asks instead.
 if GameTooltipStatusBar and GameTooltipStatusBar.HookScript then
 	GameTooltipStatusBar:HookScript("OnShow", function(bar)
-		if BT.Enabled("tooltips") and not opt("healthBar", false) then
+		if BT.Enabled("tooltips") then
 			rememberBar(bar)
 			if bar.SetHeight then
 				bar:SetHeight(1)
@@ -1711,10 +1637,8 @@ local function dressOther(tip)
 		end
 		M.LeftBar(s)
 	end
-	if opt("footer", true) then
-		quietFooter(tip)
-		shadowTitle(tip)
-	end
+	quietFooter(tip)
+	shadowTitle(tip)
 	-- NOT HERE (Josh 2026-09-21). Re-anchoring a line the client laid out
 	-- detaches it from the layout it was measured in, which is the other half
 	-- of how an item tooltip came out with its words outside its own panel.
@@ -1900,41 +1824,6 @@ if CreateFrame then
 	end)
 end
 
--- AT THE POINTER, IF YOU LIKE (Josh 2026-09-24): a tooltip the client would
--- put in its corner follows the pointer instead. (The dock's own hook moves
--- the corner one clear of the dock first; the new owner undoes that - see
--- UI/Dock.lua.)
-function M.AnchorDefault(tip, parent)
-	if not (BT.Enabled("tooltips") and opt("anchor", "dock") == "cursor") then
-		return false
-	end
-	if tip and tip.SetOwner then
-		pcall(tip.SetOwner, tip, parent or UIParent, "ANCHOR_CURSOR")
-		return true
-	end
-	return false
-end
-if type(hooksecurefunc) == "function" and type(_G.GameTooltip_SetDefaultAnchor) == "function" then
-	hooksecurefunc("GameTooltip_SetDefaultAnchor", function(tip, parent)
-		pcall(M.AnchorDefault, tip, parent)
-	end)
-end
-
--- NOT IN A FIGHT, IF YOU LIKE (Josh 2026-09-24): a unit's tooltip is put away
--- as it shows while you are in combat; items and spells are not units
-function M.CombatHidden(tip, unit)
-	if not (opt("combatHide", false) and InCombatLockdown and InCombatLockdown()) then
-		return false
-	end
-	if not (unit and UnitExists and UnitExists(unit)) then
-		return false
-	end
-	if tip and tip.Hide then
-		tip:Hide()
-	end
-	return true
-end
-
 -- CLEARED, NOT SHOWN (Josh 2026-09-21). Moving the cursor from a mob to a
 -- quest item lying in the snow does not HIDE the tooltip - it is written again
 -- in place - so OnShow never fires and the leftovers survive. The client
@@ -1974,9 +1863,6 @@ if GameTooltip and GameTooltip.HookScript then
 		elseif tip.GetUnit then
 			local ok, _, u = pcall(tip.GetUnit, tip)
 			unit = ok and u or nil
-		end
-		if M.CombatHidden(tip, unit) then
-			return
 		end
 		-- (not while one of ours is showing it: Compose and ComposeItem
 		-- have just dressed it, and a plain pass took an item's spine off)

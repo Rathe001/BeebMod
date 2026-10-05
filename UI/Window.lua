@@ -1085,7 +1085,11 @@ local function hayOf(r)
 	if not r.hay then
 		local spec = r.spec or {}
 		local extra = (not spec.head) and W.SEARCH_WORDS[spec.label or ""] or ""
-		local text = table.concat({ spec.label or "", spec.blurb or "", spec.words or "", extra }, " ")
+		-- a feature's own switch by its name only (2026-10-05, audit): its line,
+		-- "The whole feature, on or off", is every feature's, and "off" or
+		-- "feature" brought every page into the results
+		local blurb = (not spec.head) and spec.blurb or ""
+		local text = table.concat({ spec.label or "", blurb, spec.words or "", extra }, " ")
 		text = text:lower():gsub("'", "")
 		r.hay = text .. " " .. text:gsub("%s+", "")
 	end
@@ -1338,7 +1342,13 @@ local function searchField(parent)
 	f:SetScript("OnMouseDown", function() f.box:SetFocus() end)
 	f.box:SetScript("OnTextChanged", function(self) W.Search(self:GetText()) end)
 	f.box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-	f.box:SetScript("OnEscapePressed", function() W.ClearSearch() end)
+	-- Escape lets go of the keyboard whatever is in the box (2026-10-05,
+	-- audit): with the box empty, the page did not change and the box kept
+	-- the keys, so walking typed into it
+	f.box:SetScript("OnEscapePressed", function(self)
+		self:ClearFocus()
+		W.ClearSearch()
+	end)
 	f.box:SetScript("OnEditFocusGained", function()
 		lit(true)
 		W.SearchLook()
@@ -1433,28 +1443,20 @@ function W.Rebuild()
 	end
 	local y, shown = -6, 0
 	local area = rail.area or rail
-	local function place(key, title, colour, at)
+	-- every tab in the list that scrolls, top to bottom (Testing too, since
+	-- 2026-10-05: at the rail's foot the client's Issue Reporter covered it)
+	local function place(key, title, colour)
 		shown = shown + 1
 		local tab = makeTab(shown)
-		-- A TAB AT THE FOOT IS NOT IN THE LIST (Josh 2026-10-05: "We lost the
-		-- Testing module"). Every tab was made inside the list that scrolls,
-		-- and the list stops above the foot, so Testing, placed at the foot,
-		-- was cut off with nothing to say so. A tab is reused by its place in
-		-- the order, so it is given its parent each time.
-		tab:SetParent(at and rail or area)
 		tab.key, tab.title, tab.colour = key, title, colour
 		tab.label:SetText(title)
 		tab.label:ClearAllPoints()
 		tab.label:SetPoint("LEFT", colour and 28 or 14, 0)
 		tab:ClearAllPoints()
-		if at then
-			tab:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 6, at)
-		else
-			tab:SetPoint("TOPLEFT", area, "TOPLEFT", 6, y)
-			y = y - TAB_STRIDE
-		end
+		tab:SetPoint("TOPLEFT", area, "TOPLEFT", 6, y)
+		y = y - TAB_STRIDE
 		tab:SetWidth(RAIL - 12)
-		tab:SetFrameLevel(((at and rail or area):GetFrameLevel() or 1) + 4)
+		tab:SetFrameLevel((area:GetFrameLevel() or 1) + 4)
 		tab:Show()
 		tabTint(tab, W.LitTab() == key, false)
 		return tab

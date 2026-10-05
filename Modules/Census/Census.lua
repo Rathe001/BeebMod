@@ -12,10 +12,10 @@ local M = BT.Module({
 	-- a part of the Ledger since 2026-10-04 (BT.MergeCensus)
 	feature = "ledger",
 	title = "Census",
-	blurb = "Who is on the realm",
+	-- what a player sees it called: it is the Ledger's, "Record everyone you
+	-- see" on its page (2026-10-05, audit: /bt help said "(Census)")
+	short = "Ledger",
 	order = 20,
-	-- shown in the Ledger's window: no page of its own on the settings' rail
-	standalone = true,
 })
 
 -- `shell` is the Charts page's rail and toolbar (UI/CensusWindow.lua)
@@ -44,7 +44,7 @@ end
 
 BT.Command("census", function()
 	BT.CensusWindow.Toggle("charts")
-end, "open census charts", "census")
+end, "open the Ledger's charts", "census")
 
 -- WAS IN A GUILD (moved from the Ledger's tooltip, Josh 2026-09-26): a guild
 -- change is the census's to know, so it says so itself, for anyone in the

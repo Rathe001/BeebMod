@@ -51,7 +51,6 @@ local M = BT.Module({
 	key = "buffs",
 	feature = "unitframes",
 	title = "Buffs",
-	blurb = "Your buffs and debuffs, in a tray beside the dock",
 	order = 46,
 })
 B.module = M

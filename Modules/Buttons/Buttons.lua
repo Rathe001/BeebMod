@@ -20,9 +20,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "buttons",
 	feature = "dock",
-	onPage = "map",
 	title = "Addon buttons",
-	blurb = "Other addons' minimap buttons, in a line",
 	order = 6,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,

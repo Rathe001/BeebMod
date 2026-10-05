@@ -18,14 +18,12 @@ local U = BT.Util
 local M = BT.Module({
 	key = "performance",
 	title = "Performance",
-	blurb = "Frame rate and latency",
 	order = 39.8,
 	-- on the right panel, as a row of the Metrics grid (a part has no tab of
 	-- its own: its switch is on the Metrics tab)
 	dock = true,
 	-- one of the Metrics, switched from its tab (Josh 2026-09-22)
 	part = "metrics",
-	kind = "readout",
 })
 
 -- often enough to see a stutter, rarely enough to cost nothing

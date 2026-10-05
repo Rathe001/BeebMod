@@ -18,9 +18,10 @@
 --
 -- The flash is the client's too: see T.BlinkCurve.
 
--- The spells are yours to choose on the Frames page. A spell is known by
--- name and found in your spellbook, every rank of it, so a lower rank cast
--- from a macro shows too.
+-- Every spell in your class's list has its lane, in the list's order, and
+-- every lane blinks as it runs out (the settings canvas, Josh 2026-10-04, cut
+-- the choices). A spell is known by name and found in your spellbook, every
+-- rank of it, so a lower rank cast from a macro shows too.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/UnitFrames/Timers.lua")
 
@@ -179,71 +180,14 @@ function T.Colour(which, name, class)
 	return list[1]
 end
 
--- YOUR ORDER (Josh 2026-09-24: "allow the player to change the order of
--- dots, so they can stack them however they'd like"). The spells that are up
--- stack in this order with no gaps between them (dotStack).
--- The class's spells in the order you left them, first to last - first
--- being the lane nearest the frame. A spell your list has not heard of (a
--- class list that grew) goes after the rest; one it names that the class no
--- longer has is passed over.
-function T.Ordered(which, class)
-	local spells = T.Spells(which, class)
-	local order = F.Opt("timerOrder", nil)
-	order = type(order) == "table" and order[class or myClass() or ""] or nil
-	if type(order) ~= "table" then
-		return spells
-	end
-	local known, out, seen = {}, {}, {}
-	for _, n in ipairs(spells) do
-		known[n] = true
-	end
-	for _, n in ipairs(order) do
-		if known[n] and not seen[n] then
-			out[#out + 1], seen[n] = n, true
-		end
-	end
-	for _, n in ipairs(spells) do
-		if not seen[n] then
-			out[#out + 1] = n
-		end
-	end
-	return out
-end
-
--- ---------------------------------------------------------------------------
--- Your choices: every spell on, unless you switched it off
--- ---------------------------------------------------------------------------
-
-local function settings()
-	BT.settings.unitframes = BT.settings.unitframes or {}
-	return BT.settings.unitframes
-end
-
-function T.On(name)
-	local off = F.Opt("timersOff", nil)
-	return not (type(off) == "table" and off[name])
-end
+-- (2026-10-05, cleanup) The lanes stack in the class's order. Your own order
+-- (Josh 2026-09-24), a switch for each spell and the switches for the blink
+-- went with the settings canvas, and so did the code that read them.
 
 -- BLINK AS IT RUNS OUT (Josh 2026-09-24). In its last seconds a lane's empty
 -- part flashes red, under the bar that is left: the countdown number that
 -- started this went ("I think we can completely remove the number countdown
--- now. This is attention grabbing enough"). One switch for heals, on the Unit
--- frames page, and one for damage, on the Nameplates page; on unless you
--- switch it off.
-local BLINK_KEY = { hot = "timerBlinkHot", dot = "timerBlinkDot" }
-
-function T.Blinks(which)
-	local on = F.Opt(BLINK_KEY[which] or BLINK_KEY.dot, nil)
-	if on == nil then
-		return true
-	end
-	return on and true or false
-end
-
--- what a lane was made with, to know when to make it again
-function T.LaneStyle(which)
-	return T.Blinks(which) and "blink" or "still"
-end
+-- now. This is attention grabbing enough"). Heals and damage both blink.
 
 -- the flash's red, 0-255 as an inline texture takes it
 T.COVER = { 255, 92, 77 }
@@ -256,8 +200,8 @@ function T.Lanes(kind)
 	local out = {}
 	for _, which in ipairs(T.Kinds(kind) or {}) do
 		local slot = 0
-		for _, name in ipairs(T.Ordered(which)) do
-			if T.On(name) and slot < (T.MAX_LANES[which] or 1) then
+		for _, name in ipairs(T.Spells(which)) do
+			if slot < (T.MAX_LANES[which] or 1) then
 				slot = slot + 1
 				out[#out + 1] = { which = which, name = name, colour = T.Colour(which, name), slot = slot }
 			end
@@ -438,7 +382,7 @@ end
 
 -- `h` is the whole lane's height and `barH` its bar's, in the lane's middle
 -- after the picture (the same as `h` on a heal's lane)
-local function laneButton(w, h, colour, blinks, above, barH)
+local function laneButton(w, h, colour, above, barH)
 	barH = barH or h
 	return function(b)
 		T.seen.inits = T.seen.inits + 1
@@ -482,7 +426,7 @@ local function laneButton(w, h, colour, blinks, above, barH)
 		-- short of the lane's end - by whatever it scales a text's picture
 		-- by - so it is made twice the lane's width and a few pixels taller,
 		-- and the frame it is on clips it to the lane's own edges
-		local opts = blinks and flashOptions(bw * 2, barH + 6, above and "dot" or "hot") or nil
+		local opts = flashOptions(bw * 2, barH + 6, above and "dot" or "hot")
 		if opts and b.SetDurationText then
 			-- the client only asks that the text be somewhere inside the button
 			local under = CreateFrame("Frame", nil, b)
@@ -541,14 +485,13 @@ local function laneFor(b, set, lane)
 		key = "timer", max = 1, size = w, cellH = h, inside = true, flowAt = "TOPLEFT",
 		filter = lane.which == "hot" and "HELPFUL|PLAYER" or "HARMFUL|PLAYER",
 		candidate = { includeSpellIDs = spells },
-		init = laneButton(w, h, lane.colour, T.Blinks(lane.which), T.Above(lane.which)),
+		init = laneButton(w, h, lane.colour, T.Above(lane.which)),
 	}
 	local c = F.Auras.Container(set.host, spec, set.unit or b.bmUnit)
 	if not c then
 		return nil
 	end
 	c.bmSig = signature(spells)
-	c.bmCountdown = T.LaneStyle(lane.which)
 	return c
 end
 
@@ -589,11 +532,12 @@ T.Place = place
 -- them down now so we don't have blank bars for missing dots? They would just
 -- be sorted by the order in the options"). Each spell had a container of its
 -- own, kept in its place whether the spell was up or not. They are one
--- container now, a group in it for each spell in your order, each group on a
--- line of its own, growing up from the frame. The client's flow layout gives
--- a line only to a group with an aura in it, so the spells that are up stack
--- with nothing between them - in a fight too, as the client lays them out
--- itself. Each group has its spell's own button, so its own colour.
+-- container now, a group in it for each spell in the class's order, each
+-- group on a line of its own, growing up from the frame. The client's flow
+-- layout gives a line only to a group with an aura in it, so the spells that
+-- are up stack with nothing between them - in a fight too, as the client
+-- lays them out itself. Each group has its spell's own button, so its own
+-- colour.
 local function dotSignature(lanes)
 	local parts = {}
 	for _, lane in ipairs(lanes) do
@@ -627,7 +571,7 @@ local function dotStack(b, set, lanes)
 		if spells and next(spells) then
 			local added = pcall(c.AddAuraGroup, c, lane.name, "HARMFUL|PLAYER", {
 				maxFrameCount = 1,
-				initializeFrame = laneButton(w, h, lane.colour, T.Blinks("dot"), true, barH),
+				initializeFrame = laneButton(w, h, lane.colour, true, barH),
 				candidateFilters = { includeSpellIDs = spells },
 				layout = { elementSpacing = 1, lineSpacing = 1, groupLineSpacing = 1, forceNewLine = true,
 					elementWidth = w, elementHeight = h, layoutIndex = i },
@@ -642,7 +586,6 @@ local function dotStack(b, set, lanes)
 		return nil
 	end
 	c.bmSig = dotSignature(lanes)
-	c.bmCountdown = T.LaneStyle("dot")
 	return c
 end
 T.DotStack = dotStack
@@ -663,7 +606,8 @@ local function drop(set, c)
 	end
 end
 
--- every button that wears lanes, to lay them out again when a choice changes
+-- every button that wears lanes, to lay them out again when the plates go
+-- on or off or a new rank is learned
 local wearing = setmetatable({}, { __mode = "k" })
 local pending, regen
 
@@ -681,7 +625,8 @@ local function afterFight()
 	end
 end
 
--- The lanes on one button, made, moved or put away to match your choices.
+-- The lanes on one button, made, moved or put away to match the spells you
+-- know.
 -- Out of combat only: the containers are the client's.
 function T.Build(b, remake)
 	local set = b and b.bmAuras
@@ -707,7 +652,7 @@ function T.Build(b, remake)
 	if #dots > 0 then
 		want.dot = true
 		local c = set.timers.dot
-		if c and (remake or c.bmSig ~= dotSignature(dots) or c.bmCountdown ~= T.LaneStyle("dot")) then
+		if c and (remake or c.bmSig ~= dotSignature(dots)) then
 			drop(set, c)
 			c = nil
 		end
@@ -742,7 +687,7 @@ function T.BuildLane(b, set, lane, want, remake)
 	want[key] = true
 	local c = set.timers[key]
 	local spells = T.Ids(lane.name)
-	if c and (remake or c.bmSig ~= signature(spells) or c.bmCountdown ~= T.LaneStyle(lane.which)) then
+	if c and (remake or c.bmSig ~= signature(spells)) then
 		drop(set, c)
 		c = nil
 	end
@@ -760,7 +705,7 @@ function T.BuildLane(b, set, lane, want, remake)
 	end
 end
 
--- every button, after a choice or a new rank
+-- every button, after the plates go on or off or a new rank
 function T.Rebuild(remake)
 	if inCombat() then
 		afterFight()
@@ -777,42 +722,6 @@ function T.Attach(b)
 	return T.Build(b)
 end
 
--- ---------------------------------------------------------------------------
--- Their settings, for whichever page they belong on
--- ---------------------------------------------------------------------------
-
--- the blink, as a row, for heals or for damage. WHICH LANES, IN SO MANY
--- WORDS (Josh 2026-10-04: "I thought we changed the blinking to 3 seconds
--- instead of 5"): the heal's row on the Unit frames page said five and the
--- damage's on the Nameplates page three, and neither said whose it was.
-local BLINK_LANE = { hot = "heal over time", dot = "damage over time" }
-
--- the damage-over-time rows in the order their lanes stack, top lane first
-local function orderRows(section, page)
-	local rank = {}
-	local order = T.Ordered("dot")
-	for i, name in ipairs(order) do
-		rank[name] = #order - i
-	end
-	local rows, others = {}, {}
-	for _, r in ipairs(section.rows) do
-		if r.spell then
-			rows[#rows + 1] = r
-		else
-			others[#others + 1] = r
-		end
-	end
-	table.sort(rows, function(a, b) return (rank[a.spell] or 0) < (rank[b.spell] or 0) end)
-	for _, r in ipairs(others) do
-		rows[#rows + 1] = r
-	end
-	section.rows = rows
-	if page then
-		page:Layout()
-	end
-end
-T.OrderRows = orderRows
-
 -- Over-time bars, on the Testing page: where the lanes got to, from the
 -- spells found to the blink
 local function say(...)
@@ -821,8 +730,7 @@ end
 
 function T.Report()
 	local class = myClass()
-	say(("Over-time bars: %s · blink: heals %s, damage %s"):format(tostring(class),
-		T.Blinks("hot") and "on" or "off", T.Blinks("dot") and "on" or "off"))
+	say(("Over-time bars: %s"):format(tostring(class)))
 	for _, which in ipairs({ "hot", "dot" }) do
 		for _, name in ipairs(T.Spells(which, class)) do
 			local list = {}
@@ -830,7 +738,7 @@ function T.Report()
 				list[#list + 1] = tostring(id)
 			end
 			table.sort(list)
-			say(("  %s %s · %s · ids %s"):format(which, name, T.On(name) and "on" or "off",
+			say(("  %s %s · ids %s"):format(which, name,
 				#list > 0 and table.concat(list, ",") or "|cffff6b6bnone found|r"))
 		end
 	end
@@ -855,7 +763,7 @@ function T.Report()
 	if s.textRefused then
 		say("  |cffff6b6bflash refused|r " .. s.textRefused:sub(1, 120))
 	end
-	if (T.Blinks("hot") or T.Blinks("dot")) and not (T.BlinkCurve("hot") and T.BlinkCurve("dot")) then
+	if not (T.BlinkCurve("hot") and T.BlinkCurve("dot")) then
 		say("  |cffff6b6bno colour curve|r, so BeebMod can't draw the flash")
 	end
 end
@@ -945,8 +853,7 @@ function T.Show(b, kind)
 				f.cover:SetAllPoints()
 				f.cover:SetColorTexture(T.COVER[1] / 255, T.COVER[2] / 255, T.COVER[3] / 255, 1)
 			end
-			local blinks = T.Blinks(lane.which) and last
-			f:SetScript("OnUpdate", blinks and function(self, elapsed)
+			f:SetScript("OnUpdate", last and function(self, elapsed)
 				self.t = (self.t or 0) + elapsed
 				self.cover:SetAlpha(math.floor(self.t / 0.18) % 2 == 0 and 1 or 0)
 			end or nil)

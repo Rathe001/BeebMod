@@ -26,14 +26,12 @@ local U = BT.Util
 local M = BT.Module({
 	key = "currency",
 	title = "Currency",
-	blurb = "Your gold, and what you earned and spent this session",
 	order = 39,
 	-- on the right panel, as a row of the Metrics grid (a part has no tab of
 	-- its own: its switch is on the Metrics tab)
 	dock = true,
 	-- one of the Metrics, switched from its tab (Josh 2026-09-22)
 	part = "metrics",
-	kind = "readout",
 })
 
 local EVERY = 10
@@ -200,10 +198,14 @@ function M.Build()
 	end
 	M.chip = BT.Dock.Chip("currency", "purse", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
-	-- a right-click starts a new session (M.Reset)
+	-- a right-click starts a new session (M.Reset), and the open tooltip says
+	-- so at once, as Experience's does (2026-10-05, audit)
 	M.chip:SetScript("OnMouseUp", function(_, button)
 		if button == "RightButton" then
 			M.Reset()
+			if BT.Tip and BT.Tip.IsShown() then
+				M.Tip()
+			end
 		end
 	end)
 	M.chip:SetScript("OnLeave", function()

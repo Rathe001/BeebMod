@@ -44,27 +44,8 @@ local function exists(path)
 	return known[path]
 end
 
--- A HUNTER'S ICON FOR EACH TOAST (Josh 2026-09-29: "Can we update the
--- expidition toast icon to a more hunter oriented icon?"): the creature's
--- type told you little the name did not. A rifle for a mastery - the weapon
--- Nesingwary is known by - the tracking eye for a new page, a hunting horn
--- for a commendation; each with others behind it, for a client without the
--- file, and the beast call behind those.
-T.HUNTER = {
-	mastery = { "INV_Weapon_Rifle_01", "INV_Weapon_Rifle_02", "Ability_Hunter_SniperShot" },
-	discover = { "Ability_Tracking", "Ability_Hunter_EagleEye" },
-	commendation = { "INV_Misc_Horn_01", "Ability_Hunter_AspectOfTheMonkey" },
-}
-function T.HunterIcon(what)
-	for _, name in ipairs(T.HUNTER[what] or {}) do
-		local path = "Interface\\Icons\\" .. name
-		if exists(path) then
-			return path
-		end
-	end
-	local call = "Interface\\Icons\\Ability_Hunter_BeastCall"
-	return exists(call) and call or SKULL
-end
+-- (A hunter's icon for each kind of toast went with those toasts: a toast is
+-- a new rank's alone since 2026-10-05, with the rank's badge, UI/Notice.lua.)
 
 -- the client's commendation sound, by whichever name this build gives it
 local SOUNDS = { "UI_ALERT_ACHIEVEMENT_GAINED", "ACHIEVEMENT_MENU_OPEN", "UI_EPICLOOT_TOAST" }
@@ -106,8 +87,11 @@ function T.Fit(fs, words)
 		if BT.Fonts and BT.Fonts.Set then
 			BT.Fonts.Set(fs, "text", size)
 		end
+		-- through Pill.Number, as every width is (2026-10-05, audit): a width the
+		-- client keeps secret is no number to compare
 		local ok, w = pcall(fs.GetStringWidth, fs)
-		if not (ok and type(w) == "number") or w <= T.TEXT_W then
+		w = ok and BT.Pill.Number(w, nil) or nil
+		if not w or w <= T.TEXT_W then
 			fits = true
 			break
 		end

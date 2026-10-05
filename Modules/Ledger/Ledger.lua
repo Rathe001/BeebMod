@@ -20,7 +20,6 @@ local M = BT.Module({
 	feature = "ledger",
 	title = "Ravenholdt Ledger",
 	short = "Ledger",
-	blurb = "Notes and tags",
 	order = 10,
 })
 
@@ -70,6 +69,11 @@ end
 
 function M:OnDisable()
 	BT.Find.CloseEditor()
+	-- and its window, as the Expedition's goes with it (2026-10-05, audit): left
+	-- open, its cards still wrote notes and tags with the Ledger switched off
+	if BT.CensusWindow and BT.CensusWindow.Hide then
+		BT.CensusWindow.Hide()
+	end
 	if BT.Tooltip and BT.Tooltip.HidePills then
 		BT.Tooltip.HidePills()
 	end

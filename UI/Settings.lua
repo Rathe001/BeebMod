@@ -3,8 +3,7 @@
 -- GENERAL, NOT SETTINGS (Josh 2026-09-23). Every tab on the rail is settings
 -- now, so this one is named for what is on it: the look of every panel.
 -- Nothing that belongs to one utility is here (Josh 2026-09-24): the clock
--- and the census button went to the Dock's page, the target row to the
--- Ledger's, and the typeface is Google Sans, not a choice.
+-- went to the Dock's page, and the typeface is Google Sans, not a choice.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("UI/Settings.lua")
 
@@ -224,12 +223,10 @@ end
 
 S.SCALE_MIN, S.SCALE_MAX, S.SCALE_STEP = 0.7, 1.3, 0.05
 
--- every panel's size: the setting, or the dock's from before there was one
+-- every panel's size (the dock's old one is moved into it once, at bind:
+-- BT.DropCutSettings)
 function S.Scale()
-	local s = BT.settings and tonumber(BT.settings.scale)
-	if not s then
-		s = BT.settings and tonumber(BT.settings.dockScale) or 1
-	end
+	local s = BT.settings and tonumber(BT.settings.scale) or 1
 	return math.max(S.SCALE_MIN, math.min(S.SCALE_MAX, s))
 end
 BT.Scale = function() return S.Scale() end

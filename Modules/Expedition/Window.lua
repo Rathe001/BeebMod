@@ -2284,8 +2284,18 @@ end
 
 -- an enemy's popup, from its card (or a toast); a card lifted under the
 -- cursor is set down first, or it would stand over the dimming
+-- the hidden model asks for the open page's other look first: started again
+-- if it had stopped with nothing to ask (Expedition.lua, M.ProbeTick)
+local function probeAgain()
+	local exp = BT.GetModule and BT.GetModule("expedition")
+	if exp and exp.Probe and BT.Enabled("expedition") then
+		exp.Probe(true)
+	end
+end
+
 function V.Open(npc)
 	V.open = npc
+	probeAgain()
 	ui().view = "journal"
 	for _, c in pairs(frame and frame.journal.cards or {}) do
 		if c.lifted then
@@ -2535,6 +2545,7 @@ function V.Show(npc, view, focus)
 	V.open = npc
 	if npc then
 		ui().view = "journal"
+		probeAgain()
 	elseif view then
 		ui().view = view
 	end

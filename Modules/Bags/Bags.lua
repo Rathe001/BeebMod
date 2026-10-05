@@ -22,14 +22,12 @@ local U = BT.Util
 local M = BT.Module({
 	key = "bags",
 	title = "Bags",
-	blurb = "Slots used, and your class's reagents",
 	order = 39.5,
 	-- on the right panel, as a row of the Metrics grid (a part has no tab of
 	-- its own: its switch is on the Metrics tab)
 	dock = true,
 	-- one of the Metrics, switched from its tab (Josh 2026-09-22)
 	part = "metrics",
-	kind = "readout",
 })
 
 local WORDS = "|cff8a9894%s|r"

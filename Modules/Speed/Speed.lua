@@ -24,12 +24,10 @@ local U = BT.Util
 local M = BT.Module({
 	key = "speed",
 	title = "Movement speed",
-	blurb = "How fast you are, as a percentage",
 	order = 39.75,
 	dock = true,
 	-- one of the Metrics, switched from its tab (Josh 2026-09-22)
 	part = "metrics",
-	kind = "readout",
 })
 
 -- often enough to catch a sprint, rarely enough to cost nothing

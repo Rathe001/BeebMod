@@ -22,9 +22,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "rep",
 	feature = "dock",
-	onPage = "progress",
 	title = "Reputation",
-	blurb = "Your standing with the faction you watch",
 	order = 37.5,
 	-- on the right panel, so it has a tab on the rail
 	dock = true,
@@ -208,7 +206,6 @@ function M.Update()
 	end
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(c[1], c[2], c[3], 0.9)
-	BT.Dock.BandColor(M.frame, c)
 	local done = (f.reaction >= TOP or f.max <= 0) and 1 or math.min(1, f.cur / f.max)
 	-- a texture of no width is drawn as a whole one, so an empty bar is hidden
 	M.fill:SetShown(done > 0)

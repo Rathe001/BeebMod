@@ -14,7 +14,7 @@ function BT.StatsReport()
 	local s = DB.Stats(BT.db)
 	-- noted: the Ledger's to count (its own book), when there is a Ledger
 	local noted = BT.Notes and BT.Notes.CountNoted() or s.mine
-	U.Print(("Census: %s · %s characters · %s noted · %s in a guild · %s sightings")
+	U.Print(("Ledger: %s · %s characters · %s noted · %s in a guild · %s sightings")
 		:format(BT.scope.realm, U.Commas(s.total), U.Commas(noted), U.Commas(s.guilded), U.Commas(BT.db.stats.sightings or 0)))
 	-- how the book is kept (Core/Pack.lua): packed, and how big it may grow
 	local n, packed = DB.Count(BT.db)
@@ -46,7 +46,7 @@ BT.Command("prune", function(rest)
 	end
 	days = math.floor(days)
 	local dropped = DB.Prune(BT.db, days)
-	U.Print(("Census: dropped %d %s you haven't noted and haven't seen in %d %s."):format(dropped,
+	U.Print(("Ledger: dropped %d %s you haven't noted and haven't seen in %d %s."):format(dropped,
 		dropped == 1 and "character" or "characters", days, days == 1 and "day" or "days"))
 end, "prune <days> - drop characters you haven't noted and haven't seen in that many days")
 
@@ -62,8 +62,8 @@ BT.Command("autopurge", function(rest)
 	end
 	local d = BT.settings.pruneDays or 0
 	U.Print(d > 0
-		and ("Census: auto-purge after %d day%s, for characters you haven't noted."):format(d, d == 1 and "" or "s")
-		or "Census: auto-purge off.")
+		and ("Ledger: auto-purge after %d day%s, for characters you haven't noted."):format(d, d == 1 and "" or "s")
+		or "Ledger: auto-purge off.")
 end, "autopurge <days|off> - at each loading screen, drop characters you haven't noted and haven't seen in that many days")
 
 -- THE BOOK HAS A SIZE (Josh 2026-09-24): past it, the characters seen
@@ -78,8 +78,8 @@ BT.Command("cap", function(rest)
 	end
 	local c = BT.settings.bookCap or 0
 	U.Print(c > 0
-		and ("Census: keeps up to %d characters. At login, BeebMod drops levels 1-10 first, then those seen longest ago. Characters you've noted stay."):format(c)
-		or "Census: no size limit.")
+		and ("Ledger: keeps up to %d characters. At login, BeebMod drops levels 1-10 first, then those seen longest ago. Characters you've noted stay."):format(c)
+		or "Ledger: no size limit.")
 end, "cap <characters|off> - how many characters the census keeps")
 
 BT.Command("books", function()
@@ -95,7 +95,7 @@ BT.Command("adopt", function(rest)
 		U.Print("No such book. Type /bt books to list them.")
 		return
 	end
-	U.Print(("Census: adopted %s · %d brought over · %d merged")
+	U.Print(("Ledger: adopted %s · %d brought over · %d merged")
 		:format((done.key:gsub("|", " ")), done.added, done.folded))
 	BT.Window.Refresh()
 end, "adopt <book> - merge another book into this one")

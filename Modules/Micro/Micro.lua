@@ -23,7 +23,6 @@ local M = BT.Module({
 	key = "micro",
 	feature = "dock",
 	title = "Micro menu",
-	blurb = "Puts the game's menu buttons in the dock",
 	order = 55,
 	-- IN THE PANEL (Josh 2026-09-22): the row can live in the dock, so the
 	-- module has a tab on the rail
@@ -58,16 +57,6 @@ local RIM = BT.Widgets.RIM
 local CROP = 0.22
 
 local skins = setmetatable({}, { __mode = "k" })
-
-local function opt(name, fallback)
-	local s = BT.settings and BT.settings.micro
-	if not s or s[name] == nil then
-		return fallback
-	end
-	return s[name]
-end
-M.Opt = opt
-
 
 -- the tests look at what a button is wearing
 function M.Skins()

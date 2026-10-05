@@ -7,7 +7,7 @@
 -- - a rogue or a cat reads them off the target frame, which is the wrong
 -- end of the screen for a number you act on every second.
 --
--- TWO THINGS, TWO SWITCHES. The bars are dressed the way every other piece
+-- TWO THINGS. The bars are dressed the way every other piece
 -- of the client's furniture is (Core/Furniture.lua): their textures go flat,
 -- their art comes off, a one-pixel rim of ours goes round each. And a row of
 -- pips of our own hangs under them, one per point, lit in the accent as you
@@ -27,7 +27,6 @@ local M = BT.Module({
 	key = "resourcedisplay",
 	feature = "unitframes",
 	title = "Resource display",
-	blurb = "Flat bars and combo points for your Personal Resource Display",
 	order = 58.5,
 })
 
@@ -47,27 +46,9 @@ local COMBO = (Enum and Enum.PowerType and Enum.PowerType.ComboPoints) or 4
 local ENERGY = (Enum and Enum.PowerType and Enum.PowerType.Energy) or 3
 
 -- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
--- supposed to be an opinionated solution, not fully customizable"). Flat bars, and combo points.
-M.FIXED = { theme = true, combo = true }
-
-local function opt(name, fallback)
-	if M.FIXED[name] ~= nil then
-		return M.FIXED[name]
-	end
-	local s = BT.settings and BT.settings.resourcedisplay
-	if not s or s[name] == nil then
-		return fallback
-	end
-	return s[name]
-end
-M.Opt = opt
-
-function M.SetOpt(name, value)
-	BT.EnsureBound()
-	BT.settings.resourcedisplay = BT.settings.resourcedisplay or {}
-	BT.settings.resourcedisplay[name] = value
-	M.Apply()
-end
+-- supposed to be an opinionated solution, not fully customizable"). Flat
+-- bars, and combo points. (2026-10-05, cleanup) Nothing reads the old
+-- switches now, so the code for their other answers is gone.
 
 -- ---------------------------------------------------------------------------
 -- The plate
@@ -365,7 +346,7 @@ end
 -- secret: it is only ever handed to SetValue, never compared.
 function M.Pips(cur, max, show)
 	local h = pipHolder()
-	local anchor = (show and max > 0 and opt("combo", true)) and M.PipAnchor() or nil
+	local anchor = (show and max > 0) and M.PipAnchor() or nil
 	if not anchor then
 		h.laidMax = nil
 		h:Hide()
@@ -421,7 +402,7 @@ end
 -- M.Apply and is laid out there.
 function M.PipCount(cur, max, show)
 	local h = pips
-	if not (h and h:IsShown() and show and max > 0 and h.laidMax == max and opt("combo", true)) then
+	if not (h and h:IsShown() and show and max > 0 and h.laidMax == max) then
 		return M.Pips(cur, max, show)
 	end
 	for i = 1, max do
@@ -435,9 +416,10 @@ end
 -- Putting it all on, and taking it off
 -- ---------------------------------------------------------------------------
 
--- The player's plate, as the client has it right now: dressed if the switch
--- is on, and the pips under it. Called on every event that could have moved
--- anything; a plate already dressed costs a walk of a small tree.
+-- The player's plate, as the client has it right now: dressed while the
+-- module is on, and the pips under it. Called on every event that could
+-- have moved anything; a plate already dressed costs a walk of a small
+-- tree.
 function M.Apply()
 	if not BT.Enabled("resourcedisplay") then
 		return M.Release()
@@ -451,14 +433,12 @@ function M.Apply()
 	M.foundBy = p and how or nil
 	hookPlate(p)
 	local n = 0
-	if plate and opt("theme", true) then
+	if plate then
 		local ok, count = pcall(dresser.DressTree, dresser, bars(plate), 0, nil)
 		n = ok and (count or 0) or 0
 		if not ok then
 			BT.Err("resourcedisplay: " .. tostring(count))
 		end
-	elseif plate then
-		dresser:Undress()
 	end
 	M.lastCount = n
 	M.Pips(M.Combo())

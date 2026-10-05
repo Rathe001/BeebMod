@@ -34,7 +34,6 @@ local M = BT.Module({
 	key = "unitframes",
 	feature = "unitframes",
 	title = "Unit frames",
-	blurb = "Frames for you, your group, the raid, your target, focus and bosses",
 	order = 45,
 })
 
@@ -917,8 +916,9 @@ local function onEvent(_, event, unit, powerType)
 		-- unit's threat list itself)
 		for _, key in ipairs(ENEMY_FRAMES) do
 			local f = M.singles[key]
-			if f and f:IsShown() then
-				F.Paint(f, F.Source(key))
+			-- the ring and the figure alone (F.PaintThreat, 2026-10-05, audit)
+			if f and f:IsShown() and f.bmDressed then
+				F.PaintThreat(f, F.Source(key))
 			end
 		end
 	elseif event == "UNIT_POWER_FREQUENT" or event == "UNIT_DISPLAYPOWER" then
@@ -967,9 +967,14 @@ local function tick()
 	if not M.live then
 		return
 	end
+	-- THE HEALTH, NOT THE WHOLE FRAME (2026-10-05, audit): a unit like the
+	-- target's target hears no events of its own, so its bar is moved here -
+	-- but who it is arrives as UNIT_TARGET, which paints it whole, and its
+	-- name was written again four times a second for nothing. F.PaintHealth
+	-- paints it whole when its state changes (a death, offline).
 	local tot = M.singles.targettarget
 	if tot and tot:IsShown() then
-		F.Paint(tot, F.Source("targettarget"))
+		F.PaintHealth(tot, F.Source("targettarget"))
 	end
 	-- and reach, which changes with every step and tells nobody - faded as
 	-- far as the setting says, as a paint fades it: the strong figures that
@@ -987,7 +992,7 @@ local function tick()
 					local src = F.Source(child.bmUnit)
 					F.AlphaFrom(child, src:InRange(), 1, groupFar)
 					if child.bmTarget and child.bmTarget:IsShown() then
-						F.Paint(child.bmTarget, F.Source(child.bmTarget.bmUnit))
+						F.PaintHealth(child.bmTarget, F.Source(child.bmTarget.bmUnit))
 					end
 				end
 			end

@@ -90,6 +90,15 @@ local state = { mineOnly = false, tagFilter = nil }
 -- declared here because the panel's open and close paths use them before the
 -- file gets round to defining them
 local editorTop, fitWindow, shownCards, cardsHeight = nil, nil, 0, 0
+
+-- WHAT THE UNIT SAID, FOR ITS OWN PERSON ONLY (2026-10-05, audit). The panel
+-- keeps what a unit said about whoever it was opened on (B.OpenEditorFor),
+-- for a first note to make their row. A card selected later shares
+-- `selected` with the panel, and a note written on it went in with the
+-- earlier person's name, class and guild over its own. It is theirs alone.
+local function infoFor(key)
+	return (editor and key and editor.infoKey == key) and editor.info or nil
+end
 -- what the tick last drew: the Ledger's rev, the census's, and when the
 -- census's was last drawn (B.Tick)
 local seenNotes, seenBook, bookAt = -1, -1, nil
@@ -476,7 +485,7 @@ function B.RebuildTags()
 					end
 					return
 				end
-				N.ToggleTag(selected, self.tagKey, editor and editor.info)
+				N.ToggleTag(selected, self.tagKey, infoFor(selected))
 				B.Refresh()
 			end)
 			e.pool[i] = row
@@ -589,7 +598,7 @@ local function refreshEditor()
 		return
 	end
 	editorRefreshes = editorRefreshes + 1
-	local p = face(selected, editor.info)
+	local p = face(selected, infoFor(selected))
 	if not p then
 		return
 	end
@@ -696,7 +705,7 @@ function B.OpenEditorFor(key, owner, info)
 		return false
 	end
 	selected = key
-	editor.info = info
+	editor.info, editor.infoKey = info, key
 	if panel and B.Showing() then
 		B.DockEditor()
 	else
@@ -743,10 +752,10 @@ function B.SaveText(key, text)
 	if not (key and type(text) == "string") then
 		return false
 	end
-	local info = editor and editor.info
+	local info = infoFor(key)
 	local p = face(key, info)
 	if p and (p.note or "") ~= text then
-		step("write", N.SetNote, key, text, key == selected and info or nil)
+		step("write", N.SetNote, key, text, info)
 		return true
 	end
 	return false
@@ -808,9 +817,9 @@ function B.EditorNoteBox()
 	return editor and editor.note
 end
 
--- THE SAME TAG EVERYWHERE (Josh 2026-09-19). The note panel, the dock and the
--- unit tooltip all show a tag as a square of its colour with its name beside
--- it. The cards were the last place still drawing rounded pills, so the same
+-- THE SAME TAG EVERYWHERE (Josh 2026-09-19). The note panel and the unit
+-- tooltip show a tag as a square of its colour with its name beside it (and
+-- the dock did, until its target row went, 2026-10-05). The cards were the last place still drawing rounded pills, so the same
 -- tag looked like two different things depending on where you read it.
 --
 -- On is the same three things it is in the note panel: a wash of the tag's
@@ -1089,11 +1098,12 @@ end
 -- A SIGHTING IS NOT A NOTE (Josh 2026-09-30, review). Both books' changes
 -- were one number, so every sighting ran the whole refresh, and in a city
 -- that is one a second. The refresh searches the census when a search is
--- typed, and lays out the dock and the editor again. Only the list can show
+-- typed, and lays out the editor again. Only the list can show
 -- a sighting, so a census change redraws the list alone, at most every ten
 -- seconds, as the Census window does. While a tag or "My notes" leaves the
--- census out of the list, a census change redraws nothing. Something you
--- wrote still redraws everything on the next tick.
+-- census out of the list, or a search is typed (B.Tick), a census change
+-- redraws nothing. Something you wrote still redraws everything on the next
+-- tick.
 B.BOOK_EVERY = 10
 
 function B.Tick()
@@ -1114,7 +1124,12 @@ function B.Tick()
 	end
 	local now = (type(GetTime) == "function" and GetTime()) or 0
 	if notes == seenNotes then
-		if state.tagFilter or state.mineOnly then
+		-- A TYPED SEARCH IS ASKED ONCE (2026-10-05, audit): redrawn on a
+		-- sighting, it searched every row of the census again - tens of
+		-- thousands, every ten seconds in a city. What you typed is answered
+		-- when you type it, or write something; a sighting changes nothing.
+		local typed = searchBox and searchBox:GetText()
+		if state.tagFilter or state.mineOnly or (type(typed) == "string" and typed ~= "") then
 			seenBook = book
 			return false
 		end

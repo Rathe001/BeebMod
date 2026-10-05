@@ -26,7 +26,6 @@ local M = BT.Module({
 	key = "chat",
 	feature = "interface",
 	title = "Chat",
-	blurb = "Draws the chat windows flat",
 	order = 60,
 })
 
@@ -42,31 +41,12 @@ local EDIT_INSET = 6
 local skins = setmetatable({}, { __mode = "k" })
 
 -- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
--- supposed to be an opinionated solution, not fully customizable"). Side buttons on hover, the box on top, the window in its corner, short
--- channel names, guild names green and links to copy; no timestamps of
--- ours (the game has its own), and the game's own text size on each tab.
-M.FIXED = { buttons = true, editOnTop = true, flush = true, shortChannels = true, timestamps = false, guilds = true,
-	links = true, size = false }
-
-local function opt(name, fallback)
-	if M.FIXED[name] ~= nil then
-		return M.FIXED[name]
-	end
-	local s = BT.settings and BT.settings.chat
-	if not s or s[name] == nil then
-		return fallback
-	end
-	return s[name]
-end
-M.Opt = opt
-
-local function setOpt(name, value)
-	BT.EnsureBound()
-	BT.settings.chat = BT.settings.chat or {}
-	BT.settings.chat[name] = value
-	M.StyleAll()
-end
-M.SetOpt = setOpt
+-- supposed to be an opinionated solution, not fully customizable"). Side
+-- buttons on hover, the box on top, the window in its corner, short channel
+-- names, guild names green and links to copy; no timestamps of ours (the
+-- game has its own), and the game's own text size on each tab.
+-- (2026-10-05, cleanup) Nothing reads the old switches now, so the code for
+-- their other answers is gone, with our own timestamps and the text size.
 
 -- the tests look at what a tab is wearing
 function M.Skins()
@@ -519,7 +499,7 @@ local function keepStowed(thing)
 	end
 	thing.beebsStowed = true
 	thing:HookScript("OnShow", function(self)
-		if BT.Enabled("chat") and opt("buttons", true) then
+		if BT.Enabled("chat") then
 			self:Hide()
 		end
 	end)
@@ -527,7 +507,7 @@ end
 
 local function styleButtons(frame, plain)
 	local name = frame.GetName and frame:GetName()
-	local hide = (not plain) and opt("buttons", true)
+	local hide = not plain
 	local pieces = { frame.buttonFrame, frame.ScrollBar, frame.ScrollToBottomButton }
 	for _, suffix in ipairs({ "ButtonFrame", "ButtonFrameUpButton",
 		"ButtonFrameDownButton", "ButtonFrameBottomButton", "ScrollBar", "ScrollToBottomButton" }) do
@@ -835,7 +815,7 @@ end
 -- takes you to them. The large chat window has one too.
 --
 -- `wanted` says whether the mark may show at all, so the chat windows can
--- follow their switch and the large window can ignore it.
+-- hide it while the module is off and the large window can ignore that.
 function M.Newest(smf, wanted)
 	if not smf then
 		return nil
@@ -906,7 +886,7 @@ function M.Controls(frame, plain)
 		return true
 	end
 	M.Newest(frame, function()
-		return BT.Enabled("chat") and opt("buttons", true)
+		return BT.Enabled("chat")
 	end)
 	local holder = frame.beebsControls
 	if not holder then
@@ -956,7 +936,7 @@ function M.Controls(frame, plain)
 			-- hooked once and never unhooked, so it has to know when the
 			-- module is off: it used to keep fading the window and stowing
 			-- the client's buttons on every hover after the switch
-			if not (BT.Enabled("chat") and opt("buttons", true)) then
+			if not BT.Enabled("chat") then
 				holder:Hide()
 				return
 			end
@@ -1087,40 +1067,6 @@ function M.Frames()
 	return out
 end
 
--- THE TIME ON A LINE (Josh 2026-09-24), when asked for: the hour and minute,
--- quiet, in front - and not when the game's own timestamps are on already
-function M.Stamp(text)
-	if not opt("timestamps", false) or type(text) ~= "string" then
-		return text
-	end
-	local game = type(GetCVar) == "function" and GetCVar("showTimestamps")
-	if game and game ~= "none" and game ~= "" then
-		return text
-	end
-	local ok, line = pcall(function()
-		return "|cff6e7b75" .. date("%H:%M") .. "|r " .. text
-	end)
-	return ok and line or text
-end
-
--- HOW BIG THE WORDS ARE (Josh 2026-09-24): the game's own size for each
--- window, set for all of them at once
-function M.ApplySize()
-	local size = opt("size", nil)
-	if type(size) ~= "number" then
-		return false
-	end
-	for _, frame in ipairs(M.Frames()) do
-		if type(_G.FCF_SetChatWindowFontSize) == "function" then
-			pcall(_G.FCF_SetChatWindowFontSize, nil, frame, size)
-		elseif frame.GetFont and frame.SetFont then
-			local face, _, flags = frame:GetFont()
-			pcall(frame.SetFont, frame, face, size, flags)
-		end
-	end
-	return true
-end
-
 -- The line rewriter goes on the frame's own AddMessage, which is the one
 -- place every line passes through however it arrived.
 function M.HookMessages(frame, plain)
@@ -1145,15 +1091,12 @@ function M.HookMessages(frame, plain)
 		-- has. The combat log keeps its own time stamps, and its lines still
 		-- reach the large window.
 		if BT.Enabled("chat") and self ~= _G.COMBATLOG then
-			if opt("shortChannels", true) then
-				text = M.Shorten(text)
-			end
+			text = M.Shorten(text)
 			-- guild names in green and web addresses you can click
 			-- (Modules/Chat/Links.lua)
 			if M.Decorate then
 				text = M.Decorate(text)
 			end
-			text = M.Stamp(text)
 		end
 		-- the line as the frame keeps it, so the large window can tell which
 		-- end of the frame's history is the newest
@@ -1186,7 +1129,7 @@ function M.HookTab(tab, plain)
 		if BT.Enabled("chat") then
 			M.StyleAll()
 		end
-		if not (BT.Enabled("chat") and opt("editOnTop", true)) then
+		if not BT.Enabled("chat") then
 			return
 		end
 		local box = _G.ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
@@ -1216,17 +1159,17 @@ function M.StyleAll(plain)
 			and _G[name .. "Tab"]:GetHeight(), tabHeight)
 		M.HookTab(_G[name .. "Tab"], plain)
 		M.HookMessages(frame, plain)
-		-- EACH SWITCH UNDOES ITS OWN PART (Josh 2026-09-23, audit): turning
-		-- one off used to leave its work in place until a /reload - two sets
-		-- of side buttons, the edit box still on top, the window still in the
-		-- corner. Off is the plain form of each, as the module's off is.
-		M.Controls(frame, plain or not opt("buttons", true))
+		-- OFF UNDOES EACH PART (Josh 2026-09-23, audit): the side buttons,
+		-- the edit box on top and the window in the corner each go back to
+		-- their plain form when the module is off. (2026-10-05, cleanup) Each
+		-- part had a switch of its own until the settings canvas.
+		M.Controls(frame, plain)
 
 		styleButtons(frame, plain)
-		M.PlaceEditBox(_G[name .. "EditBox"], plain or not opt("editOnTop", true))
+		M.PlaceEditBox(_G[name .. "EditBox"], plain)
 		-- only the first one: the rest are docked to it or placed by hand
 		if name == "ChatFrame1" then
-			M.Corner(frame, plain or not opt("flush", true))
+			M.Corner(frame, plain)
 		end
 		n = n + 1
 	end
@@ -1254,18 +1197,18 @@ function M.Watch()
 		if box and box.HookScript and not done[box] then
 			M.hooked[#M.hooked + 1] = box
 			box:HookScript("OnShow", function(self)
-				if BT.Enabled("chat") and opt("editOnTop", true) then
+				if BT.Enabled("chat") then
 					M.PlaceEditBox(self)
 				end
 			end)
 			-- up while you type, down the moment you stop
 			box:HookScript("OnEditFocusGained", function(self)
-				if BT.Enabled("chat") and opt("editOnTop", true) then
+				if BT.Enabled("chat") then
 					M.LiftEditBox(self, true)
 				end
 			end)
 			box:HookScript("OnEditFocusLost", function(self)
-				if BT.Enabled("chat") and opt("editOnTop", true) then
+				if BT.Enabled("chat") then
 					M.LiftEditBox(self, false)
 				end
 			end)

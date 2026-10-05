@@ -463,6 +463,11 @@ function C.World(initial, reloading)
 		BT.lastRun = BT.lastRun or {}
 		BT.lastRun.capped, BT.lastRun.cappedLow, BT.lastRun.capFrom = DB.Cap(BT.db, BT.settings.bookCap)
 	end
+	-- whoever counts the book hears that rows went (the Ledger's ranks)
+	local run = BT.lastRun or {}
+	if BT.db and DB.onRemoved and ((tonumber(run.pruned) or 0) > 0 or (tonumber(run.capped) or 0) > 0) then
+		pcall(DB.onRemoved, BT.db)
+	end
 end
 
 -- PACKED FOR THE NIGHT (Josh 2026-09-24). Every character the session

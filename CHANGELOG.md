@@ -5,6 +5,46 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The Size on General is kept after a reload.** Since beta.24 the dock
+  and its tooltips went back to 100% at every login, while the unit frames
+  and buffs kept your Size.
+
+- **A note written on a card keeps that player's name.** After you wrote on
+  someone from the right-click menu, a note written on another player's card
+  in Find people took the first player's name, class and guild.
+
+- **Switching the Ledger off closes its window.** It stayed open, and its
+  cards could still write notes and tags.
+
+- **Turning the Dock back on keeps the journals' lines off** if you
+  switched them off while the Dock was off.
+
+- **The Ledger counts the census after it tidies.** A login counted the
+  characters the census was about to drop for age or size, and a
+  commendation reached that way was never said. A commendation or rank
+  earned just before a loading screen is now said after it.
+
+- **Notices light up the journals' lines again,** for the moment they show.
+
+- **In the settings search,** Escape lets go of the keyboard when the box is
+  empty, and words such as "off" no longer list every feature.
+
+- **The gold and Pick Pocket tooltips update** when you right-click to
+  reset them.
+
+- **Chat lines and /bt help say Ledger,** not Census: "Ledger: auto-purge
+  after 90 days".
+
+- **Less work in a fight and in a city.** A kill no longer counts the whole
+  Expedition journal twice. Threat changes repaint only the threat on unit
+  frames and nameplates. Friendly NPCs are not watched as possible kills,
+  and their nameplates read an NPC's title once. A name typed in Find people
+  is not searched again every time someone walks past. The damage meter,
+  the quest list and the Expedition's hidden model do less while nothing
+  changes.
+
 ## 0.1.0-beta.24
 
 - **Tag a player and write a note from the right-click menu.** Right-click

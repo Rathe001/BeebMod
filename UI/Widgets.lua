@@ -161,11 +161,6 @@ local function eachTexture(target, fn)
 end
 
 -- a glyph, coloured through its own art
--- off the theme's list: a texture that shows something else now
-function W.Untint(tex)
-	tinted[tex] = nil
-end
-
 function W.Tint(tex, alpha)
 	if not (tex and tex.SetVertexColor) then
 		return tex

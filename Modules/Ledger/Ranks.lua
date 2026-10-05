@@ -310,6 +310,13 @@ if N then
 	end
 end
 if BT.DB then
+	-- the census's purge and size cap took rows out: counted again, quietly -
+	-- fewer characters is fewer points, never a notice (2026-10-05, audit)
+	BT.DB.onRemoved = function(db)
+		if db == BT.db then
+			L.CountCharacters()
+		end
+	end
 	BT.DB.onNew = function(db)
 		if db == BT.db then
 			L.characters = (L.characters or 0) + 1

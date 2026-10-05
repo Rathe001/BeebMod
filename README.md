@@ -132,7 +132,7 @@ page.
 
 **The Testing page** is also where the debug tools are. Its buttons show
 sample notices and rank toasts, print BeebMod's reports to chat (What loaded, Over-time
-bars, The book), and write records for Claude into the saved file. Record
+bars, Saved characters), and write records for Claude into the saved file. Record
 writes down how the game built each part you have on, and also the next menu
 you open and your next fight. Clear takes the records out again. CPU use times
 BeebMod for 10 seconds. Type `/reload` after a record to save it.
@@ -146,7 +146,7 @@ checks that it stays so.
 ### Adding a utility
 
 A utility is one file and one call, which give it a row on its feature's
-page and a place on the bar. The words on its row are in
+page and, if it wants one, a section of the dock. The words on its row are in
 `BT.Window.LABELS`, and its feature's page lists it in
 `BT.Window.PAGE_MODULES` (the Dock's lists every module that stands in the
 dock).
@@ -155,10 +155,9 @@ dock).
 local M = BT.Module({
     key = "myutility", title = "My Utility", order = 30,
     feature = "dock",   -- the feature it belongs to; its switch covers this too
-    blurb = "One line about it",
 })
 function M:Parts() return { ... } end  -- switches under its row: label, get, set
-function M:Cells() return { ... } end  -- what it adds to the dock
+local section = BT.Dock.Section("myutility", 50)  -- its own part of the dock
 function M:OnBind(db) ... end          -- the settings are bound: migrate, sweep
 BT.Command("mycmd", function(rest) ... end, "what it does", "myutility")
 BT.Record("myutilityDump", M.Dump, "myutility")  -- a record for the Testing page
@@ -200,11 +199,12 @@ lives in `Modules/Ledger`.
                          the search in the title bar
     UI/Welcome.lua       the first login's five cards, a switch per feature
     UI/Settings.lua      General: the colours, one size, and positions
-    UI/CensusWindow.lua  the Ledger's window: the Charts and Find tabs
-    UI/Dock.lua          the dock: a row of cells, and sections under it
+    UI/CensusWindow.lua  the Ledger's window: Charts, Find people and
+                         Commendations
+    UI/Dock.lua          the dock: a header, and sections under it
     UI/Pill.lua          the pill, and the one place a measurement is judged
                          good or bad
-    UI/Tip.lua           the tooltip frame every cell in the dock shares
+    UI/Tip.lua           the tooltip every part of the dock shares
     UI/Widgets.lua       buttons, switches, panels, and the rows and sections
                          every settings page is built from
     UI/Ornament.lua      the Art Deco border an elite or a rare gets, on its
@@ -293,7 +293,7 @@ lives in `Modules/Ledger`.
 
     lua tests/run.lua     the pure-Lua half: keys, the book, modules, migrations
     lua tests/load.lua    loads every file in TOC order with WoW stubbed, then
-                          opens the window, clicks the switches and the bar
+                          opens the window, clicks the switches and the dock
 
 Both must pass before anything is installed. `load.lua` answers only real
 widget methods, so a typo fails there and not in the game.
@@ -380,9 +380,7 @@ too.
 
     BT.Dock.Section(key, order)   a panel of your own under the header
     BT.Dock.MakeHandle(child)     let something in it drag the whole dock
-    BT.Dock.Cell(key, width)      a cell on a row along the top (nothing
-                                  uses the row since the Ledger's moved to
-                                  the right-click menu)
+    BT.Dock.HeaderItem(frame)     something small at the header's right end
 
 Everything in the dock takes mouse clicks, so no bare part of the panel is
 left to drag. To move it, hold Shift and drag the header, a meter's line, a
@@ -487,7 +485,7 @@ shows as a floor ("3+"). The tooltip never repeats level or guild, because
 the unit in front of you already shows those.
 
 There is no spec chart. Nothing shows a stranger's talents, and inspecting
-needs them targeted and in range. The fourth chart shows your own tags
+needs them targeted and in range. The last chart shows your own tags
 instead, and it hides when the Ledger is switched off.
 
 The charts show what BeebMod doesn't know. The class chart has "Unknown" as

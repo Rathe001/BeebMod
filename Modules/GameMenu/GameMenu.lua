@@ -25,9 +25,7 @@ local U = BT.Util
 local M = BT.Module({
 	key = "gamemenu",
 	feature = "interface",
-	onPage = "allmenus",
 	title = "Game menu",
-	blurb = "Redraws the Escape menu",
 	order = 59,
 })
 

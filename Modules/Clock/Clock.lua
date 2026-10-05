@@ -14,12 +14,7 @@ local M = BT.Module({
 	key = "clock",
 	feature = "dock",
 	title = "Clock",
-	blurb = "Local or server time. Click it to switch.",
 	order = 4,
-	-- NOT A TAB (Josh 2026-09-22): it lives in the header, where there is
-	-- nothing to move, so it is a switch on the Settings page like the Census
-	standalone = true,
-	kind = "header",
 })
 
 -- the minute changes on its own schedule; a few seconds late is never noticed

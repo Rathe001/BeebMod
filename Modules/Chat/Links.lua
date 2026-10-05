@@ -19,10 +19,6 @@ local CreateFrame = BT.Cpu.For("Modules/Chat/Links.lua")
 local M = BT.GetModule("chat")
 local W = BT.Widgets
 
-local function opt(name, fallback)
-	return M.Opt(name, fallback)
-end
-
 -- ---------------------------------------------------------------------------
 -- The words of a line
 -- ---------------------------------------------------------------------------
@@ -187,20 +183,14 @@ function M.Decorate(text)
 	if issecretvalue and issecretvalue(text) then
 		return text
 	end
-	local green, links = opt("guilds", true), opt("links", true)
-	if not (green or links) or not (text:find("<", 1, true) or text:find(".", 1, true)) then
+	if not (text:find("<", 1, true) or text:find(".", 1, true)) then
 		return text
 	end
 	local ok, out = pcall(M.EachPlain, text, function(words)
-		if green then
-			words = guilds(words)
-		end
-		if links then
-			-- the guild's colour is an escape now, so the address pass skips
-			-- it; run on the pieces between
-			words = M.EachPlain(words, addresses)
-		end
-		return words
+		words = guilds(words)
+		-- the guild's colour is an escape now, so the address pass skips
+		-- it; run on the pieces between
+		return M.EachPlain(words, addresses)
 	end)
 	return ok and out or text
 end
@@ -348,9 +338,7 @@ end
 -- "addon:" to addons through EventRegistry's "SetItemRef" event instead of
 -- treating it as an item, which is why ours start "addon:BeebMod:". The hook
 -- on SetItemRef itself is for a build that has no such event; opening the
--- box twice for one click shows the same address, so both may run. Neither
--- checks the switch: a link already in the window still opens after Clickable
--- links goes off, as the line was written with it.
+-- box twice for one click shows the same address, so both may run.
 local function clicked(...)
 	for i = 1, select("#", ...) do
 		local link = (select(i, ...))
