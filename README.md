@@ -30,7 +30,7 @@ settings.
 |---|---|
 | **Dock** | The panel itself: its size, and the **Clock** in its header. The clock shows local or server time; click it to switch. |
 | **Minimap** | The client's map, moved into the dock, and **Addon buttons**: other addons' minimap buttons in one line, a switch each. |
-| **Progress** | **Experience** (the XP bar, and time to level at your XP per hour), **Reputation** (the watched faction, and your standing with it) and **PvP** (your PvP rank with its insignia, how far to the next, and this week's honor), a switch each. Each line starts with a shield that shows your level, a banner or your rank. |
+| **Progress** | **Experience** (the XP bar and time to level at your XP per hour; its tooltip suggests zones and dungeons for your level), **Reputation** (the watched faction, and your standing with it) and **PvP** (your PvP rank with its insignia, how far to the next, and this week's honor), a switch each. Each line starts with a shield that shows your level, a banner or your rank. |
 | **Metrics** | A grid of readouts, each with its own switch: gold, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
 | **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
 | **Micro menu** | The game's menu buttons, in the dock. |
@@ -42,6 +42,7 @@ settings.
 | **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. One Size setting covers them all. Shift-drag a block to move it, and Reset on the page puts every block back. The Made-up people switch on the Testing page shows a made-up party or raid. Switch them off, or one type of frame off, and the game's own frames come back. |
 | **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
 | **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). |
+| **Nameplates** | Enemy nameplates in BeebMod's look, with the enemy's level, name and health. A ring means it is attacking you, and a white outline marks your target. Casts show under the plate with the spell's icon and name, and a red rim marks a cast the game says to interrupt. Your damage over time shows above the plate. Friendly nameplates show a name and no bar. A player's name is in class colour, with their level before it. An NPC's is smaller and green, with a picture for what it does, such as selling, training or flying you. Another player's pet has its owner's name under it, and totems have no name. Switches on the page turn off friendly nameplates, show pets and minions, and fade other enemies while you have a target. |
 | **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
 
 **Interface** is the game's own windows and menus, drawn to match BeebMod.
@@ -61,11 +62,12 @@ ruleset, with both factions in it. Tiles across the top show the faction,
 gender and level split, and a click on any part of one narrows every chart
 to it.
 
-**Ledger** keeps notes, tags and a rating on the people you meet. They show
-on the person's tooltip and in the target row at the top of the dock. Its
-page searches the people you wrote about, and with the Census on, everyone
-the Census knows. The Ledger keeps what you write in its own book
-(`BeebModDB.ledger`), so it doesn't need the Census.
+**The Steamwheedle Ledger** (the Ledger, for short) keeps notes, tags and a
+rating on the people you meet. They show on the person's tooltip and in the
+target row at the top of the dock. Its page searches the people you wrote
+about, and with the Census on, everyone the Census knows. The Ledger keeps
+what you write in its own book (`BeebModDB.ledger`), so it doesn't need the
+Census.
 It also remembers the people you grouped with. A group counts once you've
 been together 5 minutes, or straight away in a dungeon. It keeps your duel
 scores too: how many duels you won and lost against each player.

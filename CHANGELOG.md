@@ -5,6 +5,79 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Guards in capitals show their directions picture.** Ironforge Guards in
+  Ironforge showed none. BeebMod now knows a capital by the zone's name as
+  well as its map, and reads a guard's name off its tooltip when the
+  nameplate keeps it hidden.
+
+- **Pictures on friendly NPCs, helped by the game.** BeebMod also asks the
+  game for the cursor it shows over an NPC, which it takes from what the
+  NPC does, so an NPC whose title says nothing BeebMod knows still gets a
+  picture if it sells or trains. Repair, flight, inn and stable cursors say
+  the role outright. A buy or trainer
+  cursor says the family, and the NPC's title or name picks which: a
+  banker, an auctioneer, a weapon merchant who repairs, a class trainer.
+  Once you talk to an NPC, the game says exactly what it is, and BeebMod
+  keeps that for every NPC of that kind. The pictures are 24 pixels, larger
+  than the name, and a role the minimap's tracking menu lists wears the
+  menu's own picture. Battlemasters have one now too.
+
+- **Trainers show their profession's or class's icon.** An alchemy trainer
+  shows the alchemy icon, and a mage trainer the mage icon, cut round to sit
+  beside the other pictures. BeebMod reads the profession or class from the
+  trainer's title, such as "Alchemy Trainer", "Expert Blacksmith" or "Mage
+  Trainer". A trainer whose title names neither, such as a weapon master,
+  keeps the tracking menu's picture. A trainer BeebMod learned about
+  earlier gets its icon the next time you see it.
+
+- **The note box lights up while you type in it.** It gets a lighter
+  background and a border in your accent colour while it has the cursor.
+  The border used to light for a moment and go dark again as the panel
+  settled, so there was no sign the box was ready.
+
+- **A full note says "Full".** A note holds 140 characters. At the limit,
+  typing did nothing, and a small grey "0 left" was the only sign. The box
+  now says "Full" in amber whenever the note is at the limit.
+
+- **No inn picture on an assistant innkeeper.** The game doesn't let you
+  talk to one. Its title still shows under its name.
+
+- **An NPC's title shows under its name.** A friendly NPC's nameplate has
+  its title on a smaller grey line under the name, such as "<Priest
+  Trainer>" or "<Innkeeper>", written as the game writes it.
+
+- **Friendly players' nameplates show their level.** It stands before the
+  name, a size smaller, coloured by how far it is from yours, as on the unit
+  frames. NPCs and pets have none.
+
+- **A pet's nameplate says whose it is.** Under another player's pet or
+  minion, a smaller line reads "<Luigi's pet>" or "<Luigi's minion>", taken
+  from the pet's tooltip. Your own pet has no such line.
+
+- **Friendly totems have no nameplate name.** With pets and minions
+  switched on, the game may give every shaman's totems a plate. BeebMod
+  leaves those blank.
+
+- **No NPC cursor lookups in a fight.** It is not known whether the game
+  blocks that lookup in combat, and a blocked one shows "Interface action
+  failed because of an AddOn". An NPC first seen during a fight gets its
+  picture from its title or name, and the cursor is checked after the
+  fight.
+
+- **Bigger names on friendly players' nameplates.** A player's name is 13
+  pixels now, and the level before it 12. NPCs keep their smaller names.
+
+- **The Ledger is the Steamwheedle Ledger.** It takes the name of the
+  neutral goblin cartel of Booty Bay and Gadgetzan, as the Expedition takes
+  Nesingwary's. The rail, the dock and the commands still say "Ledger".
+
+- **The quest settings say "hide", as the hint does.** "Fold in combat" is
+  now "Hide quests in combat", and "Fold finished quests" is "Hide
+  objectives when done". The page's note says "Right-click to hide its
+  objectives".
+
 ## 0.1.0-beta.23
 
 - **An NPC's title is back on its tooltip.** An innkeeper's tooltip said

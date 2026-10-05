@@ -1385,7 +1385,9 @@ M.OnBind = M.OnEnable
 -- ---------------------------------------------------------------------------
 function M:BuildTab(panel)
 	local page = BT.Widgets.Stack(panel)
-	page:Note("Click a quest to open it. Right-click to fold it. Shift-click to stop tracking it.")
+	-- the hint's own words, here too (Josh 2026-10-04: "Instead of 'fold' say
+	-- 'hide objectives'", and yes to the settings)
+	page:Note("Click a quest to open it. Right-click to hide its objectives. Shift-click to stop tracking it.")
 
 	self.rows = {}
 	local quests = page:Section("Quests")
@@ -1399,9 +1401,9 @@ function M:BuildTab(panel)
 	row("By level", "Lowest level first in each zone", "byLevel", true)
 	row("Zone headings", "Quests grouped under their zone", "zones", true)
 	row("Only this zone", "Only the quests of the zone you are in", "hereOnly", false)
-	row("Fold in combat", "Unfolds when the fight ends", "combatFold", false)
+	row("Hide quests in combat", "They come back when the fight ends", "combatFold", false)
 	row("Hide when empty", "Hides the panel when you track no quests", "hideEmpty", true)
-	row("Fold finished quests", "Hides their objectives", "hideDone", false)
+	row("Hide objectives when done", "A finished quest shows only its title", "hideDone", false)
 	-- "Fold the list" used to be a row here. Folding the list is something you
 	-- do to the panel in front of you and undo a second later - it is state,
 	-- not a preference, and the chevron on the QUESTS header already is the

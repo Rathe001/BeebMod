@@ -349,7 +349,12 @@ BT.FEATURES = {
 		line = "The game's action bars, bags, chat, character sheet, tooltips and menus, drawn in BeebMod's style." },
 	{ key = "census", title = "Census", color = { 0.69, 0.56, 0.88 }, single = "census", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\census",
 		line = "Writes down every character you see. It shows who is on your realm by class, race, level, guild and zone." },
-	{ key = "ledger", title = "Ledger", color = { 0.90, 0.81, 0.42 }, single = "ledger", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger",
+	-- THE STEAMWHEEDLE LEDGER (Josh 2026-10-04: "Ok I like Steamwheedle"): the
+	-- neutral goblin cartel of Booty Bay and Gadgetzan, keeping books on
+	-- everyone who passes through, as the Expedition is Nesingwary's.
+	-- "Ledger" where there is no room.
+	{ key = "ledger", title = "Steamwheedle Ledger", short = "Ledger", color = { 0.90, 0.81, 0.42 }, single = "ledger",
+		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger",
 		line = "Notes, tags and a rating for people you meet. They show on their tooltip, and in the dock when you target them." },
 	-- NESINGWARY'S EXPEDITION (Josh 2026-09-27: "Menagerie ... kind of feels
 	-- like it implies pets", and "make the player feel like they are part of

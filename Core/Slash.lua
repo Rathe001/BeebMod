@@ -125,10 +125,11 @@ BT.Command("help", function()
 			local line = c.help:sub(1, #name) == name
 				and ("/bt " .. c.help)
 				or ("/bt %s - %s"):format(name, c.help)
-			-- the module by the name its tab shows, not its key
+			-- the module by the name its tab shows, not its key: the short one
+			-- where it has one, as the rail does
 			if c.module then
 				local m = BT.GetModule(c.module)
-				line = line .. " |cff6e7b75(" .. tostring(m and m.title or c.module) .. ")|r"
+				line = line .. " |cff6e7b75(" .. tostring(m and (m.short or m.title) or c.module) .. ")|r"
 			end
 			U.Print(line)
 		end

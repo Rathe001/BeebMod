@@ -19,7 +19,8 @@ local U, N = BT.Util, BT.Notes
 local M = BT.Module({
 	key = "ledger",
 	feature = "ledger",
-	title = "Ledger",
+	title = "Steamwheedle Ledger",
+	short = "Ledger",
 	blurb = "Notes and tags",
 	order = 10,
 	-- on the right panel, so it has a tab on the rail (Josh 2026-09-22)

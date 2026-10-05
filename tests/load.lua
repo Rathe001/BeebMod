@@ -1229,6 +1229,15 @@ if ok then
 			assert(box:GetMaxLetters() == 140, "the note panel's box holds 140")
 			box:SetText(string.rep("b", 300))
 			assert(#box:GetText() == 140, "and no more")
+			-- FULL, SAID PLAINLY (Josh 2026-10-04: "im not able to update the
+			-- note"): a full note says so, without the box having the cursor
+			local panel = box:GetParent()
+			panel.Ghost()
+			assert(panel.left._text == "Full" and panel.left._shown ~= false
+				and panel.left._textColor[1] > panel.left._textColor[3], "a full note says Full, in amber")
+			box:SetText("short again")
+			panel.Ghost()
+			assert(panel.left._shown == false, "and nothing while there is room and the box is not in use")
 
 			-- SAVING A NOTE LAGS (Josh 2026-09-29): each save is timed, step
 			-- by step, for the Testing page's record
@@ -1248,6 +1257,21 @@ if ok then
 			assert(not names.list, "and not the list, which nobody can see with the window closed")
 			assert(BT.Find.Dump() >= 1 and BeebModDB.ledgerDump.lines[1]:find("^Enter in the note panel"),
 				"the Record button writes them down: " .. tostring(BeebModDB.ledgerDump.lines[1]))
+			-- WHERE YOU ARE TYPING (Josh 2026-10-04: "There is just no indication
+			-- I entered the input"): the field lights with the cursor, in the
+			-- surface's own colours, and goes quiet without it
+			do
+				BT.Find.OpenEditorFor("Trilly Lightbolt", _G.BeebModDock)
+				local panel = BT.Find.Editor()
+				local fill = function() return panel.fieldFill._color or panel.fieldFill._vertex end
+				panel.note:GetScript("OnEditFocusGained")(panel.note)
+				local litFill = fill()
+				panel.note:GetScript("OnEditFocusLost")(panel.note)
+				local idleFill = fill()
+				assert(litFill and idleFill and litFill[1] > idleFill[1], "lighter with the cursor than without: "
+					.. tostring(litFill and litFill[1]) .. " vs " .. tostring(idleFill and idleFill[1]))
+				BT.Find.CloseEditor()
+			end
 			BT.Find.CloseEditor()
 			-- A LONG NOTE WRAPS ON THE FIRST HOVER (Josh 2026-09-29: the first
 			-- showed one line and "...", a second showed it whole): the text
@@ -9293,6 +9317,24 @@ if ok then
 				assert(f.name._textColor and math.abs(f.name._textColor[1] - r) < 0.01 and math.abs(f.name._textColor[3] - b) < 0.01,
 					"in the class's colour")
 				assert(f.under._alpha == 0, "no line under one who is not your target")
+				-- A PLAYER'S LEVEL (the same day: "Can we add level to friendly
+				-- players?"): before the name, coloured as on the unit frames
+				do
+					local hadLevel = _G.UnitLevel
+					_G.UnitLevel = function(unit) if unit == "nameplate2" then return 14 end return 10 end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.level._text == F.LevelTag(F.Source("nameplate2")) and f.level._text:find("14", 1, true)
+						and f.level._text:find("^|cff"), "a player's level, in colour: " .. tostring(f.level._text))
+					assert(f.level._points.RIGHT.rel == f.name, "before the name")
+					-- a level gained: theirs, or yours, which colours everyone's
+					_G.UnitLevel = function(unit) if unit == "nameplate2" then return 15 end return 10 end
+					fire(mod.events, "UNIT_LEVEL", "nameplate2")
+					assert(f.level._text:find("15", 1, true), "repainted when they level")
+					_G.UnitLevel = function(unit) if unit == "nameplate2" then return 15 end return 20 end
+					fire(mod.events, "UNIT_LEVEL", "player")
+					assert(f.level._text == F.LevelTag(F.Source("nameplate2")), "and when you do")
+					_G.UnitLevel = hadLevel
+				end
 				_G.UnitIsUnit = function(a, b2) return a == "nameplate2" and b2 == "target" end
 				mod.TargetChanged()
 				assert(f.under._alpha == 1, "and a white line under your target's")
@@ -9303,6 +9345,50 @@ if ok then
 				mod.PaintFriend(f, F.Source("nameplate2"))
 				assert(f.name._textColor[1] == mod.FRIEND_NPC[1] and f.name._textColor[2] == mod.FRIEND_NPC[2],
 					"an NPC's name in the softer green")
+				assert(f.level._text == "", "and no level")
+				-- WHOSE PET (the same day: "Under player pets, can we tag <Luigi's
+				-- pet>?"): the tooltip's owner line, under the name
+				do
+					local hadTip, hadControlled, hadPetForm = _G.C_TooltipInfo, _G.UnitPlayerControlled, _G.UNITNAME_TITLE_PET
+					_G.UNITNAME_TITLE_PET = "%s's Pet"
+					local line = "Luigi's Pet"
+					_G.C_TooltipInfo = { GetUnit = function()
+						return { lines = { { leftText = "Wolf" }, { leftText = line }, { leftText = "Level 30 Beast" } } }
+					end }
+					_G.UnitPlayerControlled = function() return true end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.sub._text == "<Luigi's pet>", "the owner, under the name: " .. tostring(f.sub._text))
+					assert(f.sub._points.TOP.rel == f.name and f.role._shown == false, "under the name, and no picture")
+					assert(mod.OwnerTag("Luigi Garbaggio's Minion") == "<Luigi Garbaggio's minion>"
+						and mod.OwnerTag("Innkeeper") == nil, "a warlock's minion too, and never a title")
+					_G.UNITNAME_TITLE_PET = nil
+					assert(mod.OwnerTag("Luigi's Pet") == "<Luigi's pet>", "the English forms where the client has none")
+					-- YOURS GOES UNSAID (Josh 2026-10-04, "Let's do 1-4")
+					_G.UnitIsOwnerOrControllerOfUnit = function(a, b2) return a == "player" and b2 == "nameplate2" end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.sub._text == "", "your own pet has none: " .. tostring(f.sub._text))
+					_G.UnitIsOwnerOrControllerOfUnit = nil
+					-- an NPC no player controls shows the line as its title
+					_G.UnitPlayerControlled = function() return false end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.sub._text == "<Luigi's Pet>", "an NPC's line is its title, as the game writes it: " .. tostring(f.sub._text))
+					-- the game's own minion test comes first
+					_G.UnitIsMinion = function() return true end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.sub._text == "<Luigi's pet>", "a minion by the game's word")
+					_G.UnitIsMinion = nil
+					-- NO TOTEMS (the same day): a friendly totem's plate shows nothing
+					local hadType = _G.UnitCreatureType
+					_G.UnitCreatureType = function() return "Totem", 11 end
+					fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate2")
+					assert(f._shown == false and plates.nameplate2.UnitFrame._alpha == 0, "a totem: no name, and not the game's either")
+					_G.UnitCreatureType = function() return "Beast", 1 end
+					fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate2")
+					assert(f._shown, "a beast has its name")
+					_G.UnitCreatureType = hadType
+					_G.C_TooltipInfo, _G.UnitPlayerControlled, _G.UNITNAME_TITLE_PET = hadTip, hadControlled, hadPetForm
+					mod.roles = {}
+				end
 				assert(playerFont and f.name._font and f.name._font[2] < playerFont[2]
 					and f.name._font[1] == BT.Fonts.Face("text") and playerFont[1] == BT.Fonts.Face("name"),
 					"a size down, in the lighter face: " .. tostring(f.name._font and f.name._font[2]))
@@ -9320,8 +9406,30 @@ if ok then
 					_G.UnitGUID = function() return "Creature-0-4372-1-123-6736-0000ABCDEF" end
 					mod.roles = {}
 					mod.PaintFriend(f, F.Source("nameplate2"))
-					assert(f.role._shown ~= false and f.role._texture == mod.ROLES[2].icon, "an innkeeper's picture before the name")
+					assert(f.role._shown ~= false and f.role._texture == mod.RoleIcon(mod.ROLES[2]), "an innkeeper's picture before the name")
 					assert(f.role._points.RIGHT.rel == f.name, "and before the name it is")
+					-- ITS TITLE UNDER THE NAME (the same day: "I think NPCs still need
+					-- their tag under their nameplates as well")
+					assert(f.sub._text == "<Innkeeper>", "the title under the name: " .. tostring(f.sub._text))
+					assert(f.sub._textColor[1] == mod.FRIEND_SUB[1] and f.sub._textColor[3] == mod.FRIEND_SUB[3], "in grey")
+					assert(f.role._width == 24 and f.role._height == 24, "larger than the name (\"make all the icons larger\")")
+					-- THE TRACKING MENU'S PICTURES (the same day: "Can we do the same
+					-- for all the trackable icons that go on NPCs?")
+					do
+						local hadMinimap = _G.C_Minimap
+						_G.C_Minimap = { GetNumTrackingTypes = function() return 2 end, GetTrackingInfo = function(i)
+							return ({ { name = "Innkeeper", texture = 4001 }, { name = "Battlemaster", texture = 4002 } })[i]
+						end }
+						mod.trackIcons = nil
+						mod.PaintFriend(f, F.Source("nameplate2"))
+						assert(f.role._texture == 4001, "an innkeeper wears the menu's own picture: " .. tostring(f.role._texture))
+						assert(mod.RoleFor("Warsong Gulch Battlemaster").key == "battle"
+							and mod.RoleIcon(mod.RoleFor("Battlemaster")) == 4002, "a battlemaster too")
+						assert(mod.RoleIcon(mod.RoleFor("Banker")) == mod.RoleFor("Banker").icon,
+							"one the menu does not list keeps its own picture")
+						_G.C_Minimap = hadMinimap
+						mod.trackIcons = nil
+					end
 					mod.PaintFriend(f, F.Source("nameplate2"))
 					assert(asked == 1, "learned once for each kind of NPC")
 					assert(mod.RoleFor("Warrior Trainer").key == "class" and mod.RoleFor("Cooking Trainer").key == "trainer"
@@ -9332,24 +9440,236 @@ if ok then
 					assert(mod.GivesDirections("Stormwind City Guard", true) and mod.GivesDirections("Darnassus Sentinel", true)
 						and not mod.GivesDirections("Auberdine Sentinel", false)
 						and not mod.GivesDirections("Guardian Felhunter", true), "a guard gives directions in a capital only")
-					local hadMap = _G.C_Map
+					local hadMap, hadZone, hadZone2 = _G.C_Map, _G.GetRealZoneText, _G.GetZoneText
+					_G.GetRealZoneText, _G.GetZoneText = function() return "Darkshore" end, function() return "Darkshore" end
 					_G.C_Map = { GetBestMapForUnit = function() return 1457 end }
 					assert(mod.InCapital(), "Darnassus is a capital")
 					_G.C_Map = { GetBestMapForUnit = function() return 1439 end }
 					assert(not mod.InCapital(), "Darkshore is not")
+					-- a map ID that is not Classic's: the zone's name says it
+					_G.C_Map = { GetBestMapForUnit = function() return 87 end }
+					_G.GetRealZoneText = function() return "Ironforge" end
+					assert(mod.InCapital(), "Ironforge by its name, whatever its map ID")
+					-- a guard whose name the game hides on its plate: the tooltip's
+					local hadName, outerTip, outerGuid = _G.UnitName, _G.C_TooltipInfo, _G.UnitGUID
+					_G.UnitName = function() return nil end
+					_G.C_TooltipInfo = { GetUnit = function()
+						return { lines = { { leftText = "Ironforge Guard" }, { leftText = "Level 55 Humanoid" } } }
+					end }
+					_G.UnitGUID = function() return "Creature-0-4372-1-123-5595-0000ABCDEF" end
+					mod.roles = {}
+					assert(mod.RoleOf("nameplate2") == mod.DIRECTIONS, "an Ironforge Guard in Ironforge gives directions")
+					assert(mod.RoleOf("nameplate2") == mod.DIRECTIONS, "and still once its title is known")
+					_G.GetRealZoneText = function() return "Dun Morogh" end
+					_G.C_Map = { GetBestMapForUnit = function() return 1426 end }
+					assert(mod.RoleOf("nameplate2") == nil, "and none outside the city")
+					_G.UnitName, _G.GetRealZoneText, _G.GetZoneText = hadName, hadZone, hadZone2
+					_G.C_TooltipInfo, _G.UnitGUID = outerTip, outerGuid
 					_G.C_Map = hadMap
 					assert(mod.RoleFor("Some Title") == nil, "nothing it does that BeebMod knows: no picture")
+					-- REPAIR BEFORE A MERCHANT (the same day: "Repair NPCs should use
+					-- the repair icon not the bag icon")
+					assert(mod.RoleFor("Weapon Merchant").key == "repair" and mod.RoleFor("Leather Armor Merchant").key == "repair"
+						and mod.RoleFor("Shield Merchant").key == "repair" and mod.RoleFor("General Goods").key == "vendor"
+						and mod.RoleFor("Weapon Master").key == "class", "a weapon or armour seller repairs; a Weapon Master trains")
+					-- A ROLE IN THE NAME (the same day: "Not seeing auctioneer")
+					assert(mod.RoleInName("Auctioneer Lympkin").key == "auction" and mod.RoleInName("Innkeeper Firebrew").key == "inn"
+						and mod.RoleInName("Gwenna Firebrew") == nil and mod.RoleInName("Repairman") == nil,
+						"a name that starts with a role's word, then a space")
+					do
+						local hadTip2, hadGuid2, hadName2 = _G.C_TooltipInfo, _G.UnitGUID, _G.UnitName
+						_G.C_TooltipInfo = { GetUnit = function()
+							return { lines = { { leftText = "Auctioneer Lympkin" }, { leftText = "Level 50 Humanoid" } } }
+						end }
+						_G.UnitGUID = function() return "Creature-0-4372-1-123-8720-0000ABCDEF" end
+						_G.UnitName = function() return "Auctioneer Lympkin" end
+						mod.roles = {}
+						assert(mod.RoleOf("nameplate2") and mod.RoleOf("nameplate2").key == "auction",
+							"Auctioneer Lympkin, with no title, is an auctioneer")
+						_G.C_TooltipInfo, _G.UnitGUID, _G.UnitName = hadTip2, hadGuid2, hadName2
+						mod.roles = {}
+					end
 					assert(BT.Util.NpcTitle("Innkeeper") == "Innkeeper" and BT.Util.NpcTitle("<Banker>") == "Banker"
 						and BT.Util.NpcTitle("Level 30 Humanoid") == nil, "a title with or without brackets; a level line is none")
 					_G.UnitGUID = function() return "Creature-0-4372-1-123-9999-0000ABCDEF" end
 					sub = "<Fishing Supplies>"
 					mod.PaintFriend(f, F.Source("nameplate2"))
-					assert(f.role._texture == mod.ROLES[#mod.ROLES].icon, "another NPC, a vendor")
+					assert(f.role._texture == mod.RoleIcon(mod.ROLES[#mod.ROLES]), "another NPC, a vendor")
 					_G.UnitIsPlayer = function(unit) return unit == "nameplate2" end
 					mod.PaintFriend(f, F.Source("nameplate2"))
 					assert(f.role._shown == false, "and a player never has one")
 					_G.UnitIsPlayer = function() return false end
 					_G.C_TooltipInfo, _G.UnitGUID = hadTip, hadGuid
+				end
+				-- THREE WAYS, THE SUREST FIRST (the same day: "maybe a mix of these 3
+				-- methods will make it work as expected")
+				do
+					local hadSet, hadTip3, hadGuid3, hadName3, hadRepair = _G.SetUnitCursorTexture, _G.C_TooltipInfo,
+						_G.UnitGUID, _G.UnitName, _G.CanMerchantRepair
+					local cursor, title, id = nil, nil, 1000
+					_G.SetUnitCursorTexture = function(tex)
+						tex.GetTexture = function() return cursor end
+						return cursor ~= nil
+					end
+					_G.C_TooltipInfo = { GetUnit = function()
+						return { lines = { { leftText = "Somebody" }, { leftText = title or "Level 30 Humanoid" } } }
+					end }
+					_G.UnitName = function() return "Somebody" end
+					_G.UnitGUID = function() return "Creature-0-4372-1-123-" .. id .. "-0000ABCDEF" end
+					local function as(c, t)
+						cursor, title, id = c, t, id + 1
+						mod.roles = {}
+						local r = mod.RoleOf("nameplate2")
+						return r and r.key or "none"
+					end
+					local hadLearned = BeebModDB.npcRoles
+					BeebModDB.npcRoles = {}
+					assert(as("Cursor Crosshair_UnableBuy_64", "Banker") == "bank", "a buy cursor and a banker's title")
+					assert(as("Cursor Crosshair_Buy_64", nil) == "vendor", "a buy cursor and no title: a vendor")
+					assert(as("Cursor Crosshair_UnableBuy_64", "Weapon Merchant") == "repair", "a weapon merchant on a buy cursor repairs")
+					assert(as("Cursor Crosshair_Repairnpc_64", "General Goods") == "repair", "the repair cursor says so outright")
+					-- (the same day: "Not seeing an icon for the flightmaster"): no
+					-- cursor is not no role; the title still says it
+					assert(as(nil, "Gryphon Master") == "flight", "no cursor, but the title: a flight master")
+					-- (the same day: "you cannot interact with <assistant innkeeper>")
+					assert(as(nil, "Assistant Innkeeper") == "none", "an assistant innkeeper has no picture")
+					assert(as("Cursor Crosshair_Point_64", "Innkeeper") == "inn", "the plain pointer, but the title: an innkeeper")
+					assert(as(nil, nil) == "none", "no cursor and no words: no picture")
+					assert(as("Cursor Crosshair_Speak_64", "Warsong Gulch Battlemaster") == "battle", "a talk cursor leaves it to the title")
+					assert(as("Cursor Crosshair_Trainer_64", "Mage Trainer") == "class-mage"
+						and as("Cursor Crosshair_Trainer_64", "Cooking Trainer") == "cooking"
+						and as("Cursor Crosshair_Trainer_64", nil) == "trainer", "a trainer's cursor, class or profession by the title")
+					assert(as("Cursor Crosshair_Taxi_64", nil) == "flight" and as("Cursor Crosshair_UnableInnkeeper_64", nil) == "inn",
+						"flight and inn by the cursor alone")
+					-- THE MOUSE'S PICTURE WHEN THE GAMEPAD'S SAYS NOTHING (the same day:
+					-- "The game does have a hover cursor for the flightmaster")
+					assert(mod.CursorName("Interface\\Cursor\\Taxi") == "Taxi" and mod.CursorName("Interface/Cursor/unablerepairnpc.blp") == "Repairnpc"
+						and mod.CursorName("Cursor Crosshair_UnableBuy_64") == "Buy", "a cursor's kind from either set's name")
+					do
+						local gamepadSet = _G.SetUnitCursorTexture
+						_G.SetUnitCursorTexture = function(tex, _, style, _, gamepad)
+							tex.GetTexture = function() return "Interface\\Cursor\\Taxi" end
+							return gamepad == false
+						end
+						cursor, title, id = nil, nil, id + 1
+						mod.roles = {}
+						assert(mod.RoleOf("nameplate2").key == "flight", "a flight master by the mouse's cursor")
+						_G.SetUnitCursorTexture = gamepadSet
+					end
+					-- NOT IN A FIGHT (Josh 2026-10-04, "Let's do 1-4"): the cursor is
+					-- not asked in combat, and what the words gave is not kept
+					do
+						local hadCombat, stub, asks = _G.InCombatLockdown, _G.SetUnitCursorTexture, 0
+						_G.SetUnitCursorTexture = function(...)
+							asks = asks + 1
+							return stub(...)
+						end
+						_G.InCombatLockdown = function() return true end
+						cursor, title, id = "Cursor Crosshair_Taxi_64", "Gryphon Master", id + 1
+						mod.roles = {}
+						assert(mod.RoleOf("nameplate2").key == "flight" and asks == 0, "the words alone in a fight")
+						assert(mod.roles[tostring(id)] == nil, "and not kept")
+						_G.InCombatLockdown = hadCombat
+						assert(mod.RoleOf("nameplate2").key == "flight" and asks > 0, "the cursor asked once it is over")
+						assert(mod.roles[tostring(id)], "and kept")
+						_G.SetUnitCursorTexture = stub
+					end
+					-- PROFESSION PICTURES (the same day: "is it possible to use the
+					-- profession icons for their respective trainers?")
+					assert(as("Cursor Crosshair_Trainer_64", "Alchemy Trainer") == "alchemy", "an alchemy trainer")
+					assert(as("Cursor Crosshair_UnableTrainer_64", "Expert Blacksmith") == "blacksmithing",
+						"a trainer called a blacksmith teaches blacksmithing")
+					assert(as(nil, "Fishing Trainer") == "fishing", "by its title alone")
+					assert(as("Cursor Crosshair_Trainer_64", "Warrior Trainer") == "class-warrior", "a class trainer is no profession trainer")
+					assert(as("Cursor Crosshair_Trainer_64", "Riding Trainer") == "trainer", "a craft it cannot name: the menu's picture")
+					assert(as("Cursor Crosshair_Buy_64", "Blacksmith") == "repair", "and a merchant called a blacksmith still repairs")
+					-- CLASS PICTURES (the same day: "would it be possible to use class
+					-- icons for the class trainers?")
+					assert(as("Cursor Crosshair_Trainer_64", "Warlock Trainer") == "class-warlock", "a warlock trainer")
+					assert(as(nil, "Druid Trainer") == "class-druid", "by its title alone")
+					assert(as("Cursor Crosshair_Trainer_64", "Weapon Master") == "class", "a weapon master keeps the menu's picture")
+					do
+						local f3 = mod.Friend("nameplate2")
+						cursor, title, id = "Cursor Crosshair_Trainer_64", "Mage Trainer", id + 1
+						mod.roles = {}
+						mod.PaintFriend(f3, F.Source("nameplate2"))
+						local mage = mod.BY_KEY["class-mage"]
+						assert(f3.role._texture == mod.CLASS_SHEET and f3.role._texCoord[1] > mage.coords[1]
+							and f3.role._texCoord[2] < mage.coords[2], "the mage's square off the old sheet, trimmed")
+						local hadTexture, atlas = _G.C_Texture, nil
+						_G.C_Texture = { GetAtlasInfo = function(name) if name == "classicon-mage" then return {} end end }
+						f3.role.SetAtlas = function(_, name) atlas = name end
+						mod.PaintFriend(f3, F.Source("nameplate2"))
+						assert(atlas == "classicon-mage" and f3.role._width == mod.PROFESSION_SIZE, "or the game's own class icon")
+						_G.C_Texture = hadTexture
+						f3.role.SetAtlas = nil
+					end
+					do
+						local f2 = mod.Friend("nameplate2")
+						cursor, title, id = "Cursor Crosshair_Trainer_64", "Herbalism Trainer", id + 1
+						mod.roles = {}
+						mod.PaintFriend(f2, F.Source("nameplate2"))
+						assert(f2.role._texture == mod.BY_KEY.herbalism.icon and f2.role._width == mod.PROFESSION_SIZE,
+							"its craft's icon, a size down: " .. tostring(f2.role._texture))
+						cursor, title, id = "Cursor Crosshair_Innkeeper_64", nil, id + 1
+						mod.roles = {}
+						mod.PaintFriend(f2, F.Source("nameplate2"))
+						assert(f2.role._width == mod.ROLE_SIZE, "and the next NPC's picture full size again")
+					end
+					-- learned by talking to it: the game's word, kept
+					cursor, title = nil, nil
+					local banker = id
+					_G.UnitGUID = function() return "Creature-0-4372-1-123-" .. banker .. "-0000ABCDEF" end
+					fire(mod.events, "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 8)
+					assert(BeebModDB.npcRoles[tostring(banker)] == "bank", "talking to a banker is learned")
+					mod.roles = {}
+					assert(mod.RoleOf("nameplate2").key == "bank", "and outranks a cursor that says nothing")
+					_G.CanMerchantRepair = function() return true end
+					fire(mod.events, "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 5)
+					assert(BeebModDB.npcRoles[tostring(banker)] == "repair", "a merchant who repairs is learned as repair")
+					_G.CanMerchantRepair = function() return false end
+					title = "Baker"
+					fire(mod.events, "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 5)
+					assert(BeebModDB.npcRoles[tostring(banker)] == "food", "one who does not, by what it sells")
+					title = "Tailoring Trainer"
+					fire(mod.events, "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 7)
+					assert(BeebModDB.npcRoles[tostring(banker)] == "tailoring", "a trainer is learned with its craft")
+					-- a trainer learned before its class was read gets it now (the
+					-- same day: Priestess Josetta kept the plain trainer picture)
+					do
+						local old = id + 50
+						_G.UnitGUID = function() return "Creature-0-4372-1-123-" .. old .. "-0000ABCDEF" end
+						BeebModDB.npcRoles[tostring(old)] = "class"
+						title = "Priest Trainer"
+						mod.roles = {}
+						assert(mod.RoleOf("nameplate2").key == "class-priest", "an old class trainer gets its class")
+						assert(BeebModDB.npcRoles[tostring(old)] == "class-priest", "and keeps it")
+						_G.UnitGUID = function() return "Creature-0-4372-1-123-" .. banker .. "-0000ABCDEF" end
+					end
+					title = "Hunter Trainer"
+					fire(mod.events, "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 7)
+					assert(BeebModDB.npcRoles[tostring(banker)] == "class-hunter", "and with its class")
+					title = "Tailoring Trainer"
+					fire(mod.events, "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 7)
+					mod.roles = {}
+					assert(mod.RoleOf("nameplate2").key == "tailoring", "and kept")
+					BeebModDB.npcRoles = hadLearned
+					mod.roles = {}
+					_G.SetUnitCursorTexture, _G.C_TooltipInfo, _G.UnitGUID, _G.UnitName, _G.CanMerchantRepair =
+						hadSet, hadTip3, hadGuid3, hadName3, hadRepair
+				end
+				-- WHAT THE GAME SAYS AN NPC IS (the same day: "Do NPCs have a flag or
+				-- something else in the API we could use?"): the record
+				do
+					local hadSet, hadInteract = _G.SetUnitCursorTexture, _G.UnitIsInteractable
+					_G.SetUnitCursorTexture = function(tex, unit) tex:SetTexture(136465) return unit == "nameplate2" end
+					_G.UnitIsInteractable = function() return true end
+					assert(mod.Dump() >= 2, "a line for the zone, and one for the NPC")
+					local said = table.concat(BeebModDB.nameplatesDump.lines, " / ")
+					assert(said:find("nameplate2", 1, true) and said:find("cursor has=true", 1, true)
+						and said:find("interactable=true", 1, true), "the game's cursor beside BeebMod's reading: " .. said)
+					_G.SetUnitCursorTexture, _G.UnitIsInteractable = hadSet, hadInteract
+					BeebModDB.nameplatesDump = nil
 				end
 				-- PLATES FOR PETS (the same day: "can we add nameplates for player
 				-- pets/minions?"): the game's own switch, turned on and put back

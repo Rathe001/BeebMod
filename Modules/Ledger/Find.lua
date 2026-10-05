@@ -159,6 +159,10 @@ local function editorLine(parent, size, r, g, b)
 	return fs
 end
 
+-- the note field without the cursor, and with it
+B.FIELD_IDLE = { fill = { 0.02, 0.03, 0.03, 0.55 }, edge = { 0.20, 0.26, 0.24, 0.95 } }
+B.FIELD_LIT = { fill = { 0.07, 0.09, 0.09, 0.85 } }
+
 local function buildEditor(parent, anchor, label, paint)
 	local e = CreateFrame("Frame", nil, parent)
 	e:SetSize(E_W, 120)
@@ -253,8 +257,7 @@ local function buildEditor(parent, anchor, label, paint)
 	e.field = CreateFrame("Frame", nil, e)
 	e.field:SetHeight(22)
 	e.field:EnableMouse(true)
-	e.fieldFill, e.fieldRim = BT.Pill.Panel(e.field,
-		{ 0.02, 0.03, 0.03, 0.55 }, { 0.20, 0.26, 0.24, 0.95 })
+	e.fieldFill, e.fieldRim = BT.Pill.Panel(e.field, B.FIELD_IDLE.fill, B.FIELD_IDLE.edge)
 	e.field:SetScript("OnMouseDown", function() e.note:SetFocus() end)
 	e.note = CreateFrame("EditBox", nil, e)
 	e.note:SetHeight(18)
@@ -300,22 +303,46 @@ local function buildEditor(parent, anchor, label, paint)
 			most = N.MAX_NOTE
 		end
 		local left = most - N.Length(text)
-		local near = e.note:HasFocus() and left <= 30
-		e.left:SetText(near and (left == 1 and "1 left" or ("%d left"):format(left)) or "")
+		-- FULL, SAID PLAINLY (Josh 2026-10-04: "im not able to update the
+		-- note. Cannot click into that input box", on a note of exactly 140):
+		-- the box had the cursor, and typing did nothing because the note was
+		-- full, with a grey "0 left" the only sign. A full note says "Full",
+		-- in amber, whether or not the box has the cursor.
+		local full = left <= 0
+		local near = full or (e.note:HasFocus() and left <= 30)
+		if full then
+			e.left:SetText("Full")
+			e.left:SetTextColor(0.95, 0.72, 0.30)
+		else
+			e.left:SetText(near and (left == 1 and "1 left" or ("%d left"):format(left)) or "")
+			e.left:SetTextColor(0.50, 0.56, 0.53)
+		end
 		e.left:SetShown(near)
 		e.note:SetTextInsets(2, near and 46 or 2, 0, 0)
 	end
 	e.note:SetScript("OnTextChanged", ghost)
+	-- WHERE YOU ARE TYPING, IN PLAIN SIGHT (Josh 2026-10-04: "There is just
+	-- no indication I entered the input. We need to highlight it"). The rim
+	-- was lit on the cursor's arrival as a bare texture colour, and the
+	-- panel's next redraw - its height settling as it opened - painted the
+	-- surface's own colours back over it. The colours are the surface's now
+	-- (Pill.Recolour), so every redraw keeps them: a lighter field with a rim
+	-- in your accent while the box has the cursor, the quiet well without.
+	local function lit(on)
+		local c = BT.Widgets.ACCENT
+		if on then
+			BT.Pill.Recolour(e.field, B.FIELD_LIT.fill, { c[1], c[2], c[3], 1 })
+		else
+			BT.Pill.Recolour(e.field, B.FIELD_IDLE.fill, B.FIELD_IDLE.edge)
+		end
+	end
+	e.Lit = lit
 	e.note:SetScript("OnEditFocusGained", function()
-		BT.Widgets.Lit(e.fieldRim, 0.9)
+		lit(true)
 		ghost()
 	end)
 	e.note:SetScript("OnEditFocusLost", function()
-		-- A RIM IS FOUR BARS NOW, NOT ONE TEXTURE (Josh 2026-09-21). Pill.Panel
-		-- hands back a ring so the border cannot bleed through the fill, and
-		-- anything still painting it as a single texture calls a method a
-		-- table does not have.
-		BT.Pill.PaintRing(e.fieldRim, { 0.20, 0.26, 0.24, 0.95 })
+		lit(false)
 		ghost()
 	end)
 	e.Ghost = ghost
