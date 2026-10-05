@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.25
 
 - **The Size on General is kept after a reload.** Since beta.24 the dock
   and its tooltips went back to 100% at every login, while the unit frames
