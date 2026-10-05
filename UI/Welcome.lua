@@ -1,8 +1,11 @@
 -- WHICH FEATURES DO YOU WANT? (Josh 2026-09-27: "On startup we should ask
 -- users which modules they want to enable.")
 --
--- Six cards, one for each feature (BT.FEATURES): a picture of what it looks
--- like, a line on what it does, and its switch. Start switches the features
+-- A card for each feature (BT.FEATURES): a picture of what it looks like, a
+-- line on what it does, and its switch. FIVE, UNDER THE RAIL'S HEADINGS (the
+-- settings canvas, Josh 2026-10-04): the three that change your interface on
+-- top, the two journals under them, each journal's line in its keeper's
+-- voice with the name under it, right-aligned and prefixed with "- ". Start switches the features
 -- as the cards say - the same switches the settings rail has, so any of it
 -- can be changed later. It replaced three presets (full, just the dock, the
 -- census and notes, Josh 2026-09-25): a preset is a guess at what somebody
@@ -64,8 +67,11 @@ local frame
 local PAD, GAP, COLS = 18, 10, 3
 local CARD_W = 236
 local PIC_H = math.floor(CARD_W * 9 / 16 + 0.5)
-local CARD_H = PIC_H + 12 + 22 + 44
+-- (a line more than before: a journal's three lines and its keeper's name)
+local CARD_H = PIC_H + 12 + 22 + 44 + 14
 local WIDTH = PAD * 2 + COLS * CARD_W + (COLS - 1) * GAP
+-- a group's heading over its row of cards
+local HEAD_H = 18
 
 local function inCombat()
 	return InCombatLockdown and InCombatLockdown() or false
@@ -133,12 +139,29 @@ function W.Build()
 	frame.question:SetPoint("LEFT", frame.title, "RIGHT", 10, -1)
 	Wd.Divider(frame, PAD, -PAD - 26)
 	frame.cards = {}
+	frame.heads = {}
 	local top = PAD + 36
+	local slots = {}
+	local groups = BT.Window and BT.Window.GROUPS or {}
+	for row, g in ipairs(groups) do
+		local y = top + (row - 1) * (HEAD_H + CARD_H + GAP)
+		local head = Wd.Label(frame, string.upper(g.title), "small", 0.44, 0.48, 0.46)
+		head:SetPoint("TOPLEFT", PAD + 2, -y)
+		frame.heads[#frame.heads + 1] = head
+		local col = 0
+		for _, f in ipairs(BT.FEATURES) do
+			if f.group == g.key then
+				slots[f.key] = { x = PAD + col * (CARD_W + GAP), y = y + HEAD_H }
+				col = col + 1
+			end
+		end
+	end
 	for i, f in ipairs(BT.FEATURES) do
 		local col, row = (i - 1) % COLS, math.floor((i - 1) / COLS)
+		local slot = slots[f.key] or { x = PAD + col * (CARD_W + GAP), y = top + row * (CARD_H + GAP) }
 		local card = CreateFrame("Button", nil, frame)
 		card:SetSize(CARD_W, CARD_H)
-		card:SetPoint("TOPLEFT", PAD + col * (CARD_W + GAP), -(top + row * (CARD_H + GAP)))
+		card:SetPoint("TOPLEFT", slot.x, -slot.y)
 		BT.Pill.Panel(card, { 0.06, 0.07, 0.07, 0.95 }, Wd.HAIR)
 		card.key, card.feature = f.key, f
 		card.picture = BT.Window.Picture(card, f, CARD_W - 12, PIC_H - 6)
@@ -156,15 +179,27 @@ function W.Build()
 		card.line:SetJustifyH("LEFT")
 		card.line:SetJustifyV("TOP")
 		card.line:SetWordWrap(true)
+		-- the keeper's name under a journal's line, at the card's foot
+		if f.by then
+			card.by = Wd.Label(card, "- " .. f.by, "small", 0.44, 0.48, 0.46)
+			card.by:SetPoint("BOTTOMRIGHT", -10, 8)
+			card.by:SetJustifyH("RIGHT")
+		end
 		-- a click anywhere on the card is a click on its switch
 		card:SetScript("OnClick", function()
 			W.Pick(f.key, W.picks[f.key] == false)
 		end)
 		frame.cards[#frame.cards + 1] = card
 	end
-	local y = top + 2 * CARD_H + GAP + 12
+	-- the note and the buttons in the bottom row's empty third place
+	local rows = math.max(1, #groups)
+	local bottom = top + rows * (HEAD_H + CARD_H) + (rows - 1) * GAP
+	local y = bottom - 22
 	frame.foot = Wd.Label(frame, "The dock's logo and cog always stay. Click the cog or type /bt to get back here.", "small", 0.50, 0.55, 0.53)
-	frame.foot:SetPoint("TOPLEFT", PAD, -(y + 5))
+	frame.foot:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", PAD + 2 * (CARD_W + GAP) + 2, -(y - 12))
+	frame.foot:SetWidth(CARD_W - 4)
+	frame.foot:SetJustifyH("LEFT")
+	frame.foot:SetWordWrap(true)
 	frame.start = Wd.Button(frame, "Start", 72, 22)
 	frame.start:SetPoint("TOPRIGHT", -PAD, -y)
 	frame.start:SetScript("OnClick", start)
@@ -184,7 +219,7 @@ function W.Build()
 		end
 		W.Paint()
 	end)
-	frame:SetSize(WIDTH, y + 22 + PAD)
+	frame:SetSize(WIDTH, bottom + PAD)
 	frame:SetPoint("CENTER", 0, 40)
 	-- Escape puts it off to the next login rather than choosing for you
 	tinsert(UISpecialFrames, "BeebModWelcome")

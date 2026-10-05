@@ -12,6 +12,13 @@
 --                  (Core/Rename.lua moves a saved one)
 --   Commendations  what your unique kills are worth, the masteries, and
 --                  every milestone, earned or the distance to it
+--
+-- THE LEDGER'S SISTER (Josh 2026-10-05, the "Sister journals" canvas): the
+-- window is the journals' own (UI/Book.lua), 760 x 640 where it was
+-- 1180 x 746, with Hemet's face and a line from him at your rank over the
+-- tabs. The types or zones are the rail; Sort, View and the search are the
+-- toolbar over the cards; the cards are three across; and Commendations is
+-- the page the Ledger has too.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Expedition/Window.lua")
 
@@ -19,12 +26,11 @@ local U = BT.Util
 local V = {}
 BT.ExpeditionWindow = V
 
-local PAD, TITLE_H = 14, 40
-local WIDTH, HEIGHT = 1180, 746
-local CONTROLS_Y = TITLE_H + 10
-local BODY_Y = TITLE_H + 40
-
-local COMMENDATION_H, HEAD_ROW_H = 40, 24
+local Bk = BT.Book
+local PAD = Bk.PAD
+local WIDTH, HEIGHT = Bk.WIDTH, Bk.HEIGHT
+-- Hemet Nesingwary, at his camp in Stranglethorn: the face over the journal
+V.NPC = 715
 
 local DIM = { 0.50, 0.55, 0.53 }
 local WORDS = "|cff8a9894%s|r"
@@ -119,40 +125,27 @@ function V.Build()
 	if frame then
 		return frame
 	end
-	local W = BT.Widgets
-	frame = CreateFrame("Frame", "BeebModExpedition", UIParent)
-	frame:SetSize(WIDTH, HEIGHT)
-	frame:SetPoint("CENTER", 40, -20)
-	frame:SetFrameStrata("HIGH")
-	frame:SetToplevel(true)
-	frame:SetMovable(true)
-	frame:EnableMouse(true)
-	W.PixelDrag(frame)
-	frame:SetClampedToScreen(true)
-	W.Panel(frame, W.SOLID)
-	tinsert(UISpecialFrames, "BeebModExpedition") -- escape closes it
-
-	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
-	frame.title:SetPoint("TOPLEFT", PAD + 4, -PAD)
-	frame.title:SetText("Nesingwary's Expedition")
-	frame.subtitle = frame:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
-	frame.subtitle:SetPoint("LEFT", frame.title, "RIGHT", 8, -1)
-
-	frame.close = W.Close(frame, 20)
-	frame.close:SetPoint("TOPRIGHT", -PAD, -PAD)
-	frame.close:SetScript("OnClick", function() V.Hide() end)
-	W.Divider(frame, PAD, -TITLE_H)
-
-	frame.views = W.Segmented(frame, { { "journal", "Field Journal" }, { "commendations", "Commendations" } },
-		function(key)
+	local feature = BT.Feature and BT.Feature("expedition")
+	frame = Bk.Window({
+		name = "BeebModExpedition", title = "Nesingwary's Expedition", npc = V.NPC,
+		colour = feature and feature.color or { 0.44, 0.64, 0.80 },
+		by = feature and feature.by,
+		tabs = { { "journal", "Field Journal" }, { "commendations", "Commendations" } },
+		point = { "CENTER", 40, -20 },
+		onTab = function(key)
 			ui().view = key
 			V.Refresh()
-		end, 100)
-	frame.views:SetPoint("TOPLEFT", PAD, -CONTROLS_Y)
+		end,
+		onRank = function()
+			ui().view = "commendations"
+			V.Refresh()
+		end,
+	})
+	-- the tests and the old name: the tabs were "views"
+	frame.views = frame.tabs
 
 	V.BuildJournal()
 	V.BuildCommendations()
-	frame:Hide()
 	return frame
 end
 
@@ -191,14 +184,13 @@ end
 -- corners and the pendant reach past the card (Card.Reach); the gaps and the
 -- grid's margins are wide enough to hold them, so a card neither runs into
 -- its neighbour nor is clipped at the grid's edge.
-local COLS, GAP, ROW_GAP = 4, 30, 56
-local RAIL_W, RAIL_ROW_H = 180, 34
+-- THREE ACROSS, IN THE SMALLER WINDOW (Josh 2026-10-04: "Expedition UI needs
+-- to be much smaller"): the column is 572 wide, so three cards of near 170
+-- with room between them for the borders' reach, and two rows in view
+local COLS, GAP, ROW_GAP = 3, 22, 46
 local Card = BT.ExpeditionCard
--- the Group and Sort bar over the cards
-local TOOLBAR_Y, TOOLBAR_H = 8, 36
--- the grid's width: the window's, less the body's margins, the box's insets,
--- the rail and its gap, and the scroll gutter
-local GRID_W = WIDTH - PAD * 2 - 16 - RAIL_W - 10 - 6
+-- the grid's width: the column's, less the scroll gutter
+local GRID_W = WIDTH - Bk.COL_X - PAD - 6
 -- how much a card grows under the cursor
 local ZOOM = 1.1
 -- the list: three across, a slim row each - thirty in view where the cards
@@ -218,118 +210,72 @@ V.ALL = "__all"
 
 function V.BuildJournal()
 	local W = BT.Widgets
-	local b = CreateFrame("Frame", nil, frame)
-	b:SetPoint("TOPLEFT", PAD, -BODY_Y)
-	b:SetPoint("BOTTOMRIGHT", -PAD, PAD)
+	local b = Bk.Page(frame, "journal")
 	frame.journal = b
 
-	local box = CreateFrame("Frame", nil, b)
-	box:SetAllPoints()
-	W.Panel(box, W.RAISED, W.HAIR)
-	b.box = box
+	-- THE RAIL (Josh 2026-09-26: "a rail on the left rather than sub headings
+	-- and accordions"), with how the cards are filed over it: by type or by
+	-- zone (Josh 2026-09-25)
+	b.railBox = Bk.Rail(b, 0, {
+		head = "Group by",
+		seg = { { { "type", "Type" }, { "zone", "Zone" } }, function(key)
+			ui().group = key
+			b.grid:ScrollTo(0)
+			b.rail:ScrollTo(0)
+			V.Refresh()
+		end },
+		onPick = function(key)
+			local u = ui()
+			u.pick = u.pick or {}
+			u.pick[u.group] = key
+			-- a section picked is the end of a search, which is of All
+			V.query = nil
+			if b.search then
+				b.search.edit:SetText("")
+				b.search.edit:ClearFocus()
+			end
+			b.grid:ScrollTo(0)
+			V.Refresh()
+		end,
+	})
+	b.groups = b.railBox.seg
+	b.rail = b.railBox.list
 
-	-- how the cards are filed, and in what order (Josh 2026-09-25)
-	local groupLabel = W.Label(box, "Group", "small", DIM[1], DIM[2], DIM[3])
-	groupLabel:SetPoint("TOPLEFT", 10, -TOOLBAR_Y - 4)
-	b.groups = W.Segmented(box, { { "type", "Type" }, { "zone", "Zone" } }, function(key)
-		ui().group = key
-		b.grid:ScrollTo(0)
-		b.rail:ScrollTo(0)
-		V.Refresh()
-	end, 60)
-	b.groups:SetPoint("LEFT", groupLabel, "RIGHT", 8, 0)
-	local sortLabel = W.Label(box, "Sort", "small", DIM[1], DIM[2], DIM[3])
-	sortLabel:SetPoint("LEFT", b.groups, "RIGHT", 18, 0)
-	b.sorts = W.Segmented(box, { { "name", "A to Z" }, { "mastery", "Mastery" } }, function(key)
+	-- THE TOOLBAR: the order, cards or a list, and the search
+	local bar = Bk.Toolbar(b, 0)
+	b.sorts = Bk.Choice(bar, nil, "Sort", { { "name", "A to Z" }, { "mastery", "Mastery" } }, function(key)
 		ui().sort = key
 		-- the toolbar's order over a heading clicked in the table (V.SortBy)
 		ui().listSort, ui().listDesc = nil, nil
 		V.Refresh()
-	end, 70)
-	b.sorts:SetPoint("LEFT", sortLabel, "RIGHT", 8, 0)
+	end, 66)
 	-- CARDS OR A LIST (Josh 2026-09-26: "a 'View' next to 'Sort'... Cards and
 	-- List. List should be a list/grid so we can fit more on the screen")
-	local viewLabel = W.Label(box, "View", "small", DIM[1], DIM[2], DIM[3])
-	viewLabel:SetPoint("LEFT", b.sorts, "RIGHT", 18, 0)
-	b.layouts = W.Segmented(box, { { "cards", "Cards" }, { "list", "List" } }, function(key)
+	b.layouts = Bk.Choice(bar, b.sorts, "View", { { "cards", "Cards" }, { "list", "List" } }, function(key)
 		ui().layout = key
 		b.grid:ScrollTo(0)
 		V.Refresh()
-	end, 60)
-	b.layouts:SetPoint("LEFT", viewLabel, "RIGHT", 8, 0)
+	end, 54)
 	-- SEARCH (Josh 2026-09-27: "a search box that switches the filter to 'All'
 	-- and does a search through all data. We should use lazy matching"): at
-	-- the toolbar's right end; what it matches is J.Match's. A word is one
-	-- search, not one a letter (the Ledger's lesson), and Escape or the cross
-	-- empties it. Kept for the session, not saved.
-	local search = CreateFrame("Frame", nil, box)
-	search:SetSize(230, 22)
-	search:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -6)
-	W.Panel(search, W.FILL, W.HAIR)
-	b.search = search
-	local edit = CreateFrame("EditBox", nil, search)
-	edit:SetPoint("TOPLEFT", 8, 0)
-	edit:SetPoint("BOTTOMRIGHT", -22, 0)
-	edit:SetAutoFocus(false)
-	pcall(edit.SetFontObject, edit, "BeebModFontHighlightSmall")
-	search.edit = edit
-	search.hint = W.Label(search, "Search enemies", "small", DIM[1], DIM[2], DIM[3])
-	search.hint:SetPoint("LEFT", 8, 0)
-	search.clear = W.Close(search, 14)
-	search.clear:SetPoint("RIGHT", -4, 0)
-	search.clear:Hide()
-	local pending = false
-	local function apply()
-		pending = false
-		local text = edit:GetText() or ""
+	-- the toolbar's right end; what it matches is J.Match's. Kept for the
+	-- session, not saved.
+	b.search = Bk.Search(bar, "Search enemies", 168, function(text)
 		V.query = text:find("%S") and text or nil
-		search.hint:SetShown(text == "")
-		search.clear:SetShown(text ~= "")
 		b.grid:ScrollTo(0)
 		V.Refresh()
-	end
-	edit:SetScript("OnTextChanged", function()
-		if not (C_Timer and C_Timer.After) then
-			apply()
-			return
-		end
-		if not pending then
-			pending = true
-			C_Timer.After(0.12, apply)
-		end
 	end)
-	edit:SetScript("OnEscapePressed", function(self)
-		self:SetText("")
-		self:ClearFocus()
-	end)
-	edit:SetScript("OnEnterPressed", function(self)
-		self:ClearFocus()
-	end)
-	search.clear:SetScript("OnClick", function()
-		edit:SetText("")
-		edit:ClearFocus()
-	end)
-	W.Divider(box, 8, -TOOLBAR_H)
-
-	-- the rail
-	local railBox = CreateFrame("Frame", nil, box)
-	railBox:SetPoint("TOPLEFT", 8, -TOOLBAR_H - 8)
-	railBox:SetPoint("BOTTOMLEFT", 8, 8)
-	railBox:SetWidth(RAIL_W)
-	W.Panel(railBox, W.FILL, W.HAIR)
-	b.rail = W.Scroller(railBox, 4)
-	b.rail:SetPoint("TOPLEFT", 3, -3)
-	b.rail:SetPoint("BOTTOMRIGHT", -3, 3)
-	b.rail.step = RAIL_ROW_H * 3
-	b.railRows = {}
+	b.search:SetPoint("RIGHT", bar, "RIGHT", 0, 0)
 
 	-- the grid
-	b.grid = W.Scroller(box, 6)
-	b.grid:SetPoint("TOPLEFT", railBox, "TOPRIGHT", 10, 0)
-	b.grid:SetPoint("BOTTOMRIGHT", -8, 8)
+	local col = Bk.Column(b, 0)
+	b.column = col
+	b.grid = W.Scroller(col, 6)
+	b.grid:SetPoint("TOPLEFT", 0, 0)
+	b.grid:SetPoint("BOTTOMRIGHT", 0, 0)
 	-- the table's headings, over the list and not scrolled with it (V.ListHead)
-	b.listHead = CreateFrame("Frame", nil, box)
-	b.listHead:SetPoint("TOPLEFT", railBox, "TOPRIGHT", 10, 0)
+	b.listHead = CreateFrame("Frame", nil, col)
+	b.listHead:SetPoint("TOPLEFT", 0, 0)
 	b.listHead:SetSize(GRID_W, LIST_HEAD_H)
 	b.listHead.labels = {}
 	b.listHead.rule = b.listHead:CreateTexture(nil, "ARTWORK")
@@ -390,11 +336,11 @@ function V.BuildJournal()
 		self:Glide(self:RowOffset(0))
 	end
 	b.cards = {}
-	b.empty = W.Label(box, "No kills yet.\nEach unique kill gets a card here.",
+	b.empty = W.Label(col, "No kills yet.\nEach unique kill gets a card here.",
 		"small", DIM[1], DIM[2], DIM[3])
 	b.empty:SetPoint("CENTER", b.grid, "CENTER")
 	-- a search that finds nothing says so, where the cards would be
-	b.noMatch = W.Label(box, "", "small", DIM[1], DIM[2], DIM[3])
+	b.noMatch = W.Label(col, "", "small", DIM[1], DIM[2], DIM[3])
 	b.noMatch:SetPoint("CENTER", b.grid, "CENTER")
 	b.noMatch:Hide()
 	V.BuildPage(b)
@@ -412,8 +358,10 @@ end
 -- beside it, the mastery ladder at this enemy's rank, and the lore, every page
 -- of it, in a box of its own that scrolls.
 -- ---------------------------------------------------------------------------
-local MODAL_W, MODAL_H, MODAL_PAD = 480, 700, 16
-local STAGE_Y, STAGE_H = 62, 220
+-- INSIDE THE SMALLER WINDOW (Josh 2026-10-05): 600 tall where it was 700, so
+-- it stands within the 640 of the window it dims; the stage gave the room
+local MODAL_W, MODAL_H, MODAL_PAD = 480, 600, 16
+local STAGE_Y, STAGE_H = 62, 190
 -- THE NUMBERS BESIDE THE ENEMY (Josh 2026-09-27: "make the model area less
 -- wide, and place the kills, points, and mastery vertically to the right of
 -- it"): a column of three tiles as tall as the stage, and the row they took
@@ -1024,55 +972,8 @@ function V.Layout(enemies, width, list)
 		foot = foot, height = math.max(0, y - rowGap + foot) }
 end
 
-local function railRow(i)
-	local b = frame.journal
-	local r = b.railRows[i]
-	if r then
-		return r
-	end
-	local W = BT.Widgets
-	r = CreateFrame("Button", nil, b.rail.content)
-	r:SetHeight(RAIL_ROW_H)
-	r.lit = r:CreateTexture(nil, "BACKGROUND")
-	r.lit:SetAllPoints()
-	r.lit:Hide()
-	r.text = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
-	r.text:SetPoint("TOPLEFT", 10, -5)
-	r.text:SetPoint("RIGHT", r, "RIGHT", -8, 0)
-	r.text:SetJustifyH("LEFT")
-	r.text:SetWordWrap(false)
-	r.sub = W.Label(r, "", "small", DIM[1], DIM[2], DIM[3])
-	r.sub:SetPoint("TOPLEFT", r.text, "BOTTOMLEFT", 0, -2)
-	r.sub:SetJustifyH("LEFT")
-	r:SetScript("OnClick", function(self)
-		local u = ui()
-		u.pick = u.pick or {}
-		u.pick[u.group] = self.key
-		-- a section picked is the end of a search, which is of All
-		V.query = nil
-		if b.search then
-			b.search.edit:SetText("")
-			b.search.edit:ClearFocus()
-		end
-		b.grid:ScrollTo(0)
-		V.Refresh()
-	end)
-	r:SetScript("OnEnter", function(self)
-		if not self.chosen then
-			self.lit:SetColorTexture(1, 1, 1, 0.05)
-			self.lit:Show()
-		end
-	end)
-	r:SetScript("OnLeave", function(self)
-		if not self.chosen then
-			self.lit:Hide()
-		end
-	end)
-	b.railRows[i] = r
-	return r
-end
-
--- the rail: All, then every section, each with its count and points
+-- the rail: All, then every section, each with how many unique kills it holds
+-- (and what they are worth, for the tests and for anyone who asks)
 function V.DrawRail(pages, picked)
 	local b = frame.journal
 	local entries = {}
@@ -1086,29 +987,11 @@ function V.DrawRail(pages, picked)
 	for _, p in ipairs(pages) do
 		entries[#entries + 1] = { kind = p.kind, n = #p.enemies, points = p.points }
 	end
-	local width = RAIL_W - 6 - 4
+	local rows = {}
 	for i, e in ipairs(entries) do
-		local r = railRow(i)
-		r:ClearAllPoints()
-		r:SetPoint("TOPLEFT", b.rail.content, "TOPLEFT", 0, -(i - 1) * RAIL_ROW_H)
-		r:SetWidth(width)
-		r.key = e.kind
-		r.chosen = e.kind == picked
-		r.text:SetText(("%s |cff8a9894(%d)|r"):format(V.Label(e.kind), e.n))
-		r.sub:SetText(("%s %s"):format(big(e.points), e.points == 1 and "point" or "points"))
-		if r.chosen then
-			local w = BT.Widgets.WASH
-			r.lit:SetColorTexture(w[1], w[2], w[3], w[4])
-			r.lit:Show()
-		else
-			r.lit:Hide()
-		end
-		r:Show()
+		rows[i] = { key = e.kind, label = V.Label(e.kind), count = big(e.n), chosen = e.kind == picked }
 	end
-	for i = #entries + 1, #b.railRows do
-		b.railRows[i]:Hide()
-	end
-	b.rail:SetContentHeight(#entries * RAIL_ROW_H)
+	Bk.RailRows(b.railBox, rows)
 	return entries
 end
 
@@ -1773,16 +1656,18 @@ end
 local LIST_FACE = 26
 
 -- the table's columns, left to right: the name takes what the rest leave
+-- (seven of the nine since the window is 760 wide, Josh 2026-10-05: family
+-- and zone left the table; the rail files by zone, and an enemy's page says
+-- its family. The rank stays: "List view doesn't show rare/elite enemy
+-- indicators", 2026-09-26.)
 local LIST_COLUMNS = {
 	{ key = "name", title = "Name", flex = true },
-	{ key = "rank", title = "Rank", w = 70 },
-	{ key = "type", title = "Type", w = 80 },
-	{ key = "family", title = "Family", w = 80 },
-	{ key = "level", title = "Level", w = 56 },
-	{ key = "zone", title = "Zone", w = 130 },
-	{ key = "kills", title = "Kills", w = 48, right = true },
-	{ key = "tier", title = "Mastery", w = 72 },
-	{ key = "points", title = "Pts", w = 40, right = true },
+	{ key = "rank", title = "Rank", w = 64 },
+	{ key = "type", title = "Type", w = 62 },
+	{ key = "level", title = "Level", w = 38 },
+	{ key = "kills", title = "Kills", w = 36, right = true },
+	{ key = "tier", title = "Mastery", w = 56 },
+	{ key = "points", title = "Pts", w = 28, right = true },
 }
 local LIST_TEXT_X, LIST_COL_GAP, LIST_END = LIST_FACE + 16, 10, 10
 
@@ -1954,10 +1839,8 @@ local function bindRow(r, e, w)
 	cells.rank:SetText(catWord or "")
 	cells.rank:SetTextColor(catColor[1], catColor[2], catColor[3])
 	cells.type:SetText(J.KindOf(m))
-	cells.family:SetText(m.family or "")
 	local lv = level(m)
 	cells.level:SetText(lv and lv:gsub("^Level ", "") or "")
-	cells.zone:SetText(m.zone or "")
 	cells.kills:SetText(big(e.n))
 	cells.points:SetText(big(J.EnemyPoints(m, e.n)))
 	local tier = J.Mastery(e.n, m)
@@ -2037,7 +1920,7 @@ function V.Deal()
 	local top = grid.offset or 0
 	local room = grid:Room()
 	if room <= 0 then
-		room = HEIGHT - BODY_Y - PAD - 16 - TOOLBAR_H
+		room = HEIGHT - Bk.BODY_Y - Bk.COL_Y - PAD
 	end
 	local bottom = top + room
 	local open = V.open ~= nil
@@ -2120,7 +2003,7 @@ function V.ListHead(b, L)
 		head.shownFor = on
 		b.grid:ClearAllPoints()
 		b.grid:SetPoint("TOPLEFT", head, "TOPLEFT", 0, on and -LIST_HEAD_H or 0)
-		b.grid:SetPoint("BOTTOMRIGHT", -8, 8)
+		b.grid:SetPoint("BOTTOMRIGHT", 0, 0)
 	end
 	head:SetShown(on)
 	if not on then
@@ -2417,200 +2300,27 @@ end
 -- ---------------------------------------------------------------------------
 
 -- THE PAGE REDRAWN (Josh 2026-09-28: "Can we redesign the commendations
--- screen? There is a ton of unused real estate here. Maybe we could have a
--- summary box showing unlocked vs locked commendations"). A rail down the
--- left, as the Field Journal has: your rank and the way to the next, how many
--- are earned of all there are, each group with its own count - a click shows
--- that group alone - and where your points come from. On the right, the
--- commendations as tiles three across, earned ones lit, and each earned one
--- says when, and the kill that earned it.
-local COMMENDATION_RAIL_W, COMMENDATION_TILE_H, COMMENDATION_GAP, COMMENDATION_COLS = 220, 78, 8, 3
-local COMMENDATION_RAIL_ROW_H = 26
--- the badge at the top of the rail, and where the rank's bar starts under it
-local RAIL_BADGE, RAIL_TOP = 132, 176
--- the ranks across the top of the tiles: its height, and each badge's size
-local LADDER_H, LADDER_BADGE = 118, 54
-local LADDER_W = WIDTH - PAD * 2 - COMMENDATION_RAIL_W - 24
-local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
-local GOLD = { 1, 0.82, 0.30 }
-local FOCUS = GOLD
-local CHECK_TEX = "Interface\\RaidFrame\\ReadyCheck-Ready"
-
+-- screen? There is a ton of unused real estate here"), and THE LEDGER'S PAGE
+-- TOO (Josh 2026-10-05): the ten ranks across the top, the groups on the
+-- rail with where your points come from at its foot, and the commendations
+-- two across - the same page the Ravenholdt Ledger has (UI/Book.lua). Each
+-- earned one says when, and the kill that earned it.
 function V.BuildCommendations()
-	local W = BT.Widgets
-	local a = CreateFrame("Frame", nil, frame)
-	a:SetPoint("TOPLEFT", PAD, -BODY_Y)
-	a:SetPoint("BOTTOMRIGHT", -PAD, PAD)
-	W.Panel(a, W.RAISED, W.HAIR)
-
-	-- the rail: the summary
-	local rail = CreateFrame("Frame", nil, a)
-	rail:SetPoint("TOPLEFT", 8, -8)
-	rail:SetPoint("BOTTOMLEFT", 8, 8)
-	rail:SetWidth(COMMENDATION_RAIL_W)
-	W.Panel(rail, W.FILL, W.HAIR)
-	a.rail = rail
-	-- THE RANK'S BADGE (Josh 2026-09-29, from the mockup), large at the top,
-	-- then its title, which of how many and your points, then the way to the
-	-- next. The art leaves room round the shield for the antlers, tusks and
-	-- ribbon of the higher ranks, so it is drawn larger than it looks.
-	rail.badge = rail:CreateTexture(nil, "ARTWORK")
-	rail.badge:SetSize(RAIL_BADGE, RAIL_BADGE)
-	rail.badge:SetPoint("TOP", rail, "TOP", 0, 2)
-	rail.rank = rail:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
-	pcall(rail.rank.SetFont, rail.rank, Card.FONT_NAME, 20, "")
-	rail.rank:SetPoint("TOP", rail, "TOP", 0, -RAIL_BADGE + 6)
-	rail.rank:SetPoint("LEFT", 8, 0)
-	rail.rank:SetPoint("RIGHT", -8, 0)
-	rail.rank:SetJustifyH("CENTER")
-	rail.rankOf = W.Label(rail, "", "small", DIM[1], DIM[2], DIM[3])
-	rail.rankOf:SetPoint("TOP", rail.rank, "BOTTOM", 0, -4)
-	rail.rankOf:SetJustifyH("CENTER")
-	local function bar(y)
-		local track = rail:CreateTexture(nil, "BORDER")
-		track:SetPoint("TOPLEFT", 12, y)
-		track:SetPoint("TOPRIGHT", -12, y)
-		track:SetHeight(4)
-		track:SetColorTexture(1, 1, 1, 0.07)
-		local fill = rail:CreateTexture(nil, "ARTWORK")
-		fill:SetPoint("TOPLEFT", track, "TOPLEFT", 0, 0)
-		fill:SetHeight(4)
-		return track, fill
-	end
-	rail.rankTrack, rail.rankFill = bar(-RAIL_TOP)
-	rail.rankNext = W.Label(rail, "", "small", DIM[1], DIM[2], DIM[3])
-	rail.rankNext:SetPoint("TOPLEFT", rail.rankTrack, "BOTTOMLEFT", 0, -5)
-	-- earned of all there are
-	rail.earned = W.Label(rail, "", "small")
-	rail.earned:SetPoint("TOPLEFT", 12, -RAIL_TOP - 36)
-	rail.earnedTrack, rail.earnedFill = bar(-RAIL_TOP - 54)
-	-- the groups, each a row to click
-	rail.groupsHead = W.Label(rail, string.upper("Groups"), "small", DIM[1], DIM[2], DIM[3])
-	rail.groupsHead:SetPoint("TOPLEFT", 12, -RAIL_TOP - 74)
-	rail.rows = {}
-	-- where the points come from, at the foot
-	rail.sumHead = W.Label(rail, string.upper("Points"), "small", DIM[1], DIM[2], DIM[3])
-	rail.sums = {}
-	for i, key in ipairs({ "Unique kills", "Masteries", "Commendations", "Total" }) do
-		local l = W.Label(rail, key, "small")
-		if i < 4 then
-			l:SetTextColor(DIM[1], DIM[2], DIM[3])
-		end
-		local v = W.Label(rail, "", "small")
-		v:SetJustifyH("RIGHT")
-		l:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 12, 12 + (4 - i) * 18)
-		v:SetPoint("BOTTOMRIGHT", rail, "BOTTOMRIGHT", -12, 12 + (4 - i) * 18)
-		rail.sums[i] = v
-	end
-	rail.sumHead:SetPoint("BOTTOMLEFT", rail, "BOTTOMLEFT", 12, 12 + 4 * 18 + 4)
-
-	-- ALL, EARNED OR STILL TO DO (Josh 2026-09-27: "We might actually need a
-	-- 'Complete' and 'Incomplete' and 'All' tab"), and how many are earned
-	local showLabel = W.Label(a, "Show", "small", DIM[1], DIM[2], DIM[3])
-	showLabel:SetPoint("TOPLEFT", rail, "TOPRIGHT", 12, -TOOLBAR_Y + 4)
-	a.shows = W.Segmented(a, { { "all", "All" }, { "done", "Earned" }, { "todo", "In progress" } }, function(key)
-		ui().commendationShow = key
-		a.list:ScrollTo(0)
-		V.Refresh()
-	end, 80)
-	a.shows:SetPoint("LEFT", showLabel, "RIGHT", 8, 0)
-	a.tally = W.Label(a, "", "small", DIM[1], DIM[2], DIM[3])
-	a.tally:SetPoint("LEFT", a.shows, "RIGHT", 18, 0)
-	V.BuildLadder(a, rail)
-	a.list = W.Scroller(a, 6)
-	a.list:SetPoint("TOPLEFT", a.ladder, "BOTTOMLEFT", 0, -8)
-	a.list:SetPoint("BOTTOMRIGHT", -6, 6)
-	a.list.step = (COMMENDATION_TILE_H + COMMENDATION_GAP) * 2
-	a.rows, a.heads = {}, {}
+	local a = Bk.Commendations(frame, "commendations", {
+		onPick = function(key)
+			ui().commendationPick = key
+			V.Refresh()
+		end,
+		onShow = function(key)
+			ui().commendationShow = key
+			V.Refresh()
+		end,
+	})
 	frame.commendations = a
-	a:Hide()
+	-- the tests' old names for the ranks across the top
+	a.ladder = a.strip
 end
 
--- THE RANKS, ALL TEN (Josh 2026-09-29, from the mockup): a row of badges
--- above the tiles, joined by a line that fills as far as your points. The
--- ranks behind you are lit, yours has a gold glow behind it, and the ones
--- ahead are grey and faded, so what comes next is plain without looking
--- earned. Pointing at one says what it takes.
-function V.BuildLadder(a, rail)
-	local W = BT.Widgets
-	local J = BT.Expedition
-	local l = CreateFrame("Frame", nil, a)
-	l:SetPoint("TOPLEFT", rail, "TOPRIGHT", 10, -TOOLBAR_H + 8)
-	l:SetPoint("RIGHT", a, "RIGHT", -6, 0)
-	l:SetHeight(LADDER_H)
-	W.Panel(l, W.FILL, W.HAIR)
-	a.ladder = l
-	l.head = W.Label(l, string.upper("Ranks"), "small", DIM[1], DIM[2], DIM[3])
-	l.head:SetPoint("TOPLEFT", 12, -9)
-	l.note = W.Label(l, "", "small", DIM[1], DIM[2], DIM[3])
-	l.note:SetPoint("TOPRIGHT", -12, -9)
-	l.note:SetJustifyH("RIGHT")
-	local count = #J.RANKS
-	local slot = (LADDER_W - 24) / count
-	l.slot = slot
-	-- the line through the badges' middles, from the first to the last
-	local mid = -26 - LADDER_BADGE / 2
-	l.track = l:CreateTexture(nil, "BORDER")
-	l.track:SetPoint("TOPLEFT", 12 + slot / 2, mid + 1)
-	l.track:SetSize(slot * (count - 1), 2)
-	l.track:SetColorTexture(1, 1, 1, 0.07)
-	l.fill = l:CreateTexture(nil, "BORDER", nil, 1)
-	l.fill:SetPoint("TOPLEFT", l.track, "TOPLEFT", 0, 0)
-	l.fill:SetHeight(2)
-	l.rungs = {}
-	for i = 1, count do
-		local r = CreateFrame("Button", nil, l)
-		r:SetSize(slot, LADDER_H - 26)
-		r:SetPoint("TOPLEFT", 12 + (i - 1) * slot, -24)
-		r.glow = r:CreateTexture(nil, "BACKGROUND")
-		r.glow:SetSize(LADDER_BADGE + 6, LADDER_BADGE + 6)
-		r.glow:SetPoint("TOP", r, "TOP", 0, 1)
-		r.glow:SetTexture(DISC)
-		r.glow:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.22)
-		r.badge = r:CreateTexture(nil, "ARTWORK")
-		r.badge:SetSize(LADDER_BADGE, LADDER_BADGE)
-		r.badge:SetPoint("TOP", r, "TOP", 0, -2)
-		r.badge:SetTexture(J.RankBadge(i))
-		r.name = W.Label(r, J.RANKS[i][2], "small")
-		r.name:SetPoint("TOP", r.badge, "BOTTOM", 0, 0)
-		r.name:SetWidth(slot - 4)
-		r.name:SetJustifyH("CENTER")
-		r.name:SetWordWrap(true)
-		r.points = W.Label(r, big(J.RANKS[i][1]), "small", DIM[1], DIM[2], DIM[3])
-		r.points:SetPoint("TOP", r.name, "BOTTOM", 0, -1)
-		r.points:SetJustifyH("CENTER")
-		r.rank = i
-		r:SetScript("OnEnter", V.LadderTip)
-		r:SetScript("OnLeave", function()
-			if GameTooltip then
-				GameTooltip:Hide()
-			end
-		end)
-		l.rungs[i] = r
-	end
-	return l
-end
-
--- what a rank takes, and how far you are from it
-function V.LadderTip(r)
-	if not (GameTooltip and r) then
-		return
-	end
-	local J = BT.Expedition
-	local at, title = J.RANKS[r.rank][1], J.RANKS[r.rank][2]
-	local points = frame.commendations.ladder.points or 0
-	GameTooltip:SetOwner(r, "ANCHOR_TOP")
-	GameTooltip:AddLine(title, 1, 1, 1)
-	GameTooltip:AddLine(("Rank %d of %d · %s points"):format(r.rank, #J.RANKS, big(at)), DIM[1], DIM[2], DIM[3])
-	if points >= at then
-		GameTooltip:AddLine(r.here and "Your rank" or "Reached", GOLD[1], GOLD[2], GOLD[3])
-	else
-		GameTooltip:AddLine(("%s points to go"):format(big(at - points)), DIM[1], DIM[2], DIM[3])
-	end
-	GameTooltip:Show()
-end
-
--- the ranks at `points`: lit to yours, the rest faded, the line filled to it
 -- A RANK PREVIEWED FROM THE TESTING PAGE (Josh 2026-09-29: "can you hook up
 -- the testing previews to the commendations view as well?"): the points it
 -- begins at, so the page draws that rank as if you had just reached it; your
@@ -2620,182 +2330,6 @@ function V.ShownPoints(points)
 	local pv = BT.Dock and BT.Dock.preview and BT.Dock.preview.expedition
 	local r = pv and J.RANKS[pv]
 	return r and r[1] or points
-end
-
-local function drawLadder(a, points)
-	local J = BT.Expedition
-	local l = a.ladder
-	local accent = BT.Widgets.ACCENT
-	points = V.ShownPoints(points)
-	local n, title, at, nextAt, nextTitle = J.Rank(points)
-	l.points = points
-	l.note:SetText(nextAt and ("%s · %s points to %s"):format(title, big(nextAt - points), nextTitle)
-		or ("%s · highest rank"):format(title))
-	for i, r in ipairs(l.rungs) do
-		local reached = i <= n
-		r.here = i == n
-		r.badge:SetDesaturated(not reached)
-		r.badge:SetVertexColor(reached and 1 or 0.55, reached and 1 or 0.55, reached and 1 or 0.55)
-		r.badge:SetAlpha(reached and 1 or 0.45)
-		r.glow:SetShown(r.here)
-		if r.here then
-			r.name:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
-		elseif reached then
-			r.name:SetTextColor(1, 1, 1)
-		else
-			r.name:SetTextColor(DIM[1], DIM[2], DIM[3])
-		end
-	end
-	-- to your rank's badge, and on towards the next as far as your points go
-	local share = nextAt and math.min(1, (points - at) / math.max(1, nextAt - at)) or 0
-	local span = ((n - 1) + share) * l.slot
-	l.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
-	l.fill:SetShown(span > 0)
-	l.fill:SetWidth(math.max(1, span))
-end
-V.DrawLadder = drawLadder
-
--- a group's row on the rail: its name, its count and a bar; a click shows it alone
-local function commendationRailRow(i)
-	local rail = frame.commendations.rail
-	local r = rail.rows[i]
-	if r then
-		return r
-	end
-	local W = BT.Widgets
-	r = CreateFrame("Button", nil, rail)
-	r:SetHeight(COMMENDATION_RAIL_ROW_H)
-	r:SetPoint("TOPLEFT", 6, -RAIL_TOP - 90 - (i - 1) * COMMENDATION_RAIL_ROW_H)
-	r:SetPoint("RIGHT", rail, "RIGHT", -6, 0)
-	r.lit = r:CreateTexture(nil, "BACKGROUND")
-	r.lit:SetAllPoints()
-	r.name = W.Label(r, "", "small")
-	r.name:SetPoint("LEFT", 6, 2)
-	r.count = W.Label(r, "", "small", DIM[1], DIM[2], DIM[3])
-	r.count:SetPoint("RIGHT", -6, 2)
-	r.count:SetJustifyH("RIGHT")
-	r.track = r:CreateTexture(nil, "BORDER")
-	r.track:SetPoint("BOTTOMLEFT", 6, 3)
-	r.track:SetPoint("BOTTOMRIGHT", -6, 3)
-	r.track:SetHeight(2)
-	r.track:SetColorTexture(1, 1, 1, 0.06)
-	r.fill = r:CreateTexture(nil, "ARTWORK")
-	r.fill:SetPoint("BOTTOMLEFT", r.track, "BOTTOMLEFT", 0, 0)
-	r.fill:SetHeight(2)
-	r:SetScript("OnClick", function(self)
-		ui().commendationPick = self.key
-		frame.commendations.list:ScrollTo(0)
-		V.Refresh()
-	end)
-	r:SetScript("OnEnter", function(self)
-		if not self.chosen then
-			self.lit:SetColorTexture(1, 1, 1, 0.04)
-			self.lit:Show()
-		end
-	end)
-	r:SetScript("OnLeave", function(self)
-		if not self.chosen then
-			self.lit:Hide()
-		end
-	end)
-	rail.rows[i] = r
-	return r
-end
-
--- a commendation's tile: its title and what it asks, its points, and either
--- how far along it is or when it was earned and by what
-local function commendationRow(i)
-	local a = frame.commendations
-	local r = a.rows[i]
-	if r then
-		return r
-	end
-	local W = BT.Widgets
-	r = CreateFrame("Frame", nil, a.list.content)
-	r:SetHeight(COMMENDATION_TILE_H)
-	BT.Pill.Panel(r, W.FILL, W.HAIR)
-	-- EARNED, AT A GLANCE (Josh 2026-09-27: "make the commendations I already
-	-- earned more apparent"): an earned tile is lit, with the accent down its
-	-- left edge and a tick by when it was earned
-	r.lit = r:CreateTexture(nil, "BACKGROUND", nil, 2)
-	r.lit:SetAllPoints()
-	r.edge = r:CreateTexture(nil, "ARTWORK")
-	r.edge:SetPoint("TOPLEFT", 1, -1)
-	r.edge:SetPoint("BOTTOMLEFT", 1, 1)
-	r.edge:SetWidth(3)
-	r.points = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
-	pcall(r.points.SetFont, r.points, Card.FONT_NAME, 15, "")
-	r.points:SetPoint("TOPRIGHT", -10, -8)
-	r.points:SetJustifyH("RIGHT")
-	r.ptsLabel = W.Label(r, string.upper("Pts"), "small", DIM[1], DIM[2], DIM[3])
-	r.ptsLabel:SetPoint("TOPRIGHT", r.points, "BOTTOMRIGHT", 0, -2)
-	r.title = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
-	r.title:SetPoint("TOPLEFT", 12, -9)
-	r.title:SetPoint("RIGHT", r.points, "LEFT", -8, 0)
-	r.title:SetJustifyH("LEFT")
-	r.title:SetWordWrap(false)
-	r.text = W.Label(r, "", "small", DIM[1], DIM[2], DIM[3])
-	r.text:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -4)
-	r.text:SetPoint("RIGHT", r, "RIGHT", -44, 0)
-	r.text:SetJustifyH("LEFT")
-	if r.text.SetWordWrap then
-		r.text:SetWordWrap(true)
-	end
-	if r.text.SetMaxLines then
-		pcall(r.text.SetMaxLines, r.text, 2)
-	end
-	-- the foot: the tick and when, or the count and a bar
-	r.check = r:CreateTexture(nil, "OVERLAY")
-	r.check:SetSize(13, 13)
-	r.check:SetPoint("BOTTOMLEFT", 11, 9)
-	pcall(r.check.SetTexture, r.check, CHECK_TEX)
-	r.right = W.Label(r, "", "small")
-	r.right:SetPoint("BOTTOMLEFT", 12, 10)
-	r.right:SetPoint("RIGHT", r, "RIGHT", -10, 0)
-	r.right:SetJustifyH("LEFT")
-	r.right:SetWordWrap(false)
-	r.track = r:CreateTexture(nil, "BORDER")
-	r.track:SetPoint("BOTTOMLEFT", 12, 6)
-	r.track:SetPoint("BOTTOMRIGHT", -10, 6)
-	r.track:SetHeight(3)
-	r.fill = r:CreateTexture(nil, "ARTWORK")
-	r.fill:SetHeight(3)
-	r.fill:SetPoint("BOTTOMLEFT", r.track, "BOTTOMLEFT", 0, 0)
-	-- the one a toast was clicked for: a gold line round it
-	r.focus = {}
-	for _, side in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" },
-		{ "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
-		local t = r:CreateTexture(nil, "OVERLAY", nil, 2)
-		t:SetPoint(side[1])
-		t:SetPoint(side[2])
-		if side[1] == "TOPLEFT" and side[2] == "BOTTOMLEFT" or side[1] == "TOPRIGHT" then
-			t:SetWidth(2)
-		else
-			t:SetHeight(2)
-		end
-		t:SetColorTexture(FOCUS[1], FOCUS[2], FOCUS[3], 0.95)
-		t:Hide()
-		r.focus[#r.focus + 1] = t
-	end
-	a.rows[i] = r
-	return r
-end
-
-local function commendationHead(i)
-	local a = frame.commendations
-	local h = a.heads[i]
-	if h then
-		return h
-	end
-	h = CreateFrame("Frame", nil, a.list.content)
-	h:SetHeight(HEAD_ROW_H)
-	h.text = h:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")
-	h.text:SetPoint("BOTTOMLEFT", 2, 5)
-	BT.Widgets.TintText(h.text, 0.8)
-	h.count = BT.Widgets.Label(h, "", "small", DIM[1], DIM[2], DIM[3])
-	h.count:SetPoint("BOTTOMRIGHT", -4, 5)
-	a.heads[i] = h
-	return h
 end
 
 -- which kill earned a commendation, for this character
@@ -2823,9 +2357,10 @@ function V.MasteryRows(kills)
 		rows[#rows + 1] = {
 			id = "mastery:" .. m.name, title = m.name, color = m.color, points = t.points,
 			need = 1, have = t.enemies > 0 and 1 or 0,
-			text = ("%s kills of one normal enemy, %s of an elite, %s of a rare or %s of a world boss, worth %d points each")
-				:format(big(m.n), big(J.MASTERY_AT.elite[i]), big(J.MASTERY_AT.rare[i]),
-					big(J.MASTERY_AT.worldboss[i]), m.points),
+			-- two lines on a tile two across (Josh 2026-10-05): the elites',
+			-- rares' and bosses' own counts are on each enemy's page
+			text = ("%d points for each enemy killed %s times. Elites, rares and bosses take fewer.")
+				:format(m.points, big(m.n)),
 			right = ("%s %s"):format(big(t.enemies), t.enemies == 1 and "enemy" or "enemies"),
 		}
 	end
@@ -2908,204 +2443,30 @@ local function earnedLine(it)
 end
 V.EarnedLine = earnedLine
 
--- the rail: the rank, the earned, the groups and the points (`score`, what
--- J.Points said: the total, then the unique kills' and the masteries' shares)
-local function drawRail(a, groups, earned, all, score)
-	local J = BT.Expedition
-	local rail = a.rail
-	local accent = BT.Widgets.ACCENT
-	local points, uniquePoints, masteryPoints = score[1], score[2], score[3]
-	-- the rank, badge and bar as previewed (V.ShownPoints); the sums at the
-	-- foot stay your own
-	local shown = V.ShownPoints(points)
-	local n, title, at, nextAt, nextTitle = J.Rank(shown)
-	rail.badge:SetTexture(J.RankBadge(n))
-	rail.rank:SetText(title)
-	rail.rankOf:SetText(("Rank %d of %d · |cffffffff%s pts|r"):format(n, #J.RANKS, big(shown)))
-	rail.rankFill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
-	local w = COMMENDATION_RAIL_W - 24
-	if nextAt then
-		local share = math.min(1, (shown - at) / math.max(1, nextAt - at))
-		rail.rankFill:SetShown(share > 0)
-		rail.rankFill:SetWidth(math.max(1, w * share))
-		rail.rankNext:SetText(("%s to %s"):format(big(nextAt - shown), nextTitle))
-	else
-		rail.rankFill:Show()
-		rail.rankFill:SetWidth(w)
-		rail.rankNext:SetText("Highest rank")
-	end
-	rail.earned:SetText(("%d of %d commendations earned"):format(earned, all))
-	local eshare = all > 0 and earned / all or 0
-	rail.earnedFill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
-	rail.earnedFill:SetShown(eshare > 0)
-	rail.earnedFill:SetWidth(math.max(1, w * eshare))
-	-- the groups: All first, then each one
-	local pick = ui().commendationPick or "all"
-	local rows = { { key = "all", title = "All", done = earned, of = all } }
-	for _, g in ipairs(groups) do
-		rows[#rows + 1] = { key = g.key, title = g.title, done = g.done, of = (not g.count) and #g.list or nil, count = g.count }
-	end
-	for i, row in ipairs(rows) do
-		local r = commendationRailRow(i)
-		r.key = row.key
-		r.name:SetText(row.title)
-		r.count:SetText(row.of and ("%d / %d"):format(row.done or 0, row.of) or (row.count or ""))
-		local share = row.of and row.of > 0 and (row.done or 0) / row.of or 0
-		r.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.8)
-		r.track:SetShown(row.of ~= nil)
-		r.fill:SetShown(row.of ~= nil and share > 0)
-		r.fill:SetWidth(math.max(1, (COMMENDATION_RAIL_W - 24) * share))
-		r.chosen = row.key == pick
-		r.lit:SetColorTexture(accent[1], accent[2], accent[3], 0.14)
-		r.lit:SetShown(r.chosen)
-		r:Show()
-	end
-	for i = #rows + 1, #rail.rows do
-		rail.rows[i]:Hide()
-	end
-	-- where the points come from
-	local commended = points - uniquePoints - masteryPoints
-	for i, v in ipairs({ uniquePoints, masteryPoints, commended, points }) do
-		rail.sums[i]:SetText(big(v))
-	end
-end
-
 function V.DrawCommendations(kills, feats, score)
 	local a = frame.commendations
-	-- the points once, from V.Refresh where it has them: the rail and the
-	-- ladder each worked them out again from every kill
+	-- the points once, from V.Refresh where it has them
 	if not score then
 		local points, _, _, uniquePoints, masteryPoints = BT.Expedition.Points(kills, feats)
 		score = { points, uniquePoints, masteryPoints }
 	end
-	local accent = BT.Widgets.ACCENT
-	local width = BT.Pill.Number(a.list.content:GetWidth(), WIDTH - PAD * 2 - COMMENDATION_RAIL_W - 30)
-	local tileW = math.floor((width - COMMENDATION_GAP * (COMMENDATION_COLS - 1)) / COMMENDATION_COLS)
-	local show = ui().commendationShow or "all"
-	a.shows:Select(show)
-	local groups = V.Groups(kills, feats)
-	-- the milestones earned of all there are (the unique kills and the masteries'
-	-- summaries are tallies, not things to earn)
-	local earned, all = 0, 0
-	for _, g in ipairs(groups) do
-		if not g.count then
-			earned, all = earned + g.done, all + #g.list
-		end
-	end
-	a.tally:SetText(("%d of %d commendations earned"):format(earned, all))
-	drawRail(a, groups, earned, all, score)
-	drawLadder(a, score[1])
-	local pick = ui().commendationPick or "all"
-	local y, ri, hi = 0, 0, 0
-	local focusY
-	for _, g in ipairs(groups) do
-		-- what this view keeps of the group; a group left empty is not headed
-		local list = {}
-		if pick == "all" or pick == g.key then
-			for _, it in ipairs(g.list) do
-				local done = it.have >= it.need
-				if show == "all" or (show == "done") == done then
-					list[#list + 1] = it
-				end
-			end
-		end
-		if #list > 0 then
-			hi = hi + 1
-			local h = commendationHead(hi)
-			h:ClearAllPoints()
-			h:SetPoint("TOPLEFT", a.list.content, "TOPLEFT", 0, -y)
-			h:SetWidth(width)
-			h.text:SetText(g.title:upper())
-			-- the unique kills and the masteries have no end to them: they say their points
-			if g.count then
-				h.count:SetText(g.count)
-			else
-				h.count:SetText(("%d / %d"):format(g.done, #g.list))
-			end
-			h:Show()
-			y = y + HEAD_ROW_H
-			for k, it in ipairs(list) do
-				ri = ri + 1
-				local col = (k - 1) % COMMENDATION_COLS
-				if k > 1 and col == 0 then
-					y = y + COMMENDATION_TILE_H + COMMENDATION_GAP
-				end
-				local r = commendationRow(ri)
-				r:ClearAllPoints()
-				r:SetPoint("TOPLEFT", a.list.content, "TOPLEFT", col * (tileW + COMMENDATION_GAP), -y)
-				r:SetWidth(tileW)
-				local done = it.have >= it.need
-				r.points:SetText(tostring(it.points))
-				r.title:SetText(it.title)
-				r.text:SetText(it.text)
-				-- earned: lit, edged and ticked
-				r.lit:SetColorTexture(accent[1], accent[2], accent[3], 0.08)
-				r.lit:SetShown(done)
-				r.edge:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
-				r.edge:SetShown(done)
-				r.check:SetShown(done)
-				r.right:ClearAllPoints()
-				r.right:SetPoint("BOTTOMLEFT", done and 28 or 12, done and 10 or 13)
-				r.right:SetPoint("RIGHT", r, "RIGHT", -10, 0)
-				-- a mastery's name wears its metal
-				local c = it.color
-				if done then
-					r.points:SetTextColor(accent[1], accent[2], accent[3])
-					if c then
-						r.title:SetTextColor(c[1], c[2], c[3])
-					else
-						r.title:SetTextColor(1, 1, 1)
-					end
-					r.right:SetText(it.right or earnedLine(it))
-					r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
-					r.track:Hide()
-					r.fill:Hide()
-				elseif it.right then
-					-- a tier nobody has reached yet: a count, not a bar
-					r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
-					r.title:SetTextColor(0.62, 0.66, 0.64)
-					r.right:SetText(it.right)
-					r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
-					r.track:Hide()
-					r.fill:Hide()
-				else
-					r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
-					r.title:SetTextColor(0.62, 0.66, 0.64)
-					r.right:SetText(("%s / %s"):format(big(it.have), big(it.need)))
-					r.right:SetTextColor(0.75, 0.78, 0.77)
-					r.track:SetColorTexture(1, 1, 1, 0.07)
-					r.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
-					local share = math.min(1, it.have / it.need)
-					r.track:Show()
-					-- a texture of no width is drawn whole: an empty bar is no bar
-					r.fill:SetShown(share > 0)
-					r.fill:SetWidth(math.max(1, (tileW - 22) * share))
-				end
-				local focused = V.focus ~= nil and it.id == V.focus
-				for _, t in ipairs(r.focus) do
-					t:SetShown(focused)
-				end
-				if focused then
-					focusY = y
-				end
-				r:Show()
-			end
-			y = y + COMMENDATION_TILE_H + COMMENDATION_GAP
-		end
-	end
-	for i = ri + 1, #a.rows do
-		a.rows[i]:Hide()
-	end
-	for i = hi + 1, #a.heads do
-		a.heads[i]:Hide()
-	end
-	a.list:SetContentHeight(y + 6)
-	-- opened for one commendation: its row at the top, its group's heading
-	-- above it when it is the group's first row
-	if V.scrollToFocus then
-		V.scrollToFocus = nil
-		a.list:ScrollTo(focusY and math.max(0, focusY - HEAD_ROW_H) or 0)
-	end
+	local J = BT.Expedition
+	local points, uniquePoints, masteryPoints = score[1], score[2], score[3]
+	local u = ui()
+	local feature = BT.Feature and BT.Feature("expedition")
+	local focus = V.focus
+	local scroll = V.scrollToFocus
+	V.scrollToFocus = nil
+	return Bk.DrawCommendations(a, {
+		ranks = J.RANKS, badge = J.RankBadge, points = V.ShownPoints(points),
+		colour = feature and feature.color,
+		groups = V.Groups(kills, feats), pick = u.commendationPick, show = u.commendationShow,
+		sums = {
+			{ "Unique kills", uniquePoints }, { "Masteries", masteryPoints },
+			{ "Commendations", points - uniquePoints - masteryPoints }, { "Total", points },
+		},
+		earnedLine = earnedLine, focus = focus, scrollToFocus = scroll,
+	})
 end
 
 -- ---------------------------------------------------------------------------
@@ -3121,19 +2482,18 @@ function V.Refresh()
 		return false
 	end
 	local u = ui()
-	frame.views:Select(u.view)
 	local kills, feats = J.Counts()
 	local points, _, st, uniquePoints, masteryPoints = J.Points(kills, feats)
-	local _, title = J.Rank(points)
 	-- "73 kills (7 unique)" (Josh 2026-09-28): the kills, and how many of
-	-- them were an enemy's first
-	frame.subtitle:SetText(("%s · %s · %s %s (%s unique) · %s %s"):format(
-		(U.Me and U.Me()) or "This character",
-		title, big(st.total), st.total == 1 and "kill" or "kills", big(st.uniques),
-		big(points), points == 1 and "point" or "points"))
+	-- them were an enemy's first. The rank and the points are in the box at
+	-- the header's right, with Hemet's word on them.
+	Bk.SetHeader(frame, {
+		subtitle = ("%s · %s %s (%s unique)"):format((U.Me and U.Me()) or "This character",
+			big(st.total), st.total == 1 and "kill" or "kills", big(st.uniques)),
+		ranks = J.RANKS, badge = J.RankBadge, points = V.ShownPoints(points), quotes = J.QUOTES,
+	})
 	local journal = u.view ~= "commendations"
-	frame.journal:SetShown(journal)
-	frame.commendations:SetShown(not journal)
+	Bk.ShowPage(frame, journal and "journal" or "commendations")
 	frame.journal.dim:SetShown(journal and V.open ~= nil)
 	if journal then
 		V.DrawJournal(kills)

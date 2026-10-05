@@ -445,6 +445,10 @@ function DB.Note(db, name, realm, info, now)
 		end
 		p = { name = short, realm = rname, first = now, seen = 0 }
 		db.players[key] = p
+		-- one more character recorded: points in the Ledger (Modules/Ledger/Ranks.lua)
+		if DB.onNew then
+			DB.onNew(db, key)
+		end
 	end
 	-- ONLY WHAT YOU SAW (Josh 2026-09-26: "kill the whole census sharing
 	-- concept. Players will only see census data for what they collect").

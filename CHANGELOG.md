@@ -7,6 +7,135 @@ game and the addon settle.
 
 ## Unreleased
 
+- **Tag a player and write a note from the right-click menu.** Right-click
+  a player's frame, or their name in chat or in a list, and point at
+  **Ledger** at the foot of the menu. Tick a tag, rate them, or choose
+  **Write a note**, which opens the note box under the frame. A click on
+  **Ledger** itself opens the note box too, with every tag in it. When you have
+  a note or tags on someone, their Ledger entry shows a mark, and so does
+  the top right of the target frame. In this client, right-clicking a
+  character in the world opens no menu, so use their frame or their name.
+
+- **The dock's target row is gone.** The right-click menu replaces it. Your
+  notes and tags still show on the player's tooltip.
+
+- **Your level comes first in the dock.** Experience is a row of its own,
+  taller than the others, with a larger shield, the time to your next level,
+  a thicker bar and how much XP is left. PvP, Reputation and the journals'
+  lines are slim lines under it, each with a thin bar in its own colour.
+
+- **Shift-drag the dock by any of its lines.** The header, the meters, the
+  readouts and the quest list's zone headings all move it with Shift held.
+  Without the target row, there was little left to grab.
+
+- **The Testing page is gone.** Its reports and records are for working on
+  BeebMod, and the download leaves them out. Type /bt demo to fill every
+  feature with made-up data, as its switch did.
+
+- **Jorach sounds like himself.** His line for each Ledger rank is in his
+  own voice, from Ravenholdt Manor and the Hall of Shadows: "Welcome,
+  welcome, welcome!", "You have my ear", "We operate where others cannot".
+
+- **Hemet sounds like himself.** His line for each Expedition rank is in
+  the voice of his camp in Stranglethorn: "Jolly nice to make your
+  acquaintance!", "old chap", the campfire, Barnil's mead and King
+  Bangalash.
+
+- **The dock's tooltips list things alike.** Under each heading, such as
+  Honorable kills or Closest commendations, the rows step in a little and
+  use the smaller type of Experience's Recommended content.
+
+- **The cog stays in the dock's header.** After you flicked a switch in the
+  settings, the next change of target hid it until you reloaded.
+
+- **The Ledger has ranks and commendations,** as the Expedition does. Every
+  100 characters you record is worth 1 point, a note 2 and a tag 1. There
+  are 32 commendations, for characters recorded (up to 150,000), notes,
+  tags, people you grouped with and duels won. The points set your rank,
+  from Fledgling to Eye of Ravenholdt, with the Expedition's thresholds.
+  Your characters on one realm share the rank. Commendations you had
+  already earned are marked as earned, with no date.
+
+- **The journals look alike.** The Expedition's window is 760 by 640, down
+  from 1180 by 746, and the same size as the Ledger's. Over the tabs is the
+  keeper's face, Hemet's or Jorach's, with a line from him for your rank.
+  Your rank is at the top right; click it for the commendations. On every
+  tab a list on the left picks what the page shows: the Field Journal's
+  types or zones, the Ledger's charts, and who Find people shows. The
+  Expedition's cards are three across, and its list drops the Family and
+  Zone columns. The Commendations page is the same in both: the ten ranks
+  across the top, the groups on the left, the commendations two across.
+
+- **The Ledger has a line in the dock,** with your rank's badge, your rank
+  and your points. Click it to open the Ledger. The chart button in the
+  dock's header is gone.
+
+- **Toasts are for new ranks.** A new rank's toast has a line from the
+  journal's keeper under it. A commendation or a mastery shows on the
+  journal's line in the dock for a few seconds instead, with no sound, and
+  a click on the line opens it. With the line off, a small bar at the top
+  of the screen shows it. Several at once are one notice, such as "3
+  commendations +35". A unique kill raises the points on the line; the
+  switch for a toast on every unique kill is gone.
+
+- **The Ledger's ranks have badges,** drawn like the Expedition's, with
+  ravens, keys and daggers in place of antlers and tusks. The top two
+  ranks of both journals have a cut stone where a six-sided one was.
+
+- **Switching the Dock off and on keeps the journals' lines.** The
+  Expedition's line stayed hidden until you reloaded.
+
+- **Search the settings.** The settings window has a search box in its title
+  bar. Type a word, such as pets or gold, and BeebMod lists every part with
+  that word in its name or its line, under its feature's name. Each has its
+  switch, the same one as on its page. Press Escape, click the cross, or click
+  a page on the rail to go back.
+
+- **A simpler settings window.** BeebMod asks whether you want each part,
+  not how each part should look. The rail lists General, then five features
+  under two headings. Interface holds the Dock,
+  Unit frames and Game frames. Journals holds the Ravenholdt Ledger and
+  Nesingwary's Expedition. Each feature has one page, with its switch at the
+  top and a switch for each part under it. The sub-tabs are gone: about 180
+  controls on 26 pages became 58 on 6.
+
+- **The Census is part of the Ledger.** Recording everyone you see is a
+  switch on the Ledger's page. The Ledger's window has two tabs: Charts, and
+  Find people, which used to sit under the Ledger's settings. If the Census
+  was off, recording stays off.
+
+- **Interface is called Game frames.**
+
+- **The dock's order is on the Dock's page.** Drag a row there to move it in
+  the dock. Experience, PvP and Reputation each move on their own now. The
+  Expedition's line and the Ledger's are rows there too, with a switch
+  each.
+
+- **One Size, and one way to move things.** General has one Size for the
+  dock, the unit frames, the buffs and the tooltips, taken from the dock's
+  old size. Its Positions button puts the dock, the unit frames, the bag
+  windows and the character sheet back where they start. Shift-drag moves
+  the dock, as it does the unit frames, and the dock's lock switch is gone.
+
+- **Most finer options are gone.** Each part does what its switch said by
+  default. The quest tracker sorts by level under zone headings. Chat uses
+  the game's own text size and timestamps. Every micro menu button shows.
+  Tooltips sit in the corner. Every heal and damage over time has its lane,
+  in the class's order. The game's XP, reputation and bag bars stay hidden
+  while BeebMod's show. Saved answers to these are taken out of the saved
+  file once.
+
+- **Resets on a right-click.** Right-click the gold cell for a new session,
+  or the Pick Pocket cell to clear its record. Right-click the XP line for a
+  new session, as before.
+
+- **New lines on each feature.** Each feature has a new line on its card and
+  its page. The two journals' lines are in their keepers' voices: Lord
+  Jorach Ravenholdt in the Alterac Mountains, and Hemet Nesingwary in
+  Stranglethorn.
+
+- **The first login shows five cards,** under the rail's two headings.
+
 - **Guards in capitals show their directions picture.** Ironforge Guards in
   Ironforge showed none. BeebMod now knows a capital by the zone's name as
   well as its map, and reads a guard's name off its tooltip when the
@@ -69,14 +198,10 @@ game and the addon settle.
 - **Bigger names on friendly players' nameplates.** A player's name is 13
   pixels now, and the level before it 12. NPCs keep their smaller names.
 
-- **The Ledger is the Steamwheedle Ledger.** It takes the name of the
-  neutral goblin cartel of Booty Bay and Gadgetzan, as the Expedition takes
-  Nesingwary's. The rail, the dock and the commands still say "Ledger".
-
-- **The quest settings say "hide", as the hint does.** "Fold in combat" is
-  now "Hide quests in combat", and "Fold finished quests" is "Hide
-  objectives when done". The page's note says "Right-click to hide its
-  objectives".
+- **The Ledger is the Ravenholdt Ledger.** It takes the name of Lord
+  Jorach Ravenholdt's house of spies, neutral to both factions, as the
+  Expedition takes Nesingwary's. Its colour is violet. The rail, the dock
+  and the commands still say "Ledger".
 
 ## 0.1.0-beta.23
 

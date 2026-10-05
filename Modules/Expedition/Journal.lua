@@ -149,6 +149,38 @@ J.RANKS = {
 	{ 3600, "Expedition Leader" },
 }
 
+-- WHAT HEMET SAYS TO YOU (Josh 2026-10-04: "Maybe they could give an RP
+-- quoted line based on the player's current rank"). A line for each rank,
+-- over the journal's tabs and in the toast for a new rank. The first is the
+-- one on the Expedition's settings page.
+-- IN HIS OWN VOICE (Josh 2026-10-05: "update the Nesingwary quotes to sound
+-- more like something he would say. Take a look at all the Green Hills of
+-- Stranglethorn quests and content"). At his camp in Stranglethorn he is a
+-- jolly old hunter: "Jolly nice to make your acquaintance", "old chap",
+-- "Bloody well done! Right-o!", "Cheers to you, I say! Cheers!". He chides a
+-- hunter standing around the campfire, says finding the beast is half the
+-- challenge, puts trophies "over the ol' hearth", and owns that King
+-- Bangalash "caused me to come crawling back to camp many times". His book
+-- adds the pipe, the mead and Barnil, and Ajeck Rouack is a woman (the old
+-- Stalker line called her him). Taken from the 1.12 quest texts: Welcome to
+-- the Jungle, Raptor Mastery, Big Game Hunter, Hunting in Stranglethorn, and
+-- the pages of The Green Hills of Stranglethorn.
+local function quoted(s)
+	return "\226\128\156" .. s .. "\226\128\157"
+end
+J.QUOTES = {
+	quoted("Jolly nice to make your acquaintance! Off you go. No beast comes to the campfire."),
+	quoted("Finding the beast is half the challenge, and you've a nose for it, old chap."),
+	quoted("A good snare does the waiting for you. Set it, leave it, and have a pipe."),
+	quoted("Ajeck says you nearly crept up on her this morning. Nearly, mind you."),
+	quoted("From Lordaeron to the deepest jungle, I've rarely seen anyone cover such ground."),
+	quoted("Now that's a trophy or two over the ol' hearth! Nicely done, old chap."),
+	quoted("You're a hunter worthy of our company. Barnil, pour this one some mead!"),
+	quoted("More trophies than wall to hang them on, eh? Barnil can build you another."),
+	quoted("King Bangalash sent me crawling back to camp many a time. He runs from you."),
+	quoted("Bloody well done! The expedition is yours to lead. Cheers to you, I say! Cheers!"),
+}
+
 -- A RANK'S BADGE (Josh 2026-09-29): Art/Ranks/rank1.tga to rank10.tga, drawn
 -- by scripts/make-badges.py from scripts/rank-badges.html
 -- (written out, so the tests can check that each file is there)

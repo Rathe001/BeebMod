@@ -46,7 +46,14 @@ local PIP_H, PIP_GAP, PIP_DROP = 6, 2, 3
 local COMBO = (Enum and Enum.PowerType and Enum.PowerType.ComboPoints) or 4
 local ENERGY = (Enum and Enum.PowerType and Enum.PowerType.Energy) or 3
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). Flat bars, and combo points.
+M.FIXED = { theme = true, combo = true }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.resourcedisplay
 	if not s or s[name] == nil then
 		return fallback
@@ -584,15 +591,16 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- What it is doing
 -- ---------------------------------------------------------------------------
 
-local function switchRow(section, title, blurb, name, fallback)
-	local r = BT.Widgets.SwitchRow(section, title, blurb,
-		function() return opt(name, fallback) end,
-		function(on) M.SetOpt(name, on) end)
-	r.name, r.fallback = name, fallback
-	return r
+-- WHAT IT IS DOING, for the Testing page's What loaded (it was the "On
+-- screen" row of the Resource display page until the settings canvas)
+function M.Status()
+	if not (plate and plate.IsVisible and plate:IsVisible()) then
+		return "not on screen: turn on Personal Resource Display"
+	end
+	return ("%d bars themed · %s"):format(M.lastCount or 0, M.Said())
 end
 
 -- the points in words; a secret count is never formatted, because a secret
@@ -605,47 +613,6 @@ function M.Said()
 		return ("out of %d, count hidden from addons but shown on the row"):format(max)
 	end
 	return ("%d of %d points"):format(cur, max)
-end
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("This is your own nameplate. Turn on Personal Resource Display in the game's Combat options to see it.")
-	local plateSection = page:Section("Display")
-	self.rows = {
-		switchRow(plateSection, "Theme bars", "Flat bars with a thin border, in place of the game's art", "theme", true),
-		switchRow(plateSection, "Combo points", "One segment per point, for rogues and druids in cat form", "combo", true),
-	}
-	-- what the display is doing right now, as a row of its own: pinned to
-	-- the foot of the panel it sat on the rows once the page grew
-	self.status = BT.Widgets.Row(plateSection, "On screen", " ")
-	self.found = self.status.blurb
-	-- (your damage over time went over these bars until 2026-10-03; it is on
-	-- every enemy's nameplate now, and its options are on the Nameplates page)
-	page:Layout()
-end
-
-function M:RefreshTab()
-	for _, r in ipairs(self.rows or {}) do
-		r.switch:SetOn(opt(r.name, r.fallback))
-	end
-	if self.found then
-		if not (plate and plate.IsVisible and plate:IsVisible()) then
-			self.found:SetText("Not on screen. Turn on Personal Resource Display.")
-		else
-			self.found:SetText(("%d bars themed · %s"):format(M.lastCount or 0, M.Said()))
-		end
-	end
-end
-
-function M:ShowTab()
-	if BT.Enabled("resourcedisplay") then
-		M.Apply()
-	end
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
 end
 
 -- the tests want the pieces without going through frames

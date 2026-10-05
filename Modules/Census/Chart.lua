@@ -1,9 +1,13 @@
 -- The census view: one horizontal bar chart, six things it can count
--- (Josh 2026-09-18; guild and zone 2026-09-24), in the Census window
--- (UI/CensusWindow.lua).
+-- (Josh 2026-09-18; guild and zone 2026-09-24), on the Ledger window's
+-- Charts page (UI/CensusWindow.lua).
 --
 -- Bars are sorted by size, except levels, which stay in level order - a
 -- 1-10 .. 51-59, 60 chart shuffled by popularity cannot be read at all.
+--
+-- IN THE JOURNALS' WINDOW (Josh 2026-10-05, the "Sister journals" canvas):
+-- the six charts are the rail down the page's left, where the Field
+-- Journal's types are, and Seen is on the toolbar over the tiles.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Census/Chart.lua")
 
@@ -12,14 +16,16 @@ local C = {}
 BT.Census = C
 
 local ROWS, ROW_H = 12, 22
--- the tiles, the tabs, the count and its chips, then the bars
-local TILE_H, TAB_Y, CAP_Y, ROWS_Y = 62, -72, -106, -134
+-- the tiles, the chips of the filters that are on, then the bars
+local TILE_H = 62
+local CAP_Y = -(TILE_H + 10)
+local ROWS_Y = CAP_Y - 28
 -- where the bars start with no filter on: the chips' line is not needed
-local ROWS_BARE = -104
+local ROWS_BARE = -(TILE_H + 12)
 -- where a bar starts, the count's column and the share's, and a bar's room
--- before the window has been laid out (UI/CensusWindow.lua: 640 less padding)
-local BAR_X, COUNT_W, PCT_W = 150, 58, 38
-local BAR_W = 612 - BAR_X - COUNT_W - PCT_W
+-- before the window has been laid out (UI/Book.lua: the column, 572 wide)
+local BAR_X, COUNT_W, PCT_W = 140, 58, 38
+local BAR_W = 572 - BAR_X - COUNT_W - PCT_W
 
 local MODES = {
 	{ key = "class", label = "Class" },
@@ -100,7 +106,7 @@ local label, paint = BT.Widgets.Label, BT.Widgets.Paint
 local SIDE_COLOUR = { Alliance = { 0.25, 0.50, 0.88 }, Horde = { 0.79, 0.26, 0.23 } }
 local SEX_COLOUR = { [2] = { 0.42, 0.62, 0.84 }, [3] = { 0.83, 0.50, 0.69 } }
 local NONE = { 0.30, 0.31, 0.30 }
-local TILE_W, TILE_GAP = { 128, 147, 147, 166 }, 8
+local TILE_W, TILE_GAP = { 119, 137, 137, 155 }, 8
 C.SEX_WORD = { [2] = "Male", [3] = "Female" }
 
 local function tile(view, i, title)
@@ -166,40 +172,10 @@ local function splitTile(view, i, title, keys, colours, onPick)
 	return t
 end
 
--- a tab: its word, and a line under the one you are on
-local TAB_W = 64
-local function tab(view, text)
-	local b = CreateFrame("Button", nil, view)
-	b:SetSize(TAB_W, 24)
-	b.label = label(b, text, nil, 0.62, 0.66, 0.64)
-	b.label:SetPoint("CENTER", 0, 1)
-	b.line = b:CreateTexture(nil, "ARTWORK")
-	b.line:SetPoint("BOTTOMLEFT", 6, 0)
-	b.line:SetPoint("BOTTOMRIGHT", -6, 0)
-	b.line:SetHeight(2)
-	local function paintTab(self)
-		local a = BT.Widgets.ACCENT
-		self.line:SetColorTexture(a[1], a[2], a[3], 1)
-		self.line:SetShown(self.pressed and true or false)
-		if self.pressed then
-			self.label:SetTextColor(0.93, 0.95, 0.94)
-		elseif self.hovered then
-			self.label:SetTextColor(0.82, 0.86, 0.84)
-		else
-			self.label:SetTextColor(0.55, 0.60, 0.58)
-		end
-	end
-	b.SetPressed = function(self, on)
-		self.pressed = on and true or false
-		paintTab(self)
-	end
-	b:SetScript("OnEnter", function(self) self.hovered = true; paintTab(self) end)
-	b:SetScript("OnLeave", function(self) self.hovered = false; paintTab(self) end)
-	paintTab(b)
-	return b
-end
-
-function C.Build(parent)
+-- `shell` is the page's rail and toolbar (UI/Book.lua): the charts are the
+-- rail's rows, and Seen sits on the toolbar
+function C.Build(parent, shell)
+	shell = shell or {}
 	local view = CreateFrame("Frame", nil, parent)
 	view:SetAllPoints()
 	view.mode = "class"
@@ -266,35 +242,32 @@ function C.Build(parent)
 		view.bandButtons[band.key] = b
 	end
 
-	-- THE CHARTS THE TOOLKIT CAN ACTUALLY DRAW (Josh 2026-09-19), as tabs:
-	-- Tags are the Ledger's, so with the Ledger off there is no Tags tab
+	-- THE CHARTS THE TOOLKIT CAN ACTUALLY DRAW (Josh 2026-09-19), as the
+	-- rail's rows: Tags are the Ledger's, so with the Ledger off there is no
+	-- Tags row (C.PaintModes). Each chart's row, by its key, for the tests.
+	view.rail = shell.rail
 	view.modeButtons = {}
-	for _, m in ipairs(MODES) do
-		local b = tab(view, m.label)
-		b:SetScript("OnClick", function()
-			view.mode = m.key
+	if view.rail then
+		view.rail.onPick = function(key)
+			view.mode = key
 			C.Refresh(view)
-		end)
-		b.modeKey = m.key
-		b.needsLedger = m.key == "tag"
-		view.modeButtons[m.key] = b
+		end
+		C.PaintModes(view)
 	end
-	view.tabRule = view:CreateTexture(nil, "BACKGROUND")
-	view.tabRule:SetPoint("TOPLEFT", 0, TAB_Y - 24)
-	view.tabRule:SetPoint("TOPRIGHT", 0, TAB_Y - 24)
-	view.tabRule:SetHeight(1)
-	view.tabRule:SetColorTexture(1, 1, 1, 0.08)
 
-	-- SEEN WITHIN (Josh 2026-09-24), at the end of the tabs
+	-- SEEN WITHIN (Josh 2026-09-24), on the toolbar's right
 	local seenOptions = {}
 	for _, s in ipairs(BT.Stats.SEEN) do
 		seenOptions[#seenOptions + 1] = { s.key, s.short or s.label }
 	end
-	view.seenControl = BT.Widgets.Segmented(view, seenOptions, function(k)
+	local bar = shell.toolbar or view
+	view.seenControl = BT.Widgets.Segmented(bar, seenOptions, function(k)
 		view.seen = k
 		C.Refresh(view)
 	end, 48)
-	view.seenControl:SetPoint("TOPRIGHT", 0, TAB_Y - 2)
+	view.seenControl:SetPoint("RIGHT", bar, "RIGHT", 0, 0)
+	view.seenWord = label(bar, "Seen", "small", 0.50, 0.55, 0.53)
+	view.seenWord:SetPoint("RIGHT", view.seenControl, "LEFT", -8, 0)
 	view.seenButtons = {}
 	for _, b in ipairs(view.seenControl.buttons) do
 		view.seenButtons[b.key] = b
@@ -544,9 +517,7 @@ function C.Refresh(view, census)
 		-- from nothing. It is left to finish, and it draws whichever chart is
 		-- picked when it does.
 		if view.counting == key then
-			for k, b in pairs(view.modeButtons) do
-				b:SetPressed(k == view.mode)
-			end
+			C.PaintModes(view)
 			return
 		end
 		local per = BT.Stats.JOB_SLICE
@@ -576,25 +547,8 @@ function C.Refresh(view, census)
 	if view.loading and view.loading:IsShown() then
 		C.Loading(view, false)
 	end
-	-- the tabs: the charts there are today
-	local x = 0
-	for _, m in ipairs(MODES) do
-		local b = view.modeButtons[m.key]
-		if b.needsLedger and not BT.Enabled("ledger") then
-			b:Hide()
-			if view.mode == m.key then
-				view.mode = "class"
-			end
-		else
-			b:ClearAllPoints()
-			b:SetPoint("TOPLEFT", x, TAB_Y)
-			b:Show()
-			x = x + TAB_W
-		end
-	end
-	for k, b in pairs(view.modeButtons) do
-		b:SetPressed(k == view.mode)
-	end
+	-- the rail: the charts there are today
+	C.PaintModes(view)
 	view.seenControl:Select(view.seen or "all")
 
 	C.PaintTiles(view, census)
@@ -685,6 +639,32 @@ function C.Refresh(view, census)
 	view.height = -bottom + 16
 	if view.onHeight then
 		view.onHeight(view.height)
+	end
+end
+
+-- The rail's rows: a chart each, the one shown lit. Tags are the Ledger's
+-- notes, so only while the Ledger is on.
+function C.PaintModes(view)
+	if not view.rail then
+		return
+	end
+	local entries = {}
+	for _, m in ipairs(MODES) do
+		if m.key ~= "tag" or BT.Enabled("ledger") then
+			entries[#entries + 1] = { key = m.key, label = m.label, chosen = m.key == view.mode }
+		elseif view.mode == m.key then
+			view.mode = "class"
+			entries[1].chosen = true
+		end
+	end
+	BT.Book.RailRows(view.rail, entries)
+	for k in pairs(view.modeButtons) do
+		view.modeButtons[k] = nil
+	end
+	for i, e in ipairs(entries) do
+		local r = view.rail.rows[i]
+		r.pressed = e.chosen
+		view.modeButtons[e.key] = r
 	end
 end
 

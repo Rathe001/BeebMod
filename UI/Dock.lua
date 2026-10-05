@@ -39,6 +39,7 @@ local ICONS = "Interface\\AddOns\\BeebMod\\Art\\icons"
 -- unpacked from a table: `unpack` is a global in the game's Lua and a member of
 -- `table` in the one the headless tests run (Josh 2026-09-19).
 function B.NoteCoord(tex) tex:SetTexCoord(0, 0.125, 0, 1) end
+function B.SearchCoord(tex) tex:SetTexCoord(0.125, 0.25, 0, 1) end
 function B.ChartCoord(tex) tex:SetTexCoord(0.25, 0.375, 0, 1) end
 function B.CheckCoord(tex) tex:SetTexCoord(0.375, 0.5, 0, 1) end
 function B.CogCoord(tex) tex:SetTexCoord(0.5, 0.625, 0, 1) end
@@ -167,10 +168,12 @@ end
 -- back. Let go, the insets are nothing again.
 local DRAG_STEP = 0.05
 
--- LOCKED WHERE IT IS (Josh 2026-09-24): a drag that means to move a quest or
--- scroll the list no longer takes the whole dock with it
+-- SHIFT-DRAG TO MOVE (the settings canvas, Josh 2026-10-04: "Shift-drag to
+-- move, as the unit frames do"). It was a lock switch; now a plain drag
+-- moves a quest or scrolls the list, and only a drag with Shift held takes
+-- the whole dock with it.
 function B.Locked()
-	return BT.settings and BT.settings.dockLocked == true or false
+	return not (IsShiftKeyDown and IsShiftKeyDown())
 end
 
 function B.BeginDrag()
@@ -201,13 +204,32 @@ function B.BeginDrag()
 	dock.dragging = true
 end
 
+-- A CLICK AT THE END OF A DRAG IS THE DRAG LETTING GO (2026-10-05): a line
+-- that opens something on a click asks this first, so Shift-dragging the dock
+-- by the Expedition's line doesn't open the journal where it is dropped
+B.MOVED_WAIT = 0.3
+function B.JustMoved()
+	if not dock then
+		return false
+	end
+	if dock.dragging then
+		return true
+	end
+	-- (no clock, no window: a release is a click)
+	if not (GetTime and dock.movedAt) then
+		return false
+	end
+	return GetTime() - dock.movedAt < B.MOVED_WAIT
+end
+
 function B.EndDrag()
-	if not dock or B.Locked() then
+	if not (dock and dock.dragging) then
 		return
 	end
 	dock:SetScript("OnUpdate", nil)
 	dock:StopMovingOrSizing()
 	dock.dragging = false
+	dock.movedAt = GetTime and GetTime() or nil
 	savePosition()
 	-- a new top edge is a new amount of room under it
 	B.Relayout()
@@ -321,7 +343,9 @@ local function layout()
 		end
 	end
 	for _, c in ipairs(cells) do
-		if c.side == "right" then
+		if c == dock.cog then
+			-- the header's, shown and placed by Relayout
+		elseif c.side == "right" then
 			if not c.wanted then
 				c:Hide()
 			end
@@ -394,8 +418,26 @@ end
 -- art leaves room round it for the higher ranks' antlers and tusks. It
 -- reaches from the text's top to the bar's foot; the text and the bar start
 -- after it (B.LineAfter).
-B.LINE_ICON_W, B.LINE_ICON_H, B.LINE_ICON_GAP = 17, 23, 6
+--
+-- LEVEL FIRST, THE REST SLIM (Josh 2026-10-05: "level is the main thing
+-- players care about, but it becomes a bit hard to find now", and of the
+-- canvas "Dock meters: level first", option A: "I agree A is the best option
+-- in case we add more in the future"). Five rows of one size read as one
+-- block, and your level was one line among them. Level is a row of its own
+-- now, 48 tall, with a large shield (B.HERO, Modules/XP/XP.lua). Every other
+-- meter is a slim line under it, 22 tall: a small icon, the words on one
+-- line, and a bar two pixels tall under them (B.SlimLine). Another meter
+-- added later is one more slim line.
+-- ROOM UNDER THE BAR (Josh 2026-10-05: "Can you add a little padding
+-- between the progress bar and the divider?"): the line was 20 tall and the
+-- bar ended a pixel above the divider at its foot; 22 leaves three.
+B.LINE_ICON_W, B.LINE_ICON_H, B.LINE_ICON_GAP = 12, 16, 6
 B.LINE_ICON_CROP = { 0.25, 0.75, 0.2, 0.875 }
+-- a slim line: its height, the icon's top, the words' height, the bar's
+-- height, and how far in the icon and the right-hand words sit
+B.SLIM = { h = 22, top = 2, textH = 14, barH = 2, left = 8, right = 6 }
+-- Level's shield, and where it sits
+B.HERO = { w = 25, h = 34, top = 7, left = 6 }
 B.SHIELD_FIELD = "Interface\\AddOns\\BeebMod\\Art\\Dock\\field"
 B.SHIELD_RIM = "Interface\\AddOns\\BeebMod\\Art\\Dock\\rim"
 B.SHIELD_BANNER = "Interface\\AddOns\\BeebMod\\Art\\Dock\\banner"
@@ -407,7 +449,7 @@ B.SHIELD_SWORDS = "Interface\\AddOns\\BeebMod\\Art\\Dock\\swords"
 -- Exalted), a PvP rank (0 for none) and side, an Expedition rank. Only the
 -- shields follow them; nothing is saved, and a reload puts them back.
 B.preview = {}
-local PREVIEWED = { "xp", "rep", "pvp", "expedition" }
+local PREVIEWED = { "xp", "rep", "pvp", "expedition", "ledgerline" }
 function B.SetPreview(key, value)
 	B.preview[key] = value
 	for _, k in ipairs(PREVIEWED) do
@@ -416,9 +458,12 @@ function B.SetPreview(key, value)
 			pcall(m.Update)
 		end
 	end
-	-- and the Commendations page, if it is open (Josh 2026-09-29)
+	-- and the Commendations pages, if they are open (Josh 2026-09-29)
 	if BT.ExpeditionWindow and BT.ExpeditionWindow.Refresh then
 		pcall(BT.ExpeditionWindow.Refresh)
+	end
+	if BT.CensusWindow and BT.CensusWindow.Refresh then
+		pcall(BT.CensusWindow.Refresh)
 	end
 end
 function B.ClearPreviews()
@@ -428,11 +473,12 @@ function B.ClearPreviews()
 	B.SetPreview("level", nil)
 end
 
--- one layer of a line's shield, at the line's top left; `sub` orders layers
-function B.LineIcon(f, inset, sub, file)
+-- one layer of a line's shield, at the line's top left; `sub` orders layers.
+-- `size` is { w, h, top }: B.HERO for Level's, a slim line's when left out.
+function B.LineIcon(f, inset, sub, file, size)
 	local t = f:CreateTexture(nil, "ARTWORK", nil, sub or 0)
-	t:SetSize(B.LINE_ICON_W, B.LINE_ICON_H)
-	t:SetPoint("TOPLEFT", f, "TOPLEFT", inset, -3)
+	t:SetSize(size and size.w or B.LINE_ICON_W, size and size.h or B.LINE_ICON_H)
+	t:SetPoint("TOPLEFT", f, "TOPLEFT", inset or B.SLIM.left, -(size and size.top or B.SLIM.top))
 	local c = B.LINE_ICON_CROP
 	t:SetTexCoord(c[1], c[2], c[3], c[4])
 	if file then
@@ -443,12 +489,12 @@ end
 
 -- a shield of the dock's own, the field tinted by the caller: the field, the
 -- rim over it, and a mark over that if one is given
-function B.LineShield(f, inset, mark)
+function B.LineShield(f, inset, mark, size)
 	local s = {}
-	s.field = B.LineIcon(f, inset, 1, B.SHIELD_FIELD)
-	s.rim = B.LineIcon(f, inset, 2, B.SHIELD_RIM)
+	s.field = B.LineIcon(f, inset, 1, B.SHIELD_FIELD, size)
+	s.rim = B.LineIcon(f, inset, 2, B.SHIELD_RIM, size)
 	if mark then
-		s.mark = B.LineIcon(f, inset, 3, mark)
+		s.mark = B.LineIcon(f, inset, 3, mark, size)
 	end
 	s.icon = s.field
 	return s
@@ -463,11 +509,11 @@ end
 -- fit the shield's field at 12 and read at a glance.
 B.SHIELD_FONT = "Fonts\\ARIALN.TTF"
 B.SHIELD_FONT_SIZE = 12
-function B.LineNumber(f, s)
+function B.LineNumber(f, s, size)
 	-- no font object behind it: the face chosen on the General page is for
 	-- words, and must not reach the figures on a shield
 	local n = f:CreateFontString(nil, "OVERLAY")
-	local ok, loaded = pcall(n.SetFont, n, B.SHIELD_FONT, B.SHIELD_FONT_SIZE, "")
+	local ok, loaded = pcall(n.SetFont, n, B.SHIELD_FONT, size or B.SHIELD_FONT_SIZE, "")
 	if not ok or loaded == false then
 		n:SetFontObject("BeebModFontHighlightSmall")
 	end
@@ -488,9 +534,46 @@ function B.LineAfter(icon, text, track, textH)
 	track:SetPoint("TOPLEFT", icon, "TOPRIGHT", B.LINE_ICON_GAP, -textH)
 end
 
--- how wide a line's bar is, with a shield at its left
-function B.LineBarWidth(f, inset)
-	return BT.Pill.Number(f:GetWidth(), 0) - inset * 2 - B.LINE_ICON_W - B.LINE_ICON_GAP
+-- how wide a line's bar is, with an icon at its left: a slim line's, or
+-- with `icon` (B.HERO) the one under Level's shield
+function B.LineBarWidth(f, icon)
+	local left = icon and icon.left or B.SLIM.left
+	local w = icon and icon.w or B.LINE_ICON_W
+	return BT.Pill.Number(f:GetWidth(), 0) - left - w - B.LINE_ICON_GAP - B.SLIM.right
+end
+
+-- A SLIM LINE (B.SLIM): the words, the right-hand words, the bar's track and
+-- its fill, after `icon`, on `f`. The words are a step quieter than Level's,
+-- so the eye goes to Level first. No band of colour behind it: the bar is
+-- in the meter's colour, and that is enough on a line this size.
+function B.SlimLine(f, icon)
+	local S = B.SLIM
+	f.kind = "slim"
+	f.wantHeight = S.h
+	-- the client draws nothing inside a frame with no height (see Performance)
+	f:SetHeight(S.h)
+	local text = BT.Widgets.Label(f, "", "small")
+	text:SetJustifyH("LEFT")
+	text:SetTextColor(0.79, 0.83, 0.81)
+	local eta = BT.Widgets.Label(f, "", "small")
+	eta:SetPoint("TOPRIGHT", f, "TOPRIGHT", -S.right, -S.top)
+	eta:SetJustifyH("RIGHT")
+	eta:SetTextColor(0.76, 0.82, 0.80)
+	-- as tall as the left words, so both sit on one line (Josh 2026-09-29)
+	eta:SetHeight(S.textH - 2)
+	-- A LONG NAME STOPS SHORT OF THE RIGHT-HAND TEXT (Josh 2026-09-22): the
+	-- left words end where the right ones begin, cut short with an ellipsis
+	text:SetPoint("TOPRIGHT", eta, "TOPLEFT", -8, 0)
+	text:SetHeight(S.textH - 2)
+	text:SetWordWrap(false)
+	local track = f:CreateTexture(nil, "BORDER")
+	track:SetPoint("TOPRIGHT", f, "TOPRIGHT", -S.right, -(S.top + S.textH))
+	track:SetHeight(S.barH)
+	B.LineAfter(icon, text, track, S.textH)
+	local fill = f:CreateTexture(nil, "ARTWORK")
+	fill:SetPoint("TOPLEFT", track, "TOPLEFT", 0, 0)
+	fill:SetHeight(S.barH)
+	return text, eta, track, fill
 end
 
 -- a meter's colour, whenever its bar is painted
@@ -510,8 +593,8 @@ end
 -- module is disabled, should be the dock with logo and options cog. You
 -- should not be able to turn off that minimum state. Turning off the dock
 -- would turn off everything EXCEPT the logo and options cog"). With the Dock
--- switched off nothing else sits in it - no row, no section, no readout, no
--- Census icon, whatever feature it belongs to - and the header stays.
+-- switched off nothing else sits in it - no row, no section, no readout,
+-- whatever feature it belongs to - and the header stays.
 function B.DockOn()
 	return not BT.FeatureOn or BT.FeatureOn("dock")
 end
@@ -520,7 +603,7 @@ function B.RowWanted()
 	if not (dock and cells) then
 		return false
 	end
-	return B.DockOn() and (not (BT.settings and BT.settings.targetRow == false)) and moduleCells()
+	return B.DockOn() and moduleCells()
 end
 
 -- A PANEL OF YOUR OWN, UNDER THE ROW. Give it the height and width it would
@@ -531,6 +614,13 @@ function B.Section(key, order)
 	if not s then
 		s = { key = key, order = order or 50, frame = CreateFrame("Frame", nil, dock) }
 		s.frame.key = key
+		-- SHIFT-DRAG FROM ANYWHERE IN IT (Josh 2026-10-05: "Seems I am unable
+		-- to drag the dock now"). The target row's empty space let a drag
+		-- through to the dock, and the row is gone; the meters under the
+		-- header take the mouse for their tooltips and clicks, and a drag that
+		-- began on one went nowhere. Every section is a handle now. A plain
+		-- drag still does nothing (B.Locked).
+		B.MakeHandle(s.frame)
 		s.frame:Hide()
 		sections[key] = s
 		ordered[#ordered + 1] = s
@@ -540,8 +630,7 @@ function B.Section(key, order)
 end
 
 -- Stack the row and whatever sections are showing, and make the dock the size
--- of the result. The row hides when the target row is switched off; the dock itself
--- goes only when there is nothing left in it at all.
+-- of the result. The row shows only while a module has cells on it.
 -- THE DOCK IN YOUR ORDER (Josh 2026-09-22). A section belongs to the module of
 -- the same key, and the modules are in whatever order you dragged the tabs
 -- into - so the sections stack in that order too. A section with no module
@@ -585,7 +674,8 @@ local CHIP_H, COLS = 18, 3
 -- THREE ACROSS, OR TWO (Josh 2026-09-24): two gives each readout room to
 -- breathe on a narrow dock
 function B.Cols()
-	return (BT.settings and BT.settings.metricsCols == 2) and 2 or COLS
+	-- three (the settings canvas, Josh 2026-10-04, cut the choice of two)
+	return COLS
 end
 -- a row is its cell and the one-pixel line under it; the column lines stop
 -- this far short of the lines above and below the grid
@@ -908,13 +998,6 @@ function B.HeaderItem(frame)
 	return frame
 end
 
--- the Census icon is in the header while the Census is on, unless you left
--- it out (its charts are still at /bt census and on its page)
-local function censusInHeader()
-	return BT.Enabled and BT.Enabled("census") and B.DockOn() and not (BT.settings and BT.settings.censusButton == false)
-		or false
-end
-
 -- HOW WIDE THE HEADER NEEDS TO BE (Josh 2026-09-24). The dock was as wide as
 -- its row or its widest section, and never less than a sliver; with the
 -- Census alone there is neither, and the panel shrank to 34 pixels behind
@@ -923,9 +1006,6 @@ end
 local function headerNeed()
 	local title = BT.Pill.Number(dock.header.title:GetStringWidth(), 52)
 	local w = INSET + 1 + title + 4
-	if dock.census and censusInHeader() then
-		w = w + 22
-	end
 	if dock.cog then
 		w = w + (dock.cog.cellWidth or 22)
 	end
@@ -952,8 +1032,20 @@ function B.Relayout()
 	local dockOn = B.DockOn()
 	for _, s in ipairs(ordered) do
 		-- the Dock off: every section away, whoever's it is
+		-- AND BACK WITH IT (2026-10-05): another feature's row - the
+		-- Expedition's line, the Ledger's - is not switched on again with the
+		-- Dock, so the one the Dock put away it shows again itself, while
+		-- its module is still on
 		if not dockOn and s.key ~= "readouts" then
+			if s.frame:IsShown() then
+				s.dockHid = true
+			end
 			s.frame:Hide()
+		elseif dockOn and s.dockHid then
+			s.dockHid = nil
+			if not BT.GetModule(s.key) or BT.Enabled(s.key) then
+				s.frame:Show()
+			end
 		end
 		if s.frame:IsShown() and s.key ~= "readouts" then
 			live = true
@@ -1090,23 +1182,12 @@ function B.Relayout()
 		end
 	end
 	BT.Pill.SetHole(dock, hole)
-	-- THE HEADER (Josh 2026-09-22): the name, then the Census icon when it is
-	-- on and the cog, left to right beside it; whatever a module puts in the
-	-- header (the clock) sits at the right edge. The cog used to hold that
-	-- edge, but a time reads best where the eye ends a line, and the ways in
-	-- belong with the name that says whose panel this is.
+	-- THE HEADER (Josh 2026-09-22): the name, then the cog beside it;
+	-- whatever a module puts in the header (the clock) sits at the right
+	-- edge. The cog used to hold that edge, but a time reads best where the
+	-- eye ends a line, and the way in belongs with the name that says whose
+	-- panel this is.
 	local prev = dock.header.title
-	if dock.census then
-		dock.census:ClearAllPoints()
-		dock.census:SetPoint("LEFT", prev, "RIGHT", 4, 0)
-		-- its button can be left out of the header, the charts kept (Josh
-		-- 2026-09-24): /bt census and the Census page still open them
-		local on = censusInHeader()
-		dock.census:SetShown(on)
-		if on then
-			prev = dock.census
-		end
-	end
 	if dock.cog then
 		dock.cog:ClearAllPoints()
 		dock.cog:SetParent(dock.header)
@@ -1135,12 +1216,9 @@ function B.Relayout()
 	if dock.marksRule and not wantRow then
 		dock.marksRule:Hide()
 	end
-	-- a clock or the census icon in the header is something to show too:
-	-- the dock went with the last panel module, clock and all, and with it
-	-- the cog that is the way into the settings (Josh 2026-09-23, audit)
-	-- THE CENSUS ON ITS OWN (Josh 2026-09-24): its icon is a way in as much
-	-- as the clock is, and the census alone is a way to use the addon - the
-	-- name, the icon and the cog, and nothing under them
+	-- a clock in the header is something to show too: the dock went with
+	-- the last panel module, clock and all, and with it the cog that is the
+	-- way into the settings (Josh 2026-09-23, audit)
 	-- ALWAYS THERE (Josh 2026-09-27): the logo and the cog are the way back
 	-- in, whatever is switched off, and nothing switches them off
 	dock:Show()
@@ -1231,9 +1309,14 @@ function B.Rebuild()
 	if not dock then
 		return
 	end
+	-- THE COG IS NOT ASKED (2026-10-05). It is the core's and always wanted;
+	-- marked unwanted here with the modules' cells, it was hidden by the next
+	-- target change and stayed hidden until a reload
 	for _, c in ipairs(cells) do
-		c:Hide()
-		c.wanted = false
+		if c ~= dock.cog then
+			c:Hide()
+			c.wanted = false
+		end
 	end
 	cells = { dock.mark }
 	for _, m in ipairs(BT.Live()) do
@@ -1441,39 +1524,10 @@ function B.Create()
 	-- the cog moves to the corner (Josh 2026-09-19)
 	dock.cog:SetParent(dock)
 
-	-- THE CENSUS, FROM THE HEADER (Josh 2026-09-22). It left the window's rail
-	-- for a window of its own, and this is the way into it: the chart glyph,
-	-- beside the cog, drawn and lit the same way. Only while it is switched on.
-	dock.census = CreateFrame("Button", nil, dock.header)
-	dock.census:SetSize(22, 22)
-	dock.census.icon = dock.census:CreateTexture(nil, "ARTWORK")
-	dock.census.icon:SetPoint("CENTER")
-	dock.census.icon:SetSize(12, 12)
-	dock.census.icon:SetTexture(ICONS)
-	B.ChartCoord(dock.census.icon)
-	dock.census.icon:SetVertexColor(0.55, 0.63, 0.59, 1)
-	dock.census:SetScript("OnClick", function()
-		if BT.CensusWindow then
-			BT.CensusWindow.Toggle()
-		end
-	end)
-	dock.census:SetScript("OnEnter", function(self)
-		local a = BT.Widgets.ACCENT
-		self.icon:SetVertexColor(a[1], a[2], a[3], 1)
-		if BT.Tip then
-			local census = BT.Feature and BT.Feature("census")
-			BT.Tip.Show(self, { edge = census and census.color, build = function(t)
-				t:Header({ icon = false, name = "Census", sub = "Everyone you have seen on this realm" })
-				t:Foot({ { "Click", "open census" } })
-			end })
-		end
-	end)
-	dock.census:SetScript("OnLeave", function(self)
-		self.icon:SetVertexColor(0.55, 0.63, 0.59, 1)
-		if GameTooltip then
-			GameTooltip:Hide()
-		end
-	end)
+	-- THE CHARTS' BUTTON IS GONE (Josh 2026-10-04: "Remove the census icon
+	-- from the header, and make a dedicated row for ledger, the same as
+	-- expedition"): the Ledger's line in the dock opens the Ledger now
+	-- (Modules/Ledger/Line.lua), and its window has the charts.
 
 	dock:SetScript("OnDragStart", function()
 		B.BeginDrag()
@@ -1506,20 +1560,8 @@ function B.Create()
 	return dock
 end
 
--- The Target row switch hides the row only: the dock stays for whatever else is in it.
-function B.SetShown(show)
-	if not dock then
-		return
-	end
-	if BT.settings then
-		BT.settings.targetRow = show and true or false
-	end
-	B.Relayout()
-end
-
 function B.SetScale(n)
 	BT.EnsureBound()
-	BT.settings.dockScale = n
 	if dock then
 		-- THE CORNER STAYS PUT (Josh 2026-09-23, audit): a position is in the
 		-- dock's own scaled units, so a new scale slid it across the screen
@@ -1541,25 +1583,29 @@ function B.SetScale(n)
 	end
 end
 
--- how wide the dock is, as a setting (B.WIDTH)
+-- how wide the dock is: one width (the settings canvas, Josh 2026-10-04,
+-- cut the choice)
 function B.Width()
-	local w = BT.settings and tonumber(BT.settings.dockWidth)
-	if not w then
-		return B.WIDTH
-	end
-	return math.max(B.WIDTH_MIN, math.min(B.WIDTH_MAX, w))
+	return B.WIDTH
 end
 
-function B.SetWidth(n)
-	BT.EnsureBound()
-	n = math.max(B.WIDTH_MIN, math.min(B.WIDTH_MAX, math.floor(n + 0.5)))
-	BT.settings.dockWidth = n ~= B.WIDTH and n or nil
-	B.Relayout()
-	return n
-end
-
+-- the one size (UI/Settings.lua)
 function B.Scale()
-	return (BT.settings and BT.settings.dockScale) or 1
+	return BT.Scale and BT.Scale() or 1
+end
+
+-- where it starts: under the minimap, against the right edge
+function B.ResetPosition()
+	if BT.settings then
+		BT.settings.dockPos = nil
+	end
+	if dock then
+		if dock.SetUserPlaced then
+			pcall(dock.SetUserPlaced, dock, false)
+		end
+		restorePosition()
+		B.Relayout()
+	end
 end
 
 function B.Frame() return dock end

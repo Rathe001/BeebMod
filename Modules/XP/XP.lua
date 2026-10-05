@@ -1,10 +1,12 @@
 -- Experience: where you are in the level, and how long the rest will take
 -- (Josh 2026-09-22).
 --
--- One line of the dock and a thin bar under it. The shield at its start says
--- the level, the line how far through it you are, and roughly how long until
--- the next one at your pace; the bar shows the same, with rested experience as a
--- paler stretch ahead of it. Point at it for the numbers.
+-- THE FIRST AND LARGEST ROW OF THE METERS (Josh 2026-10-05, the canvas "Dock
+-- meters: level first", option A). A large shield with your level on it;
+-- "Level 10" and how long until the next one at your pace; a bar with rested
+-- experience as a paler stretch ahead of it; and under the bar how far
+-- through the level you are and the experience left. Point at it for
+-- zones and dungeons for your level.
 --
 -- WHAT THIS SESSION GAINED is kept as the gold per hour is: a login starts
 -- it, a /reload carries it on, and a level gained along the way is counted
@@ -27,12 +29,13 @@ local M = BT.Module({
 	dock = true,
 })
 
-local TEXT_H = 16
-local BAR_H = 4
--- 3 above the text, 3 between it and the bar, and 6 under the bar: the bar
--- sat on the line below it with 3 (Josh 2026-09-22)
-local LINE_H = TEXT_H + BAR_H + 9
-local INSET = 6
+-- the row (the canvas "Dock meters: level first"): 48 tall; the title and
+-- the time 5 from the top, the bar 6 tall at 25, the words under it at 34
+local ROW_H = 48
+local TITLE_TOP, TITLE_H = 5, 16
+local BAR_TOP, BAR_H = 25, 6
+local SUB_TOP, SUB_H = 34, 12
+local RIGHT = 6
 local EVERY = 10
 
 local WORDS = "|cff8a9894%s|r"
@@ -274,23 +277,20 @@ local function big(n)
 end
 M.Big = big
 
+-- The row's words: the title, the time on its right, and the line under the
+-- bar. "Level 10", "1h 17m to 11" (only once there is a pace), and "46% ·
+-- 7,600 XP to go". The level is on the shield as well (Josh 2026-09-29), and
+-- the canvas has it in the title too: the row is where you look for it.
 function M.Lines(level, cur, max, rate)
 	local pct = max > 0 and math.floor(cur / max * 100) or 0
-	-- THE LEVEL IS ON THE SHIELD (Josh 2026-09-29: "put the number level
-	-- inside the icon - it would save some room"): the line says how far
-	-- through it you are, and the hover says the rest. A TITLE FIRST (Josh
-	-- 2026-09-29: "we need some titles for these progress bars, kind of like
-	-- how the expedition starts with Expedition"): "Level · 46%".
-	local left = ("Level %s"):format(WORDS:format(("· %d%%"):format(pct)))
+	local title = ("Level %d"):format(level)
 	local secs = M.ToLevel(cur, max, rate)
-	-- ONE GRAMMAR WITH REPUTATION (Josh 2026-09-22, the panel redesign): the
-	-- right side is a time, and only once there is a pace. What is
-	-- left in experience is on the hover.
 	local right = ""
 	if secs then
 		right = ("%s %s"):format(duration(secs), WORDS:format(("to %d"):format(level + 1)))
 	end
-	return left, right
+	local sub = ("%d%% · %s XP to go"):format(pct, big(math.max(0, max - cur)))
+	return title, right, sub
 end
 
 function M.Update()
@@ -308,9 +308,11 @@ function M.Update()
 	if cap then
 		return
 	end
-	local left, right = M.Lines(level, cur, max, M.Rate())
-	M.text:SetText(left)
+	local title, right, sub = M.Lines(level, cur, max, M.Rate())
+	M.text:SetText(title)
 	M.eta:SetText(right)
+	M.sub:SetText(sub)
+	M.restedWord:SetShown((rested or 0) > 0)
 	-- the level on the shield, or the Testing page's preview of another
 	local shown = BT.Dock.preview.level or level
 	local bracket = M.Bracket(shown)
@@ -325,11 +327,13 @@ function M.Update()
 	M.shield.number:ClearAllPoints()
 	M.shield.number:SetPoint("CENTER", M.shield.icon, "CENTER", 0, bracket == #M.RIMS and -0.5 or 1)
 
-	local w = BT.Dock.LineBarWidth(M.frame, INSET)
+	local w = BT.Dock.LineBarWidth(M.frame, BT.Dock.HERO)
 	if w <= 0 then
 		return
 	end
 	local a = BT.Widgets.ACCENT
+	-- "Rested" in the accent, lifted a third of the way to white
+	M.restedWord:SetTextColor(a[1] + (1 - a[1]) * 0.3, a[2] + (1 - a[2]) * 0.3, a[3] + (1 - a[3]) * 0.3)
 	M.track:SetColorTexture(1, 1, 1, 0.07)
 	M.fill:SetColorTexture(a[1], a[2], a[3], 0.9)
 	BT.Dock.BandColor(M.frame, a)
@@ -388,8 +392,7 @@ function M.Tip()
 			t:Section("Recommended content")
 			-- each kind a step in, a line between them (Josh 2026-10-04: "slightly
 			-- indent the zones/dungeons sections, and place an (also indented)
-			-- divider between them")
-			t:Indent(8)
+			-- divider between them"); the section steps them in (UI/Tip.lua)
 			if #zones > 0 then
 				t:Subhead("Zones")
 				for _, z in ipairs(zones) do
@@ -422,32 +425,45 @@ function M.Build()
 	end
 	M.frame = BT.Dock.Section("xp", 7)
 	M.frame.kind = "meter"
-	M.frame.wantHeight = LINE_H
+	M.frame.wantHeight = ROW_H
 	-- the client draws nothing inside a frame with no height (see Performance)
-	M.frame:SetHeight(LINE_H)
-	M.text = BT.Widgets.Label(M.frame, "", "small")
+	M.frame:SetHeight(ROW_H)
+	-- a large shield at the start, your level on it
+	local H = BT.Dock.HERO
+	M.shield = BT.Dock.LineShield(M.frame, H.left, nil, H)
+	BT.Dock.LineNumber(M.frame, M.shield, 13)
+	-- everything else starts after the shield
+	local x = H.left + H.w + BT.Dock.LINE_ICON_GAP
+	M.text = M.frame:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
+	BT.Fonts.Set(M.text, "name", 13)
+	M.text:SetPoint("TOPLEFT", M.frame, "TOPLEFT", x, -TITLE_TOP)
+	M.text:SetHeight(TITLE_H)
 	M.text:SetJustifyH("LEFT")
-	-- a shield at the start, your level on it
-	M.shield = BT.Dock.LineShield(M.frame, INSET)
-	BT.Dock.LineNumber(M.frame, M.shield)
-	M.eta = BT.Widgets.Label(M.frame, "", "small")
-	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
-	M.eta:SetJustifyH("RIGHT")
-	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
-	-- the right side sat a pixel high, its height its own)
-	M.eta:SetHeight(TEXT_H - 2)
-	-- A LONG NAME STOPS SHORT OF THE RIGHT-HAND TEXT (Josh 2026-09-22):
-	-- "Gnomeregan Exiles · Friendly" ran straight into "2,807 to Honored".
-	-- The left text ends where the right one begins, and is cut short with
-	-- an ellipsis rather than drawn over it.
-	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
-	M.text:SetHeight(TEXT_H - 2)
 	M.text:SetWordWrap(false)
+	M.eta = M.frame:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
+	BT.Fonts.Set(M.eta, "name", 11)
+	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -RIGHT, -TITLE_TOP)
+	M.eta:SetHeight(TITLE_H)
+	M.eta:SetJustifyH("RIGHT")
+	-- the title stops short of the time
+	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
 	-- the bar: a faint track, the experience, and rested ahead of it
 	M.track = M.frame:CreateTexture(nil, "BORDER")
-	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -(TEXT_H + 3))
+	M.track:SetPoint("TOPLEFT", M.frame, "TOPLEFT", x, -BAR_TOP)
+	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -RIGHT, -BAR_TOP)
 	M.track:SetHeight(BAR_H)
-	BT.Dock.LineAfter(M.shield.icon, M.text, M.track, TEXT_H)
+	-- how far through, and what is left, under the bar; "Rested" opposite
+	M.restedWord = BT.Widgets.Label(M.frame, "Rested", "small")
+	M.restedWord:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -RIGHT, -SUB_TOP)
+	M.restedWord:SetHeight(SUB_H)
+	M.restedWord:SetJustifyH("RIGHT")
+	M.restedWord:Hide()
+	M.sub = BT.Widgets.Label(M.frame, "", "small", 0.54, 0.60, 0.58)
+	M.sub:SetPoint("TOPLEFT", M.frame, "TOPLEFT", x, -SUB_TOP)
+	M.sub:SetPoint("TOPRIGHT", M.restedWord, "TOPLEFT", -8, 0)
+	M.sub:SetHeight(SUB_H)
+	M.sub:SetJustifyH("LEFT")
+	M.sub:SetWordWrap(false)
 	M.fill = M.frame:CreateTexture(nil, "ARTWORK")
 	M.fill:SetPoint("TOPLEFT", M.track, "TOPLEFT", 0, 0)
 	M.fill:SetHeight(BAR_H)
@@ -496,15 +512,15 @@ M.events:SetScript("OnEvent", function(_, event, initial, reloading)
 	end
 end)
 
--- THE CLIENT'S OWN BAR, PUT AWAY WHILE THIS ONE IS UP (Josh 2026-09-22): a
--- switch on this tab, on unless you turn it off. See Core/StatusBars.lua.
+-- THE CLIENT'S OWN BAR, PUT AWAY WHILE THIS ONE IS UP (Josh 2026-09-22),
+-- always since the settings canvas cut its switch (2026-10-04). See
+-- Core/StatusBars.lua.
 function M.HideClient()
-	return not (BT.settings and BT.settings.hideClientXP == false)
+	return true
 end
 
+-- the client's bar put away or given back now (for the tests)
 function M.SetHideClient(on)
-	BT.EnsureBound()
-	BT.settings.hideClientXP = on and true or false
 	BT.StatusBars.Set("xp", BT.Enabled("xp") and on)
 end
 
@@ -553,42 +569,8 @@ function M:OnDisable()
 	M.Show(false)
 end
 
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("Your level, how far through it you are, and about how long until the next.")
-	page:Note("The time to level comes from the XP you gained in your last hour of play. "
-		.. "Only the time between one gain and the next counts, and a gap longer than 5 minutes counts as 5.", true)
-	page:Note("The paler stretch on the bar is rested XP. At the level cap there is no line.", true)
-	local r = BT.Widgets.SwitchRow(page:Section("Game's XP bar"), "Hide the game's bar",
-		"Hides the game's experience bar while this one shows",
-		function() return M.HideClient() and true or false end,
-		function(on) M.SetHideClient(on) end)
-	self.hideSwitch = r.switch
-	local session = BT.Widgets.Row(page:Section("Session"), "New session", "Resets XP per hour and the time to level")
-	self.resetButton = session:SetControl(BT.Widgets.Button(session, "Reset", 62, 20))
-	self.resetButton:SetScript("OnClick", function()
-		M.Reset()
-	end)
-	page:Layout()
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-end
-
--- A NEW SESSION FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
--- slash commands"): what /bt xp reset did, as the Reset row on this page
+-- A NEW SESSION (Josh 2026-09-28: "We don't need hundreds of slash
+-- commands"): what /bt xp reset did, from a right-click on the XP line
 function M.Reset()
 	local list = M.PaceList()
 	if list then

@@ -28,7 +28,14 @@ M.SLOTS = {
 	"MainHand", "SecondaryHand", "Ranged",
 }
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). Item level on every slot, BeebMod's look, and dragged by its title.
+M.FIXED = { levels = true, theme = true, move = true }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.charsheet
 	if not s or s[name] == nil then
 		return fallback
@@ -39,13 +46,6 @@ M.Opt = opt
 
 function M.ShowsLevels()
 	return BT.Enabled("charsheet") and opt("levels", true) and true or false
-end
-
-function M.SetShowsLevels(on)
-	BT.EnsureBound()
-	BT.settings.charsheet = BT.settings.charsheet or {}
-	BT.settings.charsheet.levels = on and true or false
-	M.UpdateAll()
 end
 
 -- one of this sheet's slots that takes gear (not the shirt, not the tabard)
@@ -233,64 +233,6 @@ function M:OnDisable()
 	-- the numbers go and the art comes back; the sheet is the game's again
 	M.UpdateAll()
 	M.Undress()
-end
-
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod redraws the game's character sheet.")
-	local sheet = page:Section("Sheet")
-	self.levelSwitch = BT.Widgets.SwitchRow(sheet, "Item level on every slot",
-		"In the corner of each piece you wear. Shirts and tabards show none.",
-		function() return opt("levels", true) and true or false end,
-		function(on) M.SetShowsLevels(on) end).switch
-	self.themeSwitch = BT.Widgets.SwitchRow(sheet, "BeebMod's look",
-		"Flat panels and plain headings, in place of the game's art",
-		function() return opt("theme", true) and true or false end,
-		function(on) M.SetThemed(on) end).switch
-	self.moveSwitch = BT.Widgets.SwitchRow(sheet, "Drag by title",
-		"Opens where you left it",
-		function() return opt("move", true) and true or false end,
-		function(on)
-			BT.EnsureBound()
-			BT.settings.charsheet = BT.settings.charsheet or {}
-			BT.settings.charsheet.move = on and true or false
-			if not on then
-				M.ResetPosition()
-			end
-		end).switch
-	-- PUT BACK FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
-	-- slash commands"): the Reset that /bt sheet reset was
-	local back = BT.Widgets.Row(sheet, "Position", "Reset to where the game puts it")
-	self.resetButton = back:SetControl(BT.Widgets.Button(back, "Reset", 62, 20))
-	self.resetButton:SetScript("OnClick", function()
-		M.ResetPosition()
-		U.Print("Character sheet: position reset.")
-	end)
-	page:Layout()
-end
-
-function M:RefreshTab()
-	if self.levelSwitch then
-		self.levelSwitch:SetOn(opt("levels", true) and true or false)
-	end
-	if self.themeSwitch then
-		self.themeSwitch:SetOn(opt("theme", true) and true or false)
-	end
-	if self.moveSwitch then
-		self.moveSwitch:SetOn(opt("move", true) and true or false)
-	end
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
 end
 
 -- ---------------------------------------------------------------------------
@@ -2611,13 +2553,6 @@ function M.Undress()
 		end
 		BT.Widgets.ShowShadow(frame, false)
 	end
-end
-
-function M.SetThemed(on)
-	BT.EnsureBound()
-	BT.settings.charsheet = BT.settings.charsheet or {}
-	BT.settings.charsheet.theme = on and true or false
-	M.Apply()
 end
 
 function M.Apply()

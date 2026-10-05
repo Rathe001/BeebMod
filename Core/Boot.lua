@@ -52,13 +52,6 @@ handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
 	end
 end
 
--- light the dock's target row up, or let it go dark
-handlers.PLAYER_TARGET_CHANGED = function()
-	if BT.Dock then
-		BT.Dock.Update()
-	end
-end
-
 local frame = CreateFrame("Frame")
 frame:SetScript("OnEvent", function(self, event, ...)
 	local h = handlers[event]

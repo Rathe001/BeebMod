@@ -468,7 +468,20 @@ local lineOf = function(tip, i, side) return BT.UnitTip.LineOf(tip, i, side) end
 local sizeLine = function(tip, i, size, side) return BT.UnitTip.SizeLine(tip, i, size, side) end
 restoreFonts = function(tip) return BT.UnitTip.RestoreFonts(tip) end
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). What
+-- each of the page's switches said by default is what the tooltips do: the
+-- guild and another faction shown, the sell price small, an item's level,
+-- in the corner; no health bar, no targeting line, not hidden in a fight.
+M.FIXED = {
+	guild = true, faction = true, footer = true, itemLevel = true,
+	healthBar = false, targetLine = false, combatHide = false, anchor = "dock",
+}
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.tooltips
 	if not s or s[name] == nil then
 		return fallback
@@ -1321,7 +1334,8 @@ function M.Dress(tip, force, ours)
 	-- likewise: SetScale re-anchors and re-measures, so it is worth doing only
 	-- when the number is actually different
 	if tip.SetScale then
-		local want = opt("scale", 0.95)
+		-- the one size (UI/Settings.lua), a little under the panels'
+		local want = 0.95 * (BT.Scale and BT.Scale() or 1)
 		local now = BT.Pill.Number(tip.GetScale and tip:GetScale(), -1)
 		if math.abs(now - want) > 0.001 then
 			tip:SetScale(want)
@@ -2014,117 +2028,3 @@ function M.UnitTooltipHidden()
 end
 BT.OnUnitTooltipHide(M.UnitTooltipHidden)
 
--- ---------------------------------------------------------------------------
--- The tab: the switches, and a picture of what they do
--- ---------------------------------------------------------------------------
-local function preview(panel, y)
-	local box = CreateFrame("Frame", nil, panel)
-	box:SetPoint("TOPLEFT", 0, y)
-	box:SetSize(300, 72)
-	BT.Widgets.Panel(box)
-	box.name = BT.Widgets.Label(box, "Beeb Magus", nil, 0.41, 0.80, 0.94)
-	box.name:SetPoint("TOPLEFT", 10, -9)
-	box.level = BT.Widgets.Label(box, "8", "small", 0.35, 0.82, 0.45)
-	box.level:SetPoint("TOPRIGHT", -10, -10)
-	box.detail = BT.Widgets.Label(box, "Gnome Mage " .. M.GUILD:format("<Nightwatch>"), "small", DIM[1], DIM[2], DIM[3])
-	box.detail:SetPoint("TOPLEFT", 10, -30)
-	-- the tab shows the thing rather than describing it, spine and all
-	box.note = BT.Widgets.Label(box, '"held the door while I ran back"', nil, 0.90, 0.88, 0.80)
-	box.note:SetPoint("TOPLEFT", 10, -46)
-	local spine = box:CreateTexture(nil, "ARTWORK")
-	spine:SetPoint("TOPLEFT", 1, -1)
-	spine:SetPoint("BOTTOMLEFT", 1, 1)
-	spine:SetWidth(2)
-	spine:SetColorTexture(0.41, 0.80, 0.94, 0.9)
-	return box
-end
-
-function M:BuildTab(panel)
-	-- the title, the blurb and the line under them belong to the panel now:
-	-- the switch they sit beside is what governs everything here
-	local page = BT.Widgets.Stack(panel)
-	-- the page shows the thing rather than describing it, spine and all
-	local top = CreateFrame("Frame", nil, panel)
-	top:SetHeight(94)
-	self.preview = preview(top, 0)
-	local caption = BT.Widgets.Label(top, "A player's tooltip with these settings", "small", 0.50, 0.55, 0.53)
-	caption:SetPoint("TOPLEFT", 2, -80)
-	page:Add(top)
-
-	self.rows = {}
-	local show = page:Section("Show")
-	local function row(title, blurb, name, default)
-		local r = BT.Widgets.SwitchRow(show, title, blurb,
-			function() return opt(name, default) and true or false end,
-			function(on)
-				setOpt(name, on)
-				M:RefreshPreview()
-				BT.UnitTip.Restack()
-			end)
-		r.optName, r.default = name, default
-		self.rows[#self.rows + 1] = r
-	end
-	row("Guild", "Guild name in angle brackets", "guild", true)
-	row("Other faction", "Only when it isn't your faction", "faction", true)
-	row("Health bar", "The game's health bar under the tooltip", "healthBar", false)
-	row("Small sell price", "Sell price and the lines under it, in small grey text", "footer", true)
-	row("Item level", "Beside the name, on anything you can wear", "itemLevel", true)
-	row("Targeting", "Who a player or NPC is targeting", "targetLine", false)
-
-	-- WHERE AND WHEN (Josh 2026-09-24)
-	local place = page:Section("Place")
-	local where = BT.Widgets.Row(place, "Position", "For tooltips the game puts in the corner")
-	self.anchorSeg = where:SetControl(BT.Widgets.Segmented(where, {
-		{ "dock", "Corner" }, { "cursor", "Pointer" },
-	}, function(key)
-		setOpt("anchor", key)
-	end, 70))
-	local quiet = BT.Widgets.SwitchRow(place, "Hide in combat", "Hides tooltips on players and NPCs while you fight",
-		function() return opt("combatHide", false) and true or false end,
-		function(on) setOpt("combatHide", on) end)
-	quiet.optName, quiet.default = "combatHide", false
-	self.rows[#self.rows + 1] = quiet
-
-	local function nudge(by)
-		local now = math.floor((opt("scale", 0.95) + by) * 100 + 0.5) / 100
-		setOpt("scale", math.max(0.7, math.min(1.2, now)))
-		M:RefreshPreview()
-		BT.UnitTip.Restack()
-	end
-	local size = BT.Widgets.Row(page:Section("Size"), "Tooltip size")
-	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir) nudge(dir * 0.05) end))
-	self.scaleText = step.value
-	page:Layout()
-end
-
-function M:RefreshPreview()
-	if self.anchorSeg then
-		self.anchorSeg:Select(opt("anchor", "dock"))
-	end
-	for _, r in ipairs(self.rows or {}) do
-		r.switch:SetOn(opt(r.optName, r.default) and true or false)
-	end
-	if self.scaleText then
-		self.scaleText:SetText(("%d%%"):format(math.floor(opt("scale", 0.95) * 100 + 0.5)))
-	end
-	-- the line as the tooltip writes it (detailLine): the guild green, straight
-	-- after race and class, and only the faction after a dot
-	if self.preview then
-		local detail = "Gnome Mage"
-		if opt("guild", true) then
-			detail = detail .. " " .. M.GUILD:format("<Nightwatch>")
-		end
-		if opt("faction", true) then
-			detail = detail .. " · Alliance"
-		end
-		self.preview.detail:SetText(detail)
-	end
-end
-
-function M:ShowTab()
-	self:RefreshPreview()
-end
-
-function M:Refresh()
-	self:RefreshPreview()
-end

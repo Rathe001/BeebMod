@@ -93,12 +93,19 @@ Change a badge here, then run the script again. -->
       case "amber":
       case "jade": {
         const c = kind === "amber" ? ["#ffe29a", "#e08a1e", "#7a3a06"] : ["#b9ffd9", "#2fae74", "#0b4a2e"];
+        // A CUT STONE (Josh 2026-10-05: "it looks like a cube in the
+        // emblem"): a flat top, a slanted crown, a point below, the left
+        // facets lit. The Ledger's top two ranks wear the same cut
+        // (scripts/ravenholdt-badges.html).
         return `<defs><linearGradient id="g${id}" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="${c[0]}"/><stop offset=".55" stop-color="${c[1]}"/><stop offset="1" stop-color="${c[2]}"/></linearGradient></defs>
-          <polygon points="60,37 76,48 76,68 60,81 44,68 44,48" fill="url(#g${id})" stroke="${fill}" stroke-width="2.5"/>
-          <polyline points="44,48 60,56 76,48" fill="none" stroke="#ffffff66" stroke-width="1.2"/>
-          <path d="M60 56 V81 M44 68 L60 56 L76 68" stroke="#00000033" stroke-width="1.2" fill="none"/>
-          <path d="M50 46 L57 42 L55 50 Z" fill="#ffffffaa"/>`;
+            <stop offset="0" stop-color="${c[0]}"/><stop offset=".5" stop-color="${c[1]}"/><stop offset="1" stop-color="${c[2]}"/></linearGradient></defs>
+          <polygon points="50,39 70,39 82,51 60,83 38,51" fill="url(#g${id})" stroke="${fill}" stroke-width="2.5" stroke-linejoin="round"/>
+          <polygon points="50,39 60,51 70,39" fill="#ffffff" opacity=".22"/>
+          <polygon points="38,51 50,39 47,51" fill="#ffffff" opacity=".32"/>
+          <polygon points="47,51 60,51 60,83" fill="#ffffff" opacity=".10"/>
+          <polygon points="60,51 82,51 60,83" fill="#000000" opacity=".22"/>
+          <path d="M38 51 H82 M50 39 L47 51 L60 83 M70 39 L73 51 L60 83 M50 39 L60 51 L70 39 M60 51 V83" fill="none" stroke="#ffffff" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+          <path d="M47 41.5 L48.3 44.7 L51.5 46 L48.3 47.3 L47 50.5 L45.7 47.3 L42.5 46 L45.7 44.7 Z" fill="#ffffff" opacity=".9"/>`;
       }
     }
     return "";

@@ -1,9 +1,16 @@
--- The Expedition's toast: "Gold mastery · 150 kills", then "Barn Owl" (Josh 2026-09-25).
+-- The journals' toast: a new rank (Josh 2026-09-25; the Ledger's too since
+-- 2026-10-05).
 --
 -- In the game's own commendation art, which this client still ships - the
 -- MobProbe drew it on 70009 from these very files and coordinates. One at a
--- time, the rest in a queue: an AoE pull that crosses three milestones shows
--- three toasts, one after the other, never three on top of each other.
+-- time, the rest in a queue, never two on top of each other.
+--
+-- RANKS ONLY (Josh 2026-10-05: "I worry about achievements being too
+-- spammy"): a commendation, a mastery or a new page is said on the journal's
+-- row in the dock (UI/Notice.lua), and the toast is kept for a new rank -
+-- with the keeper's line for it on a strip under the art (`quote`, `by`).
+-- Whether a toast is wanted, and whether it chimes, is the journal's to say
+-- (`sound`).
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Expedition/Toast.lua")
 
@@ -61,8 +68,8 @@ end
 
 -- the client's commendation sound, by whichever name this build gives it
 local SOUNDS = { "UI_ALERT_ACHIEVEMENT_GAINED", "ACHIEVEMENT_MENU_OPEN", "UI_EPICLOOT_TOAST" }
-local function chime()
-	if BT.settings and BT.settings.expeditionSound == false then
+local function chime(spec)
+	if spec and spec.sound == false then
 		return
 	end
 	if not (SOUNDKIT and type(PlaySound) == "function") then
@@ -144,6 +151,24 @@ function T.Build()
 	frame.text:SetPoint("TOP", frame.head, "BOTTOM", 0, -5)
 	frame.text:SetWidth(T.TEXT_W)
 	frame.text:SetWordWrap(false)
+	-- THE KEEPER'S WORD ON IT (Josh 2026-10-05, the canvas's rank toast): a
+	-- strip under the art, as wide as it, with what Hemet or Jorach says to
+	-- you at the rank you have just reached, and who said it
+	local W = BT.Widgets
+	frame.say = CreateFrame("Frame", nil, frame)
+	frame.say:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 14, 4)
+	frame.say:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", -14, 4)
+	frame.say:SetHeight(46)
+	W.Panel(frame.say, { 0.05, 0.05, 0.04, 0.94 }, { 0.48, 0.38, 0.20, 0.9 })
+	frame.say.quote = W.Label(frame.say, "", "small", 0.78, 0.82, 0.80)
+	frame.say.quote:SetPoint("TOPLEFT", 10, -7)
+	frame.say.quote:SetPoint("RIGHT", frame.say, "RIGHT", -10, 0)
+	frame.say.quote:SetJustifyH("LEFT")
+	frame.say.quote:SetWordWrap(true)
+	frame.say.by = W.Label(frame.say, "", "small", 0.50, 0.55, 0.53)
+	frame.say.by:SetPoint("BOTTOMRIGHT", -10, 6)
+	frame.say.by:SetJustifyH("RIGHT")
+	frame.say:Hide()
 	-- a click puts it away, and opens the journal on what it was about
 	frame:SetScript("OnClick", function(self)
 		local spec = self.spec
@@ -208,9 +233,17 @@ local function show(spec)
 	frame.head:SetText(spec.head or "")
 	T.Fit(frame.text, spec.text)
 	frame.points:SetText(spec.points and tostring(spec.points) or "")
+	frame.say:SetShown(spec.quote ~= nil)
+	if spec.quote then
+		frame.say.quote:SetText(spec.quote)
+		frame.say.by:SetText(spec.by and ("- " .. spec.by) or "")
+		-- two lines of words and the name under them, or one line and the name
+		local h = BT.Pill.Number(frame.say.quote.GetStringHeight and frame.say.quote:GetStringHeight(), 26)
+		frame.say:SetHeight(math.max(38, math.floor(h + 30)))
+	end
 	frame:SetAlpha(0)
 	frame:Show()
-	chime()
+	chime(spec)
 end
 
 -- the next one, or nothing
@@ -224,32 +257,13 @@ function T.Next()
 	end
 end
 
--- spec = { head, text, points, icon, badge, onClick, minor }
+-- spec = { head, text, points, icon, badge, onClick, quote, by, sound, book }
+-- (`book` starts the chat line a full queue says it in: "Expedition",
+-- "Ledger")
 function T.Push(spec)
-	-- the commendations' switch is theirs alone: a new page has its own
-	-- (expeditionDiscover, asked before it is pushed)
-	if not spec.minor and BT.settings and BT.settings.expeditionToasts == false then
-		return false
-	end
-	-- A NEW PAGE GIVES WAY (Josh 2026-09-27, new-enemy toasts on by default):
-	-- a fresh journal's first dozen kills are a dozen new pages, and they
-	-- filled the queue ahead of the commendation and rank those kills earned.
-	-- A full queue lets its last new page go - to chat, as ever - for anything
-	-- that is not one.
-	if #queue >= QUEUE_MAX and not spec.minor then
-		for i = #queue, 1, -1 do
-			if queue[i].minor then
-				local gone = table.remove(queue, i)
-				if BT.Util and BT.Util.Print then
-					BT.Util.Print(("Expedition: %s · %s"):format(gone.head or "", gone.text or ""))
-				end
-				break
-			end
-		end
-	end
 	if #queue >= QUEUE_MAX then
 		if BT.Util and BT.Util.Print then
-			BT.Util.Print(("Expedition: %s · %s"):format(spec.head or "", spec.text or ""))
+			BT.Util.Print(("%s: %s · %s"):format(spec.book or "Expedition", spec.head or "", spec.text or ""))
 		end
 		return false
 	end

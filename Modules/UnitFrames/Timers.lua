@@ -210,31 +210,6 @@ function T.Ordered(which, class)
 	return out
 end
 
--- one place further from the frame (dir 1) or nearer it (dir -1); returns
--- whether it moved
-function T.Move(which, name, dir)
-	local list = T.Ordered(which)
-	local at
-	for i, n in ipairs(list) do
-		if n == name then
-			at = i
-		end
-	end
-	local to = at and at + dir
-	if not (to and to >= 1 and to <= #list) then
-		return false
-	end
-	list = { (table.unpack or unpack)(list) }
-	list[at], list[to] = list[to], list[at]
-	BT.settings.unitframes = BT.settings.unitframes or {}
-	local s = BT.settings.unitframes
-	s.timerOrder = type(s.timerOrder) == "table" and s.timerOrder or {}
-	s.timerOrder[myClass() or ""] = list
-	-- the stack of damage is made again in the new order
-	T.Rebuild()
-	return true
-end
-
 -- ---------------------------------------------------------------------------
 -- Your choices: every spell on, unless you switched it off
 -- ---------------------------------------------------------------------------
@@ -247,13 +222,6 @@ end
 function T.On(name)
 	local off = F.Opt("timersOff", nil)
 	return not (type(off) == "table" and off[name])
-end
-
-function T.SetOn(name, on)
-	local s = settings()
-	s.timersOff = type(s.timersOff) == "table" and s.timersOff or {}
-	s.timersOff[name] = (not on) or nil
-	T.Rebuild()
 end
 
 -- BLINK AS IT RUNS OUT (Josh 2026-09-24). In its last seconds a lane's empty
@@ -270,22 +238,6 @@ function T.Blinks(which)
 		return true
 	end
 	return on and true or false
-end
-
-function T.SetBlinks(on, which)
-	local s = settings()
-	-- on is the default, so only off is written down
-	if on then
-		s[BLINK_KEY[which] or BLINK_KEY.dot] = nil
-	else
-		s[BLINK_KEY[which] or BLINK_KEY.dot] = false
-	end
-	-- what the countdown's days left behind
-	s.timerCount, s.timerBlink, s.timerCountHot, s.timerCountDot = nil, nil, nil, nil
-	s.timerBarBlink, s.timerBarBlinkHot, s.timerBarBlinkDot = nil, nil, nil
-	-- a lane is made blinking or not, and the ones already made are the
-	-- client's buttons, so they are made again
-	T.Rebuild(true)
 end
 
 -- what a lane was made with, to know when to make it again
@@ -834,18 +786,6 @@ end
 -- instead of 5"): the heal's row on the Unit frames page said five and the
 -- damage's on the Nameplates page three, and neither said whose it was.
 local BLINK_LANE = { hot = "heal over time", dot = "damage over time" }
-function T.BlinkRow(section, which, changed)
-	return BT.Widgets.SwitchRow(section, "Blink as it runs out",
-		("In the last %d seconds, %s bars flash red"):format(
-			T.BLINK_FROM[which] or T.BLINK_FROM.dot, BLINK_LANE[which] or BLINK_LANE.dot),
-		function() return T.Blinks(which) end,
-		function(on)
-			T.SetBlinks(on, which)
-			if changed then
-				changed()
-			end
-		end)
-end
 
 -- the damage-over-time rows in the order their lanes stack, top lane first
 local function orderRows(section, page)
@@ -872,65 +812,6 @@ local function orderRows(section, page)
 	end
 end
 T.OrderRows = orderRows
-
--- YOUR ORDER (Josh 2026-09-24): the damage in a section of its own, listed
--- as it stacks - the top lane first, the one nearest the bars last - with a
--- chevron up and down on each and a swatch of its colour. `page` is the
--- stack the section is in, laid out again when a row moves. Nil for a class
--- with nothing to follow.
-function T.DotSection(page, changed)
-	local spells = T.Spells("dot")
-	if #spells == 0 then
-		return nil
-	end
-	local W = BT.Widgets
-	local dots = page:Section("Damage over time")
-	for _, name in ipairs(spells) do
-		local row = W.SwitchRow(dots, name, "",
-			function() return T.On(name) end,
-			function(on)
-				T.SetOn(name, on)
-				if changed then
-					changed()
-				end
-			end)
-		row.spell = name
-		row.swatch = row:CreateTexture(nil, "ARTWORK")
-		row.swatch:SetSize(4, 12)
-		row.swatch:SetPoint("LEFT", 2, 0)
-		local c = T.Colour("dot", name)
-		row.swatch:SetColorTexture(c[1], c[2], c[3], 1)
-		row.moves = {}
-		for n, up in ipairs({ true, false }) do
-			local b = CreateFrame("Button", nil, row)
-			b:SetSize(16, 16)
-			b:SetPoint("RIGHT", row.switch, "LEFT", up and -26 or -8, 0)
-			b.icon = b:CreateTexture(nil, "ARTWORK")
-			b.icon:SetAllPoints()
-			b.icon:SetTexture(BT.Dock.ICONS)
-			BT.Dock.ChevronCoord(b.icon, up)
-			b.icon:SetVertexColor(0.55, 0.63, 0.59, 1)
-			b:SetScript("OnEnter", function(me)
-				local a = W.ACCENT
-				me.icon:SetVertexColor(a[1], a[2], a[3], 1)
-			end)
-			b:SetScript("OnLeave", function(me) me.icon:SetVertexColor(0.55, 0.63, 0.59, 1) end)
-			-- up the list is up the stack: further from the bars
-			b:SetScript("OnClick", function()
-				if T.Move("dot", name, up and 1 or -1) then
-					orderRows(dots, page)
-					if changed then
-						changed()
-					end
-				end
-			end)
-			row.moves[n] = b
-		end
-	end
-	orderRows(dots, nil)
-	W.Row(dots, "Same order as on screen", "Only spells that are up show, with no gaps")
-	return dots
-end
 
 -- Over-time bars, on the Testing page: where the lanes got to, from the
 -- spells found to the blink

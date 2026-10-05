@@ -190,10 +190,10 @@ local slots = setmetatable({}, { __mode = "k" })
 
 -- the ring in the quality's colour, while the client's border says there is
 -- one; the plain rim when it says there is not
--- OURS OR THE GAME'S (Josh 2026-09-24): with rings off, the client's own
--- quality glow is left showing instead
+-- ALWAYS OURS (the settings canvas, Josh 2026-10-04, cut the switch that
+-- left the client's own quality glow showing instead)
 function M.Rings()
-	return not (BT.settings and BT.settings.bagwindow and BT.settings.bagwindow.rings == false)
+	return true
 end
 
 local function paintQuality(b)
@@ -676,74 +676,6 @@ function M.WatchPosition()
 	end
 	M.positionWatched = M.positionWatched or fresh
 	return fresh
-end
-
--- ---------------------------------------------------------------------------
--- The page
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("These are the game's own bags. Every slot works as it did. "
-		.. "An item's quality shows as a ring in its colour.")
-	-- the game's bag bar, from Metrics (Josh 2026-09-24): the bag window's page
-	-- is where you look for anything to do with your bags
-	local look = page:Section("Slots")
-	BT.Widgets.SwitchRow(look, "Quality rings", "A ring in the item's quality colour, in place of the game's glow",
-		function() return M.Rings() end,
-		function(on)
-			BT.EnsureBound()
-			BT.settings.bagwindow = BT.settings.bagwindow or {}
-			-- off is written down, on (the default) is not: `(not on) and false or nil`
-			-- was nil either way, and the switch could never turn it off (Josh 2026-09-25)
-			if on then
-				BT.settings.bagwindow.rings = nil
-			else
-				BT.settings.bagwindow.rings = false
-			end
-			for b in pairs(slots) do
-				paintQuality(b)
-			end
-		end)
-	BT.Widgets.SwitchRow(look, "Bag slots", "Along the bottom of the backpack. Drag a bag onto one to equip it.",
-		function() return M.BagSlots and M.BagSlots.On() or false end,
-		function(on)
-			if M.BagSlots then
-				M.BagSlots.SetOn(on)
-			end
-		end)
-	-- PUT BACK FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
-	-- slash commands"): the Reset that /bt bags reset was
-	local place = page:Section("Place")
-	local move = BT.Widgets.Row(place, "Drag to move", "Drag a bag window by its title and it stays there")
-	self.resetButton = move:SetControl(BT.Widgets.Button(move, "Reset", 62, 20))
-	self.resetButton:SetScript("OnClick", function()
-		M.ResetPosition()
-		U.Print("Bags: bag window positions reset.")
-	end)
-	local bar = page:Section("Bag bar")
-	local space = BT.GetModule("bags")
-	self.hideBags = BT.Widgets.SwitchRow(bar, "Hide the bag bar",
-		"The backpack and bag slots by the action bars. The bag window has its own bag slots.",
-		function() return space and space.HideClient() and true or false end,
-		function(on)
-			if space then
-				space.SetHideClient(on)
-			end
-		end)
-	page:Layout()
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	if BT.Enabled("bagwindow") then
-		M.StyleAll()
-	end
-end
-
-function M:Refresh()
 end
 
 -- ---------------------------------------------------------------------------

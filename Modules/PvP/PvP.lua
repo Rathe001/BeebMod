@@ -26,10 +26,6 @@ local M = BT.Module({
 	dock = true,
 })
 
-local TEXT_H = 16
-local BAR_H = 4
-local LINE_H = TEXT_H + BAR_H + 9
-local INSET = 6
 local EVERY = 30
 -- the first rank's id: the client counts from 5, Private or Scout
 local FIRST_RANK = 5
@@ -415,7 +411,7 @@ function M.Update()
 	end
 	M.shield.field:SetVertexColor(c[1], c[2], c[3])
 
-	local w = BT.Dock.LineBarWidth(M.frame, INSET)
+	local w = BT.Dock.LineBarWidth(M.frame)
 	if w <= 0 then
 		return
 	end
@@ -449,29 +445,29 @@ function M.Tip()
 		else
 			t:Headline(p.name or "PvP", nil, c, true)
 		end
-		t:Section("Honorable kills")
-		t:Row("Today", big(p.today.hk))
-		t:Row("Yesterday", big(p.yesterday.hk))
+				t:Section("Honorable kills")
+		t:ListRow("Today", big(p.today.hk))
+		t:ListRow("Yesterday", big(p.yesterday.hk))
 		if p.week and p.week.hk then
-			t:Row("This week", big(p.week.hk))
+			t:ListRow("This week", big(p.week.hk))
 		end
 		if p.last and p.last.hk then
-			t:Row("Last week", big(p.last.hk))
+			t:ListRow("Last week", big(p.last.hk))
 		end
-		t:Row("In all", big(p.life.hk))
+		t:ListRow("In all", big(p.life.hk))
 		if p.week and p.week.honor then
 			t:Section("Honor")
-			t:Row("Today", big(p.today.honor))
-			t:Row("This week", big(p.week.honor))
+			t:ListRow("Today", big(p.today.honor))
+			t:ListRow("This week", big(p.week.honor))
 			if p.last and p.last.honor then
-				t:Row("Last week", big(p.last.honor))
+				t:ListRow("Last week", big(p.last.honor))
 			end
 		end
 		if p.last and (p.last.standing or 0) > 0 then
-			t:Row("Last week's standing", big(p.last.standing))
+			t:ListRow("Last week's standing", big(p.last.standing))
 		end
 		if p.life.highest then
-			t:Row("Highest rank", p.life.highest)
+			t:ListRow("Highest rank", p.life.highest)
 		end
 		if p.fromTab then
 			t:Note("From your PvP tab.")
@@ -485,42 +481,21 @@ function M.Build()
 		return M.frame
 	end
 	M.frame = BT.Dock.Section("pvp", 7)
-	M.frame.kind = "meter"
-	M.frame.wantHeight = LINE_H
-	-- the client draws nothing inside a frame with no height (see Performance)
-	M.frame:SetHeight(LINE_H)
-	M.text = BT.Widgets.Label(M.frame, "", "small")
-	M.text:SetJustifyH("LEFT")
-	M.shield = BT.Dock.LineShield(M.frame, INSET, BT.Dock.SHIELD_SWORDS)
+	-- a slim line under Level (BT.Dock.SlimLine, Josh 2026-10-05)
+	M.shield = BT.Dock.LineShield(M.frame, nil, BT.Dock.SHIELD_SWORDS)
 	-- the game's insignia is square: as wide as the shield, in its middle
 	M.insignia = M.frame:CreateTexture(nil, "ARTWORK", nil, 4)
 	M.insignia:SetSize(BT.Dock.LINE_ICON_W, BT.Dock.LINE_ICON_W)
 	M.insignia:SetPoint("CENTER", M.shield.icon, "CENTER", 0, 0)
 	M.insignia:Hide()
-	M.eta = BT.Widgets.Label(M.frame, "", "small")
-	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
-	M.eta:SetJustifyH("RIGHT")
-	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
-	-- the right side sat a pixel high, its height its own)
-	M.eta:SetHeight(TEXT_H - 2)
-	-- a long rank name stops short of the honor on the right
-	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
-	M.text:SetHeight(TEXT_H - 2)
-	M.text:SetWordWrap(false)
-	M.track = M.frame:CreateTexture(nil, "BORDER")
-	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -(TEXT_H + 3))
-	M.track:SetHeight(BAR_H)
-	BT.Dock.LineAfter(M.shield.icon, M.text, M.track, TEXT_H)
-	M.fill = M.frame:CreateTexture(nil, "ARTWORK")
-	M.fill:SetPoint("TOPLEFT", M.track, "TOPLEFT", 0, 0)
-	M.fill:SetHeight(BAR_H)
+	M.text, M.eta, M.track, M.fill = BT.Dock.SlimLine(M.frame, M.shield.icon)
 	M.frame:SetScript("OnSizeChanged", function()
 		M.Update()
 	end)
 	M.frame:EnableMouse(true)
 	-- a click opens the PvP page of the character window (Josh 2026-09-29)
 	M.frame:SetScript("OnMouseUp", function(_, button)
-		if button == "LeftButton" then
+		if button == "LeftButton" and not BT.Dock.JustMoved() then
 			BT.Util.OpenCharacter("pvp")
 		end
 	end)
@@ -776,29 +751,3 @@ function M.Dump()
 	return #lines
 end
 BT.Record("pvpDump", M.Dump, "pvp")
-
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("Your PvP rank, with its insignia, and your rank points towards the next rank. Point at the line for your honorable kills.")
-	if not M.Available() then
-		page:Note("This game has no PvP rank to read, so there is no line.", true)
-	elseif not M.Classic() then
-		page:Note("The game shows rank points only in the PvP tab of your character window, and BeebMod reads them from there. If the line is missing, open that tab once.", true)
-	end
-	page:Layout()
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-end

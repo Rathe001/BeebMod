@@ -1,25 +1,26 @@
 -- The Census module: what the realm is made of (Josh 2026-09-19).
 --
--- It owns a window of its own, opened from the dock's header, and nothing
--- else. The book it draws belongs to the core, which is the point of the
--- split: you can switch the Ledger off, keep no notes on anybody, and still
--- watch the realm fill up.
+-- Its charts are the Charts page of the Ledger's window (UI/CensusWindow.lua),
+-- and that is all it shows. The book it draws belongs to the core, which is
+-- the point of the split: you can keep no notes on anybody and still watch
+-- the realm fill up.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Census/Census.lua")
 
 local M = BT.Module({
 	key = "census",
-	feature = "census",
-	onPage = "censusset",
+	-- a part of the Ledger since 2026-10-04 (BT.MergeCensus)
+	feature = "ledger",
 	title = "Census",
 	blurb = "Who is on the realm",
 	order = 20,
-	-- its own window, opened from the panel header: no tab on the rail
+	-- shown in the Ledger's window: no page of its own on the settings' rail
 	standalone = true,
 })
 
-function M:BuildTab(parent)
-	self.view = BT.Census.Build(parent)
+-- `shell` is the Charts page's rail and toolbar (UI/CensusWindow.lua)
+function M:BuildTab(parent, shell)
+	self.view = BT.Census.Build(parent, shell)
 end
 
 -- opened: the book has moved since it was last counted, very likely, so
@@ -42,7 +43,7 @@ end
 -- something you watch while you play.
 
 BT.Command("census", function()
-	BT.CensusWindow.Toggle()
+	BT.CensusWindow.Toggle("charts")
 end, "open census charts", "census")
 
 -- WAS IN A GUILD (moved from the Ledger's tooltip, Josh 2026-09-26): a guild

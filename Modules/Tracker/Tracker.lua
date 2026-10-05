@@ -112,7 +112,15 @@ local frame, rows, header
 -- global, and any addon defining one would have replaced it)
 local band, paintBand
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). By level and under zone headings, every zone, the panel hidden with
+-- nothing tracked, and finished quests and fights changing nothing.
+M.FIXED = { byLevel = true, zones = true, hereOnly = false, combatFold = false, hideEmpty = true, hideDone = false }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.tracker
 	if not s or s[name] == nil then
 		return fallback
@@ -126,7 +134,6 @@ local function setOpt(name, value)
 	BT.settings.tracker = BT.settings.tracker or {}
 	BT.settings.tracker[name] = value
 	M.Update()
-	M:RefreshTab()
 end
 M.SetOpt = setOpt
 
@@ -1380,63 +1387,6 @@ end
 -- a book bound (a login, a loading screen) is the same setup
 M.OnBind = M.OnEnable
 
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	-- the hint's own words, here too (Josh 2026-10-04: "Instead of 'fold' say
-	-- 'hide objectives'", and yes to the settings)
-	page:Note("Click a quest to open it. Right-click to hide its objectives. Shift-click to stop tracking it.")
-
-	self.rows = {}
-	local quests = page:Section("Quests")
-	local function row(title, blurb, name, default)
-		local r = BT.Widgets.SwitchRow(quests, title, blurb,
-			function() return opt(name, default) and true or false end,
-			function(on) setOpt(name, on) end)
-		r.optName, r.default = name, default
-		self.rows[#self.rows + 1] = r
-	end
-	row("By level", "Lowest level first in each zone", "byLevel", true)
-	row("Zone headings", "Quests grouped under their zone", "zones", true)
-	row("Only this zone", "Only the quests of the zone you are in", "hereOnly", false)
-	row("Hide quests in combat", "They come back when the fight ends", "combatFold", false)
-	row("Hide when empty", "Hides the panel when you track no quests", "hideEmpty", true)
-	row("Hide objectives when done", "A finished quest shows only its title", "hideDone", false)
-	-- "Fold the list" used to be a row here. Folding the list is something you
-	-- do to the panel in front of you and undo a second later - it is state,
-	-- not a preference, and the chevron on the QUESTS header already is the
-	-- control for it (Josh 2026-09-19).
-
-	-- (the dock's size was here, the whole panel's, on the quests' page: it is
-	-- on the Dock's own page now - Josh 2026-09-24)
-	page:Layout()
-
-	self.found = BT.Widgets.Label(panel, "", "small", 0.45, 0.50, 0.48)
-	self.found:SetPoint("BOTTOMLEFT", 2, 4)
-end
-
-function M:RefreshTab()
-	for _, r in ipairs(self.rows or {}) do
-		r.switch:SetOn(opt(r.optName, r.default) and true or false)
-	end
-	if self.found then
-		self.found:SetText(("%d tracked · game's tracker %s")
-			:format(M.lastCount or 0, M.ClientFrame() and "hidden" or "not found"))
-	end
-end
-
-function M:ShowTab()
-	M.Update()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-	M.Queue()
-end
-
 -- the tests reach in here rather than at the frames
 function M.Frame() return frame end
 
@@ -1452,3 +1402,9 @@ end
 -- the tests want the band without going through a quest log
 M.Band = function(...) return band(...) end
 function M.Rows() return rows or {} end
+
+-- WHAT IT IS DOING, for the Testing page's What loaded (it was a line at the
+-- foot of the Quest tracker's page until the settings canvas, 2026-10-04)
+function M.Status()
+	return ("%d tracked · game's tracker %s"):format(M.lastCount or 0, M.ClientFrame() and "hidden" or "not found")
+end

@@ -448,8 +448,9 @@ local function fade(f, away)
 	end
 end
 
+-- ALWAYS, NOT A SWITCH (the settings canvas, Josh 2026-10-04: "Hidden")
 function M.HideClient()
-	return not (BT.settings and BT.settings.hideClientBags == false)
+	return true
 end
 
 function M.ApplyClient(hide)
@@ -459,16 +460,15 @@ function M.ApplyClient(hide)
 end
 
 -- AWAY WHILE SOMETHING OF OURS STANDS IN FOR IT (Josh 2026-09-24): the Bags
--- line in the dock, or the bag window; with both off, the game's bar is back
--- whatever the switch says. The switch is on the Bag window's page.
+-- line in the dock, or the bag window; with both off, the game's bar is back.
 function M.Refit()
 	M.ApplyClient(M.HideClient() and (BT.Enabled("bags") or BT.Enabled("bagwindow")))
 end
 
+-- the game's bar put away or given back now, whatever stands in for it
+-- (for the tests)
 function M.SetHideClient(on)
-	BT.EnsureBound()
-	BT.settings.hideClientBags = on and true or false
-	M.Refit()
+	M.ApplyClient(on and (BT.Enabled("bags") or BT.Enabled("bagwindow")))
 end
 
 function M.Show(on)
@@ -488,27 +488,4 @@ M.OnBind = M.OnEnable
 
 function M:OnDisable()
 	M.Show(false)
-end
-
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("Shows bag slots used out of the total, and your class's reagents, such as a warlock's shards or a hunter's ammo.")
-	page:Note("Amber at 4 free slots, red when full. Herb, enchanting, soul and ammunition bags count as reagent bags.", true)
-	-- (the switch that puts the game's bag bar away is on the Bag window's page)
-	page:Layout()
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
 end

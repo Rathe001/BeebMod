@@ -61,7 +61,14 @@ local function inCombat()
 	return InCombatLockdown and InCombatLockdown() or false
 end
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). The other enemies dimmed while you have a target.
+M.FIXED = { dim = true }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.nameplates
 	if not s or s[name] == nil then
 		return fallback
@@ -1364,69 +1371,34 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- Its parts
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local W = BT.Widgets
-	local page = W.Stack(panel)
-	page:Note("An enemy's nameplate shows its level, name and health. A ring means it is attacking you, and "
-		.. "a white outline marks your target. Gold brackets mean elite and silver brackets mean rare. Casts "
-		.. "show under the plate and your damage over time shows above it.")
-	page:Note("A friend's nameplate shows a name and no bar. A player's is in class colour, with their level before "
-		.. "it. An NPC's or a pet's is smaller and in a softer green, with its title under it, or a pet's owner. Totems have none. An NPC who sells, trains, flies you, keeps an inn, a bank or a stable, or "
-		.. "gives directions in a capital has a picture for it before the name. Nameplates must be on in the game's options. "
-		.. "In dungeons the game keeps friendly ones for itself.", true)
-	local look = page:Section("Look")
-	W.SwitchRow(look, "Friendly nameplates", "Names only, underlined for your target",
-		function() return opt("friends", true) and true or false end,
-		function(on)
-			-- on is the default, so only off is written down
-			if on then
-				M.SetOpt("friends", nil)
-			else
-				M.SetOpt("friends", false)
-			end
-			M.Sweep()
-		end)
-	W.SwitchRow(look, "Pets and minions", "Names over your pet and other players' pets and minions",
-		function() return opt("minions", true) and true or false end,
-		function(on)
-			if on then
-				M.SetOpt("minions", nil)
-			else
-				M.SetOpt("minions", false)
-			end
-			M.ShowMinions(on)
-		end)
-	W.SwitchRow(look, "Dim other enemies", "Other nameplates fade while you have a target",
-		function() return opt("dim", true) and true or false end,
-		function(on)
-			-- on is the default, so only off is written down
-			if on then
-				M.SetOpt("dim", nil)
-			else
-				M.SetOpt("dim", false)
-			end
-			M.TargetChanged()
-		end)
-	-- YOUR DAMAGE OVER TIME, HERE (Josh 2026-10-03: "Remove the DoT bar from
-	-- the personal resource display - the nameplates version deprecates
-	-- that"): which spells, in what order, and the blink, on the page of the
-	-- plates they are on now (Modules/UnitFrames/Timers.lua). The same lanes
-	-- stand over the focus and the bosses.
-	local T = F.Timers
-	if T then
-		self.dots = T.DotSection(page)
-		if self.dots then
-			self.blinkRow = T.BlinkRow(self.dots, "dot")
-		end
-	end
-	page:Layout()
-end
-
-function M:ShowTab()
-	if BT.Widgets.SyncRows then
-		BT.Widgets.SyncRows()
-	end
+-- THE NAMEPLATES' PARTS, under their row on the Unit frames page (the
+-- settings canvas, Josh 2026-10-04)
+function M:Parts()
+	return {
+		{ label = "Friendly players and NPCs", field = "friends",
+			get = function() return opt("friends", true) and true or false end,
+			set = function(on)
+				-- on is the default, so only off is written down (written out:
+				-- `(not on) and false or nil` is nil either way)
+				if on then
+					M.SetOpt("friends", nil)
+				else
+					M.SetOpt("friends", false)
+				end
+				M.Sweep()
+			end },
+		{ label = "Pets and minions", field = "minions",
+			get = function() return opt("minions", true) and true or false end,
+			set = function(on)
+				if on then
+					M.SetOpt("minions", nil)
+				else
+					M.SetOpt("minions", false)
+				end
+				M.ShowMinions(on)
+			end },
+	}
 end

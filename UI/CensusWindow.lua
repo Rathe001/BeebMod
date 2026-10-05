@@ -1,24 +1,33 @@
--- The Census, in a window of its own (Josh 2026-09-22).
+-- The Ravenholdt Ledger's window: the Census's charts, the Ledger's search
+-- and its commendations, a tab each (Josh 2026-09-22; one window since
+-- 2026-10-04; the journals' window since 2026-10-05).
 --
--- The main window's rail is for what can appear on the right panel, and the
--- Census never does: it is something you open to read. So it has its own
--- window, opened from the chart icon in the panel's header (or /bt census),
--- in the same surface as everything else. The charts themselves are the
--- Census module's, built into it the first time it opens.
+-- THE CENSUS JOINS THE LEDGER (Josh 2026-10-04: "I agree - let's update the
+-- settings to reflect this"). The charts had this window to themselves; the
+-- Ledger's search sat under its settings. Now both are read here: Charts,
+-- and Find people. The charts are the Census module's, built into their page
+-- the first time they show; the search is Modules/Ledger/Find.lua's, built
+-- the first time it is wanted.
+--
+-- THE EXPEDITION'S SISTER (Josh 2026-10-04: "Ledger and expedition should
+-- have similar experiences"; the "Sister journals" canvas, locked
+-- 2026-10-05). The window is the journals' own (UI/Book.lua): Jorach's face
+-- and a line from him at your rank over the tabs, your rank in the box at the
+-- right, a rail down each page's left and a toolbar over its column, and a
+-- third tab, Commendations, the same page as the Expedition's.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("UI/CensusWindow.lua")
 
 local C = {}
 BT.CensusWindow = C
 
-local PAD, TITLE_H = 14, 40
--- the line under the title that says where the census comes from
-local NOTE_H = 22
-local WIDTH, HEIGHT = 640, 500
+local Bk = BT.Book
 
 local frame
 -- the frame that counts a slice a frame (C.Count)
 local counter
+-- what the Commendations page shows: a group, and all, earned or to do
+C.ui = { pick = "all", show = "all" }
 
 -- (Josh 2026-10-01: "Change this to 'Note: Only counts characters you've
 -- personally seen'", with "Note:" in a highlight: the window's accent)
@@ -31,60 +40,62 @@ function C.NoteText()
 	return ("|cff%02x%02x%02xNote:|r %s"):format(byte(a[1]), byte(a[2]), byte(a[3]), C.NOTE)
 end
 
+local function feature()
+	return BT.Feature and BT.Feature("ledger")
+end
+
 function C.Build()
 	if frame then
 		return frame
 	end
-	frame = CreateFrame("Frame", "BeebModCensus", UIParent)
-	frame:SetSize(WIDTH, HEIGHT)
-	-- by its top, where it was when centred: its height follows its rows
-	-- (Chart.lua), and the top stays put while the bottom moves
-	frame:SetPoint("TOP", UIParent, "TOP", 60, -150)
-	frame:SetFrameStrata("HIGH")
-	-- ONE WINDOW IN FRONT OF THE OTHER, NOT THROUGH IT (Josh 2026-09-22). This
-	-- and the main window share a strata and a frame level, so opened together
-	-- their contents interleaved - the charts drawn through the settings. A
-	-- top-level window comes to the front when clicked, and each is raised
-	-- when it opens.
-	frame:SetToplevel(true)
-	frame:SetMovable(true)
-	frame:EnableMouse(true)
-	-- moved a pixel at a time, an eighth clear of a tie (UI/Widgets.lua)
-	BT.Widgets.PixelDrag(frame)
-	frame:SetClampedToScreen(true)
-	-- solid, as the main window is: a window you read, not a panel to see
-	-- the world through
-	BT.Widgets.Panel(frame, BT.Widgets.SOLID)
-	tinsert(UISpecialFrames, "BeebModCensus") -- escape closes it
+	local f = feature()
+	local L = BT.LedgerRanks
+	frame = Bk.Window({
+		name = "BeebModCensus", title = f and f.title or "Ravenholdt Ledger", npc = L and L.NPC,
+		colour = f and f.color, by = f and f.by,
+		tabs = { { "charts", "Charts" }, { "find", "Find people" }, { "comm", "Commendations" } },
+		point = { "CENTER", 60, -10 },
+		onTab = function(key)
+			C.Show(key)
+		end,
+		onRank = function()
+			C.Show("comm")
+		end,
+	})
 
-	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
-	frame.title:SetPoint("TOPLEFT", PAD + 4, -PAD)
-	frame.title:SetText("Census")
-	frame.subtitle = frame:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
-	frame.subtitle:SetPoint("LEFT", frame.title, "RIGHT", 8, -1)
-
-	frame.close = BT.Widgets.Close(frame, 20)
-	frame.close:SetPoint("TOPRIGHT", -PAD, -PAD)
-	frame.close:SetScript("OnClick", function() C.Hide() end)
-
-	BT.Widgets.Divider(frame, PAD, -TITLE_H)
-
+	-- THE CHARTS: the six charts on the rail, the note and Seen on the
+	-- toolbar, the tiles and bars in the column
+	local charts = Bk.Page(frame, "charts")
+	frame.chartsShell = { rail = Bk.Rail(charts, 0, { head = "Chart" }), toolbar = Bk.Toolbar(charts, 0) }
 	-- ONLY WHO YOU HAVE COME ACROSS (Josh 2026-10-01: "put a note at the top
 	-- explaining that census data is only built off of players you have
 	-- personally seen"): a count of 29,398 reads like the realm's
 	-- population, and it is the characters this copy of BeebMod has met
-	frame.note = frame:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
-	frame.note:SetPoint("TOPLEFT", PAD + 4, -TITLE_H - 10)
-	frame.note:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD - 4, -TITLE_H - 10)
+	frame.note = frame.chartsShell.toolbar:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
+	frame.note:SetPoint("LEFT", 2, 0)
 	frame.note:SetJustifyH("LEFT")
 	frame.note:SetText(C.NoteText())
+	frame.body = Bk.Column(charts, 0)
 
-	frame.body = CreateFrame("Frame", nil, frame)
-	frame.body:SetPoint("TOPLEFT", PAD, -TITLE_H - 10 - NOTE_H)
-	frame.body:SetPoint("BOTTOMRIGHT", -PAD, PAD)
+	-- FIND PEOPLE: who to show on the rail, the search on the toolbar
+	local find = Bk.Page(frame, "find")
+	frame.findShell = { rail = Bk.Rail(find, 0, { head = "Show" }), toolbar = Bk.Toolbar(find, 0) }
+	frame.find = Bk.Column(find, 0)
+
+	-- COMMENDATIONS: the Expedition's page, with the Ledger's in it
+	frame.commendations = Bk.Commendations(frame, "comm", {
+		onPick = function(key)
+			C.ui.pick = key
+			C.Refresh()
+		end,
+		onShow = function(key)
+			C.ui.show = key
+			C.Refresh()
+		end,
+	})
 
 	-- Escape hides it without going through C.Hide, so the ticker stops here
-	frame:SetScript("OnHide", function()
+	frame:HookScript("OnHide", function()
 		if C.ticker then
 			C.ticker:Cancel()
 			C.ticker = nil
@@ -96,40 +107,53 @@ function C.Build()
 			counter:SetScript("OnUpdate", nil)
 		end
 	end)
-
-	frame:Hide()
 	return frame
 end
 
--- the realm, the side and how many are in the book, as the main window says it
--- - counted by the census the charts were just drawn from, rather than by a
--- second walk of the whole book (Josh 2026-09-24)
+-- the realm and how many characters are in its book - counted by the census
+-- the charts were just drawn from, rather than by a second walk of the whole
+-- book (Josh 2026-09-24)
 local function subtitle()
-	if not (frame and BT.DB and BT.DB.Stats) then
-		return
+	if not (frame and BT.DB) then
+		return nil
 	end
 	local m = BT.GetModule("census")
 	local census = m and m.view and m.view.census
 	-- the list's length, not a reading of every character in it (Josh
 	-- 2026-09-29: opening the Census lagged)
-	local total = census and (census.book or census.total) or (BT.DB.Count(BT.db))
-	-- the realm's: its book holds both sides, and the Faction row filters them
-	frame.subtitle:SetText(("%s · %s characters"):format(BT.scope and BT.scope.realm or "?", BT.Util.Commas(total)))
+	local L = BT.LedgerRanks
+	local total = census and (census.book or census.total) or (L and L.characters) or 0
+	return ("%s · %s characters"):format(BT.scope and BT.scope.realm or "?", BT.Util.Commas(total))
 end
 
--- UP TO DATE WHILE IT IS OPEN (Josh 2026-09-22). As a tab of the main window
--- the charts were drawn when the tab was opened; in a window of their own
--- nothing drew them again, and the numbers only moved if you closed it and
--- opened it. While it is up, the book is looked at every couple of seconds,
--- and the charts and the count are drawn again only if it has changed since.
+-- the header: the realm and its count, your rank or one previewed from the
+-- Testing page, and Jorach's word at it
+local function header(points)
+	local L = BT.LedgerRanks
+	if not (frame and L) then
+		return
+	end
+	if type(points) ~= "number" then
+		points = L.Score()
+	end
+	local preview = BT.Dock and BT.Dock.preview and BT.Dock.preview.ledger
+	local shown = preview and L.RANKS[preview] and L.RANKS[preview][1] or points
+	Bk.SetHeader(frame, { subtitle = subtitle(), ranks = L.RANKS, badge = L.RankBadge, points = shown,
+		quotes = L.QUOTES })
+	return shown
+end
+
+-- ---------------------------------------------------------------------------
+-- The charts, counted while the window is open
+-- ---------------------------------------------------------------------------
+
+-- UP TO DATE WHILE IT IS OPEN (Josh 2026-09-22). While the charts are up, the
+-- book is looked at every couple of seconds, and the charts and the count are
+-- drawn again only if it has changed since.
 local EVERY = 2
 
 function C.Tick()
-	if not (frame and frame:IsShown()) then
-		return false
-	end
-	-- kept still while it is open, if you would rather (Josh 2026-09-24)
-	if BT.settings and BT.settings.censusLive == false then
+	if not (frame and frame:IsShown()) or C.Tab() ~= "charts" then
 		return false
 	end
 	local rev = BT.DB and BT.DB.rev
@@ -164,7 +188,7 @@ function C.Count(m)
 	local view = m and m.view
 	if not (view and BT.Stats and BT.Stats.CensusJob and BT.Census and BT.Census.Filter) then
 		BT.CallHook(m, "Refresh")
-		subtitle()
+		header()
 		return false
 	end
 	local step = BT.Stats.CensusJob(BT.db, nil, BT.Census.Filter(view))
@@ -174,7 +198,7 @@ function C.Count(m)
 			census = step()
 		until census
 		BT.Census.Refresh(view, census)
-		subtitle()
+		header()
 		return true
 	end
 	counter = counter or CreateFrame("Frame")
@@ -185,7 +209,7 @@ function C.Count(m)
 			self:SetScript("OnUpdate", nil)
 			if frame and frame:IsShown() then
 				BT.Census.Refresh(view, census)
-				subtitle()
+				header()
 			end
 		end
 	end)
@@ -200,30 +224,201 @@ local function stop()
 	end
 end
 
-function C.Show()
-	local m = BT.GetModule("census")
-	if not (m and BT.Enabled("census")) then
+-- which tab is up: "charts", "find" or "comm"
+function C.Tab()
+	return C.tab or "charts"
+end
+
+-- the search built into its page, for the note panel to exist with the
+-- window shut (Modules/Ledger/Find.lua, B.EnsureBuilt)
+function C.BuildFind()
+	C.Build()
+	if not C.findBuilt and BT.Find and BT.Find.Build then
+		C.findBuilt = true
+		BT.Find.Build(frame.find, frame.findShell)
+	end
+	return frame.find
+end
+
+-- ---------------------------------------------------------------------------
+-- Commendations
+-- ---------------------------------------------------------------------------
+
+-- "Earned 9/30/26", or "Earned" for one the Ledger had before it kept dates
+local function earnedLine(it)
+	local at = tonumber(it.at)
+	if at and at > 0 and BT.Util.ShortDate then
+		return ("Earned %s"):format(BT.Util.ShortDate(at))
+	end
+	return "Earned"
+end
+
+-- the groups the page shows: what each entry is worth, then the five groups
+function C.Groups(c)
+	local L = BT.LedgerRanks
+	local big = Bk.Big
+	local out = {
+		{ key = "entries", title = "Entries", list = {
+			{ id = "entries:characters", title = "Characters", text = "1 point for every 100 you record",
+				need = 1, have = 1, right = ("%s recorded"):format(big(c.characters)) },
+			{ id = "entries:notes", title = "Notes", text = "2 points for each note",
+				need = 1, have = 1, right = ("%s written"):format(big(c.notes)) },
+			{ id = "entries:tags", title = "Tags", text = "1 point for each tag",
+				need = 1, have = 1, right = ("%s given"):format(big(c.tags)) },
+		} },
+	}
+	local byGroup = {}
+	for _, g in ipairs(L.GROUPS) do
+		byGroup[g.key] = { key = g.key, title = g.title, list = {}, done = 0 }
+	end
+	for _, a in ipairs(L.List(c)) do
+		local g = byGroup[a.group]
+		if g then
+			a.at = L.EarnedAt(a.id)
+			g.list[#g.list + 1] = a
+			if a.have >= a.need then
+				g.done = g.done + 1
+			end
+		end
+	end
+	for _, g in ipairs(L.GROUPS) do
+		out[#out + 1] = byGroup[g.key]
+	end
+	return out
+end
+
+local function drawCommendations(points)
+	local L = BT.LedgerRanks
+	local total, _, c, characters, entries = L.Score()
+	local groups = C.Groups(c)
+	-- the entries' tally says its points, as the Expedition's unique kills do
+	groups[1].count = ("%s points"):format(Bk.Big(characters + entries))
+	local f = feature()
+	local focus, scroll = C.focus, C.scrollToFocus
+	C.scrollToFocus = nil
+	return Bk.DrawCommendations(frame.commendations, {
+		ranks = L.RANKS, badge = L.RankBadge, points = points or total, colour = f and f.color,
+		groups = groups, pick = C.ui.pick, show = C.ui.show,
+		sums = {
+			{ "Characters", characters }, { "Notes and tags", entries },
+			{ "Commendations", total - characters - entries }, { "Total", total },
+		},
+		earnedLine = earnedLine, focus = focus, scrollToFocus = scroll,
+	})
+end
+
+-- the header and the open page drawn again: the book changed, or a preview
+function C.Refresh()
+	if not (frame and frame:IsShown()) then
 		return false
+	end
+	local shown = header()
+	if C.Tab() == "comm" then
+		drawCommendations(shown)
+	elseif C.Tab() == "find" and BT.Find and BT.Find.Refresh then
+		BT.Find.Refresh()
+	end
+	return true
+end
+
+-- the Ledger earned something while it is open: drawn once for a burst
+function C.Changed()
+	if not (frame and frame:IsShown()) or C.pending then
+		return
+	end
+	C.pending = true
+	local function go()
+		C.pending = nil
+		C.Refresh()
+	end
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0.5, go)
+	else
+		go()
+	end
+end
+
+-- A NOTICE OPENS ITS COMMENDATION (the Expedition's since 2026-09-29): the
+-- Commendations page, everything shown, the commendation's own group picked
+-- on the rail, and its tile scrolled to and outlined in gold
+function C.ShowCommendation(id)
+	local L = BT.LedgerRanks
+	local pick = "all"
+	if L then
+		for _, a in ipairs(L.List()) do
+			if a.id == id then
+				pick = a.group
+			end
+		end
+	end
+	C.ui.pick, C.ui.show = pick, "all"
+	C.focus, C.scrollToFocus = id, true
+	return C.Show("comm")
+end
+
+-- ---------------------------------------------------------------------------
+-- Opening and closing
+-- ---------------------------------------------------------------------------
+
+-- OPEN ON A TAB: "charts" (the default), "find" or "comm". The charts need
+-- you to be recording everyone you see (the Census); without it, the window
+-- opens on Find, and there is no Charts tab.
+function C.Show(tab)
+	local m = BT.GetModule("census")
+	local charts = m ~= nil and BT.Enabled("census")
+	local find = BT.Enabled("ledger")
+	if not (charts or find) then
+		return false
+	end
+	tab = tab or C.tab or "charts"
+	if tab == "charts" and not charts then
+		tab = "find"
+	elseif tab == "find" and not find then
+		tab = "charts"
 	end
 	BT.EnsureBound()
 	C.Build()
-	if not m.view then
-		BT.CallHook(m, "BuildTab", frame.body)
-	end
-	-- AS TALL AS ITS ROWS (Josh 2026-09-30, the census redesign): the chart
-	-- says how much room it took, and the window fits round it
-	if m.view and not m.view.onHeight then
-		m.view.onHeight = function(h)
-			frame:SetHeight(TITLE_H + 10 + NOTE_H + h + PAD)
+	C.tab = tab
+	-- a tab whose part is off is not there, and the tabs close up
+	local buttons = frame.tabs.buttons
+	buttons[1]:SetShown(charts)
+	buttons[2]:SetShown(find)
+	local x = 0
+	for _, b in ipairs(buttons) do
+		if b:IsShown() then
+			b:ClearAllPoints()
+			b:SetPoint("LEFT", frame.tabs, "LEFT", x, 0)
+			x = x + Bk.TAB_W - 1
 		end
-		if m.view.height then
-			m.view.onHeight(m.view.height)
+	end
+	Bk.ShowPage(frame, tab)
+	if tab ~= "comm" then
+		C.focus = nil
+	end
+	if tab ~= "charts" then
+		stop()
+		if counter then
+			counter:SetScript("OnUpdate", nil)
 		end
 	end
 	frame:Show()
 	frame:Raise()
+	header()
+	if tab == "find" then
+		C.BuildFind()
+		if BT.Find and BT.Find.Refresh then
+			BT.Find.Refresh()
+		end
+		return true
+	elseif tab == "comm" then
+		drawCommendations(header())
+		return true
+	end
+	if not m.view then
+		BT.CallHook(m, "BuildTab", frame.body, frame.chartsShell)
+	end
 	BT.CallHook(m, "ShowTab")
-	subtitle()
+	header()
 	C.drawnAt, C.drawnTime = BT.DB and BT.DB.rev, nil
 	if not C.ticker and C_Timer and C_Timer.NewTicker then
 		C.ticker = C_Timer.NewTicker(EVERY, C.Tick)
@@ -242,12 +437,12 @@ function C.IsShown()
 	return frame and frame:IsShown() and true or false
 end
 
-function C.Toggle()
-	if C.IsShown() then
+function C.Toggle(tab)
+	if C.IsShown() and (not tab or tab == C.Tab()) then
 		C.Hide()
 		return false
 	end
-	return C.Show()
+	return C.Show(tab)
 end
 
 -- the tests reach in here

@@ -51,6 +51,7 @@ Core\Collect\Sightings.lua
 UI\Pill.lua
 Core\Theme.lua
 UI\Widgets.lua
+UI\Book.lua
 UI\Ornament.lua
 Core\Furniture.lua
 UI\Window.lua
@@ -58,6 +59,7 @@ UI\CensusWindow.lua
 UI\Settings.lua
 UI\Welcome.lua
 UI\Dock.lua
+UI\Notice.lua
 UI\Tip.lua
 
 # the utilities. Each one registers a tab, its cells on the bar and its own
@@ -69,6 +71,9 @@ Modules\Ledger\Tooltip.lua
 Modules\Ledger\Ledger.lua
 Modules\Ledger\Groups.lua
 Modules\Ledger\Duels.lua
+Modules\Ledger\Ranks.lua
+Modules\Ledger\Line.lua
+Modules\Ledger\Menu.lua
 Modules\Ledger\Demo.lua
 Modules\Census\Stats.lua
 Modules\Census\Chart.lua

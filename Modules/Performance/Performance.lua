@@ -273,34 +273,3 @@ M.OnBind = M.OnEnable
 function M:OnDisable()
 	M.Show(false)
 end
-
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local note = BT.Widgets.Label(panel,
-		"Frames a second, and latency to your realm (the house) and to the world server (the globe).",
-		"small", 0.55, 0.60, 0.58)
-	note:SetPoint("TOPLEFT", 0, -2)
-	note:SetWidth(520)
-	note:SetJustifyH("LEFT")
-
-	local why = BT.Widgets.Label(panel,
-		"Red below 30 fps or from 250 ms. Point at them for the last two minutes on a graph, each line on its own scale.",
-		"small", 0.45, 0.50, 0.48)
-	why:SetPoint("TOPLEFT", 0, -22)
-	why:SetWidth(520)
-	why:SetJustifyH("LEFT")
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-end

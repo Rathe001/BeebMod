@@ -9,101 +9,155 @@ in the dock opens it.
 
 ## Features
 
-BeebMod has six features, and each has one switch. On your first login it
-asks which ones you want. It shows six cards, each with a picture and a line
-on what the feature does. In the settings window each feature has a block of
-tabs in its own colour, with the feature's switch on the block's heading.
-Switch a feature off and everything in it goes off. Each part in it keeps its
-own switch, and the setting stays as you left it while the feature is off. No
-feature needs another.
+BeebMod is opinionated. It asks whether you want each part, not how each part
+should look. It has five features in two groups, and each feature has one
+switch:
+
+- **Interface:** the Dock, Unit frames and Game frames
+- **Journals:** the Ravenholdt Ledger and Nesingwary's Expedition
+
+On your first login BeebMod asks which features you want. It shows five
+cards under the same two headings, each with a picture and a line on what the
+feature does. The settings window's rail lists General, then the features
+under their headings. Each feature has one page:
+its switch at the top right, then a switch for each of its parts, a part of a
+part indented under it. Switch a feature off and everything in it goes off.
+Each part keeps its own switch, and the setting stays as you left it while
+the feature is off. No feature needs another.
+
+The window's title bar has a search box. Type a word, such as pets or gold,
+and BeebMod lists every row with that word in its name or its line, under its
+feature's name. Each row has its switch, the same one as on its page. A part
+comes with the row it is a part of, and a feature's name brings its whole
+page. Press Escape, click the cross in the box, or click a page on the rail
+to go back.
 
 The **core** is what every feature would otherwise build for itself: the
 settings window, the dock's header, the look of a button and a pill, and
-**General** (the colours of every panel; the typeface is Google Sans). The
-dock's logo and cog are always on screen. With the Dock off, or every feature
-off, they are all that BeebMod shows. Click the cog to get back to the
-settings.
+**General**. General holds the colours of every panel, one Size for every
+panel (the dock, the frames, the buffs and the tooltips), and a Positions
+button that puts the dock, the unit frames, the bag windows and the character
+sheet back where they start. Shift-drag any of them to move it. The typeface
+is Google Sans. The dock's logo and cog are always on screen. With the Dock
+off, or every feature off, they are all that BeebMod shows. Click the cog to
+get back to the settings.
 
-**Dock** is the panel at the side of the screen and what is in it.
+**Dock** is the panel at the side of the screen and what is in it. Its page
+lists the dock's rows from top to bottom, and dragging a row moves it in the
+dock.
 
-| tab | what it is |
+| row | what it is |
 |---|---|
-| **Dock** | The panel itself: its size, and the **Clock** in its header. The clock shows local or server time; click it to switch. |
-| **Minimap** | The client's map, moved into the dock, and **Addon buttons**: other addons' minimap buttons in one line, a switch each. |
-| **Progress** | **Experience** (the XP bar and time to level at your XP per hour; its tooltip suggests zones and dungeons for your level), **Reputation** (the watched faction, and your standing with it) and **PvP** (your PvP rank with its insignia, how far to the next, and this week's honor), a switch each. Each line starts with a shield that shows your level, a banner or your rank. |
-| **Metrics** | A grid of readouts, each with its own switch: gold, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. |
+| **Clock** | In the dock's header. It shows local or server time; click it to switch. |
+| **Minimap** | The client's map, square, moved into the dock. |
+| **Addon buttons** | Other addons' minimap buttons, in one line. |
+| **Experience** | The first and largest row: a shield with your level on it, the time to the next level at your XP per hour, the XP bar with rested XP ahead of it, and how much XP is left. Its tooltip lists zones and dungeons for your level. Right-click it for a new session. |
+| **PvP**, **Reputation** | Slim lines under Experience: your PvP rank with its insignia and how far to the next, and your standing with the faction you watch. |
+| **Expedition**, **Ledger** | Each journal's slim line: your rank's badge, your rank and your points. Click it to open the journal. |
+| **Metrics** | A grid of readouts, three to a row, each with its own switch: gold, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. Right-click the gold for a new session, or Pick Pocket to clear its record. |
 | **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
 | **Micro menu** | The game's menu buttons, in the dock. |
 
+One option is on the Dock's page: **Fade in combat**, to 70% until you point
+at the dock.
+
 **Unit frames** are what you watch in a fight.
 
-| tab | what it is |
+| part | what it is |
 |---|---|
-| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. One Size setting covers them all. Shift-drag a block to move it, and Reset on the page puts every block back. The Made-up people switch on the Testing page shows a made-up party or raid. Switch them off, or one type of frame off, and the game's own frames come back. |
+| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar, with a switch each for party, raid, main tanks, bosses and your cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. Type `/bt demo` to see a made-up party. Switch them off, or one type of frame off, and the game's own frames come back. |
 | **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
+| **Nameplates** | Enemy nameplates in BeebMod's look, with the enemy's level, name and health. A ring means it is attacking you, and a white outline marks your target; the others step back while you have one. Casts show under the plate with the spell's icon and name, and a red rim marks a cast the game says to interrupt. Your damage over time shows above the plate. Friendly nameplates show a name and no bar. A player's name is in class colour, with their level before it. An NPC's is smaller and green, with a picture for what it does, such as selling, training or flying you, and its title under it. Another player's pet has its owner's name under it, and totems have no name. Friendly nameplates, and pets and minions, have a switch each. |
 | **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). |
-| **Nameplates** | Enemy nameplates in BeebMod's look, with the enemy's level, name and health. A ring means it is attacking you, and a white outline marks your target. Casts show under the plate with the spell's icon and name, and a red rim marks a cast the game says to interrupt. Your damage over time shows above the plate. Friendly nameplates show a name and no bar. A player's name is in class colour, with their level before it. An NPC's is smaller and green, with a picture for what it does, such as selling, training or flying you. Another player's pet has its owner's name under it, and totems have no name. Switches on the page turn off friendly nameplates, show pets and minions, and fade other enemies while you have a target. |
 | **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
 
-**Interface** is the game's own windows and menus, drawn to match BeebMod.
+**Game frames** are the game's own windows and menus, drawn to match BeebMod.
 
-| tab | what it is |
+| part | what it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The Bag window page has the switch that hides the game's bag bar. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
+| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The game's bag bar is hidden while the bag window or the Bags readout is on. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
 | **Character sheet** | Item level on every slot, and BeebMod's look. |
-| **Menus** | The **Game menu** that Escape opens, and every **Dropdown menu**, a switch each. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
 | **Tooltips** | Unit tooltips rebuilt into two lines, in BeebMod's look. Elites and rares get a gold or silver border. |
+| **Game menu**, **Dropdown menus** | The menu Escape opens, and every dropdown and right-click menu. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
 
-**Census** is a record of every character you see, with charts of the realm
-by class, race, level, guild and zone, in a window of its own. Open it from
-the dock's header, or type `/bt census`. BeebMod never shares it. It holds
-only the people you saw. It keeps one book for each realm, and so for each
-ruleset, with both factions in it. Tiles across the top show the faction,
-gender and level split, and a click on any part of one narrows every chart
-to it.
+**The journals** are the Ledger and the Expedition. Their windows are the
+same shape. Over the tabs is the keeper's face, with a line from him for your
+rank, and your rank at the top right; click it to see the commendations. Each
+tab has a list on the left that picks what the page shows. A new rank shows a
+toast with the keeper's line, and a sound. A commendation or a mastery shows
+on the journal's line in the dock for a few seconds; with the line off, a
+small bar at the top of the screen shows it. Several at once are one notice.
+Rank toasts and their sound have a switch each on the journal's page.
 
-**The Steamwheedle Ledger** (the Ledger, for short) keeps notes, tags and a
-rating on the people you meet. They show on the person's tooltip and in the
-target row at the top of the dock. Its page searches the people you wrote
-about, and with the Census on, everyone the Census knows. The Ledger keeps
-what you write in its own book (`BeebModDB.ledger`), so it doesn't need the
-Census.
-It also remembers the people you grouped with. A group counts once you've
-been together 5 minutes, or straight away in a dungeon. It keeps your duel
-scores too: how many duels you won and lost against each player.
+**The Ravenholdt Ledger** (the Ledger, for short) keeps a record of everyone
+you see, and notes, tags and a rating on the people you meet. Lord Jorach
+Ravenholdt is its keeper. Its window has three tabs. **Charts** shows your
+realm by class, race, level, guild and zone; pick the chart on the left.
+Tiles across the top show the faction, gender and level split, and a click on
+any part of one narrows every chart to it. **Find people** searches by name,
+guild or a word you wrote, and the list on the left shows everyone, your
+notes, or the people with one tag. Type `/bt` and a name to open it on a
+search. **Commendations** lists what the Ledger rewards: characters
+recorded, notes, tags, groups and duels. Every 100 characters you record is
+worth 1 point, a note 2 and a tag 1, and each commendation its own. The
+points set your rank, from Fledgling to Eye of Ravenholdt, and your
+characters on one realm share it. Open the window from the Ledger's line in
+the dock, or type `/bt census`. BeebMod never shares any of it. It holds only the people you saw, in one book for
+each realm, and so for each ruleset, with both factions in it.
+Recording everyone you see is a part with its own switch. Your notes,
+tags and ratings are kept in a book of their own (`BeebModDB.ledger`), so
+they work with it off. To write them, right-click a player's frame, or their
+name in chat or a list, and point at **Ledger** at the foot of the menu. Tick
+a tag, or choose **Write a note**, which opens a small box under the frame.
+A click on **Ledger** itself opens the same box, with every tag in it.
+Your note and tags show on the person's tooltip, and as a mark at the top
+right of the target frame. The Ledger also remembers the people you grouped
+with: a group counts once you've been together 5 minutes, or straight away in
+a dungeon. It keeps your duel scores too: how many duels you won and lost
+against each player.
 
 **Nesingwary's Expedition** is a journal of every enemy you have
-killed. Each has a card with its model, its lore from the Warcraft Wiki
-and its mastery. On its page, a Model · Map switch shows the zone's map with
+killed. Hemet Nesingwary is its keeper. Each has a card with its model, its
+lore from the Warcraft Wiki and its mastery. On its page, a Model · Map switch shows the zone's map with
 a dot for each place you killed it, or a dungeon's loading screen. The page also lists
 the enemy's abilities, from the VMaNGOS database. Every unique kill and every commendation is worth points. The
 points set your rank, from Greenhorn to Expedition Leader. A line in the
 dock shows your points and rank. Click it to open the journal, or type
 `/bt expedition`.
 
-**Made-up data** is for screenshots. A switch on the Testing page, or
-`/bt demo`, shows a made-up realm, notes, a journal and a party in every
-feature at once. BeebMod saves none of it.
+**Made-up data** is for screenshots. `/bt demo` shows a made-up realm,
+notes, a journal and a party in every feature at once. BeebMod saves none
+of it. A copy run from this folder also has a switch for it on the Testing
+page.
 
-**The Testing page** is also where the debug tools are. Its buttons show a
-sample mastery toast, print BeebMod's reports to chat (What loaded, Over-time
+**The Testing page** is also where the debug tools are. Its buttons show
+sample notices and rank toasts, print BeebMod's reports to chat (What loaded, Over-time
 bars, The book), and write records for Claude into the saved file. Record
 writes down how the game built each part you have on, and also the next menu
 you open and your next fight. Clear takes the records out again. CPU use times
 BeebMod for 10 seconds. Type `/reload` after a record to save it.
 
+The Testing page shows only when BeebMod runs from this folder. In
+`Core/Init.lua`, `BT.DEV = true` sits between `--@debug@` and
+`--@end-debug@`. The packager that builds the release zip turns those lines
+into a comment, so a player's copy has no Testing page. `tests/run.lua`
+checks that it stays so.
+
 ### Adding a utility
 
-A utility is one file and one call, which give it a tab and a place on the
-bar.
+A utility is one file and one call, which give it a row on its feature's
+page and a place on the bar. The words on its row are in
+`BT.Window.LABELS`, and its feature's page lists it in
+`BT.Window.PAGE_MODULES` (the Dock's lists every module that stands in the
+dock).
 
 ```lua
 local M = BT.Module({
     key = "myutility", title = "My Utility", order = 30,
     feature = "dock",   -- the feature it belongs to; its switch covers this too
-    blurb = "One line, shown on the tab and in Settings",
+    blurb = "One line about it",
 })
-function M:BuildTab(parent) ... end    -- built once, the first time it opens
+function M:Parts() return { ... } end  -- switches under its row: label, get, set
 function M:Cells() return { ... } end  -- what it adds to the dock
 function M:OnBind(db) ... end          -- the settings are bound: migrate, sweep
 BT.Command("mycmd", function(rest) ... end, "what it does", "myutility")
@@ -141,9 +195,12 @@ lives in `Modules/Ledger`.
     Core/Slash.lua       /bt, /bt help, and What loaded for the Testing page
     Core/Boot.lua        the core's own login: the settings, the dock, then BT.OnWorld
     Core/Demo.lua        made-up data for screenshots: one switch, each feature's own
-    UI/Window.lua        the window: a block per feature down the side, a page per tab
-    UI/Welcome.lua       the first login's six cards, a switch per feature
-    UI/Settings.lua      General: the look, and the panel header's switches
+    UI/Window.lua        the window: General, the features under two headings
+                         and Testing down the side, a page per feature, and
+                         the search in the title bar
+    UI/Welcome.lua       the first login's five cards, a switch per feature
+    UI/Settings.lua      General: the colours, one size, and positions
+    UI/CensusWindow.lua  the Ledger's window: the Charts and Find tabs
     UI/Dock.lua          the dock: a row of cells, and sections under it
     UI/Pill.lua          the pill, and the one place a measurement is judged
                          good or bad
@@ -154,7 +211,9 @@ lives in `Modules/Ledger`.
                          unit frame and on its tooltip
     Core/Tooltip.lua     one hook on the unit tooltip, shared by several modules
     Core/Furniture.lua   restyles the client's own frames by what each one is
-    Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab,
+    Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab
+                         (Find.lua, in the Ledger's window), its entry in
+                         the right-click menu on a player (Menu.lua),
                          the notes on a tooltip, the people you grouped with
                          (Groups.lua) and your duel scores (Duels.lua)
     Modules/Minimap/     the map in the dock; Modules/Buttons/ the addon buttons
@@ -164,8 +223,8 @@ lives in `Modules/Ledger`.
                          ItemLevel/, Pickpocket/, Speed/ and Performance/ are
                          its rows
     Modules/Clock/       the time in the dock's header
-    Modules/Census/      the counting and the charts
-    Modules/Tooltips/    the compact tooltip, and its switches
+    Modules/Census/      the counting and the charts, a part of the Ledger
+    Modules/Tooltips/    the compact tooltip
     Modules/Tracker/     the quest tracker in the dock (Quests.lua reads the log)
     Modules/Bars/, BagWindow/, Chat/, DamageMeter/, Dropdowns/, Micro/
                          the client's own frames, drawn flat. Chat/ also has
@@ -305,41 +364,36 @@ floating on the screen. Only unit tooltips get the coloured spine.
 
 BeebMod puts one thing on screen, the **dock**.
 
-    [class] Beeb Magus                  [tags] [cog]
-    "held the door while I ran back"
+    BeebMod [cog]                              1:33pm
     ------------------------------------------------
+    [10] Level 10                        1h 17m to 11
+    ...
     QUESTS  4
     ...
 
-At the top are two lines. The first says who you are pointing at, and the
-second shows their tags and your note. Under them are whatever **sections**
-the modules have to show. The quest tracker is a section. Anything else that
-needs space on screen all the time is a section too.
+At the top is the header: BeebMod's name, the cog beside it, and the clock at
+the right end. The cog opens the settings. It stays when everything else is
+switched off, so you can always find your way back in. Under the header are
+whatever **sections** the modules have to show. The quest tracker is a
+section. Anything else that needs space on screen all the time is a section
+too.
 
-The second line shows the note itself, in words, so you don't have to hover
-over an icon to read it. It keeps its height whether or not it has anything on
-it. If the dock grew a row whenever you pointed at somebody you had written
-about, it would push the quest log down the screen while you were reading it.
-
-The first slot is BeebMod's glyph until you target a player. Then it shows
-their **class**. It can't show their spec, because nothing on this client
-shows a stranger's talents; the census has no spec chart for the same reason.
-The cog sits at the right end, apart from the other cells, because it opens
-the settings, and you need to find it with everything else switched off.
-
-    BT.Dock.Cell(key, width)      a cell on the row
-    BT.Dock.Section(key, order)   a panel of your own underneath it
+    BT.Dock.Section(key, order)   a panel of your own under the header
     BT.Dock.MakeHandle(child)     let something in it drag the whole dock
+    BT.Dock.Cell(key, width)      a cell on a row along the top (nothing
+                                  uses the row since the Ledger's moved to
+                                  the right-click menu)
 
-Everything in the dock takes mouse clicks. The row is cells you click and the
-tracker is quests you click, so no bare part of the panel is left to drag. The
-mark and the tracker's QUESTS line are the drag handles. The dock starts under
-the minimap and stays wherever you drag it.
+Everything in the dock takes mouse clicks, so no bare part of the panel is
+left to drag. To move it, hold Shift and drag the header, a meter's line, a
+readout or a zone heading in the quest list. A plain drag scrolls the
+quests. The dock starts
+under the minimap and stays wherever you drag it.
 
 The dock decides where it sits, how big it is and how it looks. A module
 decides what goes in its section and how tall that comes out (`wantHeight`,
-`wantWidth`, then `BT.Dock.Relayout()`). With the top row switched off, the
-dock stays for the sections. With nothing in it at all, it hides.
+`wantWidth`, then `BT.Dock.Relayout()`). With nothing else in it, the dock is
+its header.
 
 The dock never runs off the bottom of the screen. It has the room from its top
 edge down. When its sections want more than that, a section marked `shrinks`

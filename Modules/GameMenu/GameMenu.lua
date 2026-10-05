@@ -449,15 +449,6 @@ function M:OnDisable()
 	M.Undress()
 end
 
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("The Escape menu gets an elite's border, in your border colour. "
-		.. "Its buttons use BeebMod's font and light up in your accent colour under your mouse.")
-	page:Note("Only the look changes. Every button works as before. The game doesn't let addons restyle "
-		.. "some of its buttons, so those keep the game's look.", true)
-	page:Layout()
-end
-
 -- What the game menu is made of, for when this client lays it out
 -- differently from the one this was written against: into the saved file,
 -- from the Testing page's Record button.

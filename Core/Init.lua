@@ -83,7 +83,18 @@ BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-09-29-zones-groups"
+BT.BUILD = "2026-10-05-testing-dev-only"
+
+-- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
+-- to disable it in production builds so normal users don't see it?"). The
+-- Testing page is for working on BeebMod. The BigWigs packager that builds
+-- the release zip (.github/workflows/release.yml) turns everything between
+-- the two @debug@ markers below into a comment, so a player's copy has DEV
+-- false. This folder, run as it is, has it true.
+BT.DEV = false
+--@debug@
+BT.DEV = true
+--@end-debug@
 
 BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off
@@ -97,10 +108,6 @@ BT.SETTINGS = {
 	-- the most characters a book keeps: past it, the ones seen longest ago
 	-- go first (DB.Cap). About 9 MB of saved file, packed (Josh 2026-09-24).
 	bookCap = 150000,      -- 0 = no limit
-	-- targetRow: false when you hide the target row along the top of the dock.
-	-- No default: the dock reads anything but false as on, and a default here
-	-- would be filled in before Core/Rename.lua could move an old "bar = false"
-	-- to it.
 	dockPos = nil,         -- where you dragged the dock
 }
 
@@ -338,33 +345,60 @@ end
 -- The dock's logo and cog are none of these: they are always there, the way
 -- back into the settings whatever is switched off (UI/Dock.lua).
 -- ---------------------------------------------------------------------------
+-- THE SETTINGS CANVAS (Josh 2026-10-04, locked the same day): five
+-- features in two groups - what changes your interface, and the two
+-- journals - each with the line its first-login card and its page show. The
+-- journals' lines are in their keepers' voices (`quote`, `by`); their page
+-- says plainly what they are (`blurb`). The Census is a part of the Ledger
+-- now (BT.MergeCensus), and Interface is called Game frames.
 BT.FEATURES = {
 	-- each with its picture (Art/Features, made by scripts/make-feature-art.ps1
 	-- from screenshots taken with /bt demo on, Josh 2026-09-27)
-	{ key = "dock", title = "Dock", color = { 0.45, 0.75, 0.99 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock",
-		line = "A panel at the side of the screen. It holds the minimap, clock, XP, reputation, gold, bags, durability and quest tracker." },
-	{ key = "unitframes", title = "Unit frames", color = { 0.49, 0.77, 0.48 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes",
-		line = "Frames for you, your party, raid, target and focus, with buffs. Your heals and damage over time show as bars." },
-	{ key = "interface", title = "Interface", color = { 0.88, 0.64, 0.29 }, art = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface",
-		line = "The game's action bars, bags, chat, character sheet, tooltips and menus, drawn in BeebMod's style." },
-	{ key = "census", title = "Census", color = { 0.69, 0.56, 0.88 }, single = "census", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\census",
-		line = "Writes down every character you see. It shows who is on your realm by class, race, level, guild and zone." },
-	-- THE STEAMWHEEDLE LEDGER (Josh 2026-10-04: "Ok I like Steamwheedle"): the
-	-- neutral goblin cartel of Booty Bay and Gadgetzan, keeping books on
-	-- everyone who passes through, as the Expedition is Nesingwary's.
-	-- "Ledger" where there is no room.
-	{ key = "ledger", title = "Steamwheedle Ledger", short = "Ledger", color = { 0.90, 0.81, 0.42 }, single = "ledger",
-		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger",
-		line = "Notes, tags and a rating for people you meet. They show on their tooltip, and in the dock when you target them." },
-	-- NESINGWARY'S EXPEDITION (Josh 2026-09-27: "Menagerie ... kind of feels
-	-- like it implies pets", and "make the player feel like they are part of
-	-- the nesingwary expidition"). Its key, module, files and saved journal
-	-- took the name too on 2026-09-29 (Core/Rename.lua). `short` where there
-	-- is no room.
-	{ key = "expedition", title = "Nesingwary's Expedition", short = "Expedition", color = { 0.44, 0.64, 0.80 },
-		single = "expedition", art = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition",
-		line = "A journal of every enemy you kill, with its lore and masteries. Each unique kill is worth points. Your points set your rank." },
+	{ key = "dock", title = "Dock", group = "interface", color = { 0.45, 0.75, 0.99 },
+		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock",
+		line = "Everything you check between pulls, in one column. Even the seventeen quests you swear you'll finish." },
+	{ key = "unitframes", title = "Unit frames", group = "interface", color = { 0.49, 0.77, 0.48 },
+		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes",
+		line = "Clean frames for your group and raid, so you notice the tank dying before the tank does." },
+	{ key = "interface", title = "Game frames", group = "interface", color = { 0.88, 0.64, 0.29 },
+		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface",
+		line = "The game's own bars, bags and chat, with twenty years of gold trim taken off." },
+	-- THE RAVENHOLDT LEDGER (Josh 2026-10-05: "I don't think we can use the
+	-- whole 'debt collector' theme, because we aren't actually collecting any
+	-- gold. Is there something we could use that would be more of the 'big
+	-- brother is watching' vibe, but still keep the WoW RP?"). The house of
+	-- Lord Jorach Ravenholdt, neutral spies and assassins in the Alterac
+	-- Mountains, keeping a file on everyone, as the Expedition is
+	-- Nesingwary's. It was the Steamwheedle Ledger for a day (2026-10-04).
+	-- "Ledger" where there is no room. Its colour is a raven's violet, not
+	-- the Alliance's blue nor the Horde's red. Its picture is the Census's
+	-- and the Ledger's side by side until there is one of both (`art2`).
+	{ key = "ledger", title = "Ravenholdt Ledger", short = "Ledger", group = "journals", color = { 0.61, 0.50, 0.82 },
+		single = "ledger",
+		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\census",
+		art2 = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger",
+		blurb = "Everyone you see on your realm, and your notes, tags and ratings on them",
+		-- the first rank's line (Modules/Ledger/Ranks.lua, L.QUOTES)
+		quote = "\226\128\156Welcome, welcome, welcome! We have been watching you. Now you watch everyone else.\226\128\157",
+		by = "Lord Jorach Ravenholdt, Alterac Mountains" },
+	-- NESINGWARY'S EXPEDITION (Josh 2026-09-27: "make the player feel like
+	-- they are part of the nesingwary expidition"). Its key, module, files and
+	-- saved journal took the name too on 2026-09-29 (Core/Rename.lua).
+	-- HEMET, NOT JUNIOR (Josh 2026-10-05: "I think we should drop Jr."): in
+	-- 1.12 the camp in Stranglethorn is Hemet Nesingwary's own. His son took
+	-- it over in The Burning Crusade.
+	{ key = "expedition", title = "Nesingwary's Expedition", short = "Expedition", group = "journals",
+		color = { 0.44, 0.64, 0.80 }, single = "expedition",
+		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition",
+		blurb = "A journal of every enemy you kill, with points and ranks",
+		-- the first rank's line (Modules/Expedition/Journal.lua, J.QUOTES)
+		quote = "\226\128\156Jolly nice to make your acquaintance! Off you go. No beast comes to the campfire.\226\128\157",
+		by = "Hemet Nesingwary, Stranglethorn" },
 }
+-- what a feature's card says: its keeper's words, or its line
+for _, f in ipairs(BT.FEATURES) do
+	f.line = f.line or f.quote
+end
 local featureByKey = {}
 for _, f in ipairs(BT.FEATURES) do
 	featureByKey[f.key] = f
@@ -413,6 +447,80 @@ function BT.FeatureModules(key)
 		end
 	end
 	return out
+end
+
+-- THE CENSUS JOINS THE LEDGER (Josh 2026-10-04: "let's update the settings
+-- to reflect this"). Two features become one, once: the Ledger is on if
+-- either was, and recording everyone you see - the Census's part of it -
+-- stays off if the Census was.
+function BT.MergeCensus()
+	local s = BT.settings
+	if not (s and type(s.features) == "table" and s.features.census ~= nil) then
+		return false
+	end
+	local census = s.features.census ~= false
+	local ledger = s.features.ledger ~= false
+	if not census then
+		s.modules = s.modules or {}
+		s.modules.census = false
+	end
+	s.features.ledger = (ledger or census) and true or false
+	s.features.census = nil
+	return true
+end
+
+-- THE ANSWERS NOBODY ASKS ANY MORE (the settings canvas, Josh 2026-10-04:
+-- "This addon is supposed to be an opinionated solution, not fully
+-- customizable"). Each module now does what its old switch said by default,
+-- and a saved answer to one of these is not read; so it is taken out of the
+-- saved file, once, rather than kept there meaning nothing. The dock's size
+-- is the one size for every panel first (BT.Settings.Scale).
+BT.CUT_SETTINGS = {
+	top = { "dockLocked", "dockWidth", "dockScale", "metricsCols", "censusButton", "censusLive", "hideClientXP",
+		"hideClientRep", "hideClientBags", "expeditionShows",
+		-- (a unique kill is the points going up on the dock's line now, Josh
+		-- 2026-10-05, not a toast with a switch of its own)
+		"expeditionDiscover",
+		-- (the dock's target row went for the Ledger's entry in the game's
+		-- right-click menu, Josh 2026-10-05)
+		"targetRow" },
+	tracker = { "byLevel", "zones", "hereOnly", "combatFold", "hideEmpty", "hideDone" },
+	chat = { "buttons", "editOnTop", "flush", "shortChannels", "timestamps", "guilds", "links", "size" },
+	bars = { "hotkeys", "macroNames" },
+	charsheet = { "levels", "theme", "move" },
+	minimap = { "zoneName", "coords", "controls", "alpha" },
+	damagemeter = { "perSecond", "clock" },
+	resourcedisplay = { "theme", "combo" },
+	nameplates = { "dim" },
+	unitframes = { "health", "fade", "animate", "targetBuffs", "timerOrder", "timersOff", "timerBlinkHot",
+		"timerBlinkDot", "scale" },
+	buffs = { "scale", "timeText" },
+	tooltips = { "guild", "faction", "healthBar", "footer", "itemLevel", "targetLine", "combatHide", "anchor", "scale" },
+	micro = { "hidden" },
+	bagwindow = { "rings", "bagSlots" },
+}
+
+function BT.DropCutSettings()
+	local s = BT.settings
+	if type(s) ~= "table" or s.cutSettingsDropped then
+		return 0
+	end
+	if s.scale == nil and type(s.dockScale) == "number" then
+		s.scale = s.dockScale
+	end
+	local n = 0
+	for group, keys in pairs(BT.CUT_SETTINGS) do
+		local t = group == "top" and s or s[group]
+		if type(t) == "table" then
+			for _, key in ipairs(keys) do
+				if t[key] ~= nil then
+					t[key], n = nil, n + 1
+				end
+			end
+		end
+	end
+	s.cutSettingsDropped = true
+	return n
 end
 
 -- A FEATURE'S SWITCH, FOR AN INSTALL THAT NEVER HAD ONE (2026-09-27): on if
@@ -974,6 +1082,10 @@ function BT.Bind(realm, faction)
 	BT.DropRetired()
 	-- a switch for each feature, once, from the modules you already have on
 	BT.SeedFeatures()
+	-- and the Census's into the Ledger's, once
+	BT.MergeCensus()
+	-- and the answers the settings canvas stopped asking, once
+	BT.DropCutSettings()
 	-- the modules in your order, before the rail or the dock is laid out
 	BT.SortModules()
 	-- BEFORE ANYTHING DRAWS (Josh 2026-09-21). The fill and the rim are a

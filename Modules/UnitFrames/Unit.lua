@@ -338,7 +338,21 @@ F.GROUP_FAR = 0.25
 
 -- the unit frames' own settings, read here as well as by UnitFrames.lua (this
 -- file loads first)
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"): frames
+-- out of range fade strongly, bars slide, the target's buffs show, the
+-- health text is each frame's default (F.HEALTH_DEFAULT), and every heal and
+-- damage over time has its lane, in the class's order, blinking as it runs
+-- out. A saved answer to any of these is not read.
+F.FIXED = { fade = "strong", animate = true, targetBuffs = true }
+F.UNASKED = { health = true, timerOrder = true, timersOff = true, timerBlinkHot = true, timerBlinkDot = true }
+
 function F.Opt(name, fallback)
+	if F.FIXED[name] ~= nil then
+		return F.FIXED[name]
+	elseif F.UNASKED[name] then
+		return fallback
+	end
 	local s = BT.settings and BT.settings.unitframes
 	if not s or s[name] == nil then
 		return fallback
@@ -1077,6 +1091,25 @@ function F.Dress(b, kind)
 		b.threatText:Hide()
 		-- the name stops short of it
 		b.name:SetPoint("RIGHT", b.health, "RIGHT", -38, 0)
+
+		-- WHAT YOU WROTE ON THEM (Josh 2026-10-05, the canvas "Ledger from the
+		-- right-click menu"): the note's mark and a square per tag, in the
+		-- same corner. The dock's target row showed them, and it is gone; a
+		-- player has no threat to show there, and an enemy no note.
+		b.ledger = CreateFrame("Frame", nil, b.over)
+		b.ledger:SetSize(44, 11)
+		b.ledger:SetPoint("TOPRIGHT", b.health, "TOPRIGHT", -5, -5)
+		b.ledger.note = b.ledger:CreateTexture(nil, "OVERLAY")
+		b.ledger.note:SetSize(11, 11)
+		b.ledger.note:SetTexture("Interface\\AddOns\\BeebMod\\Art\\icons")
+		b.ledger.note:SetTexCoord(0, 0.125, 0, 1)
+		b.ledger.note:SetVertexColor(0.90, 0.88, 0.80, 1)
+		b.ledger.squares = {}
+		for i = 1, 3 do
+			b.ledger.squares[i] = b.ledger:CreateTexture(nil, "OVERLAY")
+			b.ledger.squares[i]:SetSize(7, 7)
+		end
+		b.ledger:Hide()
 	end
 
 	-- your target: a one-pixel outline round the whole frame, in white
@@ -1495,6 +1528,46 @@ local function paintName(b, src, gone)
 	end
 end
 
+-- the Ledger's mark on the target (BT.LedgerMenu.Mark): the note's mark,
+-- then the tags' squares, ending at the corner
+local SQUARE_STEP = 10
+local function paintLedger(b, gone)
+	local m = b.ledger
+	if not m then
+		return
+	end
+	local note, colors = false, nil
+	local mark = BT.LedgerMenu and BT.LedgerMenu.Mark
+	if mark and b.bmUnit and not gone then
+		local ok, n, c = pcall(mark, b.bmUnit)
+		if ok then
+			note, colors = n, c
+		end
+	end
+	colors = colors or {}
+	if not note and #colors == 0 then
+		m:Hide()
+		return
+	end
+	local x = 0
+	for i = #m.squares, 1, -1 do
+		local s, c = m.squares[i], colors[i]
+		if c then
+			s:SetColorTexture(c[1], c[2], c[3], 1)
+			s:ClearAllPoints()
+			s:SetPoint("RIGHT", m, "RIGHT", -x, 0)
+			s:Show()
+			x = x + SQUARE_STEP
+		else
+			s:Hide()
+		end
+	end
+	m.note:ClearAllPoints()
+	m.note:SetPoint("RIGHT", m, "RIGHT", -x, 0)
+	m.note:SetShown(note and true or false)
+	m:Show()
+end
+
 -- what is said in place of the health, from plain answers only: offline, a
 -- ghost, dead, or (in a group) charmed
 local function statusOf(src, k)
@@ -1651,6 +1724,7 @@ function F.Paint(b, src)
 		b.marker:Hide()
 	end
 	b.leader:SetShown(k.group and src:Leader() or false)
+	paintLedger(b, gone)
 	if b.rest then
 		b.rest:SetShown(b.bmUnit == "player" and F.Resting() or false)
 	end

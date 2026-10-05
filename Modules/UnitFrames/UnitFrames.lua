@@ -1569,8 +1569,10 @@ end
 -- combat only; a change made in a fight waits for its end.
 M.SCALE_MIN, M.SCALE_MAX, M.SCALE_STEP = 0.8, 1.3, 0.05
 
+-- the one size (UI/Settings.lua), kept to what the frames allow
 function M.Scale()
-	return opt("scale", 1)
+	local s = BT.Scale and BT.Scale() or 1
+	return math.max(M.SCALE_MIN, math.min(M.SCALE_MAX, s))
 end
 
 function M.ApplyScale()
@@ -1590,161 +1592,30 @@ function M.ApplyScale()
 end
 
 function M.SetScale(s)
-	s = math.floor((s or 1) / M.SCALE_STEP + 0.5) * M.SCALE_STEP
-	s = math.max(M.SCALE_MIN, math.min(M.SCALE_MAX, s))
-	BT.EnsureBound()
-	BT.settings.unitframes = BT.settings.unitframes or {}
-	BT.settings.unitframes.scale = s
-	M.ApplyScale()
-	return s
+	BT.Settings.SetScale(s)
+	return M.Scale()
 end
 
--- ---------------------------------------------------------------------------
--- Casting on what you point at
--- ---------------------------------------------------------------------------
---
 -- MOUSEOVER CAST IS THE CLIENT'S (Josh 2026-09-23: "if I hover over a frame
--- and cast a heal, it should heal my hover target"). The client has it -
--- enableMouseoverCast, in its own Combat options on this build - and it is
--- the right tool: a spell goes to the unit under the cursor when it can land
--- there and to your target when it cannot, so a heal on a party cell heals
--- that member and a Sinister Strike still hits the mob. Click-casting would
--- need the secure snippets this build cannot compile; this needs nothing but
--- frames that carry a unit, which these do. The switch here is the client's
--- setting, not a copy of it: flip either and both agree.
-
-function M.MouseoverSupported()
-	if type(IsMouseoverCastSupported) ~= "function" then
-		return false
-	end
-	local ok, yes = pcall(IsMouseoverCastSupported)
-	if not (ok and yes == true) then
-		return false
-	end
-	return C_CVar ~= nil and C_CVar.GetCVar ~= nil and C_CVar.GetCVar("enableMouseoverCast") ~= nil
-end
-
-function M.Mouseover()
-	if not M.MouseoverSupported() then
-		return false
-	end
-	return C_CVar.GetCVar("enableMouseoverCast") == "1"
-end
-
-function M.SetMouseover(on)
-	if not M.MouseoverSupported() then
-		return false
-	end
-	-- a setting the client guards in a fight: set when it is over
-	return later("mouseover", function()
-		pcall(C_CVar.SetCVar, "enableMouseoverCast", on and "1" or "0")
-	end)
-end
+-- and cast a heal, it should heal my hover target"): enableMouseoverCast, in
+-- its own Combat options. A spell goes to the unit under the cursor when it
+-- can land there, and these frames carry a unit, so it works on them. Its
+-- switch here went with the settings canvas (2026-10-04): it is the game's.
 
 -- ---------------------------------------------------------------------------
--- The page
+-- Its parts
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local W = BT.Widgets
-	local page = W.Stack(panel)
-	local groups = page:Section("Show")
-	W.SwitchRow(groups, "Party", "You and your pet on top, then 4 others with pets and targets",
-		function() return opt("party", true) end, function(on) setOpt("party", on) end)
-	W.SwitchRow(groups, "Raid", "A column for each group in use, in place of the game's raid frames",
-		function() return opt("raid", true) end, function(on) setOpt("raid", on) end)
-	W.SwitchRow(groups, "Main tanks", "Above raid frames, with targets",
-		function() return opt("tanks", true) end, function(on) setOpt("tanks", on) end)
-	W.SwitchRow(groups, "Bosses", "Up to 5, with casts and mechanics",
-		function() return opt("boss", true) end, function(on) setOpt("boss", on) end)
-	W.SwitchRow(groups, "Your cast bar", "Under the resource display, in place of the game's cast bar",
-		function() return opt("cast", true) end, function(on) setOpt("cast", on) end)
-	local where = page:Section("Place")
-	local move = W.Row(where, "Shift-drag to move", "Out of combat")
-	local reset = move:SetControl(W.Button(move, "Reset", 62, 20))
-	reset:SetScript("OnClick", function()
-		M.ResetPlaces()
-	end)
-	local size = W.Row(where, "Size", "All unit frames and cast bar")
-	self.sizeStep = size:SetControl(W.Stepper(size, function(dir)
-		M.SetScale(M.Scale() + dir * M.SCALE_STEP)
-		M:ShowTab()
-	end))
-	-- WHAT THEY SAY AND HOW THEY MOVE (Josh 2026-09-24)
-	local health = page:Section("Health text")
-	self.healthSegs = {}
-	for _, pair in ipairs({ { "party", "Party" }, { "raid", "Raid", "Main tanks too" }, { "target", "Target" },
-		{ "focus", "Focus" }, { "boss", "Bosses" } }) do
-		local key = pair[1]
-		local row = W.Row(health, pair[2], pair[3] or "")
-		local seg = row:SetControl(W.Segmented(row, {
-			{ "none", "None" }, { "percent", "%" }, { "value", "Value" }, { "both", "Both" },
-		}, function(mode)
-			local all = opt("health", nil)
-			all = type(all) == "table" and all or {}
-			all[key] = mode
-			setOpt("health", all)
-			M.PaintAll()
-		end, 52))
-		seg.healthKey = key
-		self.healthSegs[#self.healthSegs + 1] = seg
+-- THE UNIT FRAMES' PARTS, under their row (the settings canvas, Josh
+-- 2026-10-04): the kinds of frame there are, a switch each
+function M:Parts()
+	local out = {}
+	for _, p in ipairs({ { "party", "Party" }, { "raid", "Raid" }, { "tanks", "Main tanks" }, { "boss", "Bosses" },
+		{ "cast", "Your cast bar" } }) do
+		local key = p[1]
+		out[#out + 1] = { label = p[2], field = key,
+			get = function() return opt(key, true) and true or false end,
+			set = function(on) setOpt(key, on) end }
 	end
-	local look = page:Section("Look")
-	local fadeRow = W.Row(look, "Out of range", "How much frames fade")
-	self.fadeSeg = fadeRow:SetControl(W.Segmented(fadeRow, {
-		{ "light", "Light" }, { "medium", "Medium" }, { "strong", "Strong" },
-	}, function(key)
-		setOpt("fade", key)
-		M.PaintAll()
-	end))
-	W.SwitchRow(look, "Bars slide", "Health and power bars slide instead of jumping",
-		function() return opt("animate", true) end, function(on) setOpt("animate", on) end)
-	W.SwitchRow(look, "Target's buffs", "Next to debuffs",
-		function() return opt("targetBuffs", true) end,
-		function(on)
-			setOpt("targetBuffs", on)
-			if F.Auras and M.singles.target then
-				F.Auras.TargetBuffs(M.singles.target)
-			end
-		end)
-	-- YOUR HEAL OVER TIME (Josh 2026-09-24): a bar along the top of the
-	-- frame it is on (Timers.lua). The damage over time goes over your own
-	-- bars now, and its settings with it, on the Resource display's page.
-	local T = F.Timers
-	if T and #T.Spells("hot") > 0 then
-		local timers = page:Section("Heal over time")
-		for _, name in ipairs(T.Spells("hot")) do
-			W.SwitchRow(timers, name, "Countdown bar on each frame with this heal",
-				function() return T.On(name) end,
-				function(on)
-					T.SetOn(name, on)
-					M.RefreshPreview()
-				end)
-		end
-		-- the heal's own blink; the damage has its own, on the Nameplates
-		-- page
-		self.blinkRow = T.BlinkRow(timers, "hot", function() M.RefreshPreview() end)
-	end
-	local more = page:Section("More")
-	if M.MouseoverSupported() then
-		self.mouseoverRow = W.SwitchRow(more, "Mouseover cast",
-			"Heals go to the frame under your mouse. Attacks still go to your target.",
-			function() return M.Mouseover() end,
-			function(on) M.SetMouseover(on) end)
-	end
-	-- the made-up people are on the Testing page now (UI/Window.lua)
-	page:Layout()
-	self.page = page
-end
-
-function M:ShowTab()
-	for _, seg in ipairs(self.healthSegs or {}) do
-		seg:Select(F.HealthMode(seg.healthKey == "raid" and "raid" or seg.healthKey))
-	end
-	if self.fadeSeg then
-		self.fadeSeg:Select(opt("fade", "strong"))
-	end
-	if self.sizeStep then
-		self.sizeStep:Say(("%d%%"):format(math.floor(M.Scale() * 100 + 0.5)))
-	end
+	return out
 end

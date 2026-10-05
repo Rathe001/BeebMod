@@ -155,12 +155,8 @@ local function trayButton(size, harmful)
 		else
 			bar:Hide()
 		end
-		-- (the time in words can be left off - it takes a reload: a button is
-		-- the client's once it is made - Josh 2026-09-24)
-		local s = BT.settings and BT.settings.buffs
-		if s and s.timeText == false then
-			words:Hide()
-		elseif b.SetDurationText then
+		-- the time left in words, always (the settings canvas cut its switch)
+		if b.SetDurationText then
 			pcall(b.SetDurationText, b, words, {})
 		end
 		-- a right-click takes a buff off (the client says when it may)
@@ -231,8 +227,8 @@ function B.Place()
 	-- AS BIG AS YOU LIKE (Josh 2026-09-24): the whole tray, scaled - never in a
 	-- fight, where its containers are the client's to keep still
 	if not (InCombatLockdown and InCombatLockdown()) then
-		local s = BT.settings and BT.settings.buffs
-		h:SetScale((s and s.scale) or 1)
+		-- the one size (UI/Settings.lua)
+		h:SetScale(BT.Scale and BT.Scale() or 1)
 	end
 	h:ClearAllPoints()
 	local dock = BT.Dock and BT.Dock.Frame and BT.Dock.Frame()
@@ -767,46 +763,4 @@ function M:OnDisable()
 	B.Preview(false)
 	B.SetShown(false)
 	M.Stow()
-end
-
-function M:BuildTab(panel)
-	local W = BT.Widgets
-	local page = W.Stack(panel)
-	page:Note("Buffs are on the top row and debuffs below. The soonest to run out are on the left, then "
-		.. "weapon enchants, then ones with no timer, A to Z.")
-	page:Note("Right-click a buff to cancel it, out of combat. Turn this off to get the game's buff bar back.", true)
-	local tray = page:Section("Tray")
-	local size = W.Row(tray, "Size", "Whole tray, icons and times")
-	local step = size:SetControl(W.Stepper(size, function(dir)
-		BT.EnsureBound()
-		BT.settings.buffs = BT.settings.buffs or {}
-		local now = math.floor(((BT.settings.buffs.scale or 1) + dir * 0.1) * 10 + 0.5) / 10
-		BT.settings.buffs.scale = math.max(0.7, math.min(1.5, now))
-		B.Place()
-		M.sizeText:SetText(("%d%%"):format(math.floor(BT.settings.buffs.scale * 100 + 0.5)))
-	end))
-	M.sizeText = step.value
-	M.sizeText:SetText(("%d%%"):format(math.floor(((BT.settings and BT.settings.buffs
-		and BT.settings.buffs.scale) or 1) * 100 + 0.5)))
-	W.SwitchRow(tray, "Time left under icons", "Needs a /reload to change",
-		function() return not (BT.settings and BT.settings.buffs and BT.settings.buffs.timeText == false) end,
-		function(on)
-			BT.EnsureBound()
-			BT.settings.buffs = BT.settings.buffs or {}
-			-- off is written down, on (the default) is not: `(not on) and false or nil`
-			-- was nil either way, and the switch could never turn it off (Josh 2026-09-25)
-			if on then
-				BT.settings.buffs.timeText = nil
-			else
-				BT.settings.buffs.timeText = false
-			end
-		end)
-	-- the made-up auras are on the Testing page now (UI/Window.lua)
-	page:Layout()
-end
-
-function M:ShowTab()
-	if BT.Widgets.SyncRows then
-		BT.Widgets.SyncRows()
-	end
 end

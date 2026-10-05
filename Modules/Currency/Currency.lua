@@ -178,18 +178,19 @@ function M.Tip()
 		t:Headline(M.Coins(money()))
 		if not moved then
 			t:Note("No money in or out yet this session.")
-			return
+		else
+			t:Note(("%s%s this session, in %s."):format(net >= 0 and "+" or "-", M.Coins(math.abs(net)), duration(long)),
+				net >= 0 and "good" or "bad")
+			t:Section("This session")
+			t:Row("Earned", M.Coins(s.earned or 0))
+			t:Row("Spent", M.Coins(s.spent or 0))
+			local rate = long >= 60 and net * 3600 / long or nil
+			if rate then
+				t:Row("Net per hour", (rate >= 0 and "+" or "-") .. M.Coins(math.abs(rate), true),
+					rate >= 0 and "good" or "bad")
+			end
 		end
-		t:Note(("%s%s this session, in %s."):format(net >= 0 and "+" or "-", M.Coins(math.abs(net)), duration(long)),
-			net >= 0 and "good" or "bad")
-		t:Section("This session")
-		t:Row("Earned", M.Coins(s.earned or 0))
-		t:Row("Spent", M.Coins(s.spent or 0))
-		local rate = long >= 60 and net * 3600 / long or nil
-		if rate then
-			t:Row("Net per hour", (rate >= 0 and "+" or "-") .. M.Coins(math.abs(rate), true),
-				rate >= 0 and "good" or "bad")
-		end
+		t:Foot({ { "Right-click", "reset session" } })
 	end })
 end
 
@@ -199,6 +200,12 @@ function M.Build()
 	end
 	M.chip = BT.Dock.Chip("currency", "purse", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
+	-- a right-click starts a new session (M.Reset)
+	M.chip:SetScript("OnMouseUp", function(_, button)
+		if button == "RightButton" then
+			M.Reset()
+		end
+	end)
 	M.chip:SetScript("OnLeave", function()
 		if GameTooltip then
 			GameTooltip:Hide()
@@ -264,41 +271,12 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- A new session
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local note = BT.Widgets.Label(panel,
-		"Your gold. Point at it for what you earned and spent this session, and the net per hour.",
-		"small", 0.55, 0.60, 0.58)
-	note:SetPoint("TOPLEFT", 0, -2)
-	note:SetWidth(520)
-	note:SetJustifyH("LEFT")
-
-	local why = BT.Widgets.Label(panel,
-		"Earned counts only money coming in. Spent has its own row.",
-		"small", 0.45, 0.50, 0.48)
-	why:SetPoint("TOPLEFT", 0, -22)
-	why:SetWidth(520)
-	why:SetJustifyH("LEFT")
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-end
-
--- A NEW SESSION FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of
--- slash commands"). What /bt gold reset did, as a Reset row on the Metrics
--- page, which builds one for each part with a `resetRow` and an M.Reset.
-M.resetRow = { "Currency session", "Resets earned, spent and net per hour" }
-
+-- A NEW SESSION (Josh 2026-09-28: "We don't need hundreds of slash
+-- commands"). What /bt gold reset did, from a right-click on the gold cell
+-- (the settings canvas moved it there from the Metrics page, 2026-10-04).
 function M.Reset()
 	M.Start(true, false)
 	U.Print("Currency: session reset.")

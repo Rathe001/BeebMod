@@ -1,8 +1,8 @@
 -- The Ledger module: what you think of the people you meet (Josh 2026-09-19).
 --
--- It owns the Find tab, the tooltip decoration, and the part of the floating
--- bar that is about whoever you are pointing at: their name, a dot per tag,
--- and your note. What you write is kept in the Ledger's own book
+-- It owns the Find tab, the tooltip decoration, and the Ledger's entry in the
+-- game's right-click menu on a player (Modules/Ledger/Menu.lua), where you tag
+-- them and write a note. What you write is kept in the Ledger's own book
 -- (Modules/Ledger/Store.lua), not on the census's rows: the Ledger works
 -- with no census at all, and uses one to find people when there is one.
 --
@@ -12,405 +12,71 @@
 -- the Ledger switched off must never tidy away judgements it is not currently
 -- showing you, so it hangs off this module's OnBind.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Ledger.lua")
 
 local U, N = BT.Util, BT.Notes
 
 local M = BT.Module({
 	key = "ledger",
 	feature = "ledger",
-	title = "Steamwheedle Ledger",
+	title = "Ravenholdt Ledger",
 	short = "Ledger",
 	blurb = "Notes and tags",
 	order = 10,
-	-- on the right panel, so it has a tab on the rail (Josh 2026-09-22)
-	dock = true,
 })
 
--- NOTES ON TOOLTIPS LIVE HERE (Josh 2026-09-23). The switch was on the
--- toolkit's own page, which made it a setting of everything; the notes are
--- the Ledger's, so it sits above the Ledger's list. The setting itself is
--- still BT.settings.tooltip, where Modules/Ledger/Tooltip.lua reads it.
-function M:BuildTab(parent)
-	local stack = BT.Widgets.Stack(parent)
-	-- the feature's picture first, as every feature's page has (UI/Window.lua)
-	local art
-	art, parent.picture = BT.Window.FeatureArt(parent, "ledger")
-	if art then
-		stack:Add(art)
-	end
-	local tips = stack:Section("Tooltips")
-	self.notesRow = BT.Widgets.SwitchRow(tips, "Notes on tooltips", "Your note, tags and rating on player tooltips",
-		function() return BT.settings and BT.settings.tooltip ~= false end,
-		function(on)
-			BT.EnsureBound()
-			BT.settings.tooltip = on and true or false
-		end)
-	self.notesRow.field = "tooltip"
-	-- THE PEOPLE YOU GROUPED WITH (Josh 2026-09-29), Modules/Ledger/Groups.lua
-	local groups = stack:Section("Groups")
-	self.groupsRow = BT.Widgets.SwitchRow(groups, "People you grouped with",
-		"Counts a group once you've been together 5 minutes, or in a dungeon",
-		function() return not (BT.settings and BT.settings.ledgerGroups == false) end,
-		function(on)
-			BT.EnsureBound()
-			BT.settings.ledgerGroups = on and true or false
-		end)
-	self.groupsRow.field = "ledgerGroups"
-	-- DUEL SCORES (Josh 2026-09-30), Modules/Ledger/Duels.lua
-	local duels = stack:Section("Duels")
-	self.duelsRow = BT.Widgets.SwitchRow(duels, "Duel scores",
-		"Counts the duels you win and lose against each player",
-		function() return not (BT.settings and BT.settings.ledgerDuels == false) end,
-		function(on)
-			BT.EnsureBound()
-			BT.settings.ledgerDuels = on and true or false
-		end)
-	self.duelsRow.field = "ledgerDuels"
-	-- THE PAGE SCROLLS BY ITS PICTURE (Josh 2026-09-30: the picture on top,
-	-- and the page scrolls). The search fills the room under the settings, so
-	-- the page is made as much taller as the picture takes, and the search
-	-- keeps the room it had. How much that is, is measured: the settings laid
-	-- out without the picture, then with it.
-	local extra = 0
-	if art then
-		art:Hide()
-		local without = stack:Layout()
-		art:Show()
-		extra = stack:Layout() - without
-	end
-	local find = CreateFrame("Frame", nil, parent)
-	find:SetPoint("TOPLEFT", 0, -(stack:Layout() + 8))
-	find:SetPoint("BOTTOMRIGHT", 0, 0)
-	BT.Find.Build(find)
-	local view = parent.beebsScroller
-	if view and extra > 0 then
-		-- the window's room is known once the client has sized the strip
-		local function fit()
-			view:SetContentHeight(view:Room() + extra)
-		end
-		fit()
-		view:HookScript("OnSizeChanged", fit)
+-- a setting that is on unless switched off, as a row's get and set
+local function setting(key)
+	return function()
+		return not (BT.settings and BT.settings[key] == false)
+	end, function(on)
+		BT.EnsureBound()
+		BT.settings[key] = on and true or false
 	end
 end
 
--- THE TARGET ROW (Josh 2026-09-24): who you are pointing at, their tags and
--- your note, in the dock. Its switch is on the Ledger's tab in the Dock's
--- block (Josh 2026-09-27), which is dragged to move the row.
-function M:BuildDockTab(parent)
-	local stack = BT.Widgets.Stack(parent)
-	local dock = stack:Section("Row")
-	self.rowRow = BT.Widgets.SwitchRow(dock, "Target row", "Your target, their tags and your note",
-		function() return BT.settings and BT.settings.targetRow ~= false end,
-		function(on)
-			BT.EnsureBound()
-			BT.settings.targetRow = on and true or false
-			if BT.Dock then
-				BT.Dock.SetShown(on)
-			end
-		end)
-	self.rowRow.field = "targetRow"
-	stack:Note("Drag this tab to move the row in the dock.", true)
-	stack:Layout()
+-- THE LEDGER'S PARTS (the settings canvas, Josh 2026-10-04): its own
+-- switch is the feature's, so these stand at the top of its page, each one
+-- a setting. Notes on tooltips is still BT.settings.tooltip, where
+-- Modules/Ledger/Tooltip.lua reads it.
+function M:Parts()
+	local tipGet, tipSet = setting("tooltip")
+	local groupGet, groupSet = setting("ledgerGroups")
+	local duelGet, duelSet = setting("ledgerDuels")
+	return {
+		{ label = "Notes on tooltips", blurb = "Your note, tags and rating on player tooltips",
+			get = tipGet, set = tipSet, field = "tooltip" },
+		{ label = "People you grouped with", blurb = "Counts a group after 5 minutes together, or in a dungeon",
+			get = groupGet, set = groupSet, field = "ledgerGroups" },
+		{ label = "Duel scores", blurb = "The duels you win and lose against each player",
+			get = duelGet, set = duelSet, field = "ledgerDuels" },
+	}
 end
 
-function M:ShowTab()
-	BT.Find.Refresh()
-end
-
-function M:Refresh()
-	BT.Find.Refresh()
-end
+-- THE TARGET ROW IS GONE (Josh 2026-10-05: "I like menu B. Then we can
+-- remove the old version from the dock"). Your target's name, a dot per tag,
+-- the note's mark and a pencil sat in a row at the top of the dock. Notes and
+-- tags are written from the game's right-click menu on a player now
+-- (Modules/Ledger/Menu.lua), and read on their tooltip and the target frame.
 
 function M:OnBind()
 	-- once: what you wrote on the census's rows, into the Ledger's own book
 	N.Move()
 	BT.MigrateTags()
+	-- and the target frame's mark, with the Ledger back on
+	if BT.LedgerMenu then
+		BT.LedgerMenu.Repaint()
+	end
 end
 
 function M:OnDisable()
-	BT.Dock.SetMark(nil) -- the toolkit's own glyph back in the first slot
 	BT.Find.CloseEditor()
 	if BT.Tooltip and BT.Tooltip.HidePills then
 		BT.Tooltip.HidePills()
 	end
-end
-
--- ---------------------------------------------------------------------------
--- What the Ledger puts on the floating bar
---
---   [ who you are pointing at ] [ ••• ] [ note ] [ find ]
---
--- The dots and the note are the only things on the whole bar that carry a
--- tooltip, and each shows CONTENT rather than instructions - the hover panel
--- this replaced explained the addon to somebody who already had it installed.
--- ---------------------------------------------------------------------------
-local DOT, DOT_GAP, MAX_DOTS = 7, 3, 5
-local MARK_X = 4 -- the second line starts under the class icon, not inset again
--- with nobody targeted: a reticle in the first slot, and what targeting is for
-local RETICLE = "Interface\\AddOns\\BeebMod\\Art\\net"
-local RETICLE_COORDS = { 0.5, 0.75, 0, 1 }
-local QUIET = { 0.54, 0.60, 0.58, 1 }
-local EMPTY = "|cff7d8a84Target a player to add notes and tags.|r"
--- what the hint claims of the row: a name's worth, never the whole sentence
-local HINT_W = 90
-
--- your target: its key, its name, and what the unit says about it
-local function currentTarget()
-	return N.Target()
-end
-
-local function tagsOn(p)
-	local out = {}
-	for _, f in ipairs(BT.AllTags()) do
-		if p and p.tags and p.tags[f.key] then
-			out[#out + 1] = f
-		end
+	-- the target frame's mark goes with it
+	if BT.LedgerMenu then
+		BT.LedgerMenu.Repaint()
 	end
-	return out
-end
-
-function M:Cells()
-	local PAD = BT.Dock.PAD
-
-	-- who you are pointing at; clicking writes on them
-	local who = BT.Dock.Cell("who", 120)
-	who.button = CreateFrame("Button", nil, who)
-	who.button:SetAllPoints()
-	who.button:RegisterForClicks("AnyUp")
-	who.text = who:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
-	who.text:SetPoint("LEFT", PAD, 0)
-	who.text:SetJustifyH("LEFT")
-	who.text:SetWordWrap(false)
-	-- A PENCIL, ON HOVER (Josh 2026-09-19). The whole name used to be the
-	-- button, so pointing at somebody and clicking to read their tags opened a
-	-- panel you had not asked for. Now the name is just their name; hovering it
-	-- offers a pencil, and the pencil is the only thing that writes.
-	who.pencil = CreateFrame("Button", nil, who)
-	who.pencil:SetSize(16, 16)
-	who.pencil:SetPoint("RIGHT", -1, 0)
-	who.pencil:RegisterForClicks("AnyUp")
-	-- ABOVE THE NAME'S OWN BUTTON (Josh 2026-09-19). The button that offers the
-	-- pencil covers the whole cell, and the pencil sits inside it: two siblings
-	-- at the same frame level, and the one underneath was taking the click. The
-	-- pencil is the only thing here that does anything, so it goes on top.
-	who.pencil:SetFrameLevel(BT.Pill.Number(who.button.GetFrameLevel
-		and who.button:GetFrameLevel(), 5) + 2)
-	who.pencil.icon = who.pencil:CreateTexture(nil, "ARTWORK")
-	who.pencil.icon:SetAllPoints()
-	who.pencil.icon:SetTexture("Interface\\AddOns\\BeebMod\\Art\\icons")
-	BT.Dock.PencilCoord(who.pencil.icon)
-	who.pencil.icon:SetVertexColor(0.55, 0.63, 0.59, 1)
-	who.pencil:Hide()
-
-	-- moving from the name onto the pencil leaves the name, so neither frame
-	-- can decide on its own that you have gone: they ask together, a moment
-	-- later
-	local function overEither()
-		return (who.IsMouseOver and who:IsMouseOver())
-			or (who.pencil.IsMouseOver and who.pencil:IsMouseOver())
-	end
-	local function maybeHide()
-		if C_Timer and C_Timer.After then
-			C_Timer.After(0.08, function()
-				if not overEither() then
-					who.pencil:Hide()
-				end
-			end)
-		else
-			who.pencil:Hide()
-		end
-	end
-	local function offer()
-		if who.key then
-			who.pencil:Show()
-		end
-	end
-	who.button:SetScript("OnEnter", offer)
-	who.button:SetScript("OnLeave", maybeHide)
-	-- no tooltip: a pencil on a name says what it does (Josh 2026-09-19)
-	who.pencil:SetScript("OnEnter", function(self)
-		BT.Widgets.Tint(self.icon)
-		offer()
-	end)
-	who.pencil:SetScript("OnLeave", function(self)
-		self.icon:SetVertexColor(0.55, 0.63, 0.59, 1)
-		if GameTooltip then
-			GameTooltip:Hide()
-		end
-		maybeHide()
-	end)
-	who.pencil:SetScript("OnClick", function()
-		if not who.key then
-			return -- nobody targeted: there is nothing to write on
-		end
-		BT.Find.EnsureBuilt()
-		-- what the unit says, for a row the note is the first thing on
-		BT.Find.OpenEditorFor(who.key, who, who.info)
-	end)
-	who.Offer = offer
-
-	-- the tags hang at the right-hand end, beside the cog: they are marks about
-	-- the person on this line, so they belong on this line
-	local dots = BT.Dock.Cell("dots", 0)
-	dots.side = "right"
-	dots.list = {}
-	-- the note's own mark, at the head of the row of tags
-	dots.note = dots:CreateTexture(nil, "ARTWORK")
-	dots.note:SetSize(DOT + 3, DOT + 3)
-	dots.note:SetTexture(BT.Dock.ICONS)
-	BT.Dock.NoteCoord(dots.note)
-	dots.note:SetVertexColor(0.90, 0.88, 0.80, 1)
-	dots.note:Hide()
-	for i = 1, MAX_DOTS do
-		local d = dots:CreateTexture(nil, "ARTWORK")
-		d:SetSize(DOT, DOT)
-		d:Hide()
-		dots.list[i] = d
-	end
-	dots:EnableMouse(true)
-	dots:SetScript("OnEnter", function(self)
-		if not ((self.tags and #self.tags > 0) or self.note.text) then
-			return
-		end
-		-- THE SAME QUOTATION IT IS EVERYWHERE ELSE (Josh 2026-09-20): the note
-		-- in the lore face, its source under it. AND WHO THEY ARE (Josh
-		-- 2026-09-27, the dock's tooltips redrawn): their name, level, class
-		-- and guild, your rating, the tags as coloured chips, and when you last
-		-- saw them - the unit tooltip had the rating, this one did not.
-		local p, info = self.person, self.info
-		local feature = BT.Feature and BT.Feature("ledger")
-		BT.Tip.Show(self, { edge = feature and feature.color, build = function(t)
-			local class = (info and info.class) or (p and p.class)
-			local bits = {}
-			if p and p.level then
-				bits[#bits + 1] = "Level " .. U.LevelText(p)
-			end
-			local className = class and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class]
-			if className then
-				bits[#bits + 1] = className
-			end
-			-- green, as the unit tooltip has it (Josh 2026-09-29)
-			if p and p.guild and p.guild ~= "" then
-				bits[#bits + 1] = "|cff40ff40<" .. p.guild .. ">|r"
-			end
-			local rating = p and p.rating
-			t:Header({ icon = false, name = U.Colorize(self.name or (p and p.name) or "", class),
-				sub = #bits > 0 and table.concat(bits, " ") or nil,
-				pill = rating and ("Rated %d / 5"):format(rating) or nil })
-			if self.note.text then
-				t:Quote(self.note.text, self.note.credit)
-			end
-			if #self.tags > 0 then
-				local chips = {}
-				for i, f in ipairs(self.tags) do
-					chips[i] = { f.label, f.color or { 0.6, 0.65, 0.62 } }
-				end
-				t:Tags(chips)
-			end
-			if p and p.last then
-				t:Note(("Last seen %s."):format(U.Since(p.last)))
-			end
-		end })
-	end)
-	dots:SetScript("OnLeave", function() BT.Tip.Hide() end)
-
-	-- A MARK MEANING THERE IS ONE, AFTER ALL (Josh 2026-09-20). The words went
-	-- on the second line of the dock for a while, and a second line is a third
-	-- of the panel's height spent on a sentence you wrote and already know.
-	-- The icon says there is something to read and the tooltip reads it, which
-	-- is the right trade at this size - the note is still the first thing on
-	-- the unit tooltip, where you are looking at the person rather than at the
-	-- panel.
-
-	who.Update = function(self)
-		local key, name, info = currentTarget()
-		self.key, who.key, who.info = key, key, info
-		-- someone you wrote on, seen again: their face brought up to date
-		local p = key and N.Seen(key, info)
-		-- NOBODY TARGETED SAYS WHAT TO DO (Josh 2026-09-22). "target a player"
-		-- beside the toolkit's page glyph read as a label on a document; the
-		-- slot shows a reticle now - the thing to do - and the words say why,
-		-- a size down so the sentence fits the row a name will.
-		-- THE HINT TAKES THE ROOM THERE IS (Josh 2026-09-22). Measured like a
-		-- name, the sentence was the widest thing in the dock and pushed the
-		-- whole panel out. It claims a name's worth of the row, reaches to the
-		-- row's right edge, and is cut short there if the panel is narrower.
-		self.text:ClearAllPoints()
-		self.text:SetPoint("LEFT", PAD, 0)
-		if key then
-			self.text:SetFontObject(BeebModFontHighlight)
-			self.text:SetText(U.Colorize(name, (info and info.class) or (p and p.class)))
-		else
-			self.text:SetFontObject(BeebModFontHighlightSmall)
-			self.text:SetText(EMPTY)
-			local row = BT.Dock.Row and BT.Dock.Row()
-			if row then
-				self.text:SetPoint("RIGHT", row, "RIGHT", -PAD, 0)
-			end
-		end
-		-- the first slot becomes their class while you are pointing at them
-		-- the unit's own class: a stranger has no row to read it from
-		local class = (info and info.class) or (p and p.class)
-		if class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class] then
-			BT.Dock.SetMark("Interface\\TargetingFrame\\UI-Classes-Circles", CLASS_ICON_TCOORDS[class])
-		elseif key then
-			BT.Dock.SetMark(nil)
-		else
-			BT.Dock.SetMark(RETICLE, RETICLE_COORDS, QUIET)
-		end
-		local measured = key and self.text.GetStringWidth and self.text:GetStringWidth() or HINT_W
-		-- room for the pencil at the end, whether or not it is showing: the
-		-- row must not jump when you point at it
-		BT.Dock.SetCellWidth(self, BT.Pill.Number(measured, 90) + PAD * 2 + 16)
-		self.wanted = true
-		if not key then
-			who.pencil:Hide()
-		end
-
-		local tags = tagsOn(p)
-		dots.tags = tags
-		-- who they are, for the tooltip's header
-		dots.person, dots.name, dots.info = p, name, info
-		for i, dot in ipairs(dots.list) do
-			local f = tags[i]
-			if f and i <= MAX_DOTS then
-				local c = f.color or { 0.6, 0.65, 0.62 }
-				dot:SetColorTexture(c[1], c[2], c[3], 1)
-				dot:ClearAllPoints()
-				dot:SetPoint("LEFT", dots, "LEFT", MARK_X + (i - 1) * (DOT + DOT_GAP), 0)
-				dot:Show()
-			else
-				dot:Hide()
-			end
-		end
-		local shown = math.min(#tags, MAX_DOTS)
-		dots.note.text = p and p.note or nil
-		dots.note.credit = dots.note.text and U.Credit(p) or nil
-		dots.note:SetShown(dots.note.text ~= nil)
-		local x = MARK_X
-		if dots.note.text then
-			dots.note:ClearAllPoints()
-			dots.note:SetPoint("LEFT", dots, "LEFT", x, 0)
-			x = x + DOT + 3 + DOT_GAP
-			-- the tags step aside for it rather than sitting under it
-			for i = 1, shown do
-				dots.list[i]:ClearAllPoints()
-				dots.list[i]:SetPoint("LEFT", dots, "LEFT",
-					x + (i - 1) * (DOT + DOT_GAP), 0)
-			end
-			x = x + shown * DOT + math.max(0, shown - 1) * DOT_GAP
-		else
-			x = x + shown * DOT + math.max(0, shown - 1) * DOT_GAP
-		end
-		dots.wanted = shown > 0 or dots.note.text ~= nil
-		BT.Dock.SetCellWidth(dots, x + 6)
-	end
-	dots.Update = function() end
-
-	-- no way-in icon of its own: the cog goes to the settings and the window
-	-- has a tab for everything else
-	return { who, dots }
 end
 
 -- ---------------------------------------------------------------------------

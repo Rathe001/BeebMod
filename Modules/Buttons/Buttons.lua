@@ -370,33 +370,15 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- What it is doing
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("The buttons other addons put on the minimap, set in a line in the dock at BeebMod's icon size.")
-	page:Note("Each button works as before. With no addon buttons, the line is hidden.", true)
-	self.found = page:Note("", true).text
-	page:Layout()
-end
-
-function M:RefreshTab()
-	if self.found then
-		local names = {}
-		for _, b in ipairs(M.list or {}) do
-			names[#names + 1] = ((nameOf(b) or "?"):gsub("^LibDBIcon10_", ""))
-		end
-		self.found:SetText(#names > 0 and ("In the line: " .. table.concat(names, ", ") .. ".")
-			or "No addon has a minimap button right now.")
+-- WHAT IT IS DOING, for the Testing page's What loaded (it was a note on the
+-- Minimap page until the settings canvas, 2026-10-04)
+function M.Status()
+	local names = {}
+	for _, b in ipairs(M.list or {}) do
+		names[#names + 1] = ((nameOf(b) or "?"):gsub("^LibDBIcon10_", ""))
 	end
-end
-
-function M:ShowTab()
-	M.Layout()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
+	return #names > 0 and ("in the line: " .. table.concat(names, ", ")) or "no addon has a minimap button"
 end

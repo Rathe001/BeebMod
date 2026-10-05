@@ -30,10 +30,6 @@ local M = BT.Module({
 	dock = true,
 })
 
-local TEXT_H = 16
-local BAR_H = 4
-local LINE_H = TEXT_H + BAR_H + 9
-local INSET = 6
 -- exalted is the top of the ladder: nothing comes after it
 local TOP = 8
 
@@ -203,7 +199,10 @@ function M.Update()
 	-- (or a standing previewed from the Testing page)
 	local shield = BT.Dock.preview.standing and M.StandingColour(BT.Dock.preview.standing) or c
 	M.shield.field:SetVertexColor(shield[1], shield[2], shield[3])
-	local w = BT.Dock.LineBarWidth(M.frame, INSET)
+	-- the standing in its own colour, as the bar is, lifted to read on the
+	-- dark panel (the canvas "Dock meters: level first")
+	M.eta:SetTextColor(BT.Util.Bright(c))
+	local w = BT.Dock.LineBarWidth(M.frame)
 	if w <= 0 then
 		return
 	end
@@ -242,10 +241,10 @@ function M.Tip()
 		end
 		table.sort(moved, function(a, b) return a.gained > b.gained end)
 		if #moved > 0 then
-			t:Section("This session")
+						t:Section("This session")
 			for i = 1, math.min(5, #moved) do
 				local m = moved[i]
-				t:Row(m.name, (m.gained > 0 and "+" or "-") .. big(math.abs(m.gained)), m.gained > 0 and "good" or "bad")
+				t:ListRow(m.name, (m.gained > 0 and "+" or "-") .. big(math.abs(m.gained)), m.gained > 0 and "good" or "bad")
 			end
 		end
 		t:Foot({ { "Click", "open reputation" } })
@@ -257,40 +256,17 @@ function M.Build()
 		return M.frame
 	end
 	M.frame = BT.Dock.Section("rep", 7)
-	M.frame.kind = "meter"
-	M.frame.wantHeight = LINE_H
-	M.frame:SetHeight(LINE_H)
-	M.text = BT.Widgets.Label(M.frame, "", "small")
-	M.text:SetJustifyH("LEFT")
-	-- a shield at the start with a banner on it (Josh 2026-09-29)
-	M.shield = BT.Dock.LineShield(M.frame, INSET, BT.Dock.SHIELD_BANNER)
-	M.eta = BT.Widgets.Label(M.frame, "", "small")
-	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
-	M.eta:SetJustifyH("RIGHT")
-	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
-	-- the right side sat a pixel high, its height its own)
-	M.eta:SetHeight(TEXT_H - 2)
-	-- A LONG NAME STOPS SHORT OF THE RIGHT-HAND TEXT (Josh 2026-09-22):
-	-- "Gnomeregan Exiles · Friendly" ran straight into "2,807 to Honored".
-	-- The left text ends where the right one begins, and is cut short with
-	-- an ellipsis rather than drawn over it.
-	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
-	M.text:SetHeight(TEXT_H - 2)
-	M.text:SetWordWrap(false)
-	M.track = M.frame:CreateTexture(nil, "BORDER")
-	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -(TEXT_H + 3))
-	M.track:SetHeight(BAR_H)
-	BT.Dock.LineAfter(M.shield.icon, M.text, M.track, TEXT_H)
-	M.fill = M.frame:CreateTexture(nil, "ARTWORK")
-	M.fill:SetPoint("TOPLEFT", M.track, "TOPLEFT", 0, 0)
-	M.fill:SetHeight(BAR_H)
+	-- a shield at the start with a banner on it (Josh 2026-09-29), on a slim
+	-- line under Level (BT.Dock.SlimLine, Josh 2026-10-05)
+	M.shield = BT.Dock.LineShield(M.frame, nil, BT.Dock.SHIELD_BANNER)
+	M.text, M.eta, M.track, M.fill = BT.Dock.SlimLine(M.frame, M.shield.icon)
 	M.frame:SetScript("OnSizeChanged", function()
 		M.Update()
 	end)
 	M.frame:EnableMouse(true)
 	-- a click opens the reputation page of the character window (Josh 2026-09-29)
 	M.frame:SetScript("OnMouseUp", function(_, button)
-		if button == "LeftButton" then
+		if button == "LeftButton" and not BT.Dock.JustMoved() then
 			BT.Util.OpenCharacter("reputation")
 		end
 	end)
@@ -319,15 +295,15 @@ M.events:SetScript("OnEvent", function(_, event, initial, reloading)
 	end
 end)
 
--- THE CLIENT'S OWN BAR, PUT AWAY WHILE THIS ONE IS UP (Josh 2026-09-22): a
--- switch on this tab, on unless you turn it off. See Core/StatusBars.lua.
+-- THE CLIENT'S OWN BAR, PUT AWAY WHILE THIS ONE IS UP (Josh 2026-09-22),
+-- always since the settings canvas cut its switch (2026-10-04). See
+-- Core/StatusBars.lua.
 function M.HideClient()
-	return not (BT.settings and BT.settings.hideClientRep == false)
+	return true
 end
 
+-- the client's bar put away or given back now (for the tests)
 function M.SetHideClient(on)
-	BT.EnsureBound()
-	BT.settings.hideClientRep = on and true or false
 	BT.StatusBars.Set("rep", BT.Enabled("rep") and on)
 end
 
@@ -361,31 +337,4 @@ end
 
 function M:OnDisable()
 	M.Show(false)
-end
-
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("Your standing with the faction you watch. Watch a faction by ticking \"Show as Experience Bar\" in the reputation panel.")
-	page:Note("With no faction watched, there is no line.", true)
-	local r = BT.Widgets.SwitchRow(page:Section("Game's reputation bar"), "Hide the game's bar",
-		"Hides the game's reputation bar while this one shows",
-		function() return M.HideClient() and true or false end,
-		function(on) M.SetHideClient(on) end)
-	self.hideSwitch = r.switch
-	page:Layout()
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
 end

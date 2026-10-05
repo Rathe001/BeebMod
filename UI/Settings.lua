@@ -17,20 +17,9 @@ local panel, stack
 function S.Build(parent)
 	panel = parent
 	stack = W.Stack(parent)
+	-- the search reads its rows from here (UI/Window.lua)
+	parent.stack = stack
 	S.appearance = {}
-
-	-- WHICH FEATURES (Josh 2026-09-27): the question the first login asks -
-	-- six cards, a switch each - asked again
-	local layout = stack:Section("Features")
-	local again = W.Row(layout, "Pick features",
-		"The six cards from your first login, one for each feature. Type /bt setup to show them from chat.")
-	local ask = again:SetControl(W.Button(again, "Choose", 70, 20))
-	ask:SetScript("OnClick", function()
-		if BT.Welcome then
-			BT.Welcome.Show()
-		end
-	end)
-	S.chooseButton = ask
 
 	-- WHAT THE TOOLKIT LOOKS LIKE, IN ONE PLACE (Josh 2026-09-21). Every
 	-- module reads these; there is nothing to set twice.
@@ -83,6 +72,21 @@ function S.Build(parent)
 	end
 	swatchRow("fill", "Background", "The dark fill behind every panel")
 	swatchRow("rim", "Border", "The line around every panel")
+
+	-- ONE SIZE, ONE WAY TO MOVE THINGS (the settings canvas, Josh 2026-10-04:
+	-- the dock's, the unit frames', the buffs' and the tooltips' sizes are
+	-- one; every reset of a place is one)
+	local place = stack:Section("Size and place")
+	local size = W.Row(place, "Size", "Every BeebMod panel: the dock, frames, buffs and tooltips")
+	S.sizeStep = size:SetControl(W.Stepper(size, function(dir)
+		S.SetScale(S.Scale() + dir * S.SCALE_STEP)
+		S.Refresh()
+	end))
+	local where = W.Row(place, "Positions", "Shift-drag the dock, frames and bag windows to move them")
+	S.resetButton = where:SetControl(W.Button(where, "Reset", 70, 20))
+	S.resetButton:SetScript("OnClick", function()
+		S.ResetPositions()
+	end)
 
 	-- no border width or corner radius here any more: the toolkit has one
 	-- shape (see Core/Theme.lua)
@@ -209,6 +213,62 @@ end
 
 function S.Refresh()
 	refreshAppearance()
+	if S.sizeStep then
+		S.sizeStep:Say(("%d%%"):format(math.floor(S.Scale() * 100 + 0.5)))
+	end
+end
+
+-- ---------------------------------------------------------------------------
+-- One size
+-- ---------------------------------------------------------------------------
+
+S.SCALE_MIN, S.SCALE_MAX, S.SCALE_STEP = 0.7, 1.3, 0.05
+
+-- every panel's size: the setting, or the dock's from before there was one
+function S.Scale()
+	local s = BT.settings and tonumber(BT.settings.scale)
+	if not s then
+		s = BT.settings and tonumber(BT.settings.dockScale) or 1
+	end
+	return math.max(S.SCALE_MIN, math.min(S.SCALE_MAX, s))
+end
+BT.Scale = function() return S.Scale() end
+
+-- set, and each panel told: the dock keeps its corner, the unit frames wait
+-- for a fight to end, the tray and the tooltips take it as they next draw
+function S.SetScale(n)
+	n = math.floor((n or 1) / S.SCALE_STEP + 0.5) * S.SCALE_STEP
+	n = math.max(S.SCALE_MIN, math.min(S.SCALE_MAX, n))
+	BT.EnsureBound()
+	BT.settings.scale = n
+	if BT.Dock and BT.Dock.SetScale then
+		pcall(BT.Dock.SetScale, n)
+	end
+	local uf = BT.GetModule("unitframes")
+	if uf and uf.ApplyScale and BT.Enabled("unitframes") then
+		pcall(uf.ApplyScale)
+	end
+	local B = BT.UnitFrames and BT.UnitFrames.Buffs
+	if B and B.Place then
+		pcall(B.Place)
+	end
+	return n
+end
+
+-- EVERY PLACE BACK (the settings canvas): the dock, the unit frames, the bag
+-- windows and the character sheet where they start
+function S.ResetPositions()
+	if BT.Dock and BT.Dock.ResetPosition then
+		pcall(BT.Dock.ResetPosition)
+	end
+	for _, key in ipairs({ "unitframes", "bagwindow", "charsheet" }) do
+		local m = BT.GetModule(key)
+		local reset = m and (m.ResetPlaces or m.ResetPosition)
+		if reset then
+			pcall(reset)
+		end
+	end
+	BT.Util.Print("Positions: the dock, the unit frames, the bag windows and the character sheet are back where they start.")
 end
 
 -- the tests want the rows without going through frames

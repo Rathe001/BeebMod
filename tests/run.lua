@@ -26,6 +26,8 @@ for _, f in ipairs({ "Core/Init.lua", "Core/Rename.lua", "Core/Cpu.lua", "Core/U
 	-- until something asks it to
 	"UI/Pill.lua", "UI/Widgets.lua",
 	"Modules/Ledger/Store.lua", "Modules/Ledger/Tags.lua", "Modules/Census/Stats.lua",
+	-- the Ledger's ranks and points, and the journals' small notices' arithmetic
+	"Modules/Ledger/Ranks.lua", "UI/Notice.lua",
 	-- the modules themselves: they register the hooks that do the migrating,
 	-- and a sweep that only runs for an enabled module has to be tested with
 	-- one actually registered
@@ -833,8 +835,10 @@ do
 			dockPos = { point = "TOPLEFT", rel = "TOPLEFT", x = 12, y = -300 },
 			modules = { census = false },
 			-- the Tooltips page's options, under the key they had before
-			-- 2026-09-29: they come in, and move to the new one
+			-- 2026-09-29: they come in, and move to the new one (this file is
+			-- about the moving, so the cut answers are left in it)
 			tips = { scale = 0.8 },
+			cutSettingsDropped = true,
 		},
 		realms = { ["Whitemane|Alliance"] = {
 			players = {
@@ -929,22 +933,49 @@ do
 end
 
 -- 9b. FEATURES (Josh 2026-09-27: "each of those modules should work
--- independently... Entire modules should have a toggle switch"). Six, each a
--- switch over every module in it.
+-- independently... Entire modules should have a toggle switch"). Five since
+-- 2026-10-04, the Census a part of the Ledger: each a switch over every
+-- module in it.
 do
 	newdb()
 	check(BT.FeatureOf("tracker") == "dock" and BT.FeatureOf("ledger") == "ledger"
-		and BT.FeatureOf("census") == "census" and BT.FeatureOf("tooltips") == "interface",
-		"every module is part of a feature (an older group reads as one)")
+		and BT.FeatureOf("census") == "ledger" and BT.FeatureOf("tooltips") == "interface",
+		"every module is part of a feature (an older group reads as one, the Census the Ledger's)")
+	check(#BT.FEATURES == 5 and BT.Feature("census") == nil and BT.Feature("interface").title == "Game frames",
+		"five features, Interface called Game frames")
 	check(type(BT.settings.features) == "table" and BT.FeatureOn("dock") and BT.FeatureOn("ledger"),
 		"a fresh install's features are on")
 	-- an install from before features: its switches say what it had on
 	BT.settings.features = nil
 	BT.settings.modules.tracker, BT.settings.modules.tooltips = false, false
 	check(BT.SeedFeatures() and not BT.FeatureOn("interface") and not BT.FeatureOn("dock")
-		and BT.FeatureOn("census") and BT.FeatureOn("ledger"),
+		and BT.FeatureOn("ledger"),
 		"seeded once from the modules you had on: a feature with none of them on starts off")
 	check(not BT.SeedFeatures(), "and only once")
+	-- THE CENSUS JOINS THE LEDGER (Josh 2026-10-04): once, the Ledger on if
+	-- either was, and recording off if the Census was off
+	local hadFeatures, hadCensus = BT.settings.features, BT.settings.modules.census
+	BT.settings.features = { ledger = true, census = false }
+	check(BT.MergeCensus() and BT.settings.features.ledger == true and BT.settings.features.census == nil
+		and BT.settings.modules.census == false, "a Census switched off: the Ledger on, recording off")
+	check(not BT.MergeCensus(), "and only once")
+	BT.settings.features = { ledger = false, census = true }
+	BT.settings.modules.census = true
+	check(BT.MergeCensus() and BT.settings.features.ledger == true and BT.settings.modules.census == true,
+		"a Census on and a Ledger off: the Ledger on, recording on")
+	BT.settings.features, BT.settings.modules.census = hadFeatures, hadCensus
+	-- THE ANSWERS NOBODY ASKS ANY MORE (2026-10-04): taken out once, the
+	-- dock's size kept as everyone's
+	local hadCut = BT.settings.cutSettingsDropped
+	BT.settings.cutSettingsDropped = nil
+	BT.settings.dockScale, BT.settings.scale = 1.1, nil
+	BT.settings.tracker = { hereOnly = true, collapsed = true }
+	BT.settings.hideClientXP = false
+	check(BT.DropCutSettings() == 3 and BT.settings.scale == 1.1 and BT.settings.dockScale == nil
+		and BT.settings.tracker.hereOnly == nil and BT.settings.tracker.collapsed == true
+		and BT.settings.hideClientXP == nil, "the cut answers taken out, the dock's size kept, state left alone")
+	check(BT.DropCutSettings() == 0, "and only once")
+	BT.settings.cutSettingsDropped, BT.settings.scale, BT.settings.tracker = hadCut, nil, nil
 	BT.settings.modules.tracker, BT.settings.modules.tooltips = true, true
 	BT.SetFeature("dock", true)
 	BT.SetFeature("interface", true)
@@ -1022,6 +1053,8 @@ do
 			-- the Dock's, from when the code called it the bar
 			bar = false,
 			barPos = { point = "TOPLEFT", rel = "TOPLEFT", x = 40, y = -120 },
+			-- (about the moving: the cut answers are left in it)
+			cutSettingsDropped = true,
 		},
 		realms = {},
 		prdDump = { at = at + 1 }, menuDump = { at = at + 2 }, menusDump = { at = at + 3 }, framesDump = { at = at + 4 },
@@ -2644,6 +2677,106 @@ do
 	local all2, ally2, horde2, women2, hordeMen2 = counts()
 	check(all2 == all and ally2 == ally and horde2 == horde and women2 == women and hordeMen2 == hordeMen,
 		"and the same, read straight from the packed book")
+end
+
+-- THE LEDGER'S RANKS (Josh 2026-10-04: "achievements for hitting breakpoints
+-- on number of characters scanned, number of tags given, number of notes";
+-- the Ravenholdt Ledger since 2026-10-05). The canvas's sums: 34,172
+-- characters, six notes and twelve tags are 460 points, an Informant.
+do
+	local L = BT.LedgerRanks
+	newdb()
+	BT.settings.tags = {}
+	L.characters = 0
+	local p0 = L.Score()
+	check(p0 == 0 and L.Rank(p0) == 1 and select(2, L.Rank(p0)) == "Fledgling", "an empty book: a Fledgling, no points")
+	check(L.RankBadge(11) == L.BADGES[10] and L.BADGES[10]:find("Art\\Ravenholdt\\rank10", 1, true),
+		"ten badges, in Art/Ravenholdt")
+	for i = 1, 10 do
+		local f = io.open(("Art/Ravenholdt/rank%d.tga"):format(i), "rb")
+		check(f ~= nil, ("the badge's file is there: rank%d"):format(i))
+		if f then f:close() end
+	end
+	check(#L.QUOTES == #L.RANKS and L.QUOTES[1]:find("We have been watching you", 1, true),
+		"a line from Jorach for each rank, the first the settings page's")
+	-- the book as the canvas had it
+	L.characters = 34172
+	BT.settings.tags = { { key = "tag3", label = "Healer", color = { 0.45, 0.75, 0.99 } } }
+	local people = N.People()
+	local tags = { { "good" }, { "good" }, { "good", "tag3" }, { "good", "tag3" }, { "good", "tag3" }, { "good", "bad" },
+		{ "bad" }, { "troll" } }
+	for i, list in ipairs(tags) do
+		local p = { name = "Spy " .. i, tags = {} }
+		for _, t in ipairs(list) do p.tags[t] = true end
+		if i <= 6 then p.note = "seen" end
+		people["Spy " .. i] = p
+	end
+	local points, count, c, characters, entries = L.Points()
+	check(c.notes == 6 and c.tags == 12 and c.mixed == 3 and c.own, "six notes, twelve tags, all three kinds and one of yours")
+	check(characters == 341 and entries == 24, ("a point a hundred characters, two a note, one a tag: %d, %d")
+		:format(characters, entries))
+	check(points == 460 and count == 11 and select(2, L.Rank(points)) == "Informant",
+		("460 points from 11 commendations, an Informant: %d from %d"):format(points, count))
+	-- THE FIRST LOOK IS QUIET: what the book already has is written down,
+	-- with no date, and nothing is said about it
+	local news, up = L.Check(1000)
+	check(#news == 0 and up == nil and L.EarnedAt("characters:100") == 0 and L.EarnedAt("notes:10") == nil,
+		"the first look writes down what is there, without a date and without a word")
+	-- four more notes: Fine Print, dated, and no new rank
+	for i = 1, 4 do people["Spy Extra " .. i] = { name = "Spy Extra " .. i, note = "seen" } end
+	news, up = L.Check(2000)
+	check(#news == 1 and news[1].title == "Fine Print" and L.EarnedAt("notes:10") == 2000 and up == nil,
+		"ten notes is Fine Print, dated when it came")
+	-- fifty thousand characters: Nobody Slips By, and a Shadow
+	L.characters = 50000
+	news, up = L.Check(3000)
+	check(#news == 1 and news[1].title == "Nobody Slips By" and up == 5,
+		("fifty thousand is Nobody Slips By, and a new rank: %s"):format(tostring(up)))
+	news, up = L.Check(4000)
+	check(#news == 0 and up == nil, "and said once")
+	-- a new character in the census's book is one more counted
+	local before = L.characters
+	DB.Note(BT.db, "Newcomer Face", nil, { class = "MAGE" })
+	check(L.characters == before + 1, "a new character recorded is one more counted")
+	-- the commendations' words
+	local byId = {}
+	for _, a in ipairs(L.List(c)) do byId[a.id] = a end
+	check(byId["characters:150000"].text == "Record 150,000 characters" and byId["notes:1"].text == "Write a note on a character"
+		and byId["tags:own"].title == "Code Name", "each says what it takes, in plain words")
+end
+
+-- SEVERAL AT ONCE ARE ONE NOTICE (Josh 2026-10-05: "I worry about
+-- achievements being too spammy")
+do
+	local Nt = BT.Notice
+	local one = Nt.Merge({ { name = "First Pages", kind = "commendation", points = 5 } })
+	check(one.name == "First Pages", "one notice is itself")
+	local open = function() end
+	local three = Nt.Merge({ { name = "A", kind = "commendation", points = 5, onClick = open },
+		{ name = "B", kind = "commendation", points = 10 }, { name = "C", kind = "commendation", points = 20 } })
+	check(three.name == "3 commendations" and three.points == 35 and three.onClick == open,
+		"three commendations are one, with all their points, opening the first")
+	local mixed = Nt.Merge({ { kind = "mastery", points = 2 }, { kind = "commendation", points = 5 } })
+	check(mixed.name == "2 earned" and mixed.points == 7, "of two kinds, they are said as earned")
+	local four = Nt.Merge({ three, { name = "D", kind = "commendation", points = 5 } })
+	check(four.name == "4 commendations" and four.points == 40, "and three waiting with one more are four: " .. four.name)
+end
+
+-- A PLAYER'S COPY HAS NO TESTING PAGE (Josh 2026-10-05: "is there a way to
+-- disable it in production builds so normal users don't see it?"). What the
+-- BigWigs packager does to a @debug@ block in a Lua file, done here to
+-- Core/Init.lua: the block becomes a comment, and BT.DEV stays false.
+do
+	local file = assert(io.open("Core/Init.lua", "rb"))
+	local src = file:read("a")
+	file:close()
+	check(src:find("%-%-@debug@") and src:find("%-%-@end%-debug@"), "Core/Init.lua marks its debug lines for the packager")
+	local packaged = src:gsub("%-%-@debug@", "--[===[@debug@"):gsub("%-%-@end%-debug@", "--@end-debug@]===]")
+	local fresh, plain = {}, {}
+	assert(load(packaged, "@Core/Init.lua (packaged)"))("BeebMod", fresh)
+	check(fresh.DEV == false, "a packaged copy is not a copy to work on")
+	assert(load(src, "@Core/Init.lua"))("BeebMod", plain)
+	check(plain.DEV == true, "this folder, run as it is, is one")
 end
 
 print("")

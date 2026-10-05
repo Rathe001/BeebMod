@@ -41,7 +41,17 @@ local EDIT_INSET = 6
 
 local skins = setmetatable({}, { __mode = "k" })
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). Side buttons on hover, the box on top, the window in its corner, short
+-- channel names, guild names green and links to copy; no timestamps of
+-- ours (the game has its own), and the game's own text size on each tab.
+M.FIXED = { buttons = true, editOnTop = true, flush = true, shortChannels = true, timestamps = false, guilds = true,
+	links = true, size = false }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.chat
 	if not s or s[name] == nil then
 		return fallback
@@ -1097,7 +1107,7 @@ end
 -- window, set for all of them at once
 function M.ApplySize()
 	local size = opt("size", nil)
-	if not size then
+	if type(size) ~= "number" then
 		return false
 	end
 	for _, frame in ipairs(M.Frames()) do
@@ -1383,64 +1393,13 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- What it is doing
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod redraws the game's chat windows. It doesn't filter lines or move them to another window.")
-
-	self.rows = {}
-	local layout = page:Section("Layout")
-	local function row(title, blurb, name, default)
-		local r = BT.Widgets.SwitchRow(layout, title, blurb,
-			function() return opt(name, default) and true or false end,
-			function(on) setOpt(name, on) end)
-		r.optName, r.default = name, default
-		self.rows[#self.rows + 1] = r
-	end
-	row("Side buttons on hover", "Scroll and menu buttons show only while you point at chat",
-		"buttons", true)
-	row("Chat box on top", "Above the tabs", "editOnTop", true)
-	row("Snap to corner", "Main chat window in the bottom-left corner", "flush", true)
-	row("Short channel names", "[1. General - Dun Morogh] becomes [1.Gen]", "shortChannels", true)
-	row("Timestamps", "Puts the time in front of each new line. Off while the game's own timestamps are on.", "timestamps", false)
-	row("Guild names in green", "Guild names in chat, such as <New Horizon>, turn green. Click one to put its /who in the chat box.", "guilds", true)
-	row("Clickable links", "Click a web address in chat to copy it", "links", true)
-	local size = BT.Widgets.Row(page:Section("Text"), "Text size", "For every chat window")
-	local step = size:SetControl(BT.Widgets.Stepper(size, function(dir)
-		local now = opt("size", 14) + dir
-		now = math.max(10, math.min(20, now))
-		BT.EnsureBound()
-		BT.settings.chat = BT.settings.chat or {}
-		BT.settings.chat.size = now
-		M.ApplySize()
-		self.sizeText:SetText(tostring(now))
-	end))
-	self.sizeText = step.value
-	self.sizeText:SetText(tostring(opt("size", 14)))
-	page:Layout()
-
-	self.found = BT.Widgets.Label(panel, "", "small", 0.45, 0.50, 0.48)
-	self.found:SetPoint("BOTTOMLEFT", 2, 4)
-end
-
-function M:RefreshTab()
-	for _, r in ipairs(self.rows or {}) do
-		r.switch:SetOn(opt(r.optName, r.default) and true or false)
-	end
-	if self.found then
-		self.found:SetText(("%d chat windows redrawn"):format(M.lastCount or 0))
-	end
-end
-
-function M:ShowTab()
-	M.StyleAll()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
+-- WHAT IT IS DOING, for the Testing page's What loaded (it was a line at the
+-- foot of the Chat page until the settings canvas, 2026-10-04)
+function M.Status()
+	return ("%d chat windows redrawn"):format(M.lastCount or 0)
 end
 
 -- WHERE EACH TAB ACTUALLY IS (Josh 2026-09-21). A tab that will not line up

@@ -33,8 +33,22 @@ local function touched(note)
 	if note then
 		N.noteRev = N.noteRev + 1
 	end
+	-- the Ledger's ranks hear of it: a note or a tag is points
+	-- (Modules/Ledger/Ranks.lua)
+	if N.onTouched then
+		N.onTouched(note)
+	end
+	-- and anything else that shows what is written (N.Listen): the mark on
+	-- the target frame (Modules/Ledger/Menu.lua)
+	for _, fn in ipairs(N.listeners) do
+		pcall(fn, note)
+	end
 end
 N.Touched = touched
+N.listeners = {}
+function N.Listen(fn)
+	N.listeners[#N.listeners + 1] = fn
+end
 
 -- the whole store, made on first use
 function N.Root()
@@ -50,13 +64,9 @@ function N.Root()
 	return root
 end
 
--- this realm and side's people, or another book's by its scope key
-function N.People(scopeKey)
-	-- the made-up notes stand in for this book while they are shown
-	-- (Modules/Ledger/Demo.lua); never for a book asked for by name
-	if N.demo and not scopeKey then
-		return N.demo
-	end
+-- this realm's book: its people, and what else the Ledger keeps for the
+-- realm (the commendations' dates, Modules/Ledger/Ranks.lua)
+function N.Book(scopeKey)
 	local root = N.Root()
 	scopeKey = scopeKey or (BT.scope and BT.scope.key)
 	if not (root and scopeKey) then
@@ -73,7 +83,18 @@ function N.People(scopeKey)
 		root.realms[scopeKey] = book
 	end
 	book.people = book.people or {}
-	return book.people
+	return book
+end
+
+-- this realm and side's people, or another book's by its scope key
+function N.People(scopeKey)
+	-- the made-up notes stand in for this book while they are shown
+	-- (Modules/Ledger/Demo.lua); never for a book asked for by name
+	if N.demo and not scopeKey then
+		return N.demo
+	end
+	local book = N.Book(scopeKey)
+	return book and book.people or nil
 end
 
 -- anything of yours on it: a row with none of these is not kept

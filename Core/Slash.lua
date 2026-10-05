@@ -72,6 +72,16 @@ function BT.WhatLoaded()
 		on[#on + 1] = ("%s %s"):format(m.key, BT.Enabled(m.key) and "on" or "off")
 	end
 	U.Print("modules: " .. table.concat(on, ", "))
+	-- WHAT EACH IS DOING (the settings canvas, Josh 2026-10-04: the lines at
+	-- the foot of the old pages, such as "52 buttons redrawn", moved here)
+	for _, m in ipairs(BT.Modules()) do
+		if m.Status and BT.Enabled(m.key) then
+			local ok, said = pcall(m.Status)
+			if ok and said then
+				U.Print(("%s: %s"):format(m.short or m.title or m.key, tostring(said)))
+			end
+		end
+	end
 	-- which tooltip hooks fire (Core/Tooltip.lua)
 	local T = BT.UnitTip
 	if T then

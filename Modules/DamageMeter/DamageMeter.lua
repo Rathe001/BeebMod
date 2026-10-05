@@ -45,7 +45,14 @@ local M = BT.Module({
 
 local dresser = BT.Furniture.New({ flatBars = true })
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). Figures per second, and the fight's length.
+M.FIXED = { perSecond = true, clock = true }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.damagemeter
 	if not s or s[name] == nil then
 		return fallback
@@ -730,46 +737,16 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- What it is doing
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("This is the game's own damage meter. Every button and row works as before.")
-	-- (Josh 2026-09-24) the two things this adds to the client's meter
-	local more = page:Section("Extras")
-	BT.Widgets.SwitchRow(more, "Per second", "After each row's total, as in 8,421 (93.5)",
-		function() return opt("perSecond", true) and true or false end,
-		function(on) setOpt("perSecond", on) end)
-	BT.Widgets.SwitchRow(more, "Fight length", "In the header, when there's room",
-		function() return opt("clock", true) and true or false end,
-		function(on) setOpt("clock", on) end)
-	page:Layout()
-	self.found = BT.Widgets.Label(panel, "", "small", 0.45, 0.50, 0.48)
-	self.found:SetPoint("BOTTOMLEFT", 2, 4)
-end
-
-function M:RefreshTab()
-	if self.found then
-		if #roots == 0 then
-			self.found:SetText("No meter window found yet. Open it, then open this page again.")
-		else
-			self.found:SetText(("%d window%s · %d pieces redrawn"):format(
-				#roots, #roots == 1 and "" or "s", M.lastCount or 0))
-		end
+-- WHAT IT IS DOING, for the Testing page's What loaded (it was a line at the
+-- foot of the Damage meter page until the settings canvas, 2026-10-04)
+function M.Status()
+	if #roots == 0 then
+		return "no meter window found yet"
 	end
-end
-
-function M:ShowTab()
-	if BT.Enabled("damagemeter") then
-		M.Roots(true)
-		M.StyleAll()
-	end
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
+	return ("%d window%s · %d pieces redrawn"):format(#roots, #roots == 1 and "" or "s", M.lastCount or 0)
 end
 
 -- ---------------------------------------------------------------------------

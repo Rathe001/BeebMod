@@ -38,22 +38,9 @@ S.SIZE, S.GAP = 18, 3
 S.LEFT, S.BOTTOM = 8, 6
 local CROP = 0.08
 
--- on unless switched off, on the Bag window's page
+-- always (the settings canvas, Josh 2026-10-04, cut their switch)
 function S.On()
-	return not (BT.settings and BT.settings.bagwindow and BT.settings.bagwindow.bagSlots == false)
-end
-
-function S.SetOn(on)
-	BT.EnsureBound()
-	BT.settings.bagwindow = BT.settings.bagwindow or {}
-	-- on, the default, is not written down (`(not on) and false or nil` is nil
-	-- either way, the rings switch's old trap)
-	if on then
-		BT.settings.bagwindow.bagSlots = nil
-	else
-		BT.settings.bagwindow.bagSlots = false
-	end
-	S.Attach()
+	return true
 end
 
 -- the character's inventory slot that holds bag `bag` (1 to 4): 20 to 23 in

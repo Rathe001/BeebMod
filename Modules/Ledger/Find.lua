@@ -13,8 +13,13 @@
 -- Click another row and this one closes again.
 --
 -- The separate panel is still here for one job the tab cannot do: writing on
--- whoever you are pointing at straight from the floating bar, with no window
--- open. It is also where tags are made and deleted.
+-- a player straight from the game's right-click menu on them, with no window
+-- open (Modules/Ledger/Menu.lua). It is also where tags are made and deleted.
+--
+-- IN THE JOURNALS' WINDOW (Josh 2026-10-05, the "Sister journals" canvas):
+-- the page's rail is what to show - everyone, your notes, or one tag, each
+-- with how many - and the search box is on the toolbar over the cards, as
+-- the Field Journal's is.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Find.lua")
 
@@ -72,14 +77,13 @@ local CARD_PLAIN, CARD_RICH, CARD_CREDIT = 32, 54, 68
 local TAG_ROW_H = 20
 -- CARDS_TOP is measured inside the find view, which itself starts VIEW_TOP
 -- below the window's top edge. Mixing the two frames of reference is what put
--- the first card on top of the filter buttons (Josh 2026-09-19).
-local VIEW_TOP, CARDS_TOP, WINDOW_MIN = 62, 84, 190
+-- the first card on top of the filter buttons (Josh 2026-09-19). The view is
+-- the page's column now (UI/Book.lua), with nothing over the cards in it.
+local VIEW_TOP, CARDS_TOP, WINDOW_MIN = BT.Book.BODY_Y + BT.Book.COL_Y, 0, 190
 local panel, cards, searchBox, results, selected = nil, {}, nil, {}, nil
 local findView, editor, emptyLine, moreLine
--- the "only:" filter row, rebuilt with the tags; defined after refreshFind
+-- the rail of who to show, rebuilt with the tags; defined after refreshFind
 local buildFilters
--- the row wraps at the panel's content width, which is 584 (see the cards)
-local FILTER_W = 584
 -- what the panel is filtering by; it used to hang off the window frame, and
 -- the window belongs to the toolkit now
 local state = { mineOnly = false, tagFilter = nil }
@@ -160,8 +164,7 @@ local function editorLine(parent, size, r, g, b)
 end
 
 -- the note field without the cursor, and with it
-B.FIELD_IDLE = { fill = { 0.02, 0.03, 0.03, 0.55 }, edge = { 0.20, 0.26, 0.24, 0.95 } }
-B.FIELD_LIT = { fill = { 0.07, 0.09, 0.09, 0.85 } }
+B.FIELD_IDLE, B.FIELD_LIT = BT.Widgets.FIELD_IDLE, BT.Widgets.FIELD_LIT
 
 local function buildEditor(parent, anchor, label, paint)
 	local e = CreateFrame("Frame", nil, parent)
@@ -628,18 +631,18 @@ end
 -- BESIDE, NEVER INSIDE (Josh 2026-09-19). It used to dock into the bottom of
 -- the Ledger tab, which made the window taller and the panel a part of it.
 -- Now it is always its own small panel, put where the thing you clicked is:
--- against the right edge of the window when the window is open, against the
--- left edge of the dock when it is not. Never overlapping either.
+-- against the right edge of the window when the window is open, under the
+-- frame you right-clicked when it is not (B.PlaceBeside).
 function B.DockEditor()
 	if not editor then
 		return
 	end
-	local window = BT.Window.Frame()
+	local window = BT.CensusWindow and BT.CensusWindow.Frame()
 	editor:SetParent(UIParent)
 	editor:ClearAllPoints()
 	editor:SetWidth(E_W)
 	editor:SetClampedToScreen(true)
-	if window and BT.Window.IsShown() then
+	if window and B.Showing() then
 		editor:SetPoint("TOPLEFT", window, "TOPRIGHT", 8, 0)
 	else
 		editor:SetPoint("CENTER")
@@ -651,84 +654,53 @@ local function num(v, fallback)
 	return BT.Pill.Number(v, fallback)
 end
 
--- BESIDE THE DOCK, NOT OVER IT (Josh 2026-09-19). Clicking a name on the dock
--- used to open this wherever the arithmetic put it, which was usually on top
--- of the thing you had just clicked. It belongs alongside: pinned to the
--- dock's left edge, top aligned, so the name you clicked and the note you are
--- writing about them are on one line - and narrow, because it holds a row of
--- tags and one field, not a form.
-local FLOAT_W = E_W
+-- UNDER THE FRAME YOU RIGHT-CLICKED (Josh 2026-10-05). The panel opened
+-- beside the dock's target row, and the row is gone: notes are written from
+-- the game's right-click menu on a player (Modules/Ledger/Menu.lua). It opens
+-- under the frame the menu came from - your target, a party member - left
+-- edges together. A chat window or a list is too wide to hang it from, and
+-- there it opens where the mouse is, which is where the menu was.
+-- Narrow, because it holds a row of tags and one field, not a form.
+B.BESIDE_MOST = 320
 
-function B.FloatEditor(anchor)
+function B.PlaceBeside(owner)
 	if not editor then
-		return
+		return nil
 	end
 	editor:SetParent(UIParent)
 	editor:ClearAllPoints()
 	editor:SetWidth(E_W)
 	editor:SetClampedToScreen(true) -- the backstop, whatever the arithmetic says
 	B.RebuildTags()
-	-- BESIDE THE ROW, NOT BESIDE THE PANEL (Josh 2026-09-21). This took the
-	-- dock over whatever it was handed, which top-aligned it with the whole
-	-- panel. That was the same thing while the dock began with the Ledger's
-	-- row - now the panel opens with a header and a map above it, so "the top
-	-- of the dock" is a long way above the name you clicked.
-	--
-	-- The frame you clicked decides the height; the dock still decides the
-	-- side, because that is about the screen edge rather than about the row.
-	local dock = BT.Dock and BT.Dock.Frame()
-	anchor = anchor or dock
-	if not anchor then
-		editor:SetPoint("CENTER")
-		return
+	local wide = owner and num(owner.GetWidth and owner:GetWidth(), nil)
+	if wide and wide > 0 and wide <= B.BESIDE_MOST then
+		editor:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -8)
+		return "frame"
 	end
-	-- to the left, unless there is no room to the left, in which case the
-	-- right: a panel half off the screen is worse than one on the wrong side
-	local edge = dock or anchor
-	local left = num(edge.GetLeft and edge:GetLeft(), nil)
-	local onRight = left and left < FLOAT_W + 20
-	-- LEVEL WITH THE ROW, CLEAR OF THE DOCK (Josh 2026-09-22). Hung from the
-	-- name you clicked, the editor started where that cell does - a little
-	-- below the top of its row, and on the inside of the class icon, so it
-	-- sat low and ran over the dock's edge. The height is the ROW's top and
-	-- the side is the DOCK's edge, eight clear of it, like everything else
-	-- that opens beside the panel.
-	local row = BT.Dock and BT.Dock.Row and BT.Dock.Row()
-	local topOf = (row and row.IsShown and row:IsShown() and row) or anchor
-	local dockTop = dock and num(dock.GetTop and dock:GetTop(), nil)
-	local rowTop = num(topOf.GetTop and topOf:GetTop(), nil)
-	if dock and dockTop and rowTop then
-		-- the dock may be scaled: its tops are in its own units, the offset
-		-- is in the editor's
-		local dockScale = num(dock.GetEffectiveScale and dock:GetEffectiveScale(), 1)
-		local ownScale = num(editor.GetEffectiveScale and editor:GetEffectiveScale(), 1)
-		local dy = (rowTop - dockTop) * dockScale / math.max(0.01, ownScale)
-		if onRight then
-			editor:SetPoint("TOPLEFT", dock, "TOPRIGHT", 8, dy)
-		else
-			editor:SetPoint("TOPRIGHT", dock, "TOPLEFT", -8, dy)
-		end
-		return
+	-- the cursor is in the screen's pixels; the panel is in UIParent's units
+	local x, y = 0, 0
+	if GetCursorPosition then
+		x, y = GetCursorPosition()
 	end
-	if onRight then
-		editor:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, 0)
-	else
-		editor:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -8, 0)
-	end
+	local scale = math.max(0.01, num(UIParent.GetEffectiveScale and UIParent:GetEffectiveScale(), 1))
+	editor:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", num(x, 0) / scale, num(y, 0) / scale)
+	return "cursor"
 end
 
 -- `info`: what a unit in front of you says about them, for someone neither
--- book has yet - the first note on a stranger makes their row
-function B.OpenEditorFor(key, anchor, info)
+-- book has yet - the first note on a stranger makes their row. `owner`: the
+-- frame the menu was opened on (B.PlaceBeside). With the Ledger's own window
+-- on its Find tab, the panel docks beside that instead.
+function B.OpenEditorFor(key, owner, info)
 	if not (editor and key and face(key, info)) then
 		return false
 	end
 	selected = key
 	editor.info = info
-	if panel and BT.Window.IsShown() and BT.Window.View() == "ledger" then
+	if panel and B.Showing() then
 		B.DockEditor()
 	else
-		B.FloatEditor(anchor)
+		B.PlaceBeside(owner)
 	end
 	return B.OpenEditor()
 end
@@ -1035,6 +1007,8 @@ local function refreshFind()
 			return
 		end
 	end
+	-- the rail's counts move with the book
+	buildFilters()
 	local text = searchBox:GetText()
 	if type(text) ~= "string" then
 		text = ""
@@ -1073,8 +1047,8 @@ local function refreshFind()
 		if row and i <= CARDS then
 			local h = fillCard(card, row)
 			card:ClearAllPoints()
-			card:SetPoint("TOPLEFT", findView, "TOPLEFT", 16, -(CARDS_TOP + cardsHeight))
-			card:SetPoint("TOPRIGHT", findView, "TOPRIGHT", -16, -(CARDS_TOP + cardsHeight))
+			card:SetPoint("TOPLEFT", findView, "TOPLEFT", 0, -(CARDS_TOP + cardsHeight))
+			card:SetPoint("TOPRIGHT", findView, "TOPRIGHT", 0, -(CARDS_TOP + cardsHeight))
 			card:Show()
 			cardsHeight = cardsHeight + h + CARD_GAP
 			shownCards = i
@@ -1101,8 +1075,7 @@ local function refreshFind()
 	end
 	moreLine:SetText(#results > CARDS and ("More than %d match. Type more to narrow it."):format(CARDS) or "")
 	moreLine:ClearAllPoints()
-	moreLine:SetPoint("TOPLEFT", 20, -(CARDS_TOP + cardsHeight))
-	BT.Window.UpdateSubtitle()
+	moreLine:SetPoint("TOPLEFT", 2, -(CARDS_TOP + cardsHeight))
 	-- the panel rides under whatever is on screen now
 	if editor and editor:IsShown() and editor:GetParent() == panel then
 		editor:ClearAllPoints()
@@ -1124,7 +1097,7 @@ end
 B.BOOK_EVERY = 10
 
 function B.Tick()
-	if not (panel and BT.Enabled("ledger") and BT.Window.IsShown() and BT.Window.View() == "ledger") then
+	if not (panel and BT.Enabled("ledger") and B.Showing()) then
 		return false
 	end
 	local notes, book = N.rev, bookRev()
@@ -1221,17 +1194,12 @@ function B.Refresh()
 	-- search again, through the whole Census with a search typed, and
 	-- B.Tick catches them up the moment the page shows (seenNotes is left
 	-- behind for it).
-	if BT.Window.IsShown() and BT.Window.View() == "ledger" then
+	if B.Showing() then
 		step("list", refreshFind)
 	end
 	step("editor", refreshEditor)
-	-- THE DOCK SHOWS THESE TAGS AS WELL (Josh 2026-09-19). Tagging somebody in
-	-- the panel changed the book and repainted the panel, and the row of dots
-	-- on the dock - the same tags, on the same character - went on showing
-	-- what it showed a minute ago.
-	if BT.Dock and BT.Dock.Update then
-		step("dock", BT.Dock.Update)
-	end
+	-- (the mark on the target frame hears of a change from the book itself:
+	-- Modules/Ledger/Menu.lua)
 	-- A UNIT TOOLTIP IS ONLY REDRAWN WHEN IT WOULD SAY SOMETHING ELSE (Josh
 	-- 2026-09-19). Restack re-sets the unit, which tears the tooltip down and
 	-- rebuilds it - so doing it on every DB.rev meant doing it on every
@@ -1248,61 +1216,76 @@ function B.Cards()
 	return cards
 end
 
--- The "only:" row: a button per tag, sized to its label, wrapped at the
--- panel's width. Pooled, so it can be built again whenever the tags change.
+-- WHO TO SHOW, ON THE RAIL: everyone, the people you wrote on, or the people
+-- wearing one tag, each with how many there are - a click on the one shown
+-- goes back to everyone. Drawn again whenever the tags or the book change.
 buildFilters = function()
-	if not findView then
+	local rail = findView and findView.rail
+	if not rail then
 		return 0
-	end
-	findView.tagButtons = findView.tagButtons or {}
-	local pool = findView.tagButtons
-	local fx, fy, n = 146, -34, 0
-	for _, f in ipairs(BT.AllTags()) do
-		n = n + 1
-		-- sized to the label: a fixed width let "Do not group" run out of its
-		-- own button (Josh 2026-09-19)
-		local w = math.max(56, #f.label * 7 + 18)
-		if fx + w > FILTER_W then
-			fx, fy = 146, fy - 24
-		end
-		local b = pool[n]
-		if not b then
-			b = BT.Widgets.Button(findView, f.label, w, 20)
-			b:SetScript("OnClick", function(self)
-				-- written out, because `(x == y) and nil or y` can never BE
-				-- nil: `and nil` is false, so the `or` branch always wins and
-				-- the filter could be switched on but never off (Josh 2026-09-19)
-				if state.tagFilter == self.tagKey then
-					state.tagFilter = nil
-				else
-					state.tagFilter = self.tagKey
-				end
-				for _, other in ipairs(pool) do
-					other:SetPressed(other.tagKey == state.tagFilter)
-				end
-				refreshFind()
-			end)
-			pool[n] = b
-		else
-			b:SetLabel(f.label)
-			b:SetWidth(w)
-		end
-		b.tagKey = f.key
-		b:ClearAllPoints()
-		b:SetPoint("TOPLEFT", fx, fy)
-		b:SetPressed(state.tagFilter == f.key)
-		b:Show()
-		fx = fx + w + 5
-	end
-	for i = n + 1, #pool do
-		pool[i]:Hide()
-		pool[i].tagKey = nil
 	end
 	-- a filter on a tag that no longer exists is no filter
 	if state.tagFilter and not U.TagByKey(state.tagFilter) then
 		state.tagFilter = nil
 	end
-	return n
+	local counts, noted = {}, 0
+	for _, p in N.Each() do
+		if N.Noted(p) then
+			noted = noted + 1
+		end
+		if type(p.tags) == "table" then
+			for k in pairs(p.tags) do
+				counts[k] = (counts[k] or 0) + 1
+			end
+		end
+	end
+	local L = BT.LedgerRanks
+	local everyone = census() and L and L.characters or nil
+	local entries = {
+		{ key = "all", label = "Everyone", count = everyone and U.Commas(everyone) or "",
+			chosen = not state.mineOnly and not state.tagFilter },
+		{ key = "mine", label = "My notes", count = U.Commas(noted), chosen = state.mineOnly and not state.tagFilter },
+	}
+	local tags = BT.AllTags()
+	for _, f in ipairs(tags) do
+		entries[#entries + 1] = { key = "tag:" .. f.key, label = f.label, count = U.Commas(counts[f.key] or 0),
+			dot = f.color, chosen = state.tagFilter == f.key, tagKey = f.key }
+	end
+	BT.Book.RailRows(rail, entries)
+	-- the rows by what they filter, for the tests (B.MineButton, B.FilterButtons)
+	findView.tagButtons = {}
+	for i, e in ipairs(entries) do
+		local r = rail.rows[i]
+		r.tagKey, r.pressed = e.tagKey, e.chosen
+		if e.key == "mine" then
+			findView.mineButton = r
+		elseif e.tagKey then
+			findView.tagButtons[#findView.tagButtons + 1] = r
+		end
+	end
+	return #tags
+end
+
+-- a row of the rail picked: the one shown already lets go
+local function pickFilter(key)
+	if key == "all" then
+		state.mineOnly, state.tagFilter = false, nil
+	elseif key == "mine" then
+		if state.mineOnly and not state.tagFilter then
+			state.mineOnly = false
+		else
+			state.mineOnly, state.tagFilter = true, nil
+		end
+	else
+		local tag = type(key) == "string" and key:match("^tag:(.+)$")
+		if tag and state.tagFilter ~= tag then
+			state.tagFilter, state.mineOnly = tag, false
+		else
+			state.tagFilter = nil
+		end
+	end
+	buildFilters()
+	refreshFind()
 end
 
 function B.Results()
@@ -1315,18 +1298,25 @@ function B.Select(key)
 	B.Refresh()
 end
 
--- Build the Ledger's panel into the tab the toolkit hands us. Everything from
--- here down is the code that used to build the standalone window; what has
--- gone is the frame, the title, the close button and the tabs - the toolkit
--- owns those now, and a module should not draw them twice.
-function B.Build(parent)
+-- Build the Ledger's panel into the page the window hands us: `parent` is the
+-- column, `shell` its rail and toolbar (UI/Book.lua). Everything from here
+-- down is the code that used to build the standalone window; what has gone
+-- is the frame, the title, the close button and the tabs - the window owns
+-- those, and a module should not draw them twice.
+function B.Build(parent, shell)
+	shell = shell or {}
 	panel = parent
 	findView = CreateFrame("Frame", nil, panel)
 	findView:SetAllPoints()
+	findView.rail = shell.rail
+	if findView.rail then
+		findView.rail.onPick = pickFilter
+	end
+	local bar = shell.toolbar or findView
 
-	searchBox = CreateFrame("EditBox", nil, findView, "InputBoxTemplate")
-	searchBox:SetSize(300, 20)
-	searchBox:SetPoint("TOPLEFT", 20, -6)
+	searchBox = CreateFrame("EditBox", nil, bar, "InputBoxTemplate")
+	searchBox:SetSize(280, 20)
+	searchBox:SetPoint("LEFT", bar, "LEFT", 6, 0)
 	searchBox:SetAutoFocus(false)
 	-- TYPING IS A BURST (Josh 2026-09-19). OnTextChanged fires per letter, and
 	-- "lighthammer" is twelve searches of the whole book for eleven answers
@@ -1349,20 +1339,11 @@ function B.Build(parent)
 		end)
 	end)
 	searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
-	local prompt = label(findView, "Name, guild, or a word you wrote", "small", 0.42, 0.47, 0.45)
+	local prompt = label(bar, "Name, guild, or a word you wrote", "small", 0.42, 0.47, 0.45)
 	prompt:SetPoint("LEFT", searchBox, "RIGHT", 10, 0)
 
-	-- the questions you actually ask: who did I write about, and who did I tag
-	local only = label(findView, "Only:", "small", 0.42, 0.47, 0.45)
-	only:SetPoint("TOPLEFT", 20, -38)
-	local mine = BT.Widgets.Button(findView, "My notes", 86, 20)
-	mine:SetPoint("TOPLEFT", 54, -34)
-	mine:SetScript("OnClick", function(self)
-		state.mineOnly = not state.mineOnly
-		self:SetPressed(state.mineOnly)
-		refreshFind()
-	end)
-	findView.mineButton = mine
+	-- the questions you actually ask, on the rail: who did I write about, and
+	-- who did I tag
 	buildFilters()
 
 	-- the cards: five is what fits, and more than five means "search better"
@@ -1373,8 +1354,8 @@ function B.Build(parent)
 		-- edge, note field and all. Both edges are anchored, so the card is
 		-- whatever the panel is.
 		card:SetHeight(CARD_PLAIN)
-		card:SetPoint("TOPLEFT", findView, "TOPLEFT", 16, -(CARDS_TOP + (i - 1) * CARD_RICH))
-		card:SetPoint("TOPRIGHT", findView, "TOPRIGHT", -16, -(CARDS_TOP + (i - 1) * CARD_RICH))
+		card:SetPoint("TOPLEFT", findView, "TOPLEFT", 0, -(CARDS_TOP + (i - 1) * CARD_RICH))
+		card:SetPoint("TOPRIGHT", findView, "TOPRIGHT", 0, -(CARDS_TOP + (i - 1) * CARD_RICH))
 		-- the rim is under the fill, so selecting a card draws a line around it
 		-- rather than washing it green
 		card.sel = card:CreateTexture(nil, "BACKGROUND")
@@ -1450,11 +1431,11 @@ function B.Build(parent)
 	end
 
 	emptyLine = label(findView, "", "small", 0.45, 0.5, 0.48)
-	emptyLine:SetPoint("TOPLEFT", 20, -(CARDS_TOP + 6))
-	emptyLine:SetWidth(600)
+	emptyLine:SetPoint("TOPLEFT", 2, -(CARDS_TOP + 6))
+	emptyLine:SetPoint("RIGHT", findView, "RIGHT", -2, 0)
 	emptyLine:SetJustifyH("LEFT")
 	moreLine = label(findView, "", "small", 0.45, 0.5, 0.48)
-	moreLine:SetPoint("TOPLEFT", 20, -(CARDS_TOP + CARDS * CARD_RICH))
+	moreLine:SetPoint("TOPLEFT", 2, -(CARDS_TOP + CARDS * CARD_RICH))
 
 	editor = buildEditor(UIParent, panel, label, paint)
 	B.RebuildTags()
@@ -1467,12 +1448,18 @@ end
 -- The bar writes on your target with no window open, so the editor has to
 -- exist before the tab has ever been looked at.
 function B.EnsureBuilt()
-	BT.Window.Build()
-	if not panel then
+	if not panel and BT.CensusWindow then
 		-- built, not shown: asking for the note panel must not open the window
-		BT.Window.BuildPanel("ledger")
+		BT.CensusWindow.BuildFind()
 	end
 	return panel
+end
+
+-- WHERE THE SEARCH IS READ (the Ledger's window, 2026-10-04):
+-- the Find tab of the Ledger's window, up
+function B.Showing()
+	local C = BT.CensusWindow
+	return C ~= nil and C.IsShown() and C.Tab() == "find"
 end
 
 function B.CardNoteBox(card)
@@ -1500,7 +1487,9 @@ end
 
 -- /bt find <text>: open the Ledger on a search, whatever was on screen.
 function B.Search(text)
-	BT.Window.Show("ledger")
+	if BT.CensusWindow then
+		BT.CensusWindow.Show("find")
+	end
 	if text and searchBox then
 		searchBox:SetText(text)
 	end

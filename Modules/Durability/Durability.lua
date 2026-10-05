@@ -256,34 +256,3 @@ M.OnBind = M.OnEnable
 function M:OnDisable()
 	M.Show(false)
 end
-
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local note = BT.Widgets.Label(panel,
-		"Everything you wear as one percentage. Point at it for each piece, worst first.",
-		"small", 0.55, 0.60, 0.58)
-	note:SetPoint("TOPLEFT", 0, -2)
-	note:SetWidth(520)
-	note:SetJustifyH("LEFT")
-
-	local why = BT.Widgets.Label(panel,
-		"While this is on, BeebMod hides the game's armour figure. Amber from 50%, red from 20%.",
-		"small", 0.45, 0.50, 0.48)
-	why:SetPoint("TOPLEFT", 0, -22)
-	why:SetWidth(520)
-	why:SetJustifyH("LEFT")
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-end

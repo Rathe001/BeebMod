@@ -307,6 +307,7 @@ function M.Tip()
 				t:Row("Best find", ("%s ×%d"):format(name, count))
 			end
 		end
+		t:Foot({ { "Right-click", "clear record" } })
 	end })
 end
 
@@ -316,6 +317,12 @@ function M.Build()
 	end
 	M.chip = BT.Dock.Chip("pickpocket", "pockets", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
+	-- a right-click clears the record (M.Reset)
+	M.chip:SetScript("OnMouseUp", function(_, button)
+		if button == "RightButton" then
+			M.Reset()
+		end
+	end)
 	M.chip:SetScript("OnLeave", function()
 		if GameTooltip then
 			GameTooltip:Hide()
@@ -397,42 +404,9 @@ function M:OnDisable()
 	M.Show(false)
 end
 
--- ---------------------------------------------------------------------------
--- The tab
--- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local note = BT.Widgets.Label(panel,
-		"The coin you pickpocket, plus what a vendor would pay for the items.",
-		"small", 0.55, 0.60, 0.58)
-	note:SetPoint("TOPLEFT", 0, -2)
-	note:SetWidth(520)
-	note:SetJustifyH("LEFT")
-
-	local why = BT.Widgets.Label(panel,
-		"The total is all time. Point at it for this session. Only items you loot count.",
-		"small", 0.45, 0.50, 0.48)
-	why:SetPoint("TOPLEFT", 0, -22)
-	why:SetWidth(520)
-	why:SetJustifyH("LEFT")
-end
-
-function M:RefreshTab()
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-end
-
--- CLEARED FROM THE PAGE (Josh 2026-09-28: "We don't need hundreds of slash
--- commands"). What /bt pockets reset did, as a Reset row on the Metrics page
--- (see Gold's M.Reset).
-M.resetRow = { "Pick Pocket record", "Clears all-time and session totals" }
-
+-- CLEARED WITH A RIGHT-CLICK (Josh 2026-09-28: "We don't need hundreds of
+-- slash commands"). What /bt pockets reset did, from a right-click on the
+-- Pick Pocket cell (moved from the Metrics page, 2026-10-04).
 function M.Reset()
 	if not M.Record() then
 		return

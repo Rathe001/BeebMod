@@ -606,6 +606,10 @@ end
 -- does, and a control in the column down the right.
 -- ---------------------------------------------------------------------------
 W.ROW_H, W.ROW_SHORT = 40, 30
+-- A BOX YOU TYPE IN: a sunken well, lighter with a rim in the accent while
+-- it has the cursor (the Ledger's note, the settings window's search)
+W.FIELD_IDLE = { fill = { 0.02, 0.03, 0.03, 0.55 }, edge = { 0.20, 0.26, 0.24, 0.95 } }
+W.FIELD_LIT = { fill = { 0.07, 0.09, 0.09, 0.85 } }
 -- the width of a page of the settings window, for anything measured before
 -- the client has laid the page out (see UI/Window.lua)
 W.PAGE_W = 566
@@ -626,7 +630,12 @@ function W.Row(parent, title, blurb, opts)
 	-- white, always: W.Label's default is the client's gold, which is how
 	-- three rows of the Settings tab came out a different colour from the
 	-- four above them
-	r.label = r:CreateFontString(nil, "OVERLAY", opts.indent and "BeebModFontHighlightSmall" or "BeebModFontHighlight")
+	-- a part of a part is a size down; an indent alone (a grip's room) is not
+	local small = opts.small
+	if small == nil then
+		small = opts.indent ~= nil
+	end
+	r.label = r:CreateFontString(nil, "OVERLAY", small and "BeebModFontHighlightSmall" or "BeebModFontHighlight")
 	r.label:SetJustifyH("LEFT")
 	r.label:SetText(title or "")
 	r.blurb = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")

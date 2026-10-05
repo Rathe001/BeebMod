@@ -322,7 +322,6 @@ function C.FromUnitAndTarget(unit)
 end
 
 handlers.UPDATE_MOUSEOVER_UNIT = function() C.FromUnitAndTarget("mouseover") end
--- (the dock's target row is the core's to light: Core/Boot.lua)
 handlers.PLAYER_TARGET_CHANGED = function()
 	C.FromUnitAndTarget("target")
 end

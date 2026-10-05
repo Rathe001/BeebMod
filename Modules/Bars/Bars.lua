@@ -74,7 +74,14 @@ function M.Skins()
 	return styled
 end
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). Hotkeys shown, macro names not.
+M.FIXED = { hotkeys = true, macroNames = false }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.bars
 	if not s or s[name] == nil then
 		return fallback
@@ -437,44 +444,11 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- What it is doing
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod swaps the game's button art for its own flat look. Nothing moves or changes size.")
-
-	self.rows = {}
-	local each = page:Section("On each button")
-	local function row(title, blurb, name, default)
-		local r = BT.Widgets.SwitchRow(each, title, blurb,
-			function() return opt(name, default) and true or false end,
-			function(on) setOpt(name, on) end)
-		r.optName, r.default = name, default
-		self.rows[#self.rows + 1] = r
-	end
-	row("Hotkeys", "Shows the key binding in the corner", "hotkeys", true)
-	row("Macro names", "Shows the macro's name across the bottom", "macroNames", false)
-	page:Layout()
-
-	self.found = BT.Widgets.Label(panel, "", "small", 0.45, 0.50, 0.48)
-	self.found:SetPoint("BOTTOMLEFT", 2, 4)
-end
-
-function M:RefreshTab()
-	for _, r in ipairs(self.rows or {}) do
-		r.switch:SetOn(opt(r.optName, r.default) and true or false)
-	end
-	if self.found then
-		self.found:SetText(("%d buttons redrawn"):format(M.lastCount or 0))
-	end
-end
-
-function M:ShowTab()
-	restyle()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
+-- WHAT IT IS DOING, for the Testing page's What loaded (it was a line at the
+-- foot of the Action bars page until the settings canvas, 2026-10-04)
+function M.Status()
+	return ("%d buttons redrawn"):format(M.lastCount or 0)
 end

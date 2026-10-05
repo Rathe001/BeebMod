@@ -29,13 +29,6 @@ local M = BT.Module({
 	dock = true,
 })
 
-local TEXT_H = 16
-local BAR_H = 4
--- the same line as Experience and Reputation: text, then a thin bar
-local LINE_H = TEXT_H + BAR_H + 9
-local INSET = 6
--- YOUR BADGE AT THE START OF THE LINE (Josh 2026-09-29), where Level and
--- reputation have a shield of their own (BT.Dock.LineIcon)
 -- how often the unit tokens are looked at: a death is seen within a fifth of
 -- a second, and a look is a handful of reads per enemy in view
 local SCAN_EVERY = 0.2
@@ -43,6 +36,8 @@ local SCAN_EVERY = 0.2
 local WORDS = "|cff8a9894%s|r"
 -- the Expedition's own colour: the blue of the loading screens' ink wash
 M.INK = { 0.44, 0.64, 0.80 }
+-- the row's notices are in its colour, and the bar's line names the book
+M.colour, M.book = M.INK, "Expedition"
 
 local big = BT.ExpeditionWindow.Big
 
@@ -50,9 +45,9 @@ local big = BT.ExpeditionWindow.Big
 -- Settings
 -- ---------------------------------------------------------------------------
 
--- the dock line's number: "points" or "kills"
+-- the dock line's number: points (the settings canvas cut the choice)
 function M.Shows()
-	return (BT.settings and BT.settings.expeditionShows == "kills") and "kills" or "points"
+	return "points"
 end
 
 local function on(key, default)
@@ -101,28 +96,21 @@ function M.Kill(info, how)
 	end
 
 	local name = info.name or ("#" .. info.npc)
-	-- ON UNLESS SWITCHED OFF (Josh 2026-09-27: "this should be enabled by
-	-- default for new players"): a new page in the journal says so
-	if new and on("expeditionDiscover", true) then
+	-- SMALL NOTICES, ON THE ROW (Josh 2026-10-05: "I worry about achievements
+	-- being too spammy"): a new page is its points going up on the dock's
+	-- line, and a mastery or a commendation is said there for a moment
+	-- (UI/Notice.lua); only a new rank is a toast
+	if new then
 		local _, worth = J.Worth(J.Store().enemies[info.npc])
-		-- minor: it gives way in a full queue (T.Push)
-		T.Push({ head = "New unique kill", text = name, points = worth, icon = T.HunterIcon("discover"),
-			onClick = openOn(info.npc), minor = true })
+		BT.Notice.Gain(M, worth)
 	end
 	for _, a in ipairs(news or {}) do
 		if a.mastery then
-			T.Push({
-				-- the milestone above, the enemy's name on a line of its own (Josh
-				-- 2026-09-28: "10 kills on Blackwood Pathfin..." was cut off)
-				head = ("%s mastery · %s %s"):format(a.name, big(a.need), a.need == 1 and "kill" or "kills"), text = name,
-				points = a.points, icon = T.HunterIcon("mastery"), onClick = openOn(info.npc),
-			})
+			BT.Notice.Say(M, { name = name, what = ("%s mastery"):format(a.name), kind = "mastery",
+				points = a.points, onClick = openOn(info.npc) })
 		else
-			T.Push({
-				head = "Expedition commendation", text = a.title, points = a.points,
-				icon = T.HunterIcon("commendation"),
-				onClick = function() BT.ExpeditionWindow.ShowCommendation(a.id) end,
-			})
+			BT.Notice.Say(M, { name = a.title, what = "commendation", kind = "commendation", points = a.points,
+				onClick = function() BT.ExpeditionWindow.ShowCommendation(a.id) end })
 		end
 	end
 	-- a new rank last, once everything that earned it has been shown
@@ -380,9 +368,16 @@ function M.Lines(points, st)
 	if M.Shows() == "kills" then
 		right = ("%s %s"):format(big(st.total), WORDS:format("kills"))
 	else
-		right = ("%s %s"):format(big(points), WORDS:format("pts"))
+		-- a gain just made stands before the points a moment (UI/Notice.lua)
+		right = ("%s%s %s"):format(BT.Notice.GainText(M), big(points), WORDS:format("pts"))
 	end
 	return left, right
+end
+
+-- drawn again from the score last worked out: what a notice ending or a gain
+-- wants, without counting the whole journal again (UI/Notice.lua)
+function M.Redraw()
+	M.Update(M.lastPoints, M.lastSt)
 end
 
 -- `points` and `st` where the caller has just worked them out (M.Kill)
@@ -393,13 +388,18 @@ function M.Update(points, st)
 	if type(points) ~= "number" or type(st) ~= "table" then
 		points, _, st = J.Score()
 	end
-	local left, right = M.Lines(points, st)
-	M.text:SetText(left)
-	M.eta:SetText(right)
+	M.lastPoints, M.lastSt = points, st
+	-- the words are a notice's while one is said (UI/Notice.lua); the badge
+	-- and the bar are drawn either way
+	if not BT.Notice.Saying(M) then
+		local left, right = M.Lines(points, st)
+		M.text:SetText(left)
+		M.eta:SetText(right)
+	end
 	-- your rank's badge, or a rank previewed from the Testing page
 	M.badge:SetTexture(J.RankBadge(BT.Dock.preview.expedition or (J.Rank(points))))
 
-	local w = BT.Dock.LineBarWidth(M.frame, INSET)
+	local w = BT.Dock.LineBarWidth(M.frame)
 	if w <= 0 then
 		return
 	end
@@ -439,7 +439,7 @@ function M.Tip()
 			t:Note("No kills yet. Each unique kill is worth 1 point.")
 			if nextAt then
 				t:Section()
-				t:Row("Next rank", ("%s at %s"):format(nextTitle, big(nextAt)))
+				t:ListRow("Next rank", ("%s at %s"):format(nextTitle, big(nextAt)))
 			end
 			t:Foot({ { "Click", "open journal" } })
 			return
@@ -451,13 +451,13 @@ function M.Tip()
 		end
 		local near = J.NextMasteries(J.Mine() and J.Mine().kills or {}, 3)
 		if #near > 0 then
-			t:Section("Closest masteries")
+						t:Section("Closest masteries")
 			local enemies = J.Store().enemies
 			for _, nx in ipairs(near) do
 				local enemy = enemies[nx.npc]
 				local metal = J.Ladder(enemy)[nx.tier]
-				t:Row(("%s · %s"):format((enemy and enemy.name) or ("#" .. nx.npc), metal.name),
-					("%d / %d"):format(nx.have, nx.need), nil, { nx.have / math.max(1, nx.need), metal.color })
+				t:ListRow(("%s · %s"):format((enemy and enemy.name) or ("#" .. nx.npc), metal.name),
+					("%d / %d"):format(nx.have, nx.need), nil, nil, { nx.have / math.max(1, nx.need), metal.color })
 			end
 		end
 		if s and (s.kills or 0) > 0 then
@@ -478,29 +478,10 @@ function M.Build()
 		return M.frame
 	end
 	M.frame = BT.Dock.Section("expedition", 8)
-	M.frame.kind = "meter"
-	M.frame.wantHeight = LINE_H
-	-- the client draws nothing inside a frame with no height (see Perf)
-	M.frame:SetHeight(LINE_H)
-	M.text = BT.Widgets.Label(M.frame, "", "small")
-	M.text:SetJustifyH("LEFT")
-	M.badge = BT.Dock.LineIcon(M.frame, INSET)
-	M.eta = BT.Widgets.Label(M.frame, "", "small")
-	M.eta:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -3)
-	M.eta:SetJustifyH("RIGHT")
-	-- as tall as the left words, so both sit on one line (Josh 2026-09-29:
-	-- the right side sat a pixel high, its height its own)
-	M.eta:SetHeight(TEXT_H - 2)
-	M.text:SetPoint("TOPRIGHT", M.eta, "TOPLEFT", -8, 0)
-	M.text:SetHeight(TEXT_H - 2)
-	M.text:SetWordWrap(false)
-	M.track = M.frame:CreateTexture(nil, "BORDER")
-	M.track:SetPoint("TOPRIGHT", M.frame, "TOPRIGHT", -INSET, -(TEXT_H + 3))
-	BT.Dock.LineAfter(M.badge, M.text, M.track, TEXT_H)
-	M.track:SetHeight(BAR_H)
-	M.fill = M.frame:CreateTexture(nil, "ARTWORK")
-	M.fill:SetPoint("TOPLEFT", M.track, "TOPLEFT", 0, 0)
-	M.fill:SetHeight(BAR_H)
+	-- your rank's badge, on a slim line under Level (BT.Dock.SlimLine, Josh
+	-- 2026-10-05)
+	M.badge = BT.Dock.LineIcon(M.frame)
+	M.text, M.eta, M.track, M.fill = BT.Dock.SlimLine(M.frame, M.badge)
 	M.frame:SetScript("OnSizeChanged", function()
 		M.Update()
 	end)
@@ -512,7 +493,13 @@ function M.Build()
 		end
 	end)
 	M.frame:SetScript("OnMouseUp", function(_, button)
-		if button == "LeftButton" then
+		if button ~= "LeftButton" or BT.Dock.JustMoved() then
+			return
+		end
+		-- a click while the row says a commendation opens it
+		if M.noticeClick then
+			M.noticeClick()
+		else
 			BT.ExpeditionWindow.Toggle()
 		end
 	end)
@@ -730,7 +717,9 @@ end)
 function M.Show(show)
 	local frame = M.Build()
 	if show then
-		frame:Show()
+		-- the line only while its own switch is on (M:DockRow); the journal
+		-- counts either way
+		frame:SetShown(M.LineOn())
 		M.Update()
 		M.Probe(true)
 		if not M.ticker and C_Timer and C_Timer.NewTicker then
@@ -775,119 +764,83 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- Its parts, and its line in the dock
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local W = BT.Widgets
-	local page = W.Stack(panel)
-	-- the feature's picture first, as every feature's page has (UI/Window.lua)
-	local art
-	art, panel.picture = BT.Window.FeatureArt(panel, "expedition")
-	if art then
-		page:Add(art)
-	end
-	page:Note("The journal lists the enemies you've killed, with a kill count and a model for each. "
-		.. "Unique kills, masteries and commendations are worth points. Your points set your Expedition rank.")
-	page:Note("A kill counts when an enemy you tagged and fought dies in view, or when the game gives you "
-		.. "experience or loot for it. Click the Expedition line in the dock to open the journal.", true)
-
-	local journal = page:Section("Journal")
-	local open = W.Row(journal, "Open Expedition", "Or type /bt expedition")
-	open:SetControl(W.Button(open, "Open", 80, 20)):SetScript("OnClick", function()
-		BT.ExpeditionWindow.Show()
-	end)
-
-	local toasts = page:Section("Toasts")
-	W.SwitchRow(toasts, "Commendations, masteries and ranks", "Shows a toast at the top of the screen when you earn one",
-		function() return on("expeditionToasts", true) end,
-		function(v)
-			BT.EnsureBound()
-			BT.settings.expeditionToasts = v and true or false
-		end)
-	W.SwitchRow(toasts, "Every unique kill", "Shows a toast the first time you kill an enemy",
-		function() return on("expeditionDiscover", true) end,
-		function(v)
-			BT.EnsureBound()
-			BT.settings.expeditionDiscover = v and true or false
-		end)
-	W.SwitchRow(toasts, "Sound", "Plays the game's achievement sound with each toast",
-		function() return on("expeditionSound", true) end,
-		function(v)
-			BT.EnsureBound()
-			BT.settings.expeditionSound = v and true or false
-		end)
-	-- THE WIKI'S CREDIT, ONCE (Josh 2026-09-28: "Let's move the credit line to
-	-- the expedition's setting page"). Most descriptions are the Warcraft
-	-- Wiki's own sentences, and the rest are rewritten from them, so CC BY-SA
-	-- 3.0 asks for the source and the licence to be named. Here, not under
-	-- every enemy.
-	page:Note("The journal's descriptions come from the Warcraft Wiki (warcraft.wiki.gg), "
-		.. "some of them rewritten, under the CC BY-SA 3.0 licence.", true)
-	page:Note("An enemy's abilities come from the VMaNGOS database (github.com/vmangos), "
-		.. "under the GPL 2.0 licence.", true)
-	page:Layout()
-end
-
--- ITS LINE IN THE DOCK (Josh 2026-09-27): what the line shows is on the
--- Expedition's tab in the Dock's block, which is dragged to move the line
-function M:BuildDockTab(panel)
-	local W = BT.Widgets
-	local page = W.Stack(panel)
-	local line = page:Section("Line")
-	local shows = W.Row(line, "Shows", "Your Expedition points, or how many enemies you have killed")
-	self.shows = shows:SetControl(W.Segmented(shows, { { "points", "Points" }, { "kills", "Kills" } },
-		function(key)
-			BT.EnsureBound()
-			BT.settings.expeditionShows = key
-			M.Update()
-		end, 62))
-	page:Note("Click the line to open the journal. Drag this tab to move the line in the dock.", true)
-	page:Layout()
-	self:RefreshTab()
-end
-
-function M:RefreshDockTab()
-	self:RefreshTab()
-end
-
-function M:RefreshTab()
-	if self.shows then
-		self.shows:Select(M.Shows())
+-- a setting that is on unless switched off, as a row's get and set
+local function setting(key)
+	return function()
+		return on(key, true)
+	end, function(v)
+		BT.EnsureBound()
+		BT.settings[key] = v and true or false
 	end
 end
 
-function M:ShowTab()
-	self:RefreshTab()
+-- THE EXPEDITION'S PARTS (the settings canvas, Josh 2026-10-04): its own
+-- switch is the feature's, so the toasts stand at the top of its page, and
+-- their sound under them. A toast is a new rank's alone since 2026-10-05
+-- (UI/Notice.lua), so "Every unique kill" went: a unique kill is the points
+-- going up on the dock's line.
+function M:Parts()
+	local toastGet, toastSet = setting("expeditionToasts")
+	local soundGet, soundSet = setting("expeditionSound")
+	return {
+		{ label = "Rank toasts", blurb = "When you reach a new rank, with a word from Hemet",
+			get = toastGet, set = toastSet, field = "expeditionToasts" },
+		{ label = "Sound", get = soundGet, set = soundSet, sub = true, field = "expeditionSound" },
+	}
 end
 
-function M:Refresh()
-	self:RefreshTab()
+-- ITS LINE IN THE DOCK (Josh 2026-09-27), switched and dragged on the Dock's
+-- page. It shows your points (the audit: "Expedition line shows: Points,
+-- Kills" - cut, points).
+function M.LineOn()
+	return on("expeditionLine", true)
+end
+
+function M:DockRow()
+	return {
+		label = "Expedition", blurb = "From the Expedition: your points and rank", field = "expeditionLine",
+		get = function() return M.LineOn() end,
+		set = function(v)
+			BT.EnsureBound()
+			BT.settings.expeditionLine = v and true or false
+			if M.frame and BT.Enabled("expedition") then
+				M.frame:SetShown(v and true or false)
+				BT.Dock.Relayout()
+			end
+		end,
+	}
 end
 
 -- ---------------------------------------------------------------------------
 -- Commands
 -- ---------------------------------------------------------------------------
 
--- A SAMPLE TOAST (Josh 2026-09-28: "I'd actually prefer to use the 'Testing'
--- module with buttons/toggles going forward"): what /bt expedition toast
--- showed, from the Testing page. A Platinum mastery on the last enemy you
--- killed, or on a Barn Owl before you have killed anything.
-function M.SampleToast()
+-- A SAMPLE NOTICE (Josh 2026-09-28: "I'd actually prefer to use the
+-- 'Testing' module with buttons/toggles going forward"): from the Testing
+-- page, a Platinum mastery on the last enemy you killed, or on a Barn Owl
+-- before you have killed anything, said on the dock's line as a real one is
+function M.SampleNotice()
 	local c = J.Mine()
 	local last = c and c.last and J.Store().enemies[c.last.npc]
-	T.Push({
-		head = "Platinum mastery · 500 kills", text = last and last.name or "Barn Owl",
-		points = 10, icon = T.HunterIcon("mastery"),
-	})
+	return BT.Notice.Say(M, { name = last and last.name or "Barn Owl", what = "Platinum mastery",
+		kind = "mastery", points = 10 })
 end
 
--- a new rank's toast, with its badge; a click opens the Commendations page
+-- a new rank's toast, with its badge and Hemet's word on it; a click opens
+-- the Commendations page. Off with the Rank toasts switch.
 function M.RankToast(rank, title)
+	if not on("expeditionToasts", true) then
+		return false
+	end
+	local feature = BT.Feature and BT.Feature("expedition")
 	return T.Push({
 		head = "Expedition rank", text = ("%s %s"):format(title, WORDS:format(("· rank %d of %d")
 			:format(rank, #J.RANKS))),
-		icon = T.RANK_ICON, badge = J.RankBadge(rank),
+		icon = T.RANK_ICON, badge = J.RankBadge(rank), book = "Expedition",
+		quote = J.QUOTES[rank], by = feature and feature.by, sound = on("expeditionSound", true),
 		onClick = function() BT.ExpeditionWindow.Show(nil, "commendations") end,
 	})
 end

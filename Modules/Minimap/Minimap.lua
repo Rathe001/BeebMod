@@ -130,7 +130,15 @@ local ZONE = { "MinimapZoneTextButton", "MinimapZoneText" }
 local hidden = setmetatable({}, { __mode = "k" })
 local was = {}
 
+-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
+-- supposed to be an opinionated solution, not fully customizable"). The zone's name and your coordinates shown, and the corner buttons on
+-- hover.
+M.FIXED = { zoneName = true, coords = true, controls = "hover" }
+
 local function opt(name, fallback)
+	if M.FIXED[name] ~= nil then
+		return M.FIXED[name]
+	end
 	local s = BT.settings and BT.settings.minimap
 	if not s or s[name] == nil then
 		return fallback
@@ -1583,44 +1591,8 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- The record
 -- ---------------------------------------------------------------------------
-
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod moves the game's own minimap into the dock. The mouse wheel still zooms, and right-click still opens tracking.")
-	page:Note("The map is square so it fits the dock.", true)
-	-- WHAT IT SAYS AND WHEN (Josh 2026-09-24)
-	local show = page:Section("Show")
-	BT.Widgets.SwitchRow(show, "Zone name", "Above the map, coloured by who controls the zone",
-		function() return opt("zoneName", true) and true or false end,
-		function(on) setOpt("zoneName", on) end)
-	BT.Widgets.SwitchRow(show, "Coordinates", "Where you are standing, beside the zone name",
-		function() return opt("coords", true) and true or false end,
-		function(on) setOpt("coords", on) end)
-	local corners = BT.Widgets.Row(show, "Corner buttons", "Tracking, time of day and the world map")
-	self.controlsSeg = corners:SetControl(BT.Widgets.Segmented(corners, {
-		{ "hover", "On hover" }, { "always", "Always" },
-	}, function(key)
-		setOpt("controls", key)
-		M.Reveal(M.MouseIsOver and M.MouseIsOver() or false)
-	end, 70))
-	page:Layout()
-end
-
-function M:RefreshTab()
-	if self.controlsSeg then
-		self.controlsSeg:Select(opt("controls", "hover"))
-	end
-end
-
-function M:ShowTab()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
-end
 
 -- WHAT IT FOUND AND WHERE IT WENT (Josh 2026-09-21). Four rounds of this
 -- module were spent guessing which frame was which and whether a move had

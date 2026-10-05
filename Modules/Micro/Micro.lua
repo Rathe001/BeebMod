@@ -820,10 +820,10 @@ M.LABELS = {
 	StoreMicroButton = "Shop", WorldMapMicroButton = "World map",
 }
 
+-- EVERY BUTTON SHOWS (the settings canvas, Josh 2026-10-04, cut a switch
+-- for each): none is held back, and one held back before is let go
 function M.Hidden(b)
-	local name = b and b.GetName and b:GetName()
-	local h = opt("hidden", nil)
-	return (name and type(h) == "table" and h[name] == true) and true or false
+	return false
 end
 
 local held = setmetatable({}, { __mode = "k" })
@@ -850,16 +850,6 @@ function M.ApplyHidden(plain)
 	if type(menu) == "table" and type(menu.Layout) == "function" then
 		pcall(menu.Layout, menu)
 	end
-end
-
-function M.SetHidden(name, hidden)
-	BT.EnsureBound()
-	BT.settings.micro = BT.settings.micro or {}
-	local h = BT.settings.micro.hidden or {}
-	h[name] = hidden and true or nil
-	BT.settings.micro.hidden = h
-	M.ApplyHidden()
-	M.Layout()
 end
 
 function M.Apply()
@@ -893,40 +883,13 @@ function M:OnDisable()
 end
 
 -- ---------------------------------------------------------------------------
--- The tab
+-- What it is doing
 -- ---------------------------------------------------------------------------
 
-function M:BuildTab(panel)
-	local page = BT.Widgets.Stack(panel)
-	page:Note("BeebMod moves the game's menu buttons into the dock. Each works as before.")
-	page:Note("Switch this off and the game's micro menu comes back as it was.", true)
-	local list = page:Section("Buttons")
-	for _, b in ipairs(M.Buttons()) do
-		local name = b.GetName and b:GetName()
-		if name then
-			BT.Widgets.SwitchRow(list, M.LABELS[name] or name:gsub("MicroButton$", ""), "",
-				function() return not M.Hidden(b) end,
-				function(on) M.SetHidden(name, not on) end)
-		end
-	end
-	page:Layout()
-	self.found = BT.Widgets.Label(panel, "", "small", 0.45, 0.50, 0.48)
-	self.found:SetPoint("BOTTOMLEFT", 2, 4)
-end
-
-function M:RefreshTab()
-	if self.found then
-		self.found:SetText(("%d buttons redrawn"):format(M.lastCount or 0))
-	end
-end
-
-function M:ShowTab()
-	M.StyleAll()
-	self:RefreshTab()
-end
-
-function M:Refresh()
-	self:RefreshTab()
+-- WHAT IT IS DOING, for the Testing page's What loaded (it was a line at the
+-- foot of the Micro menu page until the settings canvas, 2026-10-04)
+function M.Status()
+	return ("%d buttons redrawn"):format(M.lastCount or 0)
 end
 
 -- Every button's faces as they are this moment, into the saved file (the

@@ -450,18 +450,21 @@ function Builder:Scale(left, right, rightState)
 	self.y = y + 13
 end
 
--- a sentence or two, wrapped
+-- a sentence or two, wrapped; inside a stepped-in section (Builder:Indent)
+-- it steps in with the rows, at their size
 function Builder:Note(words, color)
 	local y = self.y + 6
-	local fs = text(12)
+	local indent = self.indent or 0
+	local size = self.indent and 10 or 12
+	local fs = text(size)
 	fs:SetWordWrap(true)
-	fs:SetWidth(WIDTH - PAD * 2)
+	fs:SetWidth(WIDTH - PAD * 2 - indent)
 	fs:SetText(words or "")
 	local c = colourOf(color or DIM)
 	fs:SetTextColor(c[1], c[2], c[3])
-	place(fs, PAD, y)
-	local lines = math.max(1, math.ceil(#(words or "") * 6 / (WIDTH - PAD * 2)))
-	self.y = y + height(fs, 12, lines)
+	place(fs, PAD + indent, y)
+	local lines = math.max(1, math.ceil(#(words or "") * (size / 2) / (WIDTH - PAD * 2 - indent)))
+	self.y = y + height(fs, size, lines)
 end
 
 -- a hairline across, and a small heading under it (or none)
@@ -484,13 +487,21 @@ function Builder:Section(title)
 	end
 	self.y = y
 	self.afterRows = nil
-	self.indent = nil
+	-- what a section holds steps in under its heading (T.INDENT)
+	self.indent = T.INDENT
 end
 
 -- A STEP IN, for the groups inside a section (Josh 2026-10-04: "slightly
 -- indent the zones/dungeons sections, and place an (also indented) divider
 -- between them"): subheadings, rows and dividers after it start this far
 -- in; the values stay on the right edge. Until the next section, or nil.
+-- EVERY DOCK TOOLTIP'S LISTS ALIKE (Josh 2026-10-05: "Lets use the same
+-- indent and font sizes as this [Experience's Recommended content] for the
+-- other meters", then "I think ALL of the dock tooltips need the same
+-- updates"): every section's rows, notes, tiles and bars start T.INDENT in,
+-- set by Builder:Section, and a row is the list size, T.ROW.
+T.INDENT = 8
+T.ROW = 10
 function Builder:Indent(px)
 	self.indent = px
 end
@@ -526,7 +537,7 @@ end
 -- a label and a value; `state` colours the value; `bar` = { value, color }
 -- draws a thin bar under the pair
 local function row(self, label, value, state, bar, labelColor, size)
-	size = size or 12
+	size = size or T.ROW
 	local y = self.y + 3
 	local v = text(size, T.NUMBER)
 	v:SetText(tostring(value or ""))
@@ -543,16 +554,17 @@ local function row(self, label, value, state, bar, labelColor, size)
 	k:SetWidth(math.max(40, WIDTH - PAD * 2 - indent - width(v, 60) - 10))
 	y = y + size + 3
 	if bar then
-		local w = WIDTH - PAD * 2
+		-- from where the label starts, so a stepped-in row's bar steps in too
+		local w = WIDTH - PAD * 2 - indent
 		local track = rect("ARTWORK", 1)
-		place(track, PAD, y + 1)
+		place(track, PAD + indent, y + 1)
 		track:SetSize(w, 3)
 		track:SetColorTexture(1, 1, 1, 0.07)
 		local share = math.max(0, math.min(1, bar[1] or 0))
 		if share > 0 then
 			local bc = colourOf(bar[2] or BT.Widgets.ACCENT)
 			local fill = rect("ARTWORK", 2)
-			place(fill, PAD, y + 1)
+			place(fill, PAD + indent, y + 1)
 			fill:SetSize(math.max(1, math.floor(w * share + 0.5)), 3)
 			fill:SetColorTexture(bc[1], bc[2], bc[3], 1)
 		end
@@ -568,9 +580,10 @@ end
 
 -- A QUIETER ROW, for a list under a subheading (Josh 2026-10-04: "Can we
 -- reduce the font size of the zones/dungeons maybe? The text is larger than
--- their header"): the subheading's size, and closer together
-function Builder:ListRow(label, value, state, labelColor)
-	row(self, label, value, state, nil, labelColor, 10)
+-- their header"): the subheading's size, and closer together. Every row is
+-- this size now (T.ROW); this is Row with the label's colour before the bar.
+function Builder:ListRow(label, value, state, labelColor, bar)
+	row(self, label, value, state, bar, labelColor)
 end
 
 -- two or three tiles side by side: { { value, label, state, on }, ... }; a
@@ -579,11 +592,13 @@ function Builder:Stats(tiles, valueSize)
 	local y = self.y + 6
 	local n = #tiles
 	local gap = 6
-	local w = math.floor((WIDTH - PAD * 2 - gap * (n - 1)) / n)
+	-- stepped in with the rows of a stepped-in section
+	local indent = self.indent or 0
+	local w = math.floor((WIDTH - PAD * 2 - indent - gap * (n - 1)) / n)
 	local size = valueSize or 15
 	local edge = self.edge
 	for i, tile in ipairs(tiles) do
-		local x = PAD + (i - 1) * (w + gap)
+		local x = PAD + indent + (i - 1) * (w + gap)
 		local bg = rect("ARTWORK", 1)
 		place(bg, x, y)
 		bg:SetSize(w, size + 22)
