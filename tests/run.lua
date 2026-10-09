@@ -1439,6 +1439,37 @@ do
 	check(br == 1 and bg == 0.83, "a colour that already reads is left alone")
 end
 
+-- WHAT KIND OF QUEST (Josh 2026-10-08: "We should add those quest labels"):
+-- the quest's tag, in the client's own words where it has them, for the four
+-- kinds the client's own tracker names
+do
+	local hadLog, hadConsts = _G.C_QuestLog, _G.Constants
+	local hadElite, hadDungeon = _G.ELITE, _G.CALENDAR_TYPE_DUNGEON
+	_G.Constants = { QuestConsts = { QUEST_INFO_ELITE_ID = 1, QUEST_INFO_DUNGEON_ID = 81,
+		QUEST_INFO_PVP_ID = 41, QUEST_INFO_RAID_ID = 62 } }
+	local tags = { [1234] = 1, [5678] = 81, [91011] = 109 }
+	_G.C_QuestLog = { GetQuestTagInfo = function(id) return tags[id] and { tagID = tags[id] } or nil end }
+	_G.ELITE, _G.CALENDAR_TYPE_DUNGEON = "Élite", nil
+	check(BT.Quests.Tag(1234) == "Élite", "an elite quest, in the client's word for it")
+	check(BT.Quests.Tag(5678) == "Dungeon", "a dungeon quest, in ours where the client has no word")
+	check(BT.Quests.Tag(91011) == nil, "a tag the client's tracker does not name gets no label")
+	check(BT.Quests.Tag(4242) == nil, "and a quest with no tag none")
+	_G.GetNumQuestLogEntries = function() return 2 end
+	_G.GetQuestLogTitle = function(i)
+		if i == 1 then return "Dun Morogh", 0, nil, true, nil, nil, nil, nil end
+		return "Treacherous Cold", 8, nil, false, nil, nil, nil, 1234
+	end
+	_G.IsQuestWatched = function() return true end
+	_G.GetNumQuestLeaderBoards = function() return 0 end
+	check(BT.Quests.Watched()[1].tag == "Élite", "a followed quest carries its label")
+	_G.C_QuestLog = nil
+	check(BT.Quests.Watched()[1].tag == nil, "and a client that cannot say gives none")
+	_G.C_QuestLog, _G.Constants = hadLog, hadConsts
+	_G.ELITE, _G.CALENDAR_TYPE_DUNGEON = hadElite, hadDungeon
+	_G.GetNumQuestLogEntries, _G.GetQuestLogTitle = nil, nil
+	_G.IsQuestWatched, _G.GetNumQuestLeaderBoards = nil, nil
+end
+
 -- 14. ONE SURFACE. The window, the dock, the note panel and the tooltip used
 -- to carry four near-blacks with four alphas, which drifted apart every time
 -- one of them was touched.

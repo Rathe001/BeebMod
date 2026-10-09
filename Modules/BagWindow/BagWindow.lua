@@ -20,6 +20,9 @@
 --                    client's quality border as it paints it, which then
 --                    goes transparent - rather than the client's soft glow
 --   the money        left exactly as it is: the coins are pictures
+--   the gamepad row  put away while you play with a mouse (build 70291)
+--   the order        the backpack's first slot at the top left, as it was
+--                    before build 70291 turned it round (see The order)
 --
 -- WHAT THE CLIENT CALLS THEM is looked for rather than assumed, and /bt
 -- bagdump writes the window down into the saved file when something comes
@@ -323,6 +326,7 @@ function M.StyleAll(plain, force)
 		for _, s in pairs(fields) do
 			BT.Pill.ShowSurface(s, false)
 		end
+		M.GamepadBar(true)
 		if M.BagSlots then
 			M.BagSlots.Attach()
 		end
@@ -352,6 +356,7 @@ function M.StyleAll(plain, force)
 	-- the search is the combined window's, or a global one on some builds
 	dressSearch((_G.ContainerFrameCombinedBags and _G.ContainerFrameCombinedBags.SearchBox)
 		or _G.BagItemSearchBox)
+	M.GamepadBar()
 	M.lastCount = n
 	-- the bag slots beside the backpack (Modules/BagWindow/BagSlots.lua)
 	if M.BagSlots then
@@ -403,6 +408,13 @@ function M.Hook()
 						pcall(hooksecurefunc, w, fn, soon)
 					end
 				end
+				-- straight after the client's layout, not a frame later, so the
+				-- backwards order is never drawn (see The order)
+				if w == _G.ContainerFrameCombinedBags and type(w.UpdateItemLayout) == "function" then
+					pcall(hooksecurefunc, w, "UpdateItemLayout", function(self)
+						M.Reorder(self)
+					end)
+				end
 			end
 		end
 	end
@@ -435,6 +447,7 @@ function M:OnEnable()
 	M.Watch()
 	M.WatchPosition()
 	M.StyleAll()
+	M.Reorder()
 	refitBar()
 end
 
@@ -443,6 +456,7 @@ M.OnBind = M.OnEnable
 
 function M:OnDisable()
 	M.StyleAll(true)
+	M.ClientOrder()
 	refitBar()
 end
 
@@ -675,6 +689,109 @@ function M.WatchPosition()
 	end
 	M.positionWatched = M.positionWatched or fresh
 	return fresh
+end
+
+-- ---------------------------------------------------------------------------
+-- The order
+-- ---------------------------------------------------------------------------
+--
+-- THE BACKPACK FIRST AGAIN (Josh 2026-10-08: "now combo points and bags look
+-- weird"). Build 70291 sorts the combined backpack's slots for the gamepad's
+-- layout, which starts at the top left, and still lays them out for the
+-- mouse's, which starts at the bottom right. With a mouse the order came out
+-- backwards: the backpack's first slot in the bottom right corner, read right
+-- to left. Straight after the client lays the window out, the same slots go
+-- through the client's own grid again in the order it used before: the last
+-- bag's last slot in the bottom right, the backpack's first at the top left.
+-- With the gamepad interface on, the client's order is right and left alone.
+
+local function gamepad()
+	local util = _G.InputUtil
+	if not (type(util) == "table" and type(util.IsGamepadUIEnabled) == "function") then
+		return false
+	end
+	local ok, on = pcall(util.IsGamepadUIEnabled)
+	return ok and on == true
+end
+
+-- the client's order before build 70291: slots the account has not unlocked
+-- after the rest, and of the others the last bag's last slot first, back to
+-- the backpack's first
+local function before(secured)
+	return function(a, b)
+		if not secured then
+			local extA, extB = a:IsExtended() and true or false, b:IsExtended() and true or false
+			if extA ~= extB then
+				return not extA
+			end
+		end
+		local bagA, bagB = a:GetBagID(), b:GetBagID()
+		if bagA ~= bagB then
+			return bagA > bagB
+		end
+		return a:GetID() > b:GetID()
+	end
+end
+
+function M.Reorder(window)
+	window = window or combined()
+	if not (type(window) == "table" and BT.Enabled("bagwindow")) or gamepad() then
+		return false
+	end
+	local grid = _G.AnchorUtil
+	if not (type(grid) == "table" and type(grid.GridLayout) == "function"
+		and type(window.EnumerateValidItems) == "function" and movable(window)) then
+		return false
+	end
+	local ok, err = pcall(function()
+		local items = {}
+		for _, item in window:EnumerateValidItems() do
+			items[#items + 1] = item
+		end
+		local secured = type(_G.IsAccountSecured) == "function" and _G.IsAccountSecured() and true or false
+		table.sort(items, before(secured))
+		grid.GridLayout(items, window:GetInitialItemAnchor(), window:GetAnchorLayout())
+	end)
+	if not ok then
+		BT.Err("bagwindow: " .. tostring(err))
+		return false
+	end
+	return true
+end
+
+-- switched off: the client lays the open window out again its own way
+function M.ClientOrder()
+	local window = combined()
+	if not (type(window) == "table" and type(window.UpdateItemLayout) == "function"
+		and BT.Furniture.Call(window, "IsShown") and movable(window)) then
+		return false
+	end
+	return pcall(window.UpdateItemLayout, window) and true or false
+end
+
+-- THE GAMEPAD'S BAG ROW, PUT AWAY (Josh 2026-10-08). Build 70291 hangs the
+-- client's gamepad bag row, GamepadBagBar, in the backpack's top right corner
+-- and no longer hides it when you play with a mouse: its backpack button,
+-- with your free slots in brackets, sat on the end of the search field. It is
+-- hidden while the gamepad interface is off, as the client did before that
+-- build, and shown again with the module off.
+function M.GamepadBar(plain)
+	local bar = _G.GamepadBagBar
+	if not (type(bar) == "table" and type(bar.Hide) == "function") then
+		return false
+	end
+	if plain or gamepad() then
+		if bar.beebsPutAway then
+			bar.beebsPutAway = nil
+			pcall(bar.Show, bar)
+		end
+		return false
+	end
+	if BT.Furniture.Call(bar, "IsShown") then
+		bar.beebsPutAway = true
+		pcall(bar.Hide, bar)
+	end
+	return true
 end
 
 -- ---------------------------------------------------------------------------

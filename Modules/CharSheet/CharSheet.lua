@@ -268,6 +268,10 @@ M.HIDE = {
 	["ui-character-info-general-bg"] = true,
 	["ui-character-info-stat-bg"] = true,
 	["ui-character-info-stat-stonebg"] = true,
+	-- the same stone under new names: build 70291 draws the side pane's with
+	-- the third, and an older build drew the second on one of its pages
+	["ui-character-info-stat-stonebg2"] = true,
+	["ui-character-info-stat-stonebg3"] = true,
 	["common-insideframe"] = true,
 	["ui-character-info-title"] = true,
 	["ui-character-info-line-bounce"] = true,
@@ -849,6 +853,15 @@ local function dressFrame(frame)
 			end
 		end
 	end
+	-- THE ROCK STRIP COMES OFF (Josh 2026-10-08). Build 70291 laid a strip of
+	-- tiled rock, 36 pixels tall with an edge under it, across the top of the
+	-- model's pane, as a shelf for the level line. Here the level line is in
+	-- the title bar (see layoutTitle), so the strip is only art.
+	local doll = _G.PaperDollFrame
+	local strip = doll and doll.TopBackgroundStripHost
+	if strip and strip.SetAlpha then
+		hide(strip)
+	end
 	local title = _G.CharacterFrameTitleText
 	if title and title.SetTextColor then
 		keepText(title)
@@ -934,22 +947,37 @@ local function place(f, points, w, h)
 end
 M.Place = place
 
--- a font a new size, the same face - remembered like a position
-local function sized(fs, size)
+-- a font a new size, the same face - remembered like a position. `flags`,
+-- when given, replaces the font's own ("" for none)
+local function sized(fs, size, flags)
 	if not (fs and fs.GetFont and fs.SetFont) then
 		return
 	end
 	remember(fs)
 	local p = placed[fs]
 	if not p.font then
-		local face, sz, flags = fs:GetFont()
-		p.font = { face, sz, flags }
+		local face, sz, own = fs:GetFont()
+		p.font = { face, sz, own }
 	end
 	if p.font[1] then
-		pcall(fs.SetFont, fs, p.font[1], size, p.font[3])
+		pcall(fs.SetFont, fs, p.font[1], size, flags or p.font[3])
 	end
 end
 M.Sized = sized
+
+-- a frame drawn in another layer of the screen, remembered like a position
+local function layered(f, strata)
+	if not (f and f.SetFrameStrata and type(strata) == "string") then
+		return
+	end
+	remember(f)
+	local p = placed[f]
+	if p.strata == nil then
+		local ok, own = pcall(f.GetFrameStrata, f)
+		p.strata = (ok and type(own) == "string") and own or false
+	end
+	pcall(f.SetFrameStrata, f, strata)
+end
 
 local function justified(fs, how)
 	if not (fs and fs.SetJustifyH) then
@@ -1023,6 +1051,9 @@ local function unplace()
 		end
 		if p.level and f.SetFrameLevel then
 			f:SetFrameLevel(p.level)
+		end
+		if p.strata and f.SetFrameStrata then
+			pcall(f.SetFrameStrata, f, p.strata)
 		end
 		placed[f] = nil
 	end
@@ -1909,6 +1940,13 @@ local function layoutDoll(frame, left)
 		{ "TOPLEFT", left, "TOPLEFT", 6 + slot + 4, -4 },
 		{ "BOTTOMRIGHT", left, "BOTTOMRIGHT", -(6 + slot + 4), 6 + slot + 4 },
 	})
+	-- THE ZOOM AND TURN CONTROLS AT THE MODEL'S TOP (Josh 2026-10-08). Build
+	-- 70291 hangs them 40 pixels under the pane's top, below its new rock
+	-- strip, which in this layout is 26 pixels lower than they were. They go
+	-- back to 10 under the model's top, where the client had them before.
+	if scene and scene.ControlFrame then
+		place(scene.ControlFrame, { { "TOP", scene, "TOP", 0, -10 } })
+	end
 end
 
 local function layoutSide(frame, right)
@@ -1989,16 +2027,26 @@ local function layoutTitle(frame)
 	place(title, { { "LEFT", frame, "TOPLEFT", 10, -11 } }, 240, 16)
 	justified(title, "LEFT")
 	sized(title, 13)
-	local info = _G.PaperDollLevelInfo
-	local text = _G.CharacterLevelText
-	if info and text then
-		local w = BT.Pill.Number(title.GetStringWidth and title:GetStringWidth(), 90)
-		place(info, { { "LEFT", frame, "TOPLEFT", 10 + w + 8, -11 } }, 200, 16)
-		place(text, { { "LEFT", info, "LEFT", 0, 0 } }, 200, 16)
-		justified(text, "LEFT")
-		sized(text, 11)
-		keepText(text)
-		text:SetTextColor(0.55, 0.62, 0.60)
+	-- YOURS, OR YOUR PET'S (Josh 2026-10-08). Since build 70291 the pet page
+	-- has a level line of its own, which the client shows in place of yours;
+	-- both go beside the name. The client now draws them outlined, and in a
+	-- layer above the other windows, so a window laid over the title bar
+	-- would have the level showing through it: here they are plain, and in
+	-- the character window's own layer.
+	local strata = BT.Furniture.Call(frame, "GetFrameStrata")
+	local w = BT.Pill.Number(title.GetStringWidth and title:GetStringWidth(), 90)
+	for _, line in ipairs({ { "PaperDollLevelInfo", "CharacterLevelText" },
+		{ "PaperDollPetLevelInfo", "PetCharacterLevelText" } }) do
+		local info, text = _G[line[1]], _G[line[2]]
+		if info and text then
+			place(info, { { "LEFT", frame, "TOPLEFT", 10 + w + 8, -11 } }, 200, 16)
+			layered(info, strata)
+			place(text, { { "LEFT", info, "LEFT", 0, 0 } }, 200, 16)
+			justified(text, "LEFT")
+			sized(text, 11, "")
+			keepText(text)
+			text:SetTextColor(0.55, 0.62, 0.60)
+		end
 	end
 end
 

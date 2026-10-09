@@ -5,6 +5,30 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Combo points sit under the resource display again.** The game's
+  October 8 patch added its own round combo points under the power bar, and
+  BeebMod's row hung below them. The game's are hidden while the Resource
+  display is on, and BeebMod's row is back under the bars.
+
+- **The combined backpack looks as it did before the patch.** The patch
+  left a gamepad bag button in the window's top right corner, over the end
+  of the search box and the sort button. It also reversed the slot order, so
+  the backpack started at the bottom right. The button is hidden when you
+  play with a mouse, and the backpack's first slot is back at the top left.
+
+- **The character window keeps its look after the patch.** The stone behind
+  the stats and a new strip of rock over the model are hidden again. Your
+  level beside your name is plain text again and no longer shows through
+  other windows. A pet's level goes beside the name too, and the model's
+  zoom and turn buttons are back at the top of the model.
+
+- **The quest list says what kind of quest it is.** Elite, dungeon, PvP and
+  raid quests show "(Elite)", "(Dungeon)", "(PvP)" or "(Raid)" after the
+  title, as the game's own quest tracker now does. The quest's tooltip says
+  it too.
+
 ## 0.1.0-beta.25
 
 - **The Size on General is kept after a reload.** Since beta.24 the dock

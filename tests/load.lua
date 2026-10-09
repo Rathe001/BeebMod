@@ -3340,6 +3340,32 @@ if ok then
 			mod.Update()
 			assert(not mod.TickClocks(), "and with no timed quest, nothing ticks")
 
+			-- WHAT KIND OF QUEST (Josh 2026-10-08: "We should add those quest
+			-- labels"): after the name, as the client's tracker writes it, and
+			-- in the quest's tooltip
+			local hadConsts = _G.Constants
+			_G.Constants = { QuestConsts = { QUEST_INFO_ELITE_ID = 1, QUEST_INFO_DUNGEON_ID = 81,
+				QUEST_INFO_PVP_ID = 41, QUEST_INFO_RAID_ID = 62 } }
+			_G.C_QuestLog = { GetQuestTagInfo = function(id) return id == 22 and { tagID = 81 } or nil end }
+			mod.Update()
+			local tagged, plain
+			for _, r in ipairs(mod.Rows()) do
+				local text = r:IsShown() and r.kind == "title" and r.text._text or ""
+				if text:find("A Visitor", 1, true) then
+					tagged = r
+				elseif text:find("Bitter Rivals", 1, true) then
+					plain = r
+				end
+			end
+			assert(tagged and tagged.text._text:find("A Visitor to Dun Morogh (Dungeon)", 1, true),
+				"a dungeon quest says so after its name: " .. tostring(tagged and tagged.text._text))
+			assert(plain and not plain.text._text:find("(", 1, true), "a quest with no tag has no label")
+			mod.QuestTip(tagged, tagged.quest)
+			assert(BT.Tip.Says("Dungeon"), "and its tooltip says it too: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
+			_G.C_QuestLog, _G.Constants = nil, hadConsts
+			mod.Update()
+
 			-- the whole scale, since the client cannot be asked for it
 			local mod2 = BT.GetModule("tracker")
 			local red = mod2.LevelColour(15)     -- +5
@@ -6982,6 +7008,97 @@ if ok then
 			_G.ContainerFrameCombinedBags = nil
 			_G.hooksecurefunc = hadHook
 		end },
+		{ "the backpack reads from the top left again, without the gamepad's bag row", function()
+			-- BUILD 70291 (Josh 2026-10-08: "now combo points and bags look
+			-- weird"): with a mouse the backpack's slots came out backwards,
+			-- and the gamepad's bag row showed in the window's corner
+			local mod = BT.GetModule("bagwindow")
+			local hadHook, hadGrid = _G.hooksecurefunc, _G.AnchorUtil
+			_G.hooksecurefunc = function(obj, name, fn)
+				local orig = obj[name]
+				obj[name] = function(...)
+					local r = orig(...)
+					fn(...)
+					return r
+				end
+			end
+			local win = _G.CreateFrame("Frame", "ContainerFrameCombinedBags", _G.UIParent)
+			_G.ContainerFrameCombinedBags = win
+			local function item(bag, slot)
+				local b = _G.CreateFrame("Button", nil, win)
+				b.GetBagID = function() return bag end
+				b.GetID = function() return slot end
+				b.IsExtended = function() return false end
+				return b
+			end
+			-- made the way the client makes them: the last bag first, counting down
+			win.Items = { item(1, 2), item(1, 1), item(0, 3), item(0, 2), item(0, 1) }
+			win.EnumerateValidItems = function(self)
+				return function(w, i)
+					i = i + 1
+					if w.Items[i] then
+						return i, w.Items[i]
+					end
+				end, self, 0
+			end
+			win.GetInitialItemAnchor = function() return "corner" end
+			win.GetAnchorLayout = function() return "grid" end
+			local laid
+			_G.AnchorUtil = { GridLayout = function(items, anchor, layout)
+				assert(anchor == "corner" and layout == "grid", "through the client's own corner and grid")
+				laid = {}
+				for i, b in ipairs(items) do
+					laid[i] = b:GetBagID() .. ":" .. b:GetID()
+				end
+			end }
+			-- the client's layout since 70291: the backpack's first slot first
+			win.UpdateItemLayout = function(self)
+				local items = {}
+				for _, b in self:EnumerateValidItems() do
+					items[#items + 1] = b
+				end
+				table.sort(items, function(a, b)
+					if a:GetBagID() ~= b:GetBagID() then
+						return a:GetBagID() < b:GetBagID()
+					end
+					return a:GetID() < b:GetID()
+				end)
+				_G.AnchorUtil.GridLayout(items, self:GetInitialItemAnchor(), self:GetAnchorLayout())
+			end
+			local row = _G.CreateFrame("Frame", "GamepadBagBar", win)
+			_G.GamepadBagBar = row
+			_G.IsAccountSecured = function() return true end
+			BT.SetEnabled("bagwindow", true)
+			mod.StyleAll()
+			win:UpdateItemLayout()
+			local function order()
+				return table.concat(laid or {}, ",")
+			end
+			assert(order() == "1:2,1:1,0:3,0:2,0:1",
+				"the last bag's last slot in the bottom right, the backpack's first at the top left: " .. order())
+			assert(not row:IsShown(), "the gamepad's bag row is put away")
+			-- slots the account has not unlocked go after the rest, as before
+			_G.IsAccountSecured = function() return false end
+			win.Items[3].IsExtended = function() return true end
+			win:UpdateItemLayout()
+			assert(order() == "1:2,1:1,0:2,0:1,0:3", "a locked slot last: " .. order())
+			win.Items[3].IsExtended = function() return false end
+			-- with the gamepad interface on, the client's order and row are right
+			_G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+			mod.StyleAll()
+			win:UpdateItemLayout()
+			assert(order() == "0:1,0:2,0:3,1:1,1:2" and row:IsShown(), "the gamepad's own order and row: " .. order())
+			_G.InputUtil = nil
+			mod.StyleAll()
+			win:UpdateItemLayout()
+			assert(not row:IsShown() and order() == "1:2,1:1,0:3,0:2,0:1", "and put right again with a mouse")
+			BT.SetEnabled("bagwindow", false)
+			assert(row:IsShown() and order() == "0:1,0:2,0:3,1:1,1:2",
+				"switched off, the window is the client's again, its order and row too: " .. order())
+			BT.SetEnabled("bagwindow", true)
+			_G.ContainerFrameCombinedBags, _G.GamepadBagBar, _G.IsAccountSecured = nil, nil, nil
+			_G.hooksecurefunc, _G.AnchorUtil = hadHook, hadGrid
+		end },
 		{ "a tooltip in the default spot is moved clear of the dock", function()
 			-- THE CORNER IS OURS (Josh 2026-09-24): the client's default spot
 			-- is where the dock stands, so the tooltip moves left of it - but
@@ -8088,6 +8205,50 @@ if ok then
 			mod.Apply()
 			-- the switches above rebuilt the dock while the class was a rogue,
 			-- which showed the rogue-only lines: built again as the warrior
+			BT.Dock.Rebuild()
+			BT.Window.Rebuild()
+		end },
+		{ "the display's own combo points are put away, and the row hangs under its bars", function()
+			-- BUILD 70291 (Josh 2026-10-08: "now combo points and bags look
+			-- weird"): the display grew combo points of its own under the power
+			-- bar, and grew taller to hold them, so the row hung under those
+			local mod = BT.GetModule("resourcedisplay")
+			local prd = _G.CreateFrame("Frame", "PersonalResourceDisplayFrame", _G.UIParent)
+			prd.HealthBarsContainer = _G.CreateFrame("Frame", nil, prd)
+			prd.PowerBar = _G.CreateFrame("StatusBar", nil, prd)
+			prd.AlternatePowerBar = _G.CreateFrame("StatusBar", nil, prd)
+			prd.AlternatePowerBar:Hide()
+			prd.ClassFrameContainer = _G.CreateFrame("Frame", nil, prd)
+			local socket = prd.ClassFrameContainer:CreateTexture()
+			socket._width, socket._height = 20, 20
+			prd.GetBottom = function() return 50 end
+			prd.HealthBarsContainer.GetBottom = function() return 100 end
+			prd.PowerBar.GetBottom = function() return 85 end
+			prd.AlternatePowerBar.GetBottom = function() return 70 end
+			prd.ClassFrameContainer.GetBottom = function() return 52 end
+			_G.PersonalResourceDisplayFrame = prd
+			local wasClass, wasMax, wasPower = _G.UnitClass, _G.UnitPowerMax, _G.UnitPower
+			_G.UnitClass = function() return "Rogue", "ROGUE" end
+			_G.UnitPowerMax = function(_, kind) return kind == 4 and 5 or 100 end
+			_G.UnitPower = function(_, kind) return kind == 4 and 2 or 50 end
+			BT.SetEnabled("resourcedisplay", true)
+			mod.Apply()
+			assert(mod.CurrentPlate() == prd, "the display is found by its name")
+			assert(prd.ClassFrameContainer._alpha == 0, "the client's own points are out of sight")
+			assert(socket._alpha == nil, "and what is under them is not walked")
+			local at = mod.PipFrame()._points.TOPLEFT
+			assert(at and at.rel == prd.PowerBar, "the row hangs under the power bar, not the display's foot")
+			-- a cat's mana bar, under the energy, is lower still
+			prd.AlternatePowerBar:Show()
+			mod.Apply()
+			assert(mod.PipFrame()._points.TOPLEFT.rel == prd.AlternatePowerBar, "under a second bar when there is one")
+			prd.AlternatePowerBar:Hide()
+			BT.SetEnabled("resourcedisplay", false)
+			assert(prd.ClassFrameContainer._alpha == 1, "switched off, the client's points come back")
+			BT.SetEnabled("resourcedisplay", true)
+			_G.PersonalResourceDisplayFrame = nil
+			_G.UnitClass, _G.UnitPowerMax, _G.UnitPower = wasClass, wasMax, wasPower
+			mod.Apply()
 			BT.Dock.Rebuild()
 			BT.Window.Rebuild()
 		end },
@@ -10976,6 +11137,72 @@ if ok then
 			mod.Undress()
 			_G.CharacterFrame, _G.CharacterFrameRightPaneHost, _G.CharacterHeadSlot = nil, nil, nil
 			_G.CharacterFrameTitleText, _G.CharacterStatsPaneScrollBox = nil, nil
+		end },
+		{ "the character sheet keeps its look through build 70291", function()
+			-- BUILD 70291 (Josh 2026-10-08): the stone behind the stats under a
+			-- new name, a rock strip over the model, the level line outlined and
+			-- above other windows, the pet's level a line of its own, and the
+			-- model's controls hung lower
+			local mod = BT.GetModule("charsheet")
+			local frame = _G.CreateFrame("Frame", "CharacterFrame", _G.UIParent)
+			frame:SetFrameStrata("MEDIUM")
+			_G.CharacterFrame = frame
+			local left = _G.CreateFrame("Frame", nil, frame)
+			frame.CharacterFrameLeftPaneHost = left
+			local right = _G.CreateFrame("Frame", nil, frame)
+			frame.CharacterFrameRightPaneHost = right
+			_G.CharacterFrameRightPaneHost = right
+			local stone = right:CreateTexture()
+			stone.GetAtlas = function() return "UI-Character-Info-Stat-StoneBG3" end
+			stone:SetAlpha(1)
+			local doll = _G.CreateFrame("Frame", "PaperDollFrame", frame)
+			_G.PaperDollFrame = doll
+			doll.TopBackgroundStripHost = _G.CreateFrame("Frame", nil, doll)
+			doll.TopBackgroundStripHost:SetAlpha(1)
+			local scene = _G.CreateFrame("Frame", "CharacterModelScene", doll)
+			_G.CharacterModelScene = scene
+			scene.ControlFrame = _G.CreateFrame("Frame", nil, scene)
+			scene.ControlFrame:SetPoint("TOP", left, "TOP", 0, -40)
+			local title = frame:CreateFontString()
+			_G.CharacterFrameTitleText = title
+			local lines = {}
+			for _, names in ipairs({ { "PaperDollLevelInfo", "CharacterLevelText" },
+				{ "PaperDollPetLevelInfo", "PetCharacterLevelText" } }) do
+				local info = _G.CreateFrame("Frame", names[1], doll)
+				info:SetFrameStrata("HIGH")
+				local text = info:CreateFontString()
+				text:SetFont("Fonts/FRIZQT__.TTF", 16, "OUTLINE")
+				_G[names[1]], _G[names[2]] = info, text
+				lines[#lines + 1] = { info = info, text = text }
+			end
+
+			BT.SetEnabled("charsheet", true)
+			BT.settings.charsheet = BT.settings.charsheet or {}
+			BT.settings.charsheet.theme = nil
+			mod.Dress()
+			assert(stone._alpha == 0, "the stone behind the stats comes off under its new name")
+			assert(doll.TopBackgroundStripHost._alpha == 0, "and the rock strip over the model")
+			local at = scene.ControlFrame._points.TOP
+			assert(at and at.rel == scene and at.y == -10, "the model's controls 10 under its top, as before")
+			for i, line in ipairs(lines) do
+				local spot = line.info._points.LEFT
+				assert(spot and spot.rel == frame, "level line " .. i .. " beside the name in the title bar")
+				assert(line.info:GetFrameStrata() == "MEDIUM", "in the window's own layer: " .. tostring(line.info:GetFrameStrata()))
+				local _, size, flags = line.text:GetFont()
+				assert(size == 11 and flags == "", "small and plain: " .. tostring(size) .. " " .. tostring(flags))
+			end
+			BT.SetEnabled("charsheet", false)
+			assert(stone._alpha == 1 and doll.TopBackgroundStripHost._alpha == 1, "off, the client's art is back")
+			for _, line in ipairs(lines) do
+				local _, size, flags = line.text:GetFont()
+				assert(line.info:GetFrameStrata() == "HIGH" and size == 16 and flags == "OUTLINE",
+					"and its level line as it drew it")
+			end
+			BT.SetEnabled("charsheet", true)
+			mod.Undress()
+			_G.CharacterFrame, _G.CharacterFrameRightPaneHost, _G.CharacterFrameTitleText = nil, nil, nil
+			_G.PaperDollFrame, _G.CharacterModelScene = nil, nil
+			_G.PaperDollLevelInfo, _G.CharacterLevelText, _G.PaperDollPetLevelInfo, _G.PetCharacterLevelText = nil, nil, nil, nil
 		end },
 		{ "the character sheet drags by its title and opens where it was left", function()
 			local mod = BT.GetModule("charsheet")

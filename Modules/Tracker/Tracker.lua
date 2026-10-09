@@ -16,6 +16,7 @@
 --   ▌     0/1 Stoneanvil's Rifle   counts read where you read, at the start
 --   ▌     1/1 Sunhammer's Rifle    done: struck through, and still readable
 --   ▌ v [9] Frostmane Hold         ready to hand in
+--   ▌ * [10] A Quest (Elite)       elite, dungeon, PvP or raid, as the client says
 --
 -- ONE COLUMN, like the tracker everybody already knows how to read. It had the
 -- level and the counts in a right-hand column, which is the tooltip's habit and
@@ -899,6 +900,9 @@ function M.QuestTip(owner, q)
 		if q.level then
 			sub[#sub + 1] = "Level " .. q.level
 		end
+		if q.tag then
+			sub[#sub + 1] = q.tag
+		end
 		local pill, pillState
 		if q.failed then
 			pill, pillState = "Failed", "bad"
@@ -1010,7 +1014,10 @@ function M.Update()
 		-- says that, and spending the title's colour on it threw away the more
 		-- useful fact. Failed still overrides everything.
 		local titleColour = quest.failed and FAILED or levelColour(quest.level)
-		y = setRow(i, y, "title", level .. quest.title, mark, titleColour, quest)
+		-- what kind of quest, after its name, as the client's tracker writes
+		-- it: "[24] A Quest (Dungeon)" (Q.Tag)
+		local name = quest.tag and ("%s (%s)"):format(quest.title, quest.tag) or quest.title
+		y = setRow(i, y, "title", level .. name, mark, titleColour, quest)
 		-- its clock, first under the title while it runs (Q.Timers)
 		-- DONE IS NOT DELIVERED (Josh 2026-09-29: "Time limit is still not
 		-- showing" - Iverron's Antidote): a quest that asks you only to carry

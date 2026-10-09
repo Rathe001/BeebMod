@@ -5,7 +5,8 @@
 -- power bar under your character when nameplateShowSelf is on. It wears the
 -- nameplate's own art, and on this client it says nothing about combo points
 -- - a rogue or a cat reads them off the target frame, which is the wrong
--- end of the screen for a number you act on every second.
+-- end of the screen for a number you act on every second. (Build 70291 gave
+-- it points of its own; those are put away, see CHROME below.)
 --
 -- TWO THINGS. The bars are dressed the way every other piece
 -- of the client's furniture is (Core/Furniture.lua): their textures go flat,
@@ -34,7 +35,18 @@ local FILL = BT.Widgets.FILL
 local RIM = BT.Widgets.RIM
 local ACCENT = BT.Widgets.ACCENT
 
-local dresser = BT.Furniture.New({ flatBars = true, ringBars = true })
+-- THE CLIENT'S OWN POINTS, PUT AWAY (Josh 2026-10-08: "now combo points and
+-- bags look weird"). Build 70291 gave the display combo points of its own for
+-- rogues and druids: five round sockets in a frame under the power bar, the
+-- ClassFrameContainer. With our row under them that made two sets of points.
+-- Theirs goes see-through the way the client's frame pieces do, left out of
+-- the walk, and comes back with everything else when the module is off.
+local CHROME = { ClassFrameContainer = true }
+for key in pairs(BT.Furniture.CHROME) do
+	CHROME[key] = true
+end
+
+local dresser = BT.Furniture.New({ flatBars = true, ringBars = true, chrome = CHROME })
 
 -- THE PIPS ARE A BAR (Josh 2026-09-22). Five small squares under two full
 -- width bars read as a different object; a row the width of the bars, cut
@@ -313,7 +325,42 @@ end
 -- UnitFrame's bottom landed on top of the power bar, behind it. Every bar
 -- that could be the display's is asked where its bottom is, and the row goes
 -- under the lowest, a step above it in frame level.
+--
+-- THE DISPLAY'S OWN BARS FIRST (Josh 2026-10-08). Since build 70291 the
+-- display grows taller to hold the client's combo points, so its bottom edge
+-- is under those points, and the row hung there with a gap above it. Its
+-- health, power and second power bars are asked first; the display itself
+-- only when none of them is up.
+local OWN_BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
+
+-- the shown frame in `list` whose bottom is lowest, or the first shown one
+-- when none will say where its bottom is
+local function lowest(list)
+	local best, bestBottom = nil, nil
+	for _, f in ipairs(list) do
+		if type(f) == "table" and BT.Furniture.Call(f, "IsShown") then
+			local bottom = BT.Pill.Number(BT.Furniture.Call(f, "GetBottom"), nil)
+			if bottom and (not bestBottom or bottom < bestBottom) then
+				best, bestBottom = f, bottom
+			elseif not best then
+				best = f
+			end
+		end
+	end
+	return best
+end
+
 function M.PipAnchor()
+	if plate then
+		local own = {}
+		for _, key in ipairs(OWN_BARS) do
+			own[#own + 1] = plate[key]
+		end
+		local best = lowest(own)
+		if best then
+			return best
+		end
+	end
 	local candidates = {}
 	if plate then
 		candidates[#candidates + 1] = bars(plate)
@@ -328,18 +375,7 @@ function M.PipAnchor()
 			candidates[#candidates + 1] = driver[key]
 		end
 	end
-	local best, bestBottom = nil, nil
-	for _, f in ipairs(candidates) do
-		if type(f) == "table" and BT.Furniture.Call(f, "IsShown") then
-			local bottom = BT.Pill.Number(BT.Furniture.Call(f, "GetBottom"), nil)
-			if bottom and (not bestBottom or bottom < bestBottom) then
-				best, bestBottom = f, bottom
-			elseif not best then
-				best = f
-			end
-		end
-	end
-	return best
+	return lowest(candidates)
 end
 
 -- paint the row for what you have; `cur`, `max` from M.Combo. `cur` may be

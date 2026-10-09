@@ -9,7 +9,7 @@
 --   GetQuestLogTitle    the vanilla globals, still here on a 1.x client
 --
 -- The result is one plain table per quest, which is all the tracker draws:
---   { questID, title, level, complete, failed, objectives = {
+--   { questID, title, level, tag, complete, failed, objectives = {
 --       { text = "Stoneanvil's Rifle", have = 0, need = 1, done = false } } }
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Tracker/Quests.lua")
@@ -201,6 +201,36 @@ function Q.ItemCooldown(index)
 	return start, duration, enable
 end
 
+-- WHAT KIND OF QUEST (Josh 2026-10-08: "We should add those quest labels").
+-- Build 70291 gave the client's own tracker a word in brackets after an elite,
+-- dungeon, PvP or raid quest's title, read from the quest's tag. Ours says the
+-- same, in the client's own words where it has them. Nil for any other quest.
+local TAGS = {
+	{ id = "QUEST_INFO_ELITE_ID", word = "ELITE", fallback = "Elite" },
+	{ id = "QUEST_INFO_DUNGEON_ID", word = "CALENDAR_TYPE_DUNGEON", fallback = "Dungeon" },
+	{ id = "QUEST_INFO_PVP_ID", word = "CALENDAR_TYPE_PVP", fallback = "PvP" },
+	{ id = "QUEST_INFO_RAID_ID", word = "RAID", fallback = "Raid" },
+}
+
+function Q.Tag(questID)
+	if not (questID and C_QuestLog and type(C_QuestLog.GetQuestTagInfo) == "function") then
+		return nil
+	end
+	local ok, info = pcall(C_QuestLog.GetQuestTagInfo, questID)
+	local tagID = ok and type(info) == "table" and info.tagID or nil
+	local ids = type(Constants) == "table" and Constants.QuestConsts or nil
+	if tagID == nil or type(ids) ~= "table" then
+		return nil
+	end
+	for _, tag in ipairs(TAGS) do
+		if ids[tag.id] ~= nil and ids[tag.id] == tagID then
+			local word = _G[tag.word]
+			return (type(word) == "string" and word ~= "") and word or tag.fallback
+		end
+	end
+	return nil
+end
+
 -- Every quest you are following, in the order the client keeps them. (The
 -- zone each sits under is read too; the tracker does not group by it.)
 -- A TIMED QUEST'S CLOCK (Josh 2026-09-28: "timed quests don't have a timer on
@@ -259,6 +289,7 @@ function Q.Watched()
 				questID = questID,
 				title = title,
 				level = tonumber(level) or 0,
+				tag = Q.Tag(questID),
 				zone = zone,
 				complete = done,
 				failed = failed(i, questID),
