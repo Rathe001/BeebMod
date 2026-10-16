@@ -414,7 +414,7 @@ function M.Pips(cur, max, show)
 		sq:SetWidth(seg)
 		sq:SetPoint("LEFT", h, "LEFT", (i - 1) * (seg + PIP_GAP), 0)
 		sq:SetStatusBarColor(ACCENT[1], ACCENT[2], ACCENT[3], 1)
-		sq.bg:SetColorTexture(FILL[1], FILL[2], FILL[3], 0.88)
+		sq.bg:SetColorTexture(FILL[1], FILL[2], FILL[3], FILL[4])
 		-- as it came: `cur or 0` would test a secret, and the client may refuse that
 		sq:SetValue(cur)
 		BT.Pill.PlaceRing(sq.rim, sq, 0, 1, 0)

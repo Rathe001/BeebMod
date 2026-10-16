@@ -7,10 +7,10 @@
 -- journals", locked 2026-10-05: "Lock it in and start building"). Both
 -- windows are this one, 760 wide, as the settings window is:
 --
---   the header   the keeper's face, the book's name, what the keeper says to
---                you at your rank, and your rank in a box at the right - a
---                click on it opens Commendations
---   the tabs     under the header, left
+--   the title    the book's name, whose book it is, and the tabs, on one row
+--   the rank     a strip under it: your rank's badge and title, the bar to
+--                the next rank, and three numbers for the book - a click on
+--                it opens Commendations
 --   each page    a rail down the left that picks what the page shows, a
 --                toolbar over the column to its right, and the column
 --
@@ -28,11 +28,14 @@ BT.Book = Bk
 -- to these
 Bk.WIDTH, Bk.HEIGHT = 760, 640
 Bk.PAD = 14
-Bk.HEADER_H = 100
-Bk.TABS_Y = 110
-Bk.TAB_W = 104
--- the pages start under the tabs
-Bk.BODY_Y = 142
+-- RANK FIRST (Josh 2026-10-15, option B of the canvas "Journal headers"):
+-- the title row and the rank strip under it are 104 high, where the keeper's
+-- header and the tabs under it took 142
+Bk.TITLE_H = 38
+Bk.RANK_H = 66
+Bk.HEADER_H = Bk.TITLE_H + Bk.RANK_H
+-- the pages start under the rank strip
+Bk.BODY_Y = Bk.HEADER_H + 10
 Bk.RAIL_W = 150
 Bk.GAP = 10
 Bk.TOOL_H = 24
@@ -42,14 +45,17 @@ Bk.COL_Y = Bk.TOOL_H + 8
 Bk.RAIL_ROW_H = 26
 
 local PAD = Bk.PAD
-local PORTRAIT = 76
 local DIM = { 0.50, 0.55, 0.53 }
 local GOLD = { 1, 0.82, 0.30 }
 local FONT_NAME = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\JosefinSans-Bold.ttf"
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local CHECK_TEX = "Interface\\RaidFrame\\ReadyCheck-Ready"
--- the keeper's words: lighter than a grey line, quieter than a title
-local QUOTE = { 0.76, 0.82, 0.80 }
+-- a tab you are not on, and the words of one you are
+local TAB_DIM = { 0.55, 0.62, 0.60 }
+local TAB_ON = { 1, 1, 1 }
+-- the rank strip: the title's column, the gap between the book's numbers
+local NAME_W = 150
+local STAT_GAP = 22
 
 -- 12,345
 local function big(n)
@@ -66,61 +72,85 @@ end
 Bk.Big = big
 
 -- ---------------------------------------------------------------------------
--- The keeper's face
--- ---------------------------------------------------------------------------
---
--- HEMET AND JORACH IN PERSON (Josh 2026-10-04: "I'd like to have a portrait
--- of Hemet Nesingwary and Baron Revilgaz respectively"; the Ledger's keeper
--- became Lord Jorach Ravenholdt on 2026-10-05). The game's own model of each,
--- framed on the face as the journal's cards frame an enemy's
--- (Modules/Expedition/Window.lua): asked for by NPC id, held still, and
--- asked for again a little later while the client is still sending for it.
-local ASK_AGAIN = { 0.5, 1.5, 4 }
-
-local function loaded(model)
-	if type(model.GetModelFileID) ~= "function" then
-		return true
-	end
-	local ok, id = pcall(model.GetModelFileID, model)
-	return ok and type(id) == "number" and id > 0
-end
-
-local function frameFace(model)
-	pcall(model.RefreshCamera, model)
-	pcall(model.SetPortraitZoom, model, 1)
-	pcall(model.SetPosition, model, 0, 0, 0)
-	-- still, as the cards are (Josh 2026-09-25: "I want still portraits")
-	if not pcall(model.FreezeAnimation, model, 0, 0, 0) then
-		pcall(model.SetPaused, model, true)
-	end
-end
-
-function Bk.Portrait(model)
-	if not (model and model.npc) then
-		return false
-	end
-	pcall(model.ClearModel, model)
-	pcall(model.SetCreature, model, model.npc)
-	frameFace(model)
-	if C_Timer and C_Timer.After then
-		for _, wait in ipairs(ASK_AGAIN) do
-			C_Timer.After(wait, function()
-				if not loaded(model) then
-					pcall(model.SetCreature, model, model.npc)
-				end
-				frameFace(model)
-			end)
-		end
-	end
-	return true
-end
-
--- ---------------------------------------------------------------------------
 -- The window
 -- ---------------------------------------------------------------------------
+--
+-- RANK FIRST (Josh 2026-10-15: "I'd like to make this look more professional";
+-- option B of the canvas "Journal headers"). The keeper's face and his line
+-- under the title made the header read as a quest window, and took 142 pixels
+-- with the tabs. The keeper still speaks when you reach a rank (the toast);
+-- the header is the book's name and tabs on one row, and your rank on a strip
+-- under it.
 
--- spec = { name, title, npc, colour, by, tabs = { { key, label } },
---          onTab(key), onRank(), point }
+-- The tabs: words with a line under the one you are on, in the title row.
+-- `buttons`, `Select` and `Relayout` (after a tab is hidden, the rest close up).
+local function tabRow(parent, options, onPick)
+	local W = BT.Widgets
+	local row = CreateFrame("Frame", nil, parent)
+	row:SetHeight(Bk.TITLE_H)
+	row.buttons = {}
+	local function paint(b)
+		local c = (b.chosen or b.over) and TAB_ON or TAB_DIM
+		b.label:SetTextColor(c[1], c[2], c[3])
+		b.line:SetShown(b.chosen == true)
+	end
+	for i, o in ipairs(options) do
+		local b = CreateFrame("Button", nil, row)
+		b.key = o[1]
+		b.label = b:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
+		b.label:SetPoint("CENTER", 0, 0)
+		b.label:SetText(o[2])
+		b.line = b:CreateTexture(nil, "ARTWORK")
+		b.line:SetPoint("BOTTOMLEFT", 0, 0)
+		b.line:SetPoint("BOTTOMRIGHT", 0, 0)
+		b.line:SetHeight(2)
+		W.Lit(b.line)
+		b:SetScript("OnClick", function(self)
+			row:Select(self.key)
+			if onPick then
+				onPick(self.key)
+			end
+		end)
+		b:SetScript("OnEnter", function(self)
+			self.over = true
+			paint(self)
+		end)
+		b:SetScript("OnLeave", function(self)
+			self.over = nil
+			paint(self)
+		end)
+		paint(b)
+		row.buttons[i] = b
+	end
+	row.Select = function(self, key)
+		for _, b in ipairs(self.buttons) do
+			b.chosen = b.key == key
+			paint(b)
+		end
+	end
+	row.Relayout = function(self)
+		local x = 0
+		for _, b in ipairs(self.buttons) do
+			if b:IsShown() then
+				local w = BT.Pill.Number(b.label:GetStringWidth(), 0)
+				if w <= 0 then
+					w = #(b.label:GetText() or "") * 7
+				end
+				b:ClearAllPoints()
+				b:SetPoint("TOPLEFT", self, "TOPLEFT", x, 0)
+				b:SetSize(w, Bk.TITLE_H)
+				x = x + w + 18
+			end
+		end
+		self:SetWidth(math.max(1, x - 18))
+	end
+	row:Relayout()
+	return row
+end
+Bk.TabRow = tabRow
+
+-- spec = { name, title, colour, tabs = { { key, label } }, onTab(key),
+--          onRank(), point }
 function Bk.Window(spec)
 	local W = BT.Widgets
 	local f = CreateFrame("Frame", spec.name, UIParent)
@@ -139,115 +169,109 @@ function Bk.Window(spec)
 	f.spec = spec
 	local c = spec.colour or { 1, 1, 1 }
 
-	-- the keeper
-	local face = CreateFrame("Frame", nil, f)
-	face:SetSize(PORTRAIT, PORTRAIT)
-	face:SetPoint("TOPLEFT", PAD, -12)
-	W.Panel(face, { 0.02, 0.03, 0.03, 1 }, { c[1], c[2], c[3], 0.7 })
-	f.face = face
-	local ok, model = pcall(CreateFrame, "PlayerModel", nil, face)
-	if ok and model then
-		model:SetPoint("TOPLEFT", 1, -1)
-		model:SetPoint("BOTTOMRIGHT", -1, 1)
-		model.npc = spec.npc
-		pcall(model.SetScript, model, "OnModelLoaded", frameFace)
-		f.portrait = model
-	end
-
-	-- the book's name, and what it holds
-	local textX = PAD + PORTRAIT + 14
-	f.title = f:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
-	f.title:SetPoint("TOPLEFT", textX, -14)
+	-- the title row: the book's name, whose it is, and the tabs
+	f.title = f:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
+	f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -Bk.TITLE_H / 2)
 	f.title:SetText(spec.title or "")
 	f.subtitle = f:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
-	f.subtitle:SetPoint("LEFT", f.title, "RIGHT", 8, -1)
-	f.subtitle:SetPoint("RIGHT", f, "LEFT", 490, 0)
+	f.subtitle:SetPoint("LEFT", f.title, "RIGHT", 10, -1)
 	f.subtitle:SetJustifyH("LEFT")
 	f.subtitle:SetWordWrap(false)
+	f.tabs = tabRow(f, spec.tabs or {}, function(key)
+		if spec.onTab then
+			spec.onTab(key)
+		end
+	end)
+	-- the row's top at the window's (the subtitle sits a unit under the
+	-- title's middle), so a tab's line lies on the rule under the row
+	f.tabs:SetPoint("TOPLEFT", f.subtitle, "RIGHT", 24, Bk.TITLE_H / 2 + 1)
+	f.close = W.Close(f, 20)
+	f.close:SetPoint("RIGHT", f, "TOPRIGHT", -10, -Bk.TITLE_H / 2)
+	f.close:SetScript("OnClick", function() f:Hide() end)
+	W.Divider(f, 0, -Bk.TITLE_H)
 
-	-- WHAT THE KEEPER SAYS TO YOU (Josh 2026-10-04: "Maybe they could give an
-	-- RP quoted line based on the player's current rank"): a line for each
-	-- rank, and the keeper's name under it at the right, as the feature's
-	-- page sets its quote (UI/Window.lua)
-	f.quote = W.Label(f, "", "small", QUOTE[1], QUOTE[2], QUOTE[3])
-	f.quote:SetPoint("TOPLEFT", textX, -38)
-	f.quote:SetWidth(372)
-	f.quote:SetJustifyH("LEFT")
-	f.quote:SetWordWrap(true)
-	if f.quote.SetMaxLines then
-		pcall(f.quote.SetMaxLines, f.quote, 2)
-	end
-	f.by = W.Label(f, spec.by and ("- " .. spec.by) or "", "small", DIM[1], DIM[2], DIM[3])
-	f.by:SetPoint("TOPRIGHT", f.quote, "BOTTOMRIGHT", 0, -3)
-	f.by:SetJustifyH("RIGHT")
-
-	-- YOUR RANK, IN A BOX OF ITS OWN: the badge, the title, which of ten and
-	-- your points, the bar to the next and how far; a click opens
-	-- Commendations
+	-- YOUR RANK, ON A STRIP OF ITS OWN: the badge, the title and which of
+	-- ten, the bar to the next rank with the points along it, and three
+	-- numbers for the book at the right; a click opens Commendations
 	local rb = CreateFrame("Button", nil, f)
-	rb:SetSize(238, 56)
-	rb:SetPoint("TOPLEFT", 496, -36)
-	rb.bg, rb.rim = BT.Pill.Panel(rb, { c[1], c[2], c[3], 0.07 }, { c[1], c[2], c[3], 0.25 })
+	rb:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -(Bk.TITLE_H + 1))
+	rb:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -(Bk.TITLE_H + 1))
+	rb:SetHeight(Bk.RANK_H - 1)
+	rb.lit = rb:CreateTexture(nil, "BACKGROUND")
+	rb.lit:SetAllPoints()
+	rb.lit:SetColorTexture(c[1], c[2], c[3], 0.06)
 	rb.badge = rb:CreateTexture(nil, "ARTWORK")
-	rb.badge:SetSize(62, 62)
-	rb.badge:SetPoint("LEFT", rb, "LEFT", -4, 0)
+	rb.badge:SetSize(54, 54)
+	rb.badge:SetPoint("LEFT", rb, "LEFT", PAD - 4, 0)
 	rb.name = rb:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
-	pcall(rb.name.SetFont, rb.name, FONT_NAME, 17, "")
-	rb.name:SetPoint("TOPLEFT", rb, "TOPLEFT", 66, -6)
-	rb.name:SetPoint("RIGHT", rb, "RIGHT", -10, 0)
+	pcall(rb.name.SetFont, rb.name, FONT_NAME, 18, "")
+	rb.name:SetPoint("BOTTOMLEFT", rb, "LEFT", PAD + 58, 1)
+	rb.name:SetWidth(NAME_W)
 	rb.name:SetJustifyH("LEFT")
 	rb.name:SetWordWrap(false)
 	rb.line = W.Label(rb, "", "small", DIM[1], DIM[2], DIM[3])
-	rb.line:SetPoint("TOPLEFT", rb.name, "BOTTOMLEFT", 0, -3)
+	rb.line:SetPoint("TOPLEFT", rb, "LEFT", PAD + 58, -3)
 	rb.line:SetJustifyH("LEFT")
+
+	-- the book's numbers, right to left from the strip's edge
+	rb.stats = {}
+	for i = 1, 3 do
+		local s = CreateFrame("Frame", nil, rb)
+		s:SetHeight(40)
+		s.label = W.Label(s, "", "small", DIM[1], DIM[2], DIM[3])
+		s.label:SetPoint("TOPLEFT", 0, 0)
+		s.label:SetJustifyH("LEFT")
+		s.value = s:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
+		local face = s.value:GetFont()
+		if face then
+			pcall(s.value.SetFont, s.value, face, 18, "")
+		end
+		s.value:SetPoint("TOPLEFT", s.label, "BOTTOMLEFT", 0, -3)
+		s.value:SetJustifyH("LEFT")
+		rb.stats[i] = s
+	end
+	rb.split = rb:CreateTexture(nil, "ARTWORK")
+	rb.split:SetSize(1, 38)
+	W.Rule(rb.split, nil, "v")
+
+	-- the bar between the title and the numbers, its points under it
 	rb.track = rb:CreateTexture(nil, "BORDER")
-	rb.track:SetPoint("TOPLEFT", rb.line, "BOTTOMLEFT", 0, -4)
-	rb.track:SetPoint("RIGHT", rb, "RIGHT", -10, 0)
-	rb.track:SetHeight(4)
+	rb.track:SetPoint("BOTTOMLEFT", rb, "LEFT", PAD + 58 + NAME_W + 12, 3)
+	rb.track:SetPoint("RIGHT", rb.split, "LEFT", -16, 0)
+	rb.track:SetHeight(6)
 	rb.track:SetColorTexture(1, 1, 1, 0.07)
 	rb.fill = rb:CreateTexture(nil, "ARTWORK")
 	rb.fill:SetPoint("TOPLEFT", rb.track, "TOPLEFT", 0, 0)
-	rb.fill:SetHeight(4)
+	rb.fill:SetHeight(6)
 	rb.fill:SetColorTexture(c[1], c[2], c[3], 0.9)
+	rb.points = W.Label(rb, "", "small", DIM[1], DIM[2], DIM[3])
+	rb.points:SetPoint("TOPLEFT", rb.track, "BOTTOMLEFT", 0, -5)
+	rb.points:SetJustifyH("LEFT")
 	rb.next = W.Label(rb, "", "small", DIM[1], DIM[2], DIM[3])
-	rb.next:SetPoint("TOPLEFT", rb.track, "BOTTOMLEFT", 0, -3)
-	rb.next:SetJustifyH("LEFT")
+	rb.next:SetPoint("TOPRIGHT", rb.track, "BOTTOMRIGHT", 0, -5)
+	rb.next:SetJustifyH("RIGHT")
+
 	rb:SetScript("OnClick", function()
 		if spec.onRank then
 			spec.onRank()
 		end
 	end)
 	rb:SetScript("OnEnter", function(self)
-		BT.Pill.Recolour(self, { c[1], c[2], c[3], 0.12 }, { c[1], c[2], c[3], 0.5 })
+		self.lit:SetColorTexture(c[1], c[2], c[3], 0.11)
 	end)
 	rb:SetScript("OnLeave", function(self)
-		BT.Pill.Recolour(self, { c[1], c[2], c[3], 0.07 }, { c[1], c[2], c[3], 0.25 })
+		self.lit:SetColorTexture(c[1], c[2], c[3], 0.06)
 	end)
 	f.rank = rb
-
-	f.close = W.Close(f, 20)
-	f.close:SetPoint("TOPRIGHT", -12, -12)
-	f.close:SetScript("OnClick", function() f:Hide() end)
-	W.Divider(f, PAD, -Bk.HEADER_H)
-
-	f.tabs = W.Segmented(f, spec.tabs or {}, function(key)
-		if spec.onTab then
-			spec.onTab(key)
-		end
-	end, Bk.TAB_W)
-	f.tabs:SetPoint("TOPLEFT", PAD, -Bk.TABS_Y)
+	W.Divider(f, 0, -Bk.HEADER_H)
+	Bk.SetStats(f, {})
 
 	f.pages = {}
-	f:HookScript("OnShow", function(self)
-		if self.portrait then
-			Bk.Portrait(self.portrait)
-		end
-	end)
 	f:Hide()
 	return f
 end
 
--- A page of the window: everything under the tabs. Shown by Bk.ShowPage.
+-- A page of the window: everything under the rank strip. Shown by Bk.ShowPage.
 function Bk.Page(f, key)
 	local p = CreateFrame("Frame", nil, f)
 	p:SetPoint("TOPLEFT", 0, -Bk.BODY_Y)
@@ -266,19 +290,49 @@ function Bk.ShowPage(f, key)
 	f.page = key
 end
 
+-- The book's numbers on the rank strip: `stats` = { { label, value }, ... },
+-- at most three, laid out from the strip's right edge.
+function Bk.SetStats(f, stats)
+	local rb = f.rank
+	local right = -PAD - 2
+	local shown = 0
+	for i = #rb.stats, 1, -1 do
+		local s, st = rb.stats[i], stats[i]
+		s:SetShown(st ~= nil)
+		if st then
+			s.label:SetText(string.upper(st[1] or ""))
+			s.value:SetText(st[2] or "")
+			local w = math.max(BT.Pill.Number(s.label:GetStringWidth(), 0),
+				BT.Pill.Number(s.value:GetStringWidth(), 0), 24)
+			s:SetWidth(w)
+			s:ClearAllPoints()
+			s:SetPoint("RIGHT", rb, "RIGHT", right, -1)
+			right = right - w - STAT_GAP
+			shown = shown + 1
+		end
+	end
+	rb.split:ClearAllPoints()
+	rb.split:SetPoint("RIGHT", rb, "RIGHT", right + STAT_GAP - 16, 0)
+	rb.split:SetShown(shown > 0)
+end
+
 -- The header for where you are: `h` = { subtitle, ranks = { { at, title } },
--- badge(n), points, quotes }. `points` may be a preview's.
+-- badge(n), points, stats }. `points` may be a preview's.
 function Bk.SetHeader(f, h)
 	if h.subtitle then
 		f.subtitle:SetText(h.subtitle)
+	end
+	if h.stats then
+		Bk.SetStats(f, h.stats)
 	end
 	local ranks = h.ranks
 	if not ranks then
 		return
 	end
+	local points = h.points or 0
 	local n = 1
 	for i, r in ipairs(ranks) do
-		if (h.points or 0) >= r[1] then
+		if points >= r[1] then
 			n = i
 		end
 	end
@@ -287,31 +341,32 @@ function Bk.SetHeader(f, h)
 	rb.badge:SetTexture(h.badge and h.badge(n) or nil)
 	rb.name:SetText(here[2])
 	-- A LONG TITLE A SIZE SMALLER: "Master of the Hunt" and "Eye of
-	-- Ravenholdt" fit the box at 15 or 13 where 17 would cut them off
-	for _, size in ipairs({ 17, 15, 13 }) do
+	-- Ravenholdt" fit the column at 16 or 14 where 18 would cut them off
+	for _, size in ipairs({ 18, 16, 14 }) do
 		pcall(rb.name.SetFont, rb.name, FONT_NAME, size, "")
 		local ok, w = pcall(rb.name.GetStringWidth, rb.name)
-		if not (ok and type(w) == "number") or w <= 238 - 66 - 10 then
+		if not (ok and type(w) == "number") or w <= NAME_W then
 			break
 		end
 	end
-	rb.line:SetText(("Rank %d of %d · |cffffffff%s pts|r"):format(n, #ranks, big(h.points)))
+	rb.line:SetText(("Rank %d of %d"):format(n, #ranks))
 	-- the bar's width, or what it will be before the window is laid out
 	local w = BT.Pill.Number(rb.track:GetWidth(), 0)
 	if w < 2 then
-		w = 238 - 66 - 10
+		w = 240
 	end
 	if nxt then
-		local share = math.min(1, ((h.points or 0) - here[1]) / math.max(1, nxt[1] - here[1]))
+		local share = math.min(1, (points - here[1]) / math.max(1, nxt[1] - here[1]))
 		rb.fill:SetShown(share > 0)
 		rb.fill:SetWidth(math.max(1, w * share))
-		rb.next:SetText(("%s to %s"):format(big(nxt[1] - (h.points or 0)), nxt[2]))
+		rb.points:SetText(("|cffffffff%s|r / %s points"):format(big(points), big(nxt[1])))
+		rb.next:SetText("Next: " .. nxt[2])
 	else
 		rb.fill:Show()
 		rb.fill:SetWidth(w)
+		rb.points:SetText(("|cffffffff%s|r points"):format(big(points)))
 		rb.next:SetText("Highest rank")
 	end
-	f.quote:SetText(h.quotes and h.quotes[n] or "")
 	f.rankShown = n
 	return n
 end

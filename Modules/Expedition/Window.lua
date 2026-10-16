@@ -29,8 +29,6 @@ BT.ExpeditionWindow = V
 local Bk = BT.Book
 local PAD = Bk.PAD
 local WIDTH, HEIGHT = Bk.WIDTH, Bk.HEIGHT
--- Hemet Nesingwary, at his camp in Stranglethorn: the face over the journal
-V.NPC = 715
 
 local DIM = { 0.50, 0.55, 0.53 }
 local WORDS = "|cff8a9894%s|r"
@@ -127,10 +125,9 @@ function V.Build()
 	end
 	local feature = BT.Feature and BT.Feature("expedition")
 	frame = Bk.Window({
-		name = "BeebModExpedition", title = "Nesingwary's Expedition", npc = V.NPC,
+		name = "BeebModExpedition", title = "Nesingwary's Expedition",
 		colour = feature and feature.color or { 0.44, 0.64, 0.80 },
-		by = feature and feature.by,
-		tabs = { { "journal", "Field Journal" }, { "commendations", "Commendations" } },
+		tabs ={ { "journal", "Field Journal" }, { "commendations", "Commendations" } },
 		point = { "CENTER", 40, -20 },
 		onTab = function(key)
 			ui().view = key
@@ -2494,13 +2491,14 @@ function V.Refresh()
 	local u = ui()
 	local kills, feats = J.Counts()
 	local points, _, st, uniquePoints, masteryPoints = J.Points(kills, feats)
-	-- "73 kills (7 unique)" (Josh 2026-09-28): the kills, and how many of
-	-- them were an enemy's first. The rank and the points are in the box at
-	-- the header's right, with Hemet's word on them.
+	-- whose journal it is beside the title; the rank on the strip under it,
+	-- with the kills, how many of them were an enemy's first (Josh
+	-- 2026-09-28: "unique"), and the points
+	local shown = V.ShownPoints(points)
 	Bk.SetHeader(frame, {
-		subtitle = ("%s · %s %s (%s unique)"):format((U.Me and U.Me()) or "This character",
-			big(st.total), st.total == 1 and "kill" or "kills", big(st.uniques)),
-		ranks = J.RANKS, badge = J.RankBadge, points = V.ShownPoints(points), quotes = J.QUOTES,
+		subtitle = (U.Me and U.Me()) or "This character",
+		ranks = J.RANKS, badge = J.RankBadge, points = shown,
+		stats = { { "Kills", big(st.total) }, { "Unique", big(st.uniques) }, { "Points", big(shown) } },
 	})
 	local journal = u.view ~= "commendations"
 	Bk.ShowPage(frame, journal and "journal" or "commendations")

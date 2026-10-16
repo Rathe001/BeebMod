@@ -49,10 +49,9 @@ function C.Build()
 		return frame
 	end
 	local f = feature()
-	local L = BT.LedgerRanks
 	frame = Bk.Window({
-		name = "BeebModCensus", title = f and f.title or "Ravenholdt Ledger", npc = L and L.NPC,
-		colour = f and f.color, by = f and f.by,
+		name = "BeebModCensus", title = f and f.title or "Ravenholdt Ledger",
+		colour = f and f.color,
 		tabs = { { "charts", "Charts" }, { "find", "Find people" }, { "comm", "Commendations" } },
 		point = { "CENTER", 60, -10 },
 		onTab = function(key)
@@ -110,27 +109,24 @@ function C.Build()
 	return frame
 end
 
--- the realm and how many characters are in its book - counted by the census
--- the charts were just drawn from, rather than by a second walk of the whole
--- book (Josh 2026-09-24)
-local function subtitle()
-	if not (frame and BT.DB) then
-		return nil
-	end
+-- how many characters are in the realm's book, and how many were seen today -
+-- counted by the census the charts were just drawn from, rather than by a
+-- second walk of the whole book (Josh 2026-09-24)
+local function counts()
 	local m = BT.GetModule("census")
 	local census = m and m.view and m.view.census
 	-- the list's length, not a reading of every character in it (Josh
 	-- 2026-09-29: opening the Census lagged)
 	local L = BT.LedgerRanks
 	local total = census and (census.book or census.total) or (L and L.characters) or 0
-	return ("%s · %s characters"):format(BT.scope and BT.scope.realm or "?", BT.Util.Commas(total))
+	return total, census and census.today
 end
 
--- the header: the realm and its count, your rank or one previewed from the
--- Testing page, and Jorach's word at it
+-- the header: the realm beside the title; your rank, or one previewed from
+-- the Testing page, on the strip, with the book's count, today's and the points
 local function header(points)
 	local L = BT.LedgerRanks
-	if not (frame and L) then
+	if not (frame and L and BT.DB) then
 		return
 	end
 	if type(points) ~= "number" then
@@ -138,8 +134,17 @@ local function header(points)
 	end
 	local preview = BT.Dock and BT.Dock.preview and BT.Dock.preview.ledger
 	local shown = preview and L.RANKS[preview] and L.RANKS[preview][1] or points
-	Bk.SetHeader(frame, { subtitle = subtitle(), ranks = L.RANKS, badge = L.RankBadge, points = shown,
-		quotes = L.QUOTES })
+	local total, today = counts()
+	local U = BT.Util
+	Bk.SetHeader(frame, {
+		subtitle = BT.scope and BT.scope.realm or "?",
+		ranks = L.RANKS, badge = L.RankBadge, points = shown,
+		stats = {
+			{ "Characters", U.Commas(total) },
+			{ "Seen today", today and U.Commas(today) or "-" },
+			{ "Points", U.Commas(shown) },
+		},
+	})
 	return shown
 end
 
@@ -383,14 +388,7 @@ function C.Show(tab)
 	local buttons = frame.tabs.buttons
 	buttons[1]:SetShown(charts)
 	buttons[2]:SetShown(find)
-	local x = 0
-	for _, b in ipairs(buttons) do
-		if b:IsShown() then
-			b:ClearAllPoints()
-			b:SetPoint("LEFT", frame.tabs, "LEFT", x, 0)
-			x = x + Bk.TAB_W - 1
-		end
-	end
+	frame.tabs:Relayout()
 	Bk.ShowPage(frame, tab)
 	if tab ~= "comm" then
 		C.focus = nil

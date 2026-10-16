@@ -5,6 +5,45 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The Expedition and Ledger windows have a new header.** The journal's
+  name and tabs share the top row. Under it, your rank has a strip of its
+  own: the badge, the bar to the next rank with your points, and three
+  numbers. The Expedition shows kills, unique kills and points; the Ledger
+  shows characters, characters seen today and points. The keeper's face and
+  line are gone from the header, and he still speaks when you reach a rank.
+  Each page has 28 pixels more room.
+
+- **Panels show more of the world under them.** The dock, tooltips, bag
+  window, unit frames, chat and the other panels are 76% opaque by default,
+  down from 88%. A Background colour you picked on the General page keeps
+  its own opacity.
+
+- **The stats on the Character page sit closer together.** Lines are 15
+  pixels apart instead of 23, and section headings 26 instead of 40, so
+  more stats fit before the list scrolls. The text stays the same size.
+
+- **The first line of a description is no longer cut off.** On the
+  Reputation and Skills pages, the description beside the list lost the top
+  half of its first line.
+
+- **The minimap stays square when you turn Rotate Minimap on or off.**
+  Before, it went round until the next zone change or zoom.
+
+- **The minimap's corner icons fit their corners after the October 15
+  patch.** The patch drew the tracking eye, the calendar and the mail
+  envelope larger. BeebMod shrinks each to the size of the other corner
+  icons, and the envelope stays in its corner when mail comes.
+
+- **The day and night dial keeps its size at any minimap Size.** After the
+  patch it was drawn too large or too small when the minimap's Size in Edit
+  Mode was not 100%.
+
+- **The backpack's slot order and the gamepad bag row are the game's own
+  again.** The October 15 patch fixed both, so BeebMod no longer changes
+  them.
+
 ## 0.1.0-beta.26
 
 - **Combo points sit under the resource display again.** The game's

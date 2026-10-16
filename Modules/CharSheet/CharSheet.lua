@@ -780,7 +780,7 @@ local function dressFrame(frame)
 		hide(frame.PortraitContainer)
 	end
 	-- a touch more solid than the dock: a window this big over the world
-	-- shows too much of it at the dock's 88%
+	-- shows too much of it at the dock's 76%
 	BT.Widgets.Panel(frame, { FILL[1], FILL[2], FILL[3], 0.96 }, RIM)
 	BT.Pill.ShowSurface(BT.Pill.Panels()[frame], true)
 	BT.Widgets.Shadow(frame)
@@ -1003,6 +1003,47 @@ local function scaled(f, scale)
 	f:SetScale(scale)
 end
 
+-- TIGHTER BY DRAWING IT SMALLER (Josh 2026-10-15: "We really need to reduce
+-- the space between the stats"). The stats list cannot be told its lines are
+-- shorter: it measures them itself, and the game works each stat out as it
+-- draws its line, so a list this module lays out is one the game refuses to
+-- finish (2026-09-29, see M.FOLDS). It can be drawn smaller. At 65% its
+-- 23-unit lines are 15 pixels and its 40-unit headers 26, and its words are
+-- set larger by as much, so they read at the size they had.
+--
+-- Drawn smaller, the same pane holds more of the list, and the game has to
+-- draw the extra lines itself. So the scale goes on only while the list is
+-- still empty: at login, before the window has first opened. Switched on with
+-- the list already filled, it waits for the next login.
+M.STAT_SCALE = 0.65
+
+local function statBox()
+	local stats = pick(_G.CharacterFrame, "CharacterStatsPaneScrollBox")
+	return stats and stats.ScrollBox
+end
+
+-- the scale the stats list is drawn at now: ours, or the game's own
+function M.StatScale()
+	local box = statBox()
+	local p = box and placed[box]
+	return (p and p.scale ~= nil) and M.STAT_SCALE or 1
+end
+
+function M.TightenStats()
+	local box = statBox()
+	if not (box and box.SetScale) or M.StatScale() ~= 1 then
+		return false
+	end
+	local ok, provider = pcall(function()
+		return box.GetDataProvider and box:GetDataProvider()
+	end)
+	if not ok or provider ~= nil then
+		return false
+	end
+	scaled(box, M.STAT_SCALE)
+	return true
+end
+
 -- A ROW'S HEIGHT, THE MOCKUP'S (Josh 2026-09-22). The game's rows are 30 and
 -- its headers 26-28, its stat lines 23 and its stat headers 40: comfortable
 -- for a big window, air in a small one. Each comes down to what the mockup
@@ -1058,6 +1099,30 @@ local function unplace()
 		placed[f] = nil
 	end
 end
+
+-- THE DESCRIPTION MEASURES ITSELF (Josh 2026-10-15: "Text is cut off on the
+-- rep and skills windows"). A details pane's description is the game's
+-- scrolling text. The game makes its words as wide as their box, and the frame
+-- holding them as tall as the words, whenever it is given new words or a new
+-- size. Narrowed four pixels by this module after that, the words could wrap
+-- to one more line than their holder, which is centred on them and clipped:
+-- the top half of the first line went. Their width is left to the game, and
+-- once their size is set the holder is made as tall as they are.
+local function fitDescription(desc)
+	local holder = desc and desc.ScrollBox and desc.ScrollBox.FontStringContainer
+	local words = holder and holder.FontString
+	if not (words and words.GetStringHeight and holder.SetHeight) then
+		return false
+	end
+	sized(words, 11)
+	local ok, h = pcall(words.GetStringHeight, words)
+	if not (ok and type(h) == "number" and h > 0) then
+		return false
+	end
+	holder:SetHeight(h)
+	return true
+end
+M.FitDescription = fitDescription
 
 -- the side pane: showing, unless the game's arrow has folded it away
 local function paneOpen()
@@ -1181,21 +1246,24 @@ local function statRow(row)
 			row:SetHeight(M.StatExtent(h))
 		end
 	end
+	-- sizes in the list's own units: drawn at 65%, its words are set larger
+	-- by as much (M.TightenStats)
+	local u = 1 / M.StatScale()
 	if row.Title and not row.Label then
 		-- a stat header: small capitals beside its rule
 		if M.FOLDS then
 			tight()
 		end
 		header(row.Title)
-		sized(row.Title, 9)
+		sized(row.Title, 9 * u)
 	elseif row.Label then
 		-- 10 for both, the tightest text in the window: the stats are read at
 		-- a glance, and the more of them fit, the less the pane scrolls
 		if M.FOLDS then
 			tight()
 		end
-		sized(row.Label, 10)
-		sized(row.Value, 10)
+		sized(row.Label, 10 * u)
+		sized(row.Value, 10 * u)
 	end
 	if row.Label and row.Value and row.Label.SetTextColor then
 		for _, fs in ipairs({ row.Label, row.Value }) do
@@ -1533,14 +1601,17 @@ function M.ResistRow(row)
 	if not row.beebsSwatch and row.CreateTexture then
 		row.beebsSwatch = row:CreateTexture(nil, "OVERLAY")
 		row.beebsSwatch.beebs = true
-		row.beebsSwatch:SetSize(8, 8)
-		row.beebsSwatch:SetPoint("LEFT", row, "LEFT", 4, 0)
 	end
+	-- in the list's own units, which are smaller while it is drawn at 65%
+	local u = 1 / M.StatScale()
 	if row.beebsSwatch then
+		row.beebsSwatch:SetSize(8 * u, 8 * u)
+		row.beebsSwatch:ClearAllPoints()
+		row.beebsSwatch:SetPoint("LEFT", row, "LEFT", 4 * u, 0)
 		row.beebsSwatch:SetColorTexture(colour[1], colour[2], colour[3], 1)
 		row.beebsSwatch:Show()
 	end
-	place(row.Label, { { "LEFT", row, "LEFT", 16, 0 } })
+	place(row.Label, { { "LEFT", row, "LEFT", 16 * u, 0 } })
 	return true
 end
 
@@ -1973,9 +2044,16 @@ local function layoutSide(frame, right)
 		-- the list inside it, and its bar, within the pane rather than the
 		-- game's 233 pixels - close to the edges, the pane is short
 		if pane and pane.ScrollBox then
+			-- the stats' list drawn smaller (M.TightenStats), and its edges
+			-- given in its own units, so they land where they did
+			local u = 1
+			if key == "CharacterStatsPaneScrollBox" then
+				M.TightenStats()
+				u = 1 / M.StatScale()
+			end
 			place(pane.ScrollBox, {
-				{ "TOPLEFT", pane, "TOPLEFT", 4, 0 },
-				{ "BOTTOMRIGHT", pane, "BOTTOMRIGHT", -8, 0 },
+				{ "TOPLEFT", pane, "TOPLEFT", 4 * u, 0 },
+				{ "BOTTOMRIGHT", pane, "BOTTOMRIGHT", -8 * u, 0 },
 			})
 			if pane.ScrollBar then
 				place(pane.ScrollBar, {
@@ -2104,12 +2182,15 @@ local function layoutPages(frame, left, right)
 		end
 		local okC, kids = pcall(function() return { f:GetChildren() } end)
 		for _, kid in ipairs(okC and kids or {}) do
-			local okW, w = pcall(kid.GetWidth, kid)
-			if okW and type(w) == "number" and w > inner and kid.SetWidth then
-				resizing(kid)
-				kid:SetWidth(inner)
+			-- the game's scrolling text sizes its own words (see fitDescription)
+			if not kid.GetFontStringContainer then
+				local okW, w = pcall(kid.GetWidth, kid)
+				if okW and type(w) == "number" and w > inner and kid.SetWidth then
+					resizing(kid)
+					kid:SetWidth(inner)
+				end
+				fitWords(kid, depth + 1)
 			end
-			fitWords(kid, depth + 1)
 		end
 	end
 	for _, d in pairs(details) do
@@ -2224,6 +2305,7 @@ local function layoutPages(frame, left, right)
 		if d.EmptyText and d.EmptyText.IsShown and d.EmptyText:IsShown() then
 			place(d.EmptyText, { { "TOP", d, "TOP", 0, y - 10 } })
 		end
+		fitDescription(d.Description)
 	end
 	-- the switches, along the bottom of the pane where nothing else is
 	local repDetail2 = pick(pick(frame, "ReputationFrame"), "ReputationDetailFrame")

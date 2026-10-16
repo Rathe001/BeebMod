@@ -78,7 +78,7 @@ function T.Preset(token)
 	local c = CLASS[token or ""] or HOUSE
 	return {
 		rim = { c[1] * 0.55, c[2] * 0.55, c[3] * 0.55, 0.95 },
-		fill = { 0.03 + c[1] * 0.045, 0.04 + c[2] * 0.045, 0.04 + c[3] * 0.045, 0.88 },
+		fill = { 0.03 + c[1] * 0.045, 0.04 + c[2] * 0.045, 0.04 + c[3] * 0.045, 0.76 },
 	}
 end
 
@@ -188,7 +188,7 @@ function T.Set(name, value)
 	BT.settings.theme = BT.settings.theme or {}
 	local s = BT.settings.theme
 	if name == "fill" or name == "rim" then
-		s[name] = { value[1], value[2], value[3], value[4] or (name == "rim" and 0.95 or 0.88) }
+		s[name] = { value[1], value[2], value[3], value[4] or (name == "rim" and 0.95 or 0.76) }
 		-- picking a colour IS choosing to leave the preset: otherwise the next
 		-- login reads the class again and the colour you picked is gone
 		s.preset = "custom"
@@ -227,7 +227,7 @@ function T.Apply()
 				W.SOLID[i] = fill[i]
 				W.HAIR[i] = rim[i]
 			end
-			W.SOLID[4] = math.max(fill[4] or 0.88, 0.96)
+			W.SOLID[4] = math.max(fill[4] or 0.76, 0.96)
 			W.HAIR[4] = 0.45
 		end
 		-- a selection is the panel with a wash of the accent through it, not

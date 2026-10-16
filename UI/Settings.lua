@@ -177,7 +177,7 @@ function S.PickColour(which)
 	for k, v in pairs(info) do
 		ColorPickerFrame[k] = v
 	end
-	-- the old picker's opacity is a transparency: 88% opaque opens at 12%
+	-- the old picker's opacity is a transparency: 76% opaque opens at 24%
 	ColorPickerFrame.opacity = 1 - (was[4] or 1)
 	ColorPickerFrame.func = info.swatchFunc
 	if ColorPickerFrame.SetColorRGB then

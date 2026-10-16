@@ -26,9 +26,6 @@ local N = BT.Notes
 local L = {}
 BT.LedgerRanks = L
 
--- Lord Jorach Ravenholdt, at his manor in the Alterac Mountains
-L.NPC = 6768
-
 L.RANKS = {
 	{ 0, "Fledgling" }, { 50, "Lookout" }, { 150, "Eavesdropper" }, { 300, "Informant" }, { 500, "Shadow" },
 	{ 800, "Agent" }, { 1200, "Handler" }, { 1800, "Spymaster" }, { 2600, "Master of Shadows" },

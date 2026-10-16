@@ -81,9 +81,10 @@ at the dock.
 | **Game menu**, **Dropdown menus** | The menu Escape opens, and every dropdown and right-click menu. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
 
 **The journals** are the Ledger and the Expedition. Their windows are the
-same shape. Over the tabs is the keeper's face, with a line from him for your
-rank, and your rank at the top right; click it to see the commendations. Each
-tab has a list on the left that picks what the page shows. A new rank shows a
+same shape. The top row has the journal's name and its tabs. Under it is your
+rank, with a bar to the next one and three numbers for the journal; click it
+to see the commendations. Each tab has a list on the left that picks what the
+page shows. A new rank shows a
 toast with the keeper's line, and a sound. A commendation or a mastery shows
 on the journal's line in the dock for a few seconds; with the line off, a
 small bar at the top of the screen shows it. Several at once are one notice.

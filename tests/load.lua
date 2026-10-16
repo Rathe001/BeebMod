@@ -1769,12 +1769,17 @@ if ok then
 					and BT.ExpeditionWindow.Build():GetWidth() == cw:GetWidth(), "the two journals are one size")
 				assert(#cw.tabs.buttons == 3 and cw.tabs.buttons[3].label:GetText() == "Commendations",
 					"Charts, Find people and Commendations")
-				assert(cw.title:GetText() == "Ravenholdt Ledger" and cw.portrait and cw.portrait.npc == L.NPC,
-					"the Ravenholdt Ledger, with Jorach's face")
+				-- RANK FIRST (Josh 2026-10-15, option B): the title row, then
+				-- your rank on a strip with the book's three numbers
+				assert(cw.title:GetText() == "Ravenholdt Ledger" and not cw.portrait and not cw.quote,
+					"the Ravenholdt Ledger, without the keeper's face and line")
 				local n = L.Rank((L.Score()))
-				assert(cw.rank.name:GetText() == L.RANKS[n][2] and cw.quote:GetText() == L.QUOTES[n]
-					and cw.by:GetText() == "- Lord Jorach Ravenholdt, Alterac Mountains",
-					"your rank in the header, and what Jorach says at it")
+				assert(cw.rank.name:GetText() == L.RANKS[n][2] and cw.rank.line:GetText() == ("Rank %d of 10"):format(n),
+					"your rank on the strip")
+				local st = cw.rank.stats
+				assert(st[1].label:GetText() == "CHARACTERS" and st[2].label:GetText() == "SEEN TODAY"
+					and st[3].label:GetText() == "POINTS" and st[3].value:GetText() == BT.Util.Commas(L.Score()),
+					"the book's count, today's and the points: " .. tostring(st[3].value:GetText()))
 				assert(view.rail and view.rail.rows[1].label:GetText() == "Class" and view.rail.rows[1].chosen
 					and view.seenControl:GetParent() == cw.chartsShell.toolbar, "the charts on the rail, Seen on the toolbar")
 				-- Commendations: the Expedition's page, the Ledger's in it
@@ -7008,10 +7013,12 @@ if ok then
 			_G.ContainerFrameCombinedBags = nil
 			_G.hooksecurefunc = hadHook
 		end },
-		{ "the backpack reads from the top left again, without the gamepad's bag row", function()
-			-- BUILD 70291 (Josh 2026-10-08: "now combo points and bags look
-			-- weird"): with a mouse the backpack's slots came out backwards,
-			-- and the gamepad's bag row showed in the window's corner
+		{ "the backpack's order and the gamepad's bag row are the client's", function()
+			-- BUILD 70425 (2026-10-15) put back what build 70291 turned round:
+			-- the client lays the backpack out from the bottom right again and
+			-- no longer hangs the gamepad's bag row in the window's corner. The
+			-- module's reordering and its putting the row away are gone, and
+			-- nothing it does now touches either.
 			local mod = BT.GetModule("bagwindow")
 			local hadHook, hadGrid = _G.hooksecurefunc, _G.AnchorUtil
 			_G.hooksecurefunc = function(obj, name, fn)
@@ -7031,8 +7038,7 @@ if ok then
 				b.IsExtended = function() return false end
 				return b
 			end
-			-- made the way the client makes them: the last bag first, counting down
-			win.Items = { item(1, 2), item(1, 1), item(0, 3), item(0, 2), item(0, 1) }
+			win.Items = { item(0, 1), item(0, 2), item(0, 3), item(1, 1), item(1, 2) }
 			win.EnumerateValidItems = function(self)
 				return function(w, i)
 					i = i + 1
@@ -7043,15 +7049,15 @@ if ok then
 			end
 			win.GetInitialItemAnchor = function() return "corner" end
 			win.GetAnchorLayout = function() return "grid" end
-			local laid
-			_G.AnchorUtil = { GridLayout = function(items, anchor, layout)
-				assert(anchor == "corner" and layout == "grid", "through the client's own corner and grid")
+			local laid, grids = nil, 0
+			_G.AnchorUtil = { GridLayout = function(items)
+				grids = grids + 1
 				laid = {}
 				for i, b in ipairs(items) do
 					laid[i] = b:GetBagID() .. ":" .. b:GetID()
 				end
 			end }
-			-- the client's layout since 70291: the backpack's first slot first
+			-- the client's layout since 70425: the last bag's last slot first
 			win.UpdateItemLayout = function(self)
 				local items = {}
 				for _, b in self:EnumerateValidItems() do
@@ -7059,44 +7065,33 @@ if ok then
 				end
 				table.sort(items, function(a, b)
 					if a:GetBagID() ~= b:GetBagID() then
-						return a:GetBagID() < b:GetBagID()
+						return a:GetBagID() > b:GetBagID()
 					end
-					return a:GetID() < b:GetID()
+					return a:GetID() > b:GetID()
 				end)
 				_G.AnchorUtil.GridLayout(items, self:GetInitialItemAnchor(), self:GetAnchorLayout())
 			end
 			local row = _G.CreateFrame("Frame", "GamepadBagBar", win)
 			_G.GamepadBagBar = row
-			_G.IsAccountSecured = function() return true end
 			BT.SetEnabled("bagwindow", true)
 			mod.StyleAll()
 			win:UpdateItemLayout()
 			local function order()
 				return table.concat(laid or {}, ",")
 			end
-			assert(order() == "1:2,1:1,0:3,0:2,0:1",
-				"the last bag's last slot in the bottom right, the backpack's first at the top left: " .. order())
-			assert(not row:IsShown(), "the gamepad's bag row is put away")
-			-- slots the account has not unlocked go after the rest, as before
-			_G.IsAccountSecured = function() return false end
-			win.Items[3].IsExtended = function() return true end
-			win:UpdateItemLayout()
-			assert(order() == "1:2,1:1,0:2,0:1,0:3", "a locked slot last: " .. order())
-			win.Items[3].IsExtended = function() return false end
-			-- with the gamepad interface on, the client's order and row are right
+			assert(order() == "1:2,1:1,0:3,0:2,0:1" and grids == 1,
+				"laid out once, by the client, in its own order: " .. order() .. " x" .. grids)
+			assert(row:IsShown(), "and the gamepad's bag row is left alone")
 			_G.InputUtil = { IsGamepadUIEnabled = function() return true end }
 			mod.StyleAll()
 			win:UpdateItemLayout()
-			assert(order() == "0:1,0:2,0:3,1:1,1:2" and row:IsShown(), "the gamepad's own order and row: " .. order())
+			assert(order() == "1:2,1:1,0:3,0:2,0:1" and grids == 2 and row:IsShown(),
+				"the same with the gamepad interface on")
 			_G.InputUtil = nil
-			mod.StyleAll()
-			win:UpdateItemLayout()
-			assert(not row:IsShown() and order() == "1:2,1:1,0:3,0:2,0:1", "and put right again with a mouse")
 			BT.SetEnabled("bagwindow", false)
-			assert(row:IsShown() and order() == "0:1,0:2,0:3,1:1,1:2",
-				"switched off, the window is the client's again, its order and row too: " .. order())
+			assert(row:IsShown() and grids == 2, "and switched off, nothing is laid out again")
 			BT.SetEnabled("bagwindow", true)
-			_G.ContainerFrameCombinedBags, _G.GamepadBagBar, _G.IsAccountSecured = nil, nil, nil
+			_G.ContainerFrameCombinedBags, _G.GamepadBagBar = nil, nil
 			_G.hooksecurefunc, _G.AnchorUtil = hadHook, hadGrid
 		end },
 		{ "a tooltip in the default spot is moved clear of the dock", function()
@@ -11003,6 +10998,27 @@ if ok then
 			_G.CharacterFrameTitleText = title
 			_G.CharacterFrame = frame
 
+			-- the skills pane's words are the game's scrolling text: the game
+			-- makes them as wide as their box and their holder as tall as they
+			-- are, four lines at its own size (Josh 2026-10-15)
+			local skills = _G.CreateFrame("Frame", nil, frame)
+			frame.SkillsFrame = skills
+			local skillDetail = _G.CreateFrame("Frame", nil, skills)
+			skills.SkillDetailFrame = skillDetail
+			local scroller = _G.CreateFrame("Frame", nil, skillDetail)
+			skillDetail.Description = scroller
+			scroller.ScrollBox = _G.CreateFrame("Frame", nil, scroller)
+			local holder = _G.CreateFrame("Frame", nil, scroller.ScrollBox)
+			scroller.ScrollBox.FontStringContainer = holder
+			scroller.GetFontStringContainer = function(self) return self.ScrollBox.FontStringContainer end
+			local lines = holder:CreateFontString()
+			holder.FontString = lines
+			lines:SetWidth(152)
+			lines.GetStringHeight = function(self)
+				local _, size = self:GetFont()
+				return size * 4
+			end
+			holder:SetHeight(48)
 			BT.SetEnabled("charsheet", true)
 			BT.settings.charsheet = BT.settings.charsheet or {}
 			BT.settings.charsheet.theme = nil
@@ -11051,6 +11067,13 @@ if ok then
 			assert(detail.Title._width == 156 and detail.StandingBar._width == 152,
 				"a details pane's pieces fit the pane: " .. tostring(detail.Title._width))
 			assert(words._width == 148, "and the words inside them keep a margin, so nothing runs past the edge")
+			-- THE DESCRIPTION MEASURES ITSELF (Josh 2026-10-15: "Text is cut
+			-- off on the rep and skills windows"): narrowed after the game
+			-- measured them, the words wrapped a line taller than their holder
+			assert(lines._width == 152, "the game's scrolling words keep the width it gave them: "
+				.. tostring(lines._width))
+			assert(select(2, lines:GetFont()) == 11 and holder._height == 44,
+				"set a size smaller, and their holder as tall as they are now: " .. tostring(holder._height))
 			-- THE PANE BESIDE A LIST, NOT THE WHOLE WINDOW (Josh 2026-09-30,
 			-- review): picking a row refills the pane in the game's sizes, and a
 			-- page's list lays out only the pages again
@@ -11084,6 +11107,27 @@ if ok then
 				"a line and a header keep the game's heights: " .. tostring(health._height) .. "/" .. tostring(general._height))
 			mod.StatRow(health)
 			assert(health._alpha ~= 0 and not general.beebsChevron, "no folds: every line drawn, no chevron")
+			-- TIGHTER BY DRAWING IT SMALLER (Josh 2026-10-15): dressed while
+			-- the list was still empty, it is drawn at 65%, its words set
+			-- larger by as much and its edges given in its own units
+			local s = mod.STAT_SCALE
+			assert(stats.ScrollBox._scale == s and mod.StatScale() == s,
+				"the stats list drawn smaller: " .. tostring(stats.ScrollBox._scale))
+			assert(math.abs(select(2, health.Label:GetFont()) - 10 / s) < 1e-6
+				and math.abs(select(2, general.Title:GetFont()) - 9 / s) < 1e-6,
+				"its words larger by as much, so they read at 10 and 9")
+			local boxAt = stats.ScrollBox._points.TOPLEFT
+			assert(boxAt and math.abs(boxAt.x - 4 / s) < 1e-6, "and its edge where it was: " .. tostring(boxAt and boxAt.x))
+			-- off, it is the game's size again; filled, the scale waits for a login
+			mod.Undress()
+			assert((stats.ScrollBox._scale or 1) == 1 and mod.StatScale() == 1, "off, the list is the game's size")
+			stats.ScrollBox.GetDataProvider = function() return {} end
+			mod.Dress()
+			assert((stats.ScrollBox._scale or 1) == 1,
+				"a list the game has filled is not drawn smaller: the game would have to draw lines for us")
+			stats.ScrollBox.GetDataProvider = nil
+			mod.Dress()
+			assert(stats.ScrollBox._scale == s, "and an empty one is")
 			mod.Refold()
 			stats.ScrollBox:SetDataProvider({})
 			assert((stats.ScrollBox.fulls or 0) == fullsBefore,
@@ -11744,6 +11788,7 @@ if ok then
 				or _G.CreateFrame("Frame", "MinimapCluster", _G.UIParent)
 			local cluster = _G.MinimapCluster
 			cluster.Tracking = _G.CreateFrame("Button", nil, _G.UIParent)
+			cluster.Tracking:SetScale(0.8)
 			cluster.ZoneTextButton = _G.CreateFrame("Button", nil, _G.UIParent)
 			cluster.MailFrame = _G.CreateFrame("Button", nil, _G.UIParent)
 			cluster.InstanceDifficulty = _G.CreateFrame("Frame", nil, _G.UIParent)
@@ -11760,6 +11805,15 @@ if ok then
 				"and the client's caption is put away rather than laid on the map")
 			assert(cluster.Tracking._shown ~= false and cluster.MailFrame._shown ~= false,
 				"and none of them was hidden for want of a name")
+			-- AT ITS OWN SIZE ON OURS (Josh 2026-10-15). Build 70425 scales
+			-- the day/night dial by one over the map's Edit Mode Size; out of
+			-- the client's holder that was the wrong size at any Size but 100%.
+			-- Every piece placed goes through the same move.
+			assert(cluster.Tracking._scale == 1,
+				"a piece on our map is drawn at its own size: " .. tostring(cluster.Tracking._scale))
+			mod.Apply(true)
+			assert(cluster.Tracking._scale == 0.8, "and switched off it has the client's scale back")
+			mod.Apply()
 			cluster.Tracking, cluster.ZoneTextButton = nil, nil
 			cluster.MailFrame, cluster.InstanceDifficulty = nil, nil
 
@@ -12001,6 +12055,85 @@ if ok then
 			local again = (sunny._points or {}).BOTTOMLEFT
 			assert(again.x == snapped.x and again.y == snapped.y,
 				"and measuring again does not undo the snap")
+
+			-- MEASURED ON THE SCREEN (Josh 2026-10-15). A button
+			-- drawn at half size reports its edges in units twice as small;
+			-- the snap measures both on the screen and moves it in its own.
+			local halved = _G.CreateFrame("Button", nil, _G.UIParent)
+			halved.GetEffectiveScale = function() return 0.5 end
+			local dot = halved:CreateTexture()
+			dot.GetObjectType = function() return "Texture" end
+			dot.GetEffectiveScale = function() return 0.5 end
+			-- 144-174 by 120-150 on the screen, as the sun above
+			dot.GetLeft = function() return 288 end
+			dot.GetRight = function() return 348 end
+			dot.GetTop = function() return 300 end
+			dot.GetBottom = function() return 240 end
+			assert(mod.Snap(halved, map, { spot = "BOTTOMLEFT", x = 3, y = 3 }),
+				"a scaled button whose picture is off in the map gets moved")
+			local halfAt = (halved._points or {}).BOTTOMLEFT
+			assert(halfAt and halfAt.x == 3 + (103 - 144) * 2 and halfAt.y == 3 + (103 - 120) * 2,
+				("the same distance on the screen, twice as many of its own units (%s, %s)")
+					:format(tostring(halfAt and halfAt.x), tostring(halfAt and halfAt.y)))
+
+			-- THE PICTURE DECIDES THE SIZE (Josh 2026-10-15). Build
+			-- 70425's tracking eye is a 23-pixel picture in a smaller holder.
+			local function pictured(side)
+				local holder = _G.CreateFrame("Frame", nil, _G.UIParent)
+				local button = _G.CreateFrame("Button", nil, holder)
+				button.StateTexture = {
+					GetWidth = function() return side end,
+					GetHeight = function() return side end,
+				}
+				holder.GetChildren = function() return button end
+				return holder
+			end
+			local eye = pictured(23)
+			assert(mod.Shrink(eye, map, 18), "a picture larger than the corner is made smaller")
+			assert(math.abs(eye._scale - 18 / 23) < 1e-6, "to the corner's size: " .. tostring(eye._scale))
+			local small = pictured(14)
+			assert(not mod.Shrink(small, map, 18) and small:GetScale() == 1,
+				"and one that already fits is left as the client drew it")
+
+			-- WHAT THE CLIENT DOES AGAIN, THIS MODULE DOES AGAIN (Josh
+			-- 2026-10-15). Rotate Minimap gives the map its round mask back,
+			-- an Edit Mode Size scales the dial again, and mail coming lays
+			-- the envelope's holder out again.
+			do
+				local hadCluster, hadHook, hadLaid = _G.MinimapCluster, _G.hooksecurefunc, mod.laidOut
+				local realKeepers = mod.Keepers
+				_G.hooksecurefunc = function(obj, name, fn)
+					local orig = obj[name]
+					obj[name] = function(...)
+						local r = orig(...)
+						fn(...)
+						return r
+					end
+				end
+				local held = _G.CreateFrame("Frame", nil, _G.UIParent)
+				held.Layout = function() end
+				_G.MinimapCluster = {
+					IndicatorFrame = held,
+					Layout = function() end,
+					SetHeaderUnderneath = function() end,
+					SetEditModeScale = function() end,
+					UpdateMinimapConfig = function() map:SetMaskTexture("Interface\\Round") end,
+				}
+				mod.laidOut = nil
+				mod.Watch()
+				local placed = 0
+				mod.Keepers = function() placed = placed + 1 return 0 end
+				_G.MinimapCluster:UpdateMinimapConfig()
+				assert(map._mask == "Interface\\Buttons\\WHITE8X8",
+					"rotate minimap on or off, and the map is square again: " .. tostring(map._mask))
+				placed = 0
+				_G.MinimapCluster:SetEditModeScale(0.8)
+				assert(placed == 1, "an Edit Mode Size places the pieces again")
+				held:Layout()
+				assert(placed == 2, "and so does mail coming or going")
+				mod.Keepers = realKeepers
+				_G.MinimapCluster, _G.hooksecurefunc, mod.laidOut = hadCluster, hadHook, hadLaid
+			end
 			map.GetLeft, map.GetRight, map.GetTop, map.GetBottom = nil, nil, nil, nil
 
 			-- NOTHING THAT CHANGES WHAT IT DOES: no scripts of ours on it
@@ -13040,7 +13173,18 @@ if ok then
 			assert(shown() == 9, ("every row with any of itself in view is dealt (%d)"):format(shown()))
 			assert(not b.cards[1].portrait.covered and not b.cards[4].portrait.covered,
 				"a face wholly in view is up")
-			assert(b.cards[9].portrait.covered, "and one wholly under the view is put away")
+			-- the third row's faces are up only if some of them is in view: the
+			-- view grew when the header got shorter (2026-10-15), so where they
+			-- fall is worked out rather than assumed
+			local row3 = b.layout.rows[3]
+			local _, faceY = BT.ExpeditionCard.Window(b.layout.w)
+			local room = b.grid:Room()
+			if room <= 0 then
+				room = BT.Book.HEIGHT - BT.Book.BODY_Y - BT.Book.COL_Y - BT.Book.PAD
+			end
+			local someInView = row3.y + faceY < room
+			assert((b.cards[9].portrait.covered == true) == not someInView,
+				"a face wholly under the view is put away, one partly in it is up")
 			assert(V.Crop(nil, 0, 40, 100) and V.Crop(nil, 40, 0, 100) and not V.Crop(nil, 60, 40, 100),
 				"a face with any of itself in view is shown; one wholly out of view is not")
 			local firstEnemy = b.cards[5].npc
@@ -13722,11 +13866,11 @@ if ok then
 			local points, _, _, uniquePoints, masteryPoints = MJ.Points(MJ.Counts("char"))
 			local rankN, rankTitle = MJ.Rank(points)
 			local box = f.rank
-			assert(box.name:GetText() == rankTitle and box.line:GetText():find("^Rank %d+ of 10 · ")
-				and box.line:GetText():find(points .. " pts", 1, true),
-				"the header says the rank and the points: " .. tostring(box.line:GetText()))
-			assert(f.quote:GetText() == MJ.QUOTES[rankN] and f.by:GetText() == "- Hemet Nesingwary, Stranglethorn",
-				"and what Hemet says at it, and who said it: " .. tostring(f.quote:GetText()))
+			assert(box.name:GetText() == rankTitle and box.line:GetText() == ("Rank %d of 10"):format(rankN)
+				and box.points:GetText():find(points, 1, true),
+				"the strip says the rank and the points: " .. tostring(box.points:GetText()))
+			assert(box.stats[1].label:GetText() == "KILLS" and box.stats[3].value:GetText() == tostring(points)
+				and not f.quote, "with the kills, the unique kills and the points, and no keeper's line")
 			-- THE BADGE (Josh 2026-09-29): the rank's own
 			assert(box.badge._texture == MJ.RankBadge(rankN) and box.badge._texture:find("Ranks\\rank" .. rankN, 1, true),
 				"the header shows the rank's badge: " .. tostring(box.badge._texture))
@@ -13741,7 +13885,7 @@ if ok then
 			assert(em.badge._texture == MJ.RankBadge(10), "a previewed rank's badge")
 			-- and the Commendations page draws it too, as if just reached
 			assert(box.badge._texture == MJ.RankBadge(10) and box.name:GetText() == "Expedition Leader"
-				and f.quote:GetText() == MJ.QUOTES[10]
+				and box.next:GetText() == "Highest rank"
 				and ach.ladder.rungs[10].glow:IsShown() and not ach.ladder.rungs[10].badge._grey,
 				"the header's badge, title and line and the row of ranks follow the preview: " .. tostring(box.name:GetText()))
 			local xpMod = BT.GetModule("xp")

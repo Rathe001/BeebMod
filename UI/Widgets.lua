@@ -106,10 +106,10 @@ end
 -- alpha, which drifted apart every time one of them was touched. They share
 -- these now, so "slightly transparent" is one number rather than five.
 --
--- 0.88 is deliberate: enough that the world moves under a panel and it reads
--- as part of the game rather than a window pasted on top, and not so much that
--- a grey stone floor eats a grey line of text.
-W.FILL = { 0.04, 0.06, 0.05, 0.88 }
+-- 0.76 (Josh 2026-10-15: "I'd like to see more under it"; it was 0.88): the
+-- world moves under a panel and it reads as part of the game rather than a
+-- window pasted on top. The window itself stays nearly solid (W.SOLID).
+W.FILL = { 0.04, 0.06, 0.05, 0.76 }
 W.RIM = { 0.16, 0.24, 0.21, 0.95 }
 -- and the lit one: the tab you are on, the switch that is on, the glyph on the
 -- dock. Mutated in place like the other two, so anything holding it keeps up.
@@ -126,7 +126,7 @@ W.KNOB = { 0.80, 0.96, 0.88, 1 }
 -- a button at rest: the panel's own fill, lifted a step so it reads as
 -- something you can press rather than a hole in the panel
 W.RAISED = { 0.08, 0.11, 0.10, 0.95 }
--- THE WINDOW IS FOR READING (Josh 2026-09-23). 0.88 lets the world move
+-- THE WINDOW IS FOR READING (Josh 2026-09-23). W.FILL lets the world move
 -- under the dock, which is the point of the dock; under a page of settings it
 -- put nameplates behind the text. The window wears the same fill, nearly
 -- solid. And the groups of rows inside it are rimmed with a quieter rim.

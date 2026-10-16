@@ -405,6 +405,7 @@ local function move(thing, parent, spot, rel, relSpot, x, y, size)
 		end
 		m.w = BT.Pill.Number(thing.GetWidth and thing:GetWidth(), nil)
 		m.h = BT.Pill.Number(thing.GetHeight and thing:GetHeight(), nil)
+		m.scale = BT.Pill.Number(thing.GetScale and thing:GetScale(), nil)
 		m.shown = (thing.IsShown and thing:IsShown()) and true or false
 		moved[thing] = m
 	end
@@ -423,6 +424,9 @@ local function move(thing, parent, spot, rel, relSpot, x, y, size)
 		if m.w and m.h and m.w > 0 and m.h > 0 and thing.SetSize then
 			pcall(thing.SetSize, thing, m.w, m.h)
 		end
+		if m.scale and m.scale > 0 and thing.SetScale then
+			pcall(thing.SetScale, thing, m.scale)
+		end
 		-- whether it shows is the client's: it shows the mail envelope when
 		-- there is mail, and replaying what it was the first time we touched
 		-- it hid mail that had come since (Josh 2026-09-23, audit)
@@ -439,6 +443,16 @@ local function move(thing, parent, spot, rel, relSpot, x, y, size)
 	moved[thing].landed = (thing.GetParent and thing:GetParent()) == parent
 	if size and thing.SetSize then
 		pcall(thing.SetSize, thing, size, size)
+	end
+	-- AT ITS OWN SIZE ON OURS (Josh 2026-10-15). Build 70425 hangs the
+	-- day/night dial inside the map's Edit Mode holder and scales it by one
+	-- over the Size chosen there, so that it comes out the same size inside a
+	-- holder scaled the other way. Taken out of that holder, only the one over
+	-- was left: at any Size but 100% the dial was drawn too big or too small.
+	-- What this module places is drawn at its own size; M.Shrink makes the
+	-- corners smaller after.
+	if thing.SetScale then
+		pcall(thing.SetScale, thing, 1)
 	end
 	if thing.SetFrameLevel and parent.GetFrameLevel then
 		pcall(thing.SetFrameLevel, thing, (parent:GetFrameLevel() or 1) + 6)
@@ -760,6 +774,15 @@ M.found = {}
 -- the frame went in the corner and the sun sat a thumb's width inside the map.
 -- So what the button actually DRAWS is measured - every shown texture on it
 -- and on its children - and the button is shifted until that is in the corner.
+-- MEASURED ON THE SCREEN (Josh 2026-10-15). A frame reports where
+-- it is in units of its own scale, so a corner scaled down by M.Shrink and the
+-- map it sits on were being measured with two different rulers. Every edge is
+-- turned into screen units first.
+local function scaleOf(region)
+	local ok, s = pcall(region.GetEffectiveScale, region)
+	return (ok and type(s) == "number" and s > 0) and s or 1
+end
+
 local function artBox(f)
 	local l, r, t, b
 	local function take(region)
@@ -783,6 +806,8 @@ local function artBox(f)
 			and type(rt) == "number" and type(rb) == "number") then
 			return
 		end
+		local s = scaleOf(region)
+		rl, rr, rt, rb = rl * s, rr * s, rt * s, rb * s
 		l, r = math.min(l or rl, rl), math.max(r or rr, rr)
 		t, b = math.max(t or rt, rt), math.min(b or rb, rb)
 	end
@@ -831,28 +856,90 @@ function M.Snap(f, map, w)
 		f.beebsSnap = l and "the map has no position yet" or "nothing measurable drawn"
 		return false
 	end
-	f.beebsSnap = ("art at %d,%d-%d,%d, map at %d,%d-%d,%d"):format(
+	-- the map on the screen's ruler too, and the gap from its edge with it
+	local ms = scaleOf(map)
+	ml, mr, mt, mb = ml * ms, mr * ms, mt * ms, mb * ms
+	f.beebsSnap = ("art at %.0f,%.0f-%.0f,%.0f, map at %.0f,%.0f-%.0f,%.0f"):format(
 		l, b, r, t, ml, mb, mr, mt)
 	local dx, dy = 0, 0
 	if w.spot:find("LEFT") then
-		dx = (ml + w.x) - l
+		dx = (ml + w.x * ms) - l
 	elseif w.spot:find("RIGHT") then
-		dx = (mr + w.x) - r
+		dx = (mr + w.x * ms) - r
 	end
 	if w.spot:find("TOP") then
-		dy = (mt + w.y) - t
+		dy = (mt + w.y * ms) - t
 	elseif w.spot:find("BOTTOM") then
-		dy = (mb + w.y) - b
+		dy = (mb + w.y * ms) - b
 	end
 	if math.abs(dx) < 0.5 and math.abs(dy) < 0.5 then
 		return false
 	end
 	-- added to whatever shift it already had: measuring again after a snap
-	-- measures from where the snap left it
+	-- measures from where the snap left it. In the button's own units, which
+	-- is what its anchor is measured in.
+	local fs = scaleOf(f)
 	local shift = f.beebsShift or { 0, 0 }
-	f.beebsShift = { shift[1] + dx, shift[2] + dy }
+	f.beebsShift = { shift[1] + dx / fs, shift[2] + dy / fs }
 	pcall(f.ClearAllPoints, f)
 	pcall(f.SetPoint, f, w.spot, map, w.spot, w.x + f.beebsShift[1], w.y + f.beebsShift[2])
+	return true
+end
+
+-- THE PICTURE DECIDES THE SIZE (Josh 2026-10-15). Build 70425 draws the
+-- tracking eye and the calendar on 23-pixel buttons, and the mail on a 32 by
+-- 24 holder that sizes itself again whenever mail comes. Sizing the holder to
+-- ICON no longer sizes the picture in it, so the picture is measured and the
+-- holder scaled down until it fits. Only down, and only the picture: the
+-- calendar's glow for an invite is 64 pixels across and would shrink the
+-- calendar to a dot.
+local PICTURES = { "StateTexture", "MailIcon" }
+
+local function picture(f, depth)
+	depth = depth or 0
+	for _, key in ipairs(PICTURES) do
+		local t = f[key]
+		if type(t) == "table" and type(t.GetWidth) == "function" then
+			return t
+		end
+	end
+	if depth < 2 and type(f.GetChildren) == "function" then
+		local ok, kids = pcall(function()
+			return { f:GetChildren() }
+		end)
+		for _, kid in ipairs(ok and kids or {}) do
+			local found = type(kid) == "table" and picture(kid, depth + 1)
+			if found then
+				return found
+			end
+		end
+	end
+	return nil
+end
+
+function M.Shrink(f, map, size)
+	if type(f.SetScale) ~= "function" then
+		return false
+	end
+	local pic = picture(f)
+	if not pic then
+		return false
+	end
+	local ok, pw, ph = pcall(function()
+		return pic:GetWidth(), pic:GetHeight()
+	end)
+	if not ok then
+		return false
+	end
+	-- both on the screen's ruler: the picture as drawn, the room on the map
+	local side = math.max(BT.Pill.Number(pw, 0), BT.Pill.Number(ph, 0)) * scaleOf(pic)
+	local room = size * scaleOf(map)
+	if side <= room + 0.5 then
+		return false
+	end
+	local okScale, own = pcall(f.GetScale, f)
+	own = okScale and BT.Pill.Number(own, 1) or 1
+	pcall(f.SetScale, f, own * room / side)
 	return true
 end
 
@@ -976,6 +1063,7 @@ function M.Keepers(frame, map, plain)
 					move(f, map, w.spot, map, w.spot, w.x, w.y, w.size)
 					-- placed afresh, so no shift yet
 					f.beebsShift = nil
+					M.Shrink(f, map, w.size)
 					M.Snap(f, map, w)
 					if w.hover then
 						M.hovering[f] = true
@@ -1506,17 +1594,42 @@ function M.Watch()
 	-- and ours was the only pass that ever ran. This goes on again after it.
 	if not M.laidOut and _G.MinimapCluster and hooksecurefunc then
 		local cluster = _G.MinimapCluster
-		for _, fn in ipairs({ "Layout", "SetHeaderUnderneath", "UpdateRotateMinimapButton" }) do
+		local function again()
+			if BT.Enabled("minimap") and not M.placing and M.frame then
+				M.placing = true
+				pcall(M.Keepers, M.frame, _G.Minimap, false)
+				M.placing = false
+			end
+		end
+		-- SetEditModeScale too (Josh 2026-10-15): build 70425 scales the
+		-- day/night dial again after every change to the map's Edit Mode Size,
+		-- and anchors it by its old holder, after the cluster's layout has run
+		for _, fn in ipairs({ "Layout", "SetHeaderUnderneath", "SetEditModeScale" }) do
 			if type(cluster[fn]) == "function" then
 				M.laidOut = true
-				pcall(hooksecurefunc, cluster, fn, function()
-					if BT.Enabled("minimap") and not M.placing and M.frame then
-						M.placing = true
-						pcall(M.Keepers, M.frame, _G.Minimap, false)
-						M.placing = false
-					end
-				end)
+				pcall(hooksecurefunc, cluster, fn, again)
 			end
+		end
+		-- THE MAIL LAYS ITSELF OUT AS WELL (Josh 2026-10-15). Mail coming or
+		-- going makes its holder lay itself out at 32 by 24 again (build
+		-- 70425), with the envelope at its top left, away from the corner.
+		local held = cluster.IndicatorFrame
+		if type(held) == "table" and type(held.Layout) == "function" then
+			pcall(hooksecurefunc, held, "Layout", again)
+		end
+		-- ROTATE MINIMAP MAKES THE MAP ROUND AGAIN (Josh 2026-10-15). Turning
+		-- it on or off runs UpdateMinimapConfig, which gives the map the
+		-- client's round mask, so the whole layout goes on again after it, as
+		-- after a zone change. The hook was on UpdateRotateMinimapButton until
+		-- now, which neither build has: the map stayed round until the next
+		-- zone change or zoom.
+		if type(cluster.UpdateMinimapConfig) == "function" then
+			M.laidOut = true
+			pcall(hooksecurefunc, cluster, "UpdateMinimapConfig", function()
+				if BT.Enabled("minimap") and M.frame then
+					M.Apply()
+				end
+			end)
 		end
 	end
 	if not M.events then
