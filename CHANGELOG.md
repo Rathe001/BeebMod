@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.27
 
 - **The Expedition and Ledger windows have a new header.** The journal's
   name and tabs share the top row. Under it, your rank has a strip of its
