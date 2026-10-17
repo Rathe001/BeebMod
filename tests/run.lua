@@ -933,6 +933,116 @@ do
 	check(BT.boot.type == "nil" and BT.boot.total == 0, "an empty login is reported as an empty login")
 end
 
+-- 9a. THE BETA'S RECORDS GO AT LAUNCH (Josh 2026-10-17: "When the game
+-- releases, we need to make sure we reset all ledger and expedition data").
+-- A saved file copied from the beta's game folder: a login to a beta realm
+-- keeps every record, and the first login to a launch realm drops what was
+-- filed under a beta realm and keeps the settings and everything else.
+do
+	local function betaFile()
+		_G.BeebModKeep, _G.BeebModChar = nil, nil
+		BT.boot, BT.betaDropped = nil, nil
+		_G.BeebModDB = {
+			schema = BT.SCHEMA,
+			settings = {
+				dockPos = { point = "TOPLEFT", rel = "TOPLEFT", x = 12, y = -300 },
+				nextTag = 4,
+				tags = { { key = "tag3", label = "Friendly", short = "Friendly", color = { 0.31, 0.82, 0.48 } } },
+				-- every other module's records, one character each
+				xp = { ["Beeb Bob@ClassicBetaPvE2"] = { start = 1 }, ["Ola Bard@Whitemane"] = { start = 2 } },
+				xpPace = { ["Beeb Bob@ClassicBetaPvE2"] = { { t = 1, xp = 10 } } },
+				pickpocket = { ["Beeb Bob@ClassicBetaPvE2"] = { copper = 500 } },
+				expedition = {
+					chars = {
+						["Beeb Bob@ClassicBetaPvE2"] = { kills = { [101] = 3, [102] = 1 }, first = { [101] = 1, [102] = 2 } },
+						["Ola Bard@Whitemane"] = { kills = { [102] = 1 }, first = { [102] = 5 } },
+					},
+					sessions = { ["Beeb Bob@ClassicBetaPvE2"] = { last = 1 }, ["Ola Bard@Whitemane"] = { last = 2 } },
+					enemies = { [101] = { name = "Beta Boar" }, [102] = { name = "Shared Wolf" } },
+					same = { [201] = 101, [202] = 102 },
+					quests = { [9] = { id = 9 } }, questOrder = { 9 },
+				},
+			},
+			realms = {
+				["ClassicBetaPvE2|All"] = { players = {
+					["Seen Once"] = { name = "Seen Once", first = 1, last = 2, seen = 1 },
+					["Seen Twice"] = { name = "Seen Twice", first = 1, last = 2, seen = 2 },
+				}, stats = { sightings = 3 } },
+				["Whitemane|All"] = { players = {
+					["Home Body"] = { name = "Home Body", first = 1, last = 2, seen = 1 },
+				}, stats = { sightings = 1 } },
+			},
+			ledger = {
+				moved = 1,
+				realms = {
+					["ClassicBetaPvE2|All"] = { people = { ["Seen Once"] = { name = "Seen Once", note = "beta note" } },
+						earned = { ["notes:1"] = 1 }, rank = 4 },
+					["Whitemane|All"] = { people = { ["Home Body"] = { name = "Home Body", note = "launch note" } } },
+				},
+				group = { me = "Beeb Bob@ClassicBetaPvE2", at = 1, members = {} },
+			},
+		}
+		return _G.BeebModDB
+	end
+
+	-- on the beta: the realm's name says so, and nothing goes
+	local saved = betaFile()
+	BT.Bind("Classic Beta PvE 2", "Alliance")
+	check(BT.betaCheck.realm and not BT.betaDropped and saved.realms["ClassicBetaPvE2|All"]
+		and saved.ledger.realms["ClassicBetaPvE2|All"] and saved.settings.expedition.chars["Beeb Bob@ClassicBetaPvE2"],
+		"on a beta realm every beta record is kept")
+
+	-- the same file on a launch realm
+	BT.Bind("Whitemane", "Alliance")
+	local gone = BT.betaDropped
+	check(gone and gone.books == 1 and gone.characters == 2 and gone.ledger == 1 and gone.people == 1
+		and gone.journals == 1 and gone.enemies == 1 and gone.records == 3,
+		("on a launch realm the beta's records go, and are counted (%s)"):format(
+			gone and ("%d %d %d %d %d %d %d"):format(gone.books, gone.characters, gone.ledger, gone.people,
+				gone.journals, gone.enemies, gone.records) or "nothing dropped"))
+	check(saved.settings.xp["Beeb Bob@ClassicBetaPvE2"] == nil and saved.settings.xp["Ola Bard@Whitemane"]
+		and next(saved.settings.xpPace) == nil and next(saved.settings.pickpocket) == nil,
+		"a beta character's XP and pickpocket records go, a launch character's stay")
+	check(saved.realms["ClassicBetaPvE2|All"] == nil and DB.Get(BT.db, "Home Body") ~= nil,
+		"the census's beta book goes, and this realm's stays")
+	check(saved.ledger.realms["ClassicBetaPvE2|All"] == nil and N.Get("Home Body")
+		and N.Get("Home Body").note == "launch note" and saved.ledger.group == nil,
+		"the Ledger's beta book goes with its notes, commendations and group, and this realm's notes stay")
+	local ex = saved.settings.expedition
+	check(ex.chars["Beeb Bob@ClassicBetaPvE2"] == nil and ex.sessions["Beeb Bob@ClassicBetaPvE2"] == nil
+		and ex.chars["Ola Bard@Whitemane"] and ex.sessions["Ola Bard@Whitemane"],
+		"a beta character's kills and session go, a launch character's stay")
+	check(ex.enemies[101] == nil and ex.enemies[102] and ex.same[201] == nil and ex.same[202] == 102
+		and ex.quests[9],
+		"an enemy only beta characters killed goes, one a launch character killed stays, and so do the quests")
+	check(BT.settings.dockPos.point == "TOPLEFT" and BT.Util.TagByKey("tag3") ~= nil,
+		"the settings stay, and the tags you made with them")
+	check(BT.DropBeta("Whitemane") == nil, "and the next login finds nothing to drop")
+
+	-- only beta characters: the journal is empty, the quests read for lore too
+	saved = betaFile()
+	saved.settings.expedition.chars["Ola Bard@Whitemane"] = nil
+	BT.Bind("Whitemane", "Alliance")
+	ex = saved.settings.expedition
+	check(next(ex.chars) == nil and next(ex.enemies) == nil and next(ex.same) == nil and ex.quests == nil,
+		"with no launch character the Expedition starts empty")
+
+	-- the client says it is the beta: nothing goes, whatever the realm
+	saved = betaFile()
+	_G.IsBetaBuild = function() return true end
+	BT.Bind("Whitemane", "Alliance")
+	_G.IsBetaBuild = nil
+	check(BT.betaCheck.client and not BT.betaDropped and saved.realms["ClassicBetaPvE2|All"]
+		and saved.settings.expedition.chars["Beeb Bob@ClassicBetaPvE2"],
+		"on a beta client every beta record is kept")
+
+	-- no realm known yet is no answer
+	check(BT.DropBeta(nil) == nil and BT.DropBeta("?") == nil and BT.DropBeta("") == nil
+		and saved.realms["ClassicBetaPvE2|All"],
+		"without a realm's name nothing goes")
+	_G.BeebModDB, BT.betaDropped = nil, nil
+end
+
 -- 9b. FEATURES (Josh 2026-09-27: "each of those modules should work
 -- independently... Entire modules should have a toggle switch"). Five since
 -- 2026-10-04, the Census a part of the Ledger: each a switch over every
@@ -2120,6 +2230,27 @@ do
 	local next = J.NextMasteries({ [90001] = 44, [90002] = 9, [90003] = 1 }, 2)
 	check(#next == 2 and next[1].npc == 90002 and next[1].need == 10 and next[2].npc == 90001 and next[2].need == 50,
 		"the nearest masteries come first")
+	-- THE ENEMIES KILLED LAST (Josh 2026-10-17): the dock's tooltip lists
+	-- them, latest first, each once, from the GUIDs counted
+	check(J.GuidNpc("Creature-0-4618-1-12-90001-0000AB") == 90001 and J.GuidNpc("Vehicle-0-1-1-1-90002-1") == 90002
+		and J.GuidNpc("Player-4618-0002BFB2") == nil and J.GuidNpc("Pet-0-1-1-1-90001-1") == nil,
+		"an enemy's npc id is read from its GUID, and nothing else's")
+	local sameWas = J.Store().same
+	J.Store().same = { [90009] = 90003 }
+	J.Store().enemies[90003] = J.Store().enemies[90003] or { name = "Merged Into" }
+	local lately = { kills = { [90001] = 44, [90002] = 9, [90003] = 500 }, recent = {
+		"Creature-0-1-1-1-90002-1", "Creature-0-1-1-1-90001-1", "Creature-0-1-1-1-90002-2",
+		"Player-1-ABC", "Creature-0-1-1-1-90009-1", "Creature-0-1-1-1-90001-2" } }
+	local last = J.LastKilled(lately, 3)
+	check(#last == 3 and last[1].npc == 90001 and last[2].npc == 90003 and last[3].npc == 90002,
+		"the last enemies killed, latest first, each once, a merged one on its page")
+	check(last[1].have == 44 and last[1].tier == 1 and last[1].need == 50 and last[2].need == nil and last[2].tier == 4
+		and last[3].need == 10,
+		"each with its kills and the next mastery, or none past Platinum")
+	check(#J.LastKilled(lately, 1) == 1, "as many as asked for")
+	check(#J.LastKilled({ kills = { [90002] = 9 }, recent = {}, last = { npc = 90002 } }) == 1,
+		"with no GUIDs kept, the last kill")
+	J.Store().same = sameWas
 	-- FEWER KILLS FOR THE RARER KINDS (Josh 2026-09-26): an elite's Platinum
 	-- is 250, a rare's 20 and a world boss's 5; the metals pay the same
 	check(J.Mastery(100, { rank = "elite" }) == 4 and J.Mastery(99, { rank = "elite" }) == 3

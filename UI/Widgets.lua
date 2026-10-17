@@ -132,6 +132,11 @@ W.RAISED = { 0.08, 0.11, 0.10, 0.95 }
 -- solid. And the groups of rows inside it are rimmed with a quieter rim.
 W.SOLID = { 0.04, 0.06, 0.05, 0.96 }
 W.HAIR = { 0.16, 0.24, 0.21, 0.45 }
+-- AND A TOOLTIP IS FOR READING TOO (Josh 2026-10-17: "Tooltips need to be
+-- less transparent so they are easier to read"): the same fill, nearly
+-- solid, on the unit and item tooltips (Modules/Tooltips)
+W.TIP_ALPHA = 0.94
+W.TIP = { 0.04, 0.06, 0.05, W.TIP_ALPHA }
 
 -- WHAT IS WEARING IT (Josh 2026-09-21). Most of these are set once, where the
 -- texture is made, so a colour that can change later needs to know who took a

@@ -65,10 +65,10 @@ at the dock.
 
 | part | what it is |
 |---|---|
-| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar, with a switch each for party, raid, main tanks, bosses and your cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. Type `/bt demo` to see a made-up party. Switch them off, or one type of frame off, and the game's own frames come back. |
+| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar, with a switch each for party, raid, main tanks, bosses and your cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. The target, focus and boss frames fade when none of your class's skills reaches them, such as a hunter's Auto Shot or Raptor Strike, and the party and raid fade when the game says they are out of range. Type `/bt demo` to see a made-up party. Switch them off, or one type of frame off, and the game's own frames come back. |
 | **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
-| **Nameplates** | Enemy nameplates in BeebMod's look, with the enemy's level, name and health. A ring means it is attacking you, and a white outline marks your target; the others step back while you have one. Casts show under the plate with the spell's icon and name, and a red rim marks a cast the game says to interrupt. Your damage over time shows above the plate. Friendly nameplates show a name and no bar. A player's name is in class colour, with their level before it. An NPC's is smaller and green, with a picture for what it does, such as selling, training or flying you, and its title under it. Another player's pet has its owner's name under it, and totems have no name. Friendly nameplates, and pets and minions, have a switch each. |
-| **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). |
+| **Nameplates** | Enemy nameplates in BeebMod's look, with the enemy's level, name and health. A ring means it is attacking you, and a white outline marks your target; the others step back while you have one. Casts show under the plate with the spell's icon and name, and a red rim marks a cast the game says to interrupt. An enemy player's guild sits under their bar in green, out of the way while they cast. Your damage over time shows above the plate. Friendly nameplates show a name and no bar. A player's name is in class colour, with their level before it and their guild under it in green. An NPC's is smaller and green, with a picture for what it does, such as selling, training or flying you, and its title under it. Another player's pet has its owner's name under it, and totems have no name. Friendly nameplates, and pets and minions, have a switch each. The game has at most 40 plates out at once, so in a crowded city some players have none. |
+| **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). A crosshair to its left lights while your main attack reaches your target: Auto Shot for a hunter, so it goes dark too close as well as too far, melee for a warrior or rogue, and your usual spell for a caster. |
 | **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
 
 **Game frames** are the game's own windows and menus, drawn to match BeebMod.
@@ -77,7 +77,7 @@ at the dock.
 |---|---|
 | **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The game's bag bar is hidden while the bag window or the Bags readout is on. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
 | **Character sheet** | Item level on every slot, and BeebMod's look. |
-| **Tooltips** | Unit tooltips rebuilt into two lines, in BeebMod's look. Elites and rares get a gold or silver border. |
+| **Tooltips** | Unit tooltips rebuilt in BeebMod's look: the name and level, then small tags for what they are and what state they are in, then a row each for a quest objective, your kills of an enemy, and your note. Elites and rares get a gold or silver border. Item tooltips, and the Equipped tooltips beside them, are written again in the same look: the item's icon beside its name, how it binds as a small tag (BoE, BoP), damage as three tiles, stats and effects under headings, and durability as a bar beside the sell price. |
 | **Game menu**, **Dropdown menus** | The menu Escape opens, and every dropdown and right-click menu. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
 
 **The journals** are the Ledger and the Expedition. Their windows are the
@@ -211,6 +211,9 @@ lives in `Modules/Ledger`.
     UI/Ornament.lua      the Art Deco border an elite or a rare gets, on its
                          unit frame and on its tooltip
     Core/Tooltip.lua     one hook on the unit tooltip, shared by several modules
+    Core/Reach.lua       how far your class's skills reach a unit, asked of the
+                         game spell by spell, for the frames' fade and the
+                         resource display's crosshair
     Core/Furniture.lua   restyles the client's own frames by what each one is
     Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab
                          (Find.lua, in the Ledger's window), its entry in
@@ -289,6 +292,11 @@ lives in `Modules/Ledger`.
                          well as its colour
     Art/Rank/            the Art Deco corner and crest round an elite or rare
                          enemy's frame, gold or silver (scripts/make-rank.py)
+    Art/crosshair.tga    the resource display's crosshair, white, tinted lit
+                         or dim (scripts/make-crosshair.py)
+    Art/tipicons.tga     the unit tooltip's row pictures: a quest mark, a paw,
+                         a quotation mark, a tag, two people, a star, crossed
+                         swords and a banner (scripts/make-tip-icons.py)
 
 ## Tests
 
@@ -340,14 +348,102 @@ Tooltips rebuilds the tooltip instead of hiding lines. Calling `ClearLines`
 and starting again is the only way to make a tooltip shrink, because a blank
 line still takes up its height.
 
-It has four parts:
+It has four parts, from the tooltip canvas Josh picked on 2026-10-17
+("C, everything as tags"):
 
-- a **header**: the name, biggest, in class colour, with the level opposite,
-  and a hairline under it
-- a **subheader**: what they are, small and grey
-- the **body**: your note, in quotes and a shade warmer (this client has no
-  italic face, so the quotes mark it)
-- a **footer**: the tags, smaller again, under a second hairline
+- a **header**: the name, biggest, in class colour, with the level opposite.
+  Elite, Rare or Boss is a gold or silver tag before the level.
+- **tags**, straight under the name: what they are in grey (a player's race,
+  or a creature's type and family) and what state they are in, two or three
+  in all on most tooltips (Josh: "I think we should only have 2-3 tags per
+  tooltip on average"). Only the states you act on have a colour: PvP red,
+  Skinnable tan; Dead and Tapped are a quieter grey. A tag is a box and a
+  word of BeebMod's own, laid over a line the tooltip keeps for it, because
+  a tooltip line is one size of text. A player's class is the client's own
+  class icon before their name (`classicon-<class>`, as markup in the name's
+  text), and a class tag only where the client has no such icon. The race
+  is the word `UnitRace` gives, "Skyborne", and not the client's longer
+  "High Order Skyborne" (Josh: "is it possible to just say "Skyborne"?").
+- **who they are with**: a player's guild or an NPC's job, in guild green, as
+  `<Codex>` or `<Banker>`, on a line under the tags.
+- **rows**: one thing each, led by a small picture in its owner's colour
+  (`Art/tipicons.tga`): a quest objective with its count (the quest's name
+  only when there are two quests), your kills of an enemy and its next
+  mastery, and the Ledger's note (two lines at most, in italics), tags,
+  rating, groups, duels and former guild.
+- **small print**: anything else the client said, such as a reputation
+  faction or Tameable, the short ones on one line between dots.
+
+Something alive you can attack also gets its health as a two-pixel line
+along the bottom. The client keeps the number from addons, so the line is a
+bar of BeebMod's own that is handed the secret value as it comes. A player's
+tooltip has their side's crest behind its right half: the client's own logo
+(`Interface\Timer\Horde-Logo`, `Alliance-Logo`, which this client's Inspect
+window draws 256 pixels wide), added to the fill, so it can only lighten it.
+It is meant as a faint background, nothing more. Each side has its own
+strength (`M.CREST_LOOK`), because the art is not alike: the Alliance's pale
+lion is greyed, tinted blue and added at 12%; the Horde's dark mark keeps its
+own red, which is bright in thin strokes, and is added at 15%. Measured from
+screenshots, the two came out about even at 12% and 8%, but faint red hardly
+shows on the fill's green-grey, so the Horde's was raised by eye. It is as big as half the card and
+runs a little past the right edge. A texture is not clipped by the frame it
+sits on, so the part past the card's edges is cut off with its texture
+coordinates, and laid again whenever the card changes size.
+
+Items, spells and buffs are written again as cards of one shape (`card` in
+`Modules/Tooltips/Tooltips.lua`): the icon with the name and a line under
+it, small headings over rules, tiles, then rows. The client hands each line
+with its kind (`tooltipData.lines[i].type`), but a spell's cost, range, cast
+time and cooldown come as plain lines of two halves, so each half is read by
+the client's own sentence for it (`SPELL_RANGE`, `SPELL_CAST_TIME_SEC`, …). A
+line nothing reads stays a row, as the client wrote it. A spell's amount is
+only in its description's words, so it is read with patterns (`M.AMOUNTS`:
+absorb, then heal, then damage, since all three can say "damage").
+
+A spell's card follows option D of the spell canvas's redesign, as Josh
+chose it: the icon, the name and the rank and range as before; DPS or HPS
+and what it does per point of its cost at the right of the name and the
+rank, plain and right-aligned, each a number in its colour
+(`M.FIGURE_INK`) and a small label, in FontStrings of BeebMod's own laid
+against a blank kept at the right of those two lines; and the facts (the
+amount, cost, cast and cooldown) in cells with lines between them in the
+rim's colour, drawn by BeebMod over a line kept as tall as their rows
+(`c.cells`, wrapped by `T.Measure` before the tooltip is shown). A macro's
+tooltip is written as its spell's when its first line is not an item's;
+where its first line only names the spell (`tooltipType`, `tooltipID`), the
+spell's own tooltip is fetched and read. A buff's card has the same
+cells, with the time it has left as a fact. An item with a Use line that
+says an amount (a bandage, a potion, food or drink) gets its figure at the
+right of its name (`M.UseFigures`). On an Equipped tooltip, the client's
+"If you replace this item..." lines, written after the card, are folded
+into it afterwards by a hook on `TooltipComparisonManager.SetItemTooltip`
+(`M.FoldDelta`). A next-swing ability (Heroic Strike, Maul) counts only
+its bonus over the swing it replaces. DPS goes by what runs out first. A mana spell's
+is the middle of its range divided by the cast time, an instant taking the
+1.5 sec global cooldown; where the words straight after the amount say it
+works over time ("over 18 sec", "each second for 3 sec"), it is over that
+time instead, and a channel's seconds are that time too. "Every 3 sec" with
+no length gets none. An energy ability's is its damage per energy times the
+energy coming back a second (`GetPowerRegen` while the player uses energy,
+else 10), with its damage per energy beside the rank. A rage ability's is per second of the global
+cooldown, as a mana spell's, and keeps its damage per rage beside the rank;
+one on the next swing ("Next melee", "Next ranged") is per second of the
+swing (`UnitAttackSpeed`, `UnitRangedDamage`). An attack that adds to your weapon ("3 damage in
+addition to your normal weapon damage", "150% weapon damage plus 15") has
+the weapon's own hit from `UnitDamage` added in (`M.WEAPON_AMOUNTS`): the
+character sheet's damage, attack power and buffs included, before crits,
+talents and armour. Its middle is worked out from the weapon's own figures,
+not from the rounded ends of the range. A description is
+left out when it says no more than the line (`M.SaysNoMore`: one sentence,
+nothing after the amount but a length of time, and none of the words that
+say it reaches more than its target, such as "yards" or "party"). The
+Testing page's Record keeps the last six of each kind as the client sent
+them, under `tooltipsDump`.
+
+The tags, the item's tiles and the health line sit on frames of BeebMod's
+own over the tooltip. Each is marked `beebs`, because the Equipped tooltip's
+tab is found by looking for a child frame with words and art on it, and a
+frame of ours taken for the tab was given a fill over every line.
 
 BeebMod sets the sizes on Blizzard's own FontStrings, which every other
 tooltip in the game shares, so `Core/Tooltip.lua` puts them all back as soon
@@ -535,6 +631,19 @@ the same. Before that (09-19 to 09-22) BeebMod kept the book in a generated
 `Data/Baked.lua`. `BT.Adopt` and `BT.linked` in `Core/Init.lua` stay in case a
 later build loses the book again. While the book loads normally they do
 nothing.
+
+**At launch the beta's records go.** The census, the Ledger, the
+Expedition and every record kept for one character file what they keep
+under the realm's name, and every beta realm has "Beta" in its name
+("Classic Beta PvE 2"). A launch client in its own game folder starts with
+an empty saved file, but a player can copy the old `WTF` folder across. So
+the first time you log in to a realm without "Beta" in its name,
+`BT.DropBeta` in `Core/Init.lua` drops everything filed under a beta realm:
+the characters seen, the notes and tags on them, every kill, both journals'
+ranks and commendations, and each beta character's XP, reputation, gold,
+clock, PvP and pickpocket records. An enemy stays only if a character on a
+launch realm has killed it. Settings stay, and so do the tags you created. On a beta realm, or on a client where `IsBetaBuild()` is true,
+nothing is dropped. What loaded, on the Testing page, says which way it went.
 
 `scripts/backup-book.ps1` copies the save into `LedgerBackups`.
 `scripts/restore-book.ps1` puts one back. It refuses while the game is running,

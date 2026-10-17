@@ -230,6 +230,13 @@ function T.Apply()
 			W.SOLID[4] = math.max(fill[4] or 0.76, 0.96)
 			W.HAIR[4] = 0.45
 		end
+		-- and the tooltips' copy (UI/Widgets.lua, W.TIP)
+		if W.TIP then
+			for i = 1, 3 do
+				W.TIP[i] = fill[i]
+			end
+			W.TIP[4] = math.max(fill[4] or 0.76, W.TIP_ALPHA or 0.94)
+		end
 		-- a selection is the panel with a wash of the accent through it, not
 		-- a second colour: a third of the way from one to the other reads as
 		-- "this one" without becoming a block of paint

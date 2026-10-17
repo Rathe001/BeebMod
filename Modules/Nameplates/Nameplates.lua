@@ -308,6 +308,9 @@ M.FRIEND_SIZE = { player = 13, npc = 10, level = 12, sub = 9 }
 -- the line under an NPC's name, grey (Josh 2026-10-04: "Can you make the NPC
 -- titles gray?"): light enough to read on the ground at its small size
 M.FRIEND_SUB = { 0.66, 0.68, 0.67 }
+-- and a player's guild under theirs, in the guild chat's green, as on their
+-- tooltip (Modules/Tooltips/Tooltips.lua, M.GUILD)
+M.FRIEND_GUILD = { 0.25, 1, 0.25 }
 function M.FriendColour(src)
 	if src:IsPlayer() then
 		local r, g, b = BT.Util.ClassColor(src:Class())
@@ -952,15 +955,24 @@ function M.PaintFriend(f, src)
 	-- under their nameplates as well", "<Priest trainer> <Physician> etc"): a
 	-- pet's owner, or an NPC's title as the game writes it - its capitals
 	-- too, since a title can hold a place, as in "Warsong Gulch Battlemaster"
-	local line = ""
+	local line, colour = "", M.FRIEND_SUB
 	if owned then
 		line = not M.Mine(f.bmUnit) and M.OwnerTag((M.Subtitle(f.bmUnit))) or ""
+	elseif player and f.bmUnit then
+		-- A PLAYER'S GUILD (Josh 2026-10-17: "Can we add guild names to player
+		-- nameplates? Same size as the pet text, but green"): the same line
+		-- a pet's owner is on, in green. A guild the game has not sent yet
+		-- comes with the name (UNIT_NAME_UPDATE paints the plate again).
+		local guild = F.Plain(_G.GetGuildInfo, f.bmUnit)
+		if type(guild) == "string" and guild ~= "" then
+			line, colour = "<" .. guild .. ">", M.FRIEND_GUILD
+		end
 	elseif not player and f.bmUnit then
 		local title = M.TitleOf(f.bmUnit)
 		line = title and ("<" .. title .. ">") or ""
 	end
 	f.sub:SetText(line)
-	f.sub:SetTextColor(M.FRIEND_SUB[1], M.FRIEND_SUB[2], M.FRIEND_SUB[3])
+	f.sub:SetTextColor(colour[1], colour[2], colour[3])
 	if role then
 		if role.atlas and M.HasAtlas(role.atlas) and f.role.SetAtlas then
 			f.role:SetAtlas(role.atlas)
@@ -1076,6 +1088,36 @@ function M.ShowMinions(on)
 	return true
 end
 
+-- ---------------------------------------------------------------------------
+-- How many plates the game has out
+-- ---------------------------------------------------------------------------
+--
+-- FORTY AT MOST (Josh 2026-10-17: "Fonra Silverblade is missing
+-- nameplates"). The record from that moment said the distance was never the
+-- trouble: this client draws plates out to 45 yards (its nameplateMaxDistance,
+-- 40 for players, both secure), and asking for 41 changed nothing, so that
+-- was taken out again. What it did say: the game had forty plates out, which
+-- is all the tokens there are (nameplate1 to nameplate40), and nineteen of
+-- them were pets, minions and friendly NPCs. A player past the forty gets no
+-- plate from the game, and so no name from us.
+M.MAX_PLATES = 40
+
+-- how many of the forty the game is using now
+function M.InUse()
+	local n = 0
+	for i = 1, M.MAX_PLATES do
+		if M.PlateOf(M.Token(i)) then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+-- for What loaded, on the Testing page
+function M.Status()
+	return ("%d of %d plates in use"):format(M.InUse(), M.MAX_PLATES)
+end
+
 -- our frames off a token's plate, without giving the client's back
 local function hideSkin(token)
 	local s = M.skins[token]
@@ -1170,10 +1212,43 @@ function M.Added(token)
 	F.Fresh(s)
 	s:Show()
 	F.Paint(s, src)
+	M.PaintEnemyGuild(s, src)
 	if F.Auras then
 		F.Auras.Refresh(s)
 	end
 	return true
+end
+
+-- AN ENEMY PLAYER'S GUILD (Josh 2026-10-17: "Enemy players should also show
+-- guild"): under their bar in the green a friend's guild is in, where their
+-- cast bar goes; it steps aside while they cast
+function M.PaintEnemyGuild(s, src)
+	if not s.bmGuild then
+		local g = s:CreateFontString(nil, "OVERLAY")
+		BT.Fonts.Set(g, "text", M.FRIEND_SIZE.sub, "")
+		g:SetShadowColor(0, 0, 0, 1)
+		g:SetShadowOffset(1, -1)
+		g:SetWordWrap(false)
+		local gap = (F.KINDS.plate and F.KINDS.plate.castGap) or 5
+		g:SetPoint("TOP", s, "BOTTOM", 0, -gap)
+		g:SetTextColor(M.FRIEND_GUILD[1], M.FRIEND_GUILD[2], M.FRIEND_GUILD[3])
+		s.bmGuild = g
+		if s.cast and s.cast.HookScript then
+			s.cast:HookScript("OnShow", function()
+				g:Hide()
+			end)
+			s.cast:HookScript("OnHide", function()
+				g:SetShown((g:GetText() or "") ~= "")
+			end)
+		end
+	end
+	local g = s.bmGuild
+	local guild = src:IsPlayer() and s.bmUnit and F.Plain(_G.GetGuildInfo, s.bmUnit) or nil
+	local line = (type(guild) == "string" and guild ~= "") and ("<" .. guild .. ">") or ""
+	g:SetText(line)
+	local casting = s.cast and s.cast.IsShown and s.cast:IsShown()
+	g:SetShown(line ~= "" and not casting)
+	return line
 end
 
 -- the plate went (or is somebody else's now): ours off it, the client's back
@@ -1250,10 +1325,14 @@ M.events:SetScript("OnEvent", function(_, event, token)
 			M.Learn(token)
 		end
 	elseif event == "UNIT_NAME_UPDATE" then
-		-- a friend's name the game had not sent yet
+		-- a friend's name the game had not sent yet, or an enemy's guild
 		local f = type(token) == "string" and M.friends[token]
 		if f and f:IsShown() then
 			M.PaintFriend(f, F.Source(token))
+		end
+		local s = type(token) == "string" and M.skins[token]
+		if s and s:IsShown() then
+			M.PaintEnemyGuild(s, F.Source(token))
 		end
 	elseif event == "UNIT_LEVEL" then
 		-- a friend's new level; yours changes the colour of everyone's
@@ -1301,6 +1380,73 @@ local function describe(v)
 	return tostring(v)
 end
 
+-- EVERY PLATE THE GAME HAS (Josh 2026-10-17: "Seems like the nameplates
+-- still aren't always appearing"). A missing name is one of three things: the
+-- game made no plate (its distance, its settings), it made one and faded it
+-- (behind a wall, far off), or it made one and ours is not on it. So the
+-- record says how the game is set to draw them - every setting whose name
+-- starts "nameplate", with its default and whether an addon may change it -
+-- and then each plate it has, with whether ours is on it and how faded the
+-- game has made it.
+M.PLATE_CVARS = { "nameplateMaxDistance", "nameplateShowAll", "nameplateShowFriends", "nameplateShowFriendlyNPCs",
+	"nameplateShowEnemies", "nameplateMotion", "nameplateOccludedAlphaMult", "nameplateMinAlpha",
+	"nameplateMinAlphaDistance", "nameplateMaxAlphaDistance", "nameplateTargetBehindMaxDistance" }
+
+function M.DumpPlates(lines)
+	local names = {}
+	if type(_G.ConsoleGetAllCommands) == "function" then
+		local ok, all = pcall(_G.ConsoleGetAllCommands)
+		for _, c in ipairs(ok and type(all) == "table" and all or {}) do
+			local n = type(c) == "table" and c.command or nil
+			if type(n) == "string" and n:lower():find("^nameplate") then
+				names[#names + 1] = n
+			end
+		end
+	end
+	if #names == 0 then
+		names = M.PLATE_CVARS
+	end
+	table.sort(names)
+	for _, n in ipairs(names) do
+		local said = nil
+		local get = _G.C_CVar and _G.C_CVar.GetCVarInfo
+		if type(get) == "function" then
+			local ok, value, default, _, _, locked, secure = pcall(get, n)
+			if ok and value ~= nil then
+				said = ("%s (default %s%s%s)"):format(describe(value), describe(default),
+					locked and ", locked" or "", secure and ", secure" or "")
+			end
+		end
+		lines[#lines + 1] = ("cvar %s = %s"):format(n, said or describe(cvar(n)))
+	end
+	-- each token's plate, asked for by token: a plate frame on this client
+	-- does not say whose it is (its namePlateUnitToken came back empty)
+	local plates, players = 0, 0
+	for t = 1, M.MAX_PLATES do
+		local token = M.Token(t)
+		local plate = M.PlateOf(token)
+		if plate then
+			plates = plates + 1
+			local player = F.Plain(UnitIsPlayer, token)
+			if player then
+				players = players + 1
+			end
+			local ours = "none"
+			if M.friends[token] and M.friends[token]:IsShown() then
+				ours = "name"
+			elseif M.skins[token] and M.skins[token]:IsShown() then
+				ours = "frame"
+			end
+			local alpha = BT.Pill.Number(plate.GetEffectiveAlpha and plate:GetEffectiveAlpha(), -1)
+			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f"):format(token,
+				describe(F.Plain(UnitName, token)), describe(player), describe(not F.Source(token):CanAttack()),
+				ours, alpha)
+		end
+	end
+	lines[#lines + 1] = ("plates: %d of %d in use, %d of them players"):format(plates, M.MAX_PLATES, players)
+	return plates
+end
+
 function M.Dump()
 	local lines = {}
 	local probe = M.probeTexture
@@ -1336,6 +1482,7 @@ function M.Dump()
 	end
 	local zone = _G.GetRealZoneText and _G.GetRealZoneText() or nil
 	lines[#lines + 1] = ("zone=%s map=%s capital=%s"):format(describe(zone), describe(map), tostring(M.InCapital()))
+	M.DumpPlates(lines)
 	for i = 1, 40 do
 		local token = M.Token(i)
 		local src = F.Source(token)

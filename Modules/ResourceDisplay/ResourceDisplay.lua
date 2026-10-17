@@ -449,6 +449,118 @@ function M.PipCount(cur, max, show)
 end
 
 -- ---------------------------------------------------------------------------
+-- The target in reach
+-- ---------------------------------------------------------------------------
+
+-- THE TARGET IN REACH (Josh 2026-10-17: "I'd like to add an icon that is
+-- dim, but lights up when the target is in range of the player. We can use
+-- the target icon. For hunters, it should also dim if the target is too
+-- close to use auto shot"). A crosshair of our own (Josh, the same day: "I
+-- meant a crosshair icon - not hunters mark"; scripts/make-crosshair.py)
+-- to the left of the bars and as tall as them. It is lit in the accent, as
+-- a combo point is, while your class's main attack reaches your target
+-- (BT.Reach.Main, Core/Reach.lua), and grey and faint while it does not, or
+-- you have no target. A hunter's main attack is Auto Shot, and the game
+-- says it is out of range inside its least reach as well. Reach changes
+-- with every step and no event says so, so it is asked five times a second
+-- while the display is on screen.
+M.REACH_ICON = "Interface\\AddOns\\BeebMod\\Art\\crosshair"
+M.REACH_GREY = { 0.62, 0.66, 0.64 }
+M.REACH_GAP, M.REACH_DIM, M.REACH_EVERY = 4, 0.35, 0.2
+-- as tall as the bars, within these, and this when they won't say
+M.REACH_MIN, M.REACH_MAX, M.REACH_SIZE = 14, 28, 18
+
+local reach -- the icon, and the frame that spans the bars it sits beside
+
+local function reachIcon()
+	if reach then
+		return reach
+	end
+	reach = CreateFrame("Frame", nil, UIParent)
+	reach.beebs = true
+	reach.span = CreateFrame("Frame", nil, reach)
+	reach.icon = reach:CreateTexture(nil, "ARTWORK")
+	reach.icon.beebs = true
+	reach.icon:SetAllPoints()
+	reach.icon:SetTexture(M.REACH_ICON)
+	reach.wait = 0
+	reach:SetScript("OnUpdate", function(self, elapsed)
+		self.wait = self.wait - (elapsed or 0)
+		if self.wait <= 0 then
+			self.wait = M.REACH_EVERY
+			M.PaintReach()
+		end
+	end)
+	reach:Hide()
+	return reach
+end
+
+-- lit or dim for what the main attack says of your target; returns it
+function M.PaintReach()
+	local f = reach
+	if not f then
+		return nil
+	end
+	local r = nil
+	local ok, there = pcall(UnitExists or function() return false end, "target")
+	if ok and not secret(there) and there and BT.Reach then
+		r = BT.Reach.Main("target")
+	end
+	if secret(r) then
+		-- the client's to read: onto the alpha as it came, in the accent
+		f.icon:SetVertexColor(ACCENT[1], ACCENT[2], ACCENT[3], 1)
+		if f.SetAlphaFromBoolean then
+			pcall(f.SetAlphaFromBoolean, f, r, 1, M.REACH_DIM)
+		else
+			f:SetAlpha(1)
+		end
+		f.lit = nil
+		return r
+	end
+	local lit = r == true
+	local c = lit and ACCENT or M.REACH_GREY
+	f.icon:SetVertexColor(c[1], c[2], c[3], 1)
+	f:SetAlpha(lit and 1 or M.REACH_DIM)
+	f.lit = lit
+	return lit
+end
+
+-- beside the display's bars, from the top of the health to the bottom of
+-- the lowest bar under it; nothing when the display is not up
+function M.Reach()
+	local f = reachIcon()
+	local top = plate and (plate.HealthBarsContainer or bars(plate))
+	local bottom = M.PipAnchor()
+	if not (top and bottom) then
+		f:Hide()
+		return nil
+	end
+	f:SetParent(plate)
+	f.span:ClearAllPoints()
+	f.span:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
+	f.span:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMRIGHT", 0, 0)
+	local h = BT.Pill.Number(BT.Furniture.Call(top, "GetTop"), nil)
+	local low = BT.Pill.Number(BT.Furniture.Call(bottom, "GetBottom"), nil)
+	local size = (h and low and h > low) and (h - low) or M.REACH_SIZE
+	size = math.floor(math.max(M.REACH_MIN, math.min(M.REACH_MAX, size)) + 0.5)
+	f:SetSize(size, size)
+	f:ClearAllPoints()
+	f:SetPoint("RIGHT", f.span, "LEFT", -M.REACH_GAP, 0)
+	local strata = BT.Furniture.Call(bottom, "GetFrameStrata")
+	if type(strata) == "string" and f.SetFrameStrata then
+		pcall(f.SetFrameStrata, f, strata)
+	end
+	f:Show()
+	M.PaintReach()
+	return f
+end
+
+-- the tests want it without going through frames
+function M.ReachFrame()
+	return reach
+end
+
+-- ---------------------------------------------------------------------------
 -- Putting it all on, and taking it off
 -- ---------------------------------------------------------------------------
 
@@ -478,15 +590,20 @@ function M.Apply()
 	end
 	M.lastCount = n
 	M.Pips(M.Combo())
+	M.Reach()
 	return n
 end
 
--- the client's plate back as it came, and the pips away
+-- the client's plate back as it came, and the pips and the icon away
 function M.Release()
 	dresser:Undress()
 	if pips then
 		pips:Hide()
 		pips:SetParent(UIParent)
+	end
+	if reach then
+		reach:Hide()
+		reach:SetParent(UIParent)
 	end
 	plate = nil
 	M.lastCount = 0
@@ -616,7 +733,22 @@ function M.Status()
 	if not (plate and plate.IsVisible and plate:IsVisible()) then
 		return "not on screen: turn on Personal Resource Display"
 	end
-	return ("%d bars themed · %s"):format(M.lastCount or 0, M.Said())
+	return ("%d bars themed · %s · %s"):format(M.lastCount or 0, M.Said(), M.ReachSaid())
+end
+
+-- the target icon in words: which spell it asked, and what it was told
+function M.ReachSaid()
+	local list = BT.Reach and BT.Reach.List("target")
+	local spell = list and list[1]
+	local name = nil
+	if spell and C_Spell and type(C_Spell.GetSpellName) == "function" then
+		local ok, n = pcall(C_Spell.GetSpellName, spell)
+		name = ok and n or nil
+	end
+	local r = M.PaintReach()
+	local said = secret(r) and "hidden from addons" or (r and "lit" or "dim")
+	return ("target icon %s, by %s"):format(said, type(name) == "string" and not secret(name) and name
+		or (spell and ("spell " .. spell)) or "no spell")
 end
 
 -- the points in words; a secret count is never formatted, because a secret

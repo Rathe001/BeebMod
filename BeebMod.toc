@@ -39,6 +39,7 @@ Core\Util.lua
 Core\Session.lua
 Core\Fonts.lua
 Core\Blocked.lua
+Core\Reach.lua
 Core\Pack.lua
 Core\DB.lua
 Core\Tooltip.lua

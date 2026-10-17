@@ -5,6 +5,134 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **The beta's records go when the game launches.** BeebMod files what it
+  keeps about people, enemies and your characters under the realm's name.
+  The first time you log in to a realm without "Beta" in its name, it drops
+  everything filed under a beta realm: the characters seen, your notes and
+  tags on them, every kill, both journals' ranks and commendations, and each
+  beta character's XP, reputation, gold, clock, PvP and pickpocket records.
+  Your settings stay, and so do the tags you created. Nothing changes while
+  you play on the beta.
+
+- **Item tooltips have a new layout**, and so do the Equipped tooltips that
+  open beside them to compare. The item's icon sits beside its name, with
+  its type, slot and item level under it. Something you don't wear says
+  what kind of thing it is there instead, such as Consumable · Bandage or
+  Trade Goods. How it binds is a small outlined
+  tag (BoE, BoP, BoU or Soulbound), with the level it needs beside it.
+  Under headings: a weapon's damage as three tiles (per second, a hit,
+  speed), or a piece of armour's armour; its stats; and its effects, under
+  Equip, Use, Chance on hit or Enchant, in the game's green. A wand's tile
+  names its school, as Fire, a hit. A set's bonuses stay with the set's
+  name and pieces. Flavour text is in italics. A potion, bandage, food or
+  drink shows what it does at the right of its name: a bandage's 66
+  healing over 6 sec as 11.0 HPS, a drink as MPS, a healing potion's 140
+  to 180 as 160 HEALING. At the foot, on one line: a short bar of how worn
+  it is with its durability beside it, and the sell price in coins; who
+  made it under them. On an Equipped tooltip, what swapping would change
+  sits under an "If replaced" heading of its own. The tooltip a chat link
+  opens, and the Equipped tooltip beside it, have the same layout. A
+  recipe, an item with a gem socket and a few other shapes keep the game's
+  lines, restyled where they are.
+
+- **Spell and buff tooltips have the item tooltips' layout.** The spell's
+  icon sits beside its name, with its rank and range under it. At the right
+  of the name is its DPS or HPS, in red or green; at the right of the rank,
+  what it does for each point it costs, such as 1.72 PER MANA, in the
+  resource's colour: blue for mana, yellow for energy, red for rage. Both
+  are plain and right-aligned. Under them, the facts sit in a row of cells
+  with thin lines between them: what it does on average, what it costs and
+  how long it takes, such as 51.5 healing | 30 mana | 1.5 sec cast. The
+  numbers are brighter than the words, a cost you can't pay is red, and
+  cells that don't fit wrap to a second row. What the spell needs, such as
+  a form or a weapon, comes after.
+  - DPS goes by what runs out first. A caster can cast again as soon as a
+    cast ends, until the mana runs out, so a mana spell's DPS and HPS are
+    per second of casting, an instant counting as the 1.5 sec global
+    cooldown. A spell that works over time has them over the time it
+    lasts: Shadow Word: Pain's 30 damage over 18 sec is 1.7 DPS. A
+    channelled spell counts the seconds it channels.
+  - A rogue runs out of energy after two Sinister Strikes, so an energy
+    ability's DPS is its damage per energy times the energy you get back a
+    second, about 10. That is what it does over a whole fight: Backstab's
+    95.5 damage for 60 energy is 15.9 DPS, Sinister Strike's 46.5 for 45 is
+    10.3. Beside the rank is its damage per energy, as 1.03 damage per
+    energy.
+  - A rage ability's DPS is per second of the global cooldown, as a
+    caster's is. One that lands on your next swing, such as Heroic Strike
+    or Maul, takes the place of a swing you would have made anyway, so it
+    counts only what it adds, as +11 damage, over the time of your swing.
+    Beside the rank is its damage per rage.
+  - The amount is read from the spell's description. A warrior's or
+    rogue's attack that adds to your weapon counts your weapon's damage
+    too, as 46.5 damage with your weapon. A spell with no amount, such as
+    Power Word: Fortitude, has no figures.
+  - The description is left out when it says no more than the line: one
+    sentence with the amount, and after it at most how long. One that says
+    more, or reaches more than one target, stays, a little smaller and
+    quieter.
+  - The numbers are the tooltip's own, so they leave out any bonus from
+    your gear that the game leaves out of the tooltip.
+
+  A buff or debuff has its kind under its name, and what it does and the
+  time it has left in the same cells, as 47 absorb | 25 sec remaining. One
+  that works over time, such as Renew, shows its HPS or DPS at the right.
+  Where the game names a debuff's kind, such as Magic or Curse, the left
+  edge is that kind's colour. A linked spell gets the same
+  layout, and so does a macro on your action bars that casts a spell. On
+  an item tooltip, a weapon's DPS tile is faintly red, and a number too wide
+  for its tile is set smaller.
+
+- **Player nameplates show the guild.** On a friendly player's, it sits
+  under the name in guild green, as <Codex>, on the same small line that
+  shows a pet's owner. On an enemy player's, it sits under the health bar
+  in the same green, and steps aside while they cast.
+
+- **Tooltips are easier to read.** Unit and item tooltips are 94% opaque,
+  where the panels are 76%, so the world no longer shows through the words.
+
+- **Unit tooltips have a new layout.** Under the name and level, what a
+  unit is and what state it is in are small tags, two or three on most
+  tooltips. A player's class is the game's own class icon before their
+  name, and their race is a grey tag in a word or two, as Skyborne; anything
+  else has its type and family as grey tags. A player's tooltip has a faint
+  crest of their side behind its right half, in Alliance blue or Horde red. Only the states
+  you act on have a colour: PvP is red and Skinnable is tan. Under the tags
+  is a player's guild or an NPC's job in guild green, as <Codex> or
+  <Banker>, and anything else the game says, such as a reputation faction,
+  is small print.
+  Dead and Tapped are grey. Elite, Rare and Boss are a tag before the
+  level, and elites and rares keep their gold and silver borders. Under
+  the tags is one row for each thing worth knowing, each with a small
+  picture: a quest objective and its count, your kills of an enemy and how
+  far it is to its next mastery, and your note, tags, rating, groups and
+  duels. The note sits inside the tooltip now, two lines at most. Something
+  alive you can attack has its health as a thin line along the bottom.
+
+- **The resource display shows whether your target is in reach.** A
+  crosshair to the left of its bars lights while your main attack reaches
+  your target, and is grey and faint while it doesn't or you have no
+  target. A hunter's main attack is Auto Shot, so the crosshair also goes
+  dark when the target is too close to shoot. A warrior's is Heroic Strike
+  and a rogue's Sinister Strike, so theirs lights in melee. A caster's is
+  their usual spell, such as Frostbolt or Shadow Bolt. Targeting a friend,
+  a healer's is their heal.
+
+- **Target frames fade by your class's reach.** The target, focus and boss
+  frames used to fade past 28 yards for every class, and never in a fight.
+  Now they fade when none of your class's skills reaches the unit, in a
+  fight too. A hunter's target stays clear as far as Auto Shot reaches, and
+  in melee for Raptor Strike. A warrior's stays clear in melee, and as far
+  as Throw or Charge reaches.
+
+- **The Expedition's tooltip lists the enemies you killed last.** Hover the
+  Expedition's line in the dock. Under Last killed are the last three
+  different enemies you killed, newest first, each with its kills and the
+  next mastery. The list follows you from zone to zone. It used to show the
+  three masteries you were closest to.
+
 ## 0.1.0-beta.27
 
 - **The Expedition and Ledger windows have a new header.** The journal's

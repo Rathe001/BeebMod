@@ -61,7 +61,11 @@ BT.OnUnitTooltip("census", 30, function(tip, unit)
 	local p = key and BT.DB.View(BT.db, key, BT.DB.Players(BT.db)[key], true)
 	local former, when = BT.DB.FormerGuild(p)
 	if former then
-		tip:AddLine(("Was in %s, %s"):format(former, U.Since(when)), 0.6, 0.65, 0.7)
+		-- a row like the Ledger's, under a banner (Josh 2026-10-17, the
+		-- tooltip canvas)
+		local feature = BT.Feature and BT.Feature("ledger")
+		BT.UnitTip.Row(tip, "guild", feature and feature.color or { 0.61, 0.50, 0.82 },
+			("Was in %s, %s"):format(former, U.Since(when)), { 0.73, 0.78, 0.76 })
 		if tip.Show then
 			tip:Show()
 		end

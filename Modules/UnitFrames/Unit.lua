@@ -325,12 +325,19 @@ end
 -- for your party and raid (in secret, onto an alpha) and for nobody else, so
 -- the target, the focus and the bosses were never faded at all.
 -- ONE DISTANCE FOR EVERYONE ELSE (Josh 2026-09-29: "Can we just test a 30
--- yard range?"). They are faded past the client's follow distance, 28 yards,
--- whatever your class. It asked a spell of each class before - Throw and
--- Charge for a warrior - and those refuse anything within 8 yards, so a
--- warrior's target faded while she hit it; and the answer can be a secret,
--- which only the client may read, so no two could be weighed together. The
--- one answer goes to the alpha as it came.
+-- yard range?"). They were faded past the client's follow distance, 28
+-- yards, whatever your class. It asked a spell of each class before - Throw
+-- and Charge for a warrior - and those refuse anything within 8 yards, so a
+-- warrior's target faded while she hit it.
+-- YOUR CLASS'S REACH AGAIN (Josh 2026-10-17: "the unit frame range fader
+-- doesnt seem to match actual auto shot range of the hunder"). A hunter
+-- shoots to 35 yards, and in a fight the 28-yard check is refused, so the
+-- target never faded at all. Now a frame fades when none of your class's
+-- skills reaches the unit (BT.Reach.Any, Core/Reach.lua): a warrior's
+-- Heroic Strike in melee as well as Charge and Throw beyond 8 yards, a
+-- hunter's Raptor Strike as well as Auto Shot. Where no spell answers (a
+-- friend, for a class with nothing to cast on one), the 28 yards still
+-- decide, out of a fight.
 -- HOW FAR A FADED FRAME FADES (Josh 2026-09-23: "hard to tell if it is
 -- faded"): a cell out of range to a quarter, a single frame to a third
 F.FAR_ALPHA = 0.35
@@ -386,6 +393,12 @@ function Live:InRange()
 	end
 	if UnitInParty and (plain(UnitInParty, unit) or plain(UnitInRaid, unit)) then
 		return (raw(UnitInRange, unit))
+	end
+	-- your class's skills, the game asked spell by spell; a secret answer
+	-- goes to the alpha as it came
+	local reach = BT.Reach and BT.Reach.Any(unit)
+	if secret(reach) or reach ~= nil then
+		return reach
 	end
 	-- within 28 yards; no answer at all is in reach, not faded.
 	-- OUT OF A FIGHT ONLY (2026-10-04: "Interface action failed because of

@@ -427,9 +427,11 @@ function M.Update(points, st)
 end
 
 -- (Josh 2026-09-27, the dock's tooltips redrawn, and "Much better" of the
--- plainer words) your rank and how far to the next, the masteries you are
--- closest to, and this session's hunting; a new character is told how to
--- start instead of shown rows of zeros
+-- plainer words) your rank and how far to the next, the enemies you killed
+-- last with how far each is from its next mastery (Josh 2026-10-17, in place
+-- of the closest masteries: "so it kind of tracks with the zone"), and this
+-- session's hunting; a new character is told how to start instead of shown
+-- rows of zeros
 function M.Tip()
 	if not (BT.Tip and J.Store()) then
 		return
@@ -457,15 +459,24 @@ function M.Tip()
 			t:Bar((points - at) / span, feature and feature.color)
 			t:Scale(("%s to %s"):format(big(nextAt - points), nextTitle), big(nextAt))
 		end
-		local near = J.NextMasteries(J.Mine() and J.Mine().kills or {}, 3)
-		if #near > 0 then
-						t:Section("Closest masteries")
+		-- each with the mastery it is working towards, or the last one it has
+		local last = J.LastKilled(J.Mine(), 3)
+		if #last > 0 then
+			t:Section("Last killed")
 			local enemies = J.Store().enemies
-			for _, nx in ipairs(near) do
-				local enemy = enemies[nx.npc]
-				local metal = J.Ladder(enemy)[nx.tier]
-				t:ListRow(("%s · %s"):format((enemy and enemy.name) or ("#" .. nx.npc), metal.name),
-					("%d / %d"):format(nx.have, nx.need), nil, nil, { nx.have / math.max(1, nx.need), metal.color })
+			for _, k in ipairs(last) do
+				local enemy = enemies[k.npc]
+				local name = (enemy and enemy.name) or ("#" .. k.npc)
+				local ladder = J.Ladder(enemy)
+				if k.need then
+					local metal = ladder[k.tier + 1]
+					t:ListRow(("%s · %s"):format(name, metal.name), ("%d / %d"):format(k.have, k.need), nil, nil,
+						{ k.have / math.max(1, k.need), metal.color })
+				else
+					local metal = ladder[k.tier]
+					t:ListRow(("%s · %s"):format(name, metal.name), ("%s kills"):format(big(k.have)), nil, nil,
+						{ 1, metal.color })
+				end
 			end
 		end
 		if s and (s.kills or 0) > 0 then

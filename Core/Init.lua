@@ -81,7 +81,7 @@ BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-10-15-journal-headers"
+BT.BUILD = "2026-10-17-easy-wins"
 
 -- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
 -- to disable it in production builds so normal users don't see it?"). The
@@ -840,6 +840,80 @@ function BT.DropOldRecords(now)
 	return n
 end
 
+-- THE BETA'S RECORDS GO AT LAUNCH (Josh 2026-10-17: "When the game releases,
+-- we need to make sure we reset all ledger and expedition data. It will
+-- probably be a different game client, so it might happen automatically,
+-- but we should make sure"). A launch client in a game folder of its own
+-- starts with an empty saved file, but a player who copies the old WTF
+-- folder across brings the beta's file with it. Everything the census, the
+-- Ledger and the Expedition keep is filed under a realm's name, and the beta
+-- realms have "Beta" in theirs ("Classic Beta PvE 2"). So on the first login
+-- to a realm without it, every record filed under a beta realm goes: the
+-- characters seen, the notes, tags and commendations, each character's
+-- kills, and the enemies only those characters had killed. And every other
+-- record a beta character has (Josh, the same day: "all character records
+-- should be dropped"): the XP, reputation, gold, clock, PvP and pickpocket
+-- figures, each a table in the settings keyed "Name@Realm" (U.MeKey).
+-- Settings stay, tags you made among them.
+--
+-- On the beta nothing is touched: the realm's name says so, and so does
+-- IsBetaBuild (Blizzard_APIDocumentationGenerated/BuildDocumentation.lua)
+-- where the client answers. Either one is enough. A realm not known yet is
+-- no answer, and nothing goes.
+function BT.IsBetaRealm(realm)
+	return type(realm) == "string" and realm:find("Beta", 1, true) ~= nil
+end
+
+function BT.BetaClient()
+	local ok, beta = pcall(function()
+		return IsBetaBuild and IsBetaBuild()
+	end)
+	return ok and beta == true
+end
+
+function BT.DropBeta(realm)
+	local known = type(realm) == "string" and realm:gsub("%s+", "") ~= "" and realm ~= "?"
+	BT.betaCheck = { realm = BT.IsBetaRealm(realm), client = BT.BetaClient(), known = known }
+	if not known or BT.betaCheck.realm or BT.betaCheck.client or type(BeebModDB) ~= "table" then
+		return nil
+	end
+	local gone = BT.IsBetaRealm
+	local out = { books = 0, characters = 0, ledger = 0, people = 0, journals = 0, enemies = 0, records = 0 }
+	for key, book in pairs(type(BeebModDB.realms) == "table" and BeebModDB.realms or {}) do
+		if gone(type(key) == "string" and key:match("^(.-)|") or key) then
+			for _ in pairs(type(book) == "table" and type(book.players) == "table" and book.players or {}) do
+				out.characters = out.characters + 1
+			end
+			BeebModDB.realms[key] = nil
+			out.books = out.books + 1
+		end
+	end
+	if BT.Notes and BT.Notes.DropRealms then
+		out.ledger, out.people = BT.Notes.DropRealms(gone)
+	end
+	if BT.Expedition and BT.Expedition.DropRealms then
+		out.journals, out.enemies = BT.Expedition.DropRealms(gone)
+	end
+	for _, store in pairs(type(BeebModDB.settings) == "table" and BeebModDB.settings or {}) do
+		if type(store) == "table" then
+			for who in pairs(store) do
+				if type(who) == "string" and gone(who:match("@(.+)$")) then
+					store[who] = nil
+					out.records = out.records + 1
+				end
+			end
+		end
+	end
+	if out.books == 0 and out.ledger == 0 and out.journals == 0 and out.records == 0 then
+		return nil
+	end
+	if out.books > 0 and BT.DB then
+		BT.DB.rev = (BT.DB.rev or 0) + 1
+	end
+	BT.betaDropped = out
+	return out
+end
+
 -- ---------------------------------------------------------------------------
 -- THE BOOK
 -- ---------------------------------------------------------------------------
@@ -1003,6 +1077,8 @@ function BT.Bind(realm, faction)
 	-- load; it was older than a day long ago, and the key is the looks
 	-- record's now.
 	BT.DropOldRecords()
+	-- and the beta's records, once the game has launched (BT.DropBeta)
+	BT.DropBeta(rname)
 	if BT.Notes and BT.Notes.FoldRealms then
 		local n = BT.Notes.FoldRealms(rname)
 		BT.unsplitOnLoad = n > 0 and n or nil

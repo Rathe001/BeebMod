@@ -701,6 +701,63 @@ function J.Mine()
 	return fresh(c), who
 end
 
+-- THE BETA'S PAGES GO AT LAUNCH (Josh 2026-10-17, BT.DropBeta in
+-- Core/Init.lua). Each character's kills, commendations and session are
+-- filed under name and realm, so every character on a realm that `gone`
+-- names goes. The enemies are the account's, so one stays only while a
+-- character left has killed it, and a page merged into another (s.same)
+-- stays with the page it points to. With no character left, the quests kept
+-- for the enemies' lore go too. Reads the saved table itself, never the
+-- made-up journal. Returns how many characters and enemies went.
+function J.DropRealms(gone)
+	local s = BT.settings and BT.settings.expedition
+	if not (type(s) == "table" and type(s.chars) == "table" and type(gone) == "function") then
+		return 0, 0
+	end
+	local function goes(who)
+		return type(who) == "string" and gone(who:match("@(.+)$"))
+	end
+	local chars = 0
+	for who in pairs(s.chars) do
+		if goes(who) then
+			s.chars[who] = nil
+			chars = chars + 1
+		end
+	end
+	for who in pairs(type(s.sessions) == "table" and s.sessions or {}) do
+		if goes(who) then
+			s.sessions[who] = nil
+		end
+	end
+	if chars == 0 then
+		return 0, 0
+	end
+	local killed = {}
+	for _, c in pairs(s.chars) do
+		for _, list in ipairs({ type(c) == "table" and c.kills or {}, type(c) == "table" and c.first or {} }) do
+			for npc in pairs(list) do
+				killed[npc] = true
+			end
+		end
+	end
+	local enemies = 0
+	for npc in pairs(type(s.enemies) == "table" and s.enemies or {}) do
+		if not killed[npc] then
+			s.enemies[npc] = nil
+			enemies = enemies + 1
+		end
+	end
+	for from, to in pairs(type(s.same) == "table" and s.same or {}) do
+		if not (s.enemies and s.enemies[to]) then
+			s.same[from] = nil
+		end
+	end
+	if not next(s.chars) then
+		s.quests, s.questOrder = nil, nil
+	end
+	return chars, enemies
+end
+
 -- the type an enemy is filed under
 function J.KindOf(m)
 	local k = m and m.kind
@@ -1505,6 +1562,60 @@ function J.NextMasteries(kills, limit)
 	end)
 	for i = #out, (limit or #out) + 1, -1 do
 		out[i] = nil
+	end
+	return out
+end
+
+-- the npc id in a counted GUID, "Creature-0-server-instance-zone-npcID-spawnUID"
+-- (Kills.lua, K.Parse); nil for anything that is not an enemy
+function J.GuidNpc(guid)
+	if type(guid) ~= "string" then
+		return nil
+	end
+	local kind, npc = guid:match("^(%a+)%-[^-]*%-[^-]*%-[^-]*%-[^-]*%-(%d+)")
+	if kind ~= "Creature" and kind ~= "Vehicle" then
+		return nil
+	end
+	return tonumber(npc)
+end
+
+-- THE ENEMIES KILLED LAST (Josh 2026-10-17: "Rather than showing the closest
+-- masteries, we should show the last killed mobs, so it kind of tracks with
+-- the zone"). The last `limit` different enemies a character killed, the
+-- latest first, read off the GUIDs it counted (J.Remember), each on its own
+-- page (s.same). Each is { npc, have, tier, need }: the kills, the mastery
+-- reached, and the kills the next one takes, nil past the last. A character
+-- with no GUIDs kept still has its last kill (c.last).
+function J.LastKilled(c, limit)
+	local out = {}
+	local s = J.Store()
+	if not (c and s and type(c.kills) == "table") then
+		return out
+	end
+	limit = limit or 3
+	local seen = {}
+	local function add(npc)
+		local to = s.same and s.same[npc]
+		if to and s.enemies[to] then
+			npc = to
+		end
+		local have = npc and c.kills[npc]
+		if not have or seen[npc] then
+			return
+		end
+		seen[npc] = true
+		local tier, _, nxt = J.Mastery(have, s.enemies[npc])
+		out[#out + 1] = { npc = npc, have = have, tier = tier, need = nxt and nxt.n }
+	end
+	local recent = type(c.recent) == "table" and c.recent or {}
+	for i = #recent, 1, -1 do
+		if #out >= limit then
+			break
+		end
+		add(J.GuidNpc(recent[i]))
+	end
+	if #out == 0 and type(c.last) == "table" then
+		add(c.last.npc)
 	end
 	return out
 end

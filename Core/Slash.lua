@@ -53,6 +53,21 @@ local function bootLines(say)
 	if BT.renamedOnLoad then
 		say(("%d settings moved to their new names"):format(BT.renamedOnLoad))
 	end
+	-- the launch reset (BT.DropBeta): what told it this is the beta, and what
+	-- it dropped the day neither did
+	local beta = BT.betaCheck
+	if beta then
+		local yes = function(v) return v and "yes" or "no" end
+		say(("beta realm: %s · beta client: %s · beta records: %s"):format(
+			beta.known and yes(beta.realm) or "not known yet", yes(beta.client),
+			(beta.realm or beta.client or not beta.known) and "kept" or "dropped"))
+	end
+	local gone = BT.betaDropped
+	if gone then
+		say(("beta records dropped: %s characters seen in %d book%s · %s people in the Ledger · %d Expedition characters · %s enemies · %d other character records"):format(
+			U.Commas(gone.characters), gone.books, gone.books == 1 and "" or "s", U.Commas(gone.people), gone.journals,
+			U.Commas(gone.enemies), gone.records or 0))
+	end
 	if BT.lateBook then
 		say(("saved data loaded late · %d found · %d seen since login kept"):format(BT.lateBook.found,
 			BT.lateBook.kept))
@@ -85,8 +100,9 @@ function BT.WhatLoaded()
 	-- which tooltip hooks fire (Core/Tooltip.lua)
 	local T = BT.UnitTip
 	if T then
-		U.Print(("tooltip hooks: unit %s (%d filled) · item %s (%d filled)"):format(tostring(T.path),
-			T.fills or 0, tostring(T.itemPath), T.itemFills or 0))
+		U.Print(("tooltip hooks: unit %s (%d filled) · item %s (%d filled) · spell %s (%d filled)"):format(
+			tostring(T.path), T.fills or 0, tostring(T.itemPath), T.itemFills or 0, tostring(T.spellPath),
+			T.spellFills or 0))
 	end
 	local refused = {}
 	for _, from in ipairs({ BT.Boot and BT.Boot.refused, BT.Collect and BT.Collect.refused }) do

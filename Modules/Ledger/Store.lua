@@ -318,6 +318,37 @@ function N.FoldRealms(realm)
 	return n
 end
 
+-- THE BETA'S BOOKS GO AT LAUNCH (Josh 2026-10-17, BT.DropBeta in
+-- Core/Init.lua): every realm's book that `gone` names, with its notes, tags,
+-- commendations and rank, and the group in progress if it was a beta
+-- character's. The revisions move so nothing shows a cached answer, but
+-- nothing is told of a change: there are no points to announce. Returns how
+-- many books went and how many people were in them.
+function N.DropRealms(gone)
+	local root = type(BeebModDB) == "table" and BeebModDB.ledger
+	if not (type(root) == "table" and type(root.realms) == "table" and type(gone) == "function") then
+		return 0, 0
+	end
+	local books, people = 0, 0
+	for scopeKey, book in pairs(root.realms) do
+		if gone(type(scopeKey) == "string" and scopeKey:match("^(.-)|") or scopeKey) then
+			for _ in pairs(type(book) == "table" and type(book.people) == "table" and book.people or {}) do
+				people = people + 1
+			end
+			root.realms[scopeKey] = nil
+			books = books + 1
+		end
+	end
+	local group = root.group
+	if type(group) == "table" and type(group.me) == "string" and gone(group.me:match("@(.+)$")) then
+		root.group = nil
+	end
+	if books > 0 then
+		N.rev, N.noteRev = N.rev + 1, N.noteRev + 1
+	end
+	return books, people
+end
+
 -- A person seen again (the tooltip, the target): the face on their row
 -- brought up to date, when there is a row. Nothing is made.
 function N.Seen(key, info)
