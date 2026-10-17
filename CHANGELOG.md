@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.28
 
 - **The beta's records go when the game launches.** BeebMod files what it
   keeps about people, enemies and your characters under the realm's name.
