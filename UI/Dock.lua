@@ -142,6 +142,10 @@ function B.BeginDrag()
 	end
 	dock:SetClampedToScreen(true)
 	dock:StartMoving()
+	-- the name's tooltip, which says how to do this, does not ride along
+	if GameTooltip then
+		GameTooltip:Hide()
+	end
 	-- ONLY WHEN THE ROOM CHANGED (Josh 2026-09-23, audit): moving sideways
 	-- changes nothing the layout depends on, and it was laid out twenty times
 	-- a second all the same - every cell, every quest row, every rule
@@ -421,10 +425,25 @@ end
 -- module is disabled, should be the dock with logo and options cog. You
 -- should not be able to turn off that minimum state. Turning off the dock
 -- would turn off everything EXCEPT the logo and options cog"). With the Dock
--- switched off nothing else sits in it - no section, no readout, whatever
--- feature it belongs to - and the header stays.
+-- switched off nothing of the Dock's sits in it - no section, no readout -
+-- and the header stays.
+--
+-- BUT THE JOURNALS' LINES STAY (Josh 2026-10-18: "I disabled everything
+-- except the ledger and expedition. I see the beebmod header in the upper
+-- right ... but ledger and expedition are not showing up"). The Expedition's
+-- line and the Ledger's belong to their journals, not to the Dock: with the
+-- Dock off and a journal on, its line stays under the header, as its own
+-- switch says (B.OwnLine).
 function B.DockOn()
 	return not BT.FeatureOn or BT.FeatureOn("dock")
+end
+
+-- a section that is another feature's line in the dock (the Expedition's,
+-- the Ledger's), kept when the Dock is off
+function B.OwnLine(key)
+	local m = BT.GetModule and BT.GetModule(key)
+	local f = m and BT.FeatureOf and BT.FeatureOf(m)
+	return f ~= nil and f ~= "dock"
 end
 
 -- A PANEL OF YOUR OWN, UNDER THE HEADER. Give it the height and width it would
@@ -851,17 +870,19 @@ function B.Relayout()
 	local width, live = math.max(B.Width(), MIN_W), false
 	local dockOn = B.DockOn()
 	for _, s in ipairs(ordered) do
-		-- the Dock off: every section away, whoever's it is
+		-- the Dock off: every section of the Dock's away
 		-- AND BACK WITH IT (2026-10-05): another feature's row - the
 		-- Expedition's line, the Ledger's - is not switched on again with the
 		-- Dock, so the one the Dock put away it shows again itself, while
 		-- its module is still on
-		if not dockOn and s.key ~= "readouts" then
+		-- (a journal's line is kept: B.OwnLine)
+		local keep = dockOn or B.OwnLine(s.key)
+		if not keep and s.key ~= "readouts" then
 			if s.frame:IsShown() then
 				s.dockHid = true
 			end
 			s.frame:Hide()
-		elseif dockOn and s.dockHid then
+		elseif keep and s.dockHid then
 			s.dockHid = nil
 			-- and only if its own switch still wants it (2026-10-05, audit): a
 			-- journal's line switched off while the Dock was off came back
@@ -1204,6 +1225,22 @@ function B.Create()
 	dock.header:SetHeight(HEADER_H)
 	dock.header:RegisterForDrag("LeftButton")
 	B.MakeHandle(dock.header)
+	-- HOW TO MOVE IT, ON THE NAME (Josh 2026-10-18: "I forgot you need to hold
+	-- shift to move it. Maybe a tooltip over the beebmod logo to explain that
+	-- would help")
+	dock.header:SetScript("OnEnter", function(self)
+		if BT.Tip and not dock.dragging then
+			BT.Tip.Show(self, { build = function(t)
+				t:Header({ icon = false, name = "BeebMod" })
+				t:Foot({ { "Shift-drag", "move dock" } })
+			end })
+		end
+	end)
+	dock.header:SetScript("OnLeave", function()
+		if GameTooltip then
+			GameTooltip:Hide()
+		end
+	end)
 	dock.header.title = dock.header:CreateFontString(nil, "OVERLAY", "BeebModFontNormal")
 	dock.header.title:SetPoint("LEFT", INSET + 1, 0)
 	-- the same name the window wears
@@ -1274,12 +1311,30 @@ function B.SetScale(n)
 		-- THE CORNER STAYS PUT (Josh 2026-09-23, audit): a position is in the
 		-- dock's own scaled units, so a new scale slid it across the screen
 		-- by a twentieth of its distance from the edge at every click
+		-- THE EDGE IT IS NEAREST STAYS PUT (2026-10-17, audit). Held by its
+		-- top-left corner, a dock at its spot on the right moved off the
+		-- right edge with each new Size (100% to 70% left a gap of 73), and
+		-- was saved there. A dock right of the screen's middle keeps its top
+		-- and its right edge, and is saved by its top-right corner, as it
+		-- starts; one on the left keeps its top and its left edge.
 		local num = BT.Pill.Number
 		local e0 = num(dock:GetEffectiveScale(), 0)
 		local l, t = num(dock:GetLeft(), nil), num(dock:GetTop(), nil)
+		local r = dock.GetRight and num(dock:GetRight(), nil)
+		local pe = num(UIParent:GetEffectiveScale(), 1)
+		local pr = UIParent.GetRight and num(UIParent:GetRight(), nil)
+		local pt = UIParent.GetTop and num(UIParent:GetTop(), nil)
 		dock:SetScale(n)
 		local e1 = num(dock:GetEffectiveScale(), 0)
-		if l and t and e0 > 0 and e1 > 0 then
+		if l and r and t and pr and pt and e0 > 0 and e1 > 0 and pe > 0
+			and (l + r) / 2 * e0 > pr * pe / 2 then
+			local x, y = B.Snap((r * e0 - pr * pe) / e1), B.Snap((t * e0 - pt * pe) / e1)
+			dock:ClearAllPoints()
+			dock:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", x, y)
+			if BT.settings then
+				BT.settings.dockPos = { point = "TOPRIGHT", rel = "TOPRIGHT", x = x, y = y }
+			end
+		elseif l and t and e0 > 0 and e1 > 0 then
 			dock:ClearAllPoints()
 			dock:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l * e0 / e1, t * e0 / e1)
 			savePosition()

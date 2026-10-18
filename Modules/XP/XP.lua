@@ -8,10 +8,10 @@
 -- through the level you are and the experience left. Point at it for
 -- zones and dungeons for your level.
 --
--- WHAT THIS SESSION GAINED is kept as the gold per hour is: a login starts
--- it, a /reload carries it on, and a level gained along the way is counted
--- whole rather than read as the bar going backwards. The PACE is not the
--- session's any more (M.Pace). At the level cap there is nothing to say, so
+-- EACH GAIN goes to the pace (M.Pace), and a level gained along the way is
+-- counted whole rather than read as the bar going backwards. The session (a
+-- login starts it, a /reload carries it on) keeps no total any more: nothing
+-- showed it (2026-10-17, audit). At the level cap there is nothing to say, so
 -- the line is not there.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/XP/XP.lua")
@@ -116,7 +116,7 @@ function M.Start(initial, reloading)
 		return nil
 	end
 	M.session = BT.Session.Open(all, initial, reloading, function(now)
-		return { start = now, gained = 0 }
+		return { start = now }
 	end)
 	M.level, M.cur, M.max = M.Read()
 	M.Update()
@@ -138,7 +138,11 @@ function M.Gain()
 	-- was nearly a whole level, and the pace jumped for an hour. Experience
 	-- going down without a new level is a level gained; a new level with the
 	-- bar unmoved waits for the bar.
-	if level > was and cur == wasCur and max == wasMax then
+	-- THE NEW MAX WITH THE OLD BAR (2026-10-17, audit) waits as well. Taken
+	-- as a level gained, a read of 14 at 500 of 12,000 after 13 at 500 of
+	-- 11,000 booked 11,000; the bar's own move then booked 11,550 more, and
+	-- the level went to 15.
+	if level > was and cur == wasCur then
 		return
 	end
 	local levelled = level > was or (level == was and cur < wasCur)
@@ -149,7 +153,6 @@ function M.Gain()
 		gained = cur - wasCur
 	end
 	if gained > 0 then
-		s.gained = (s.gained or 0) + gained
 		M.Note(gained, U.Now())
 	end
 	-- a level never goes down in a session, so a late read of the old one
@@ -260,18 +263,11 @@ M.Duration = duration
 -- The line and the bar
 -- ---------------------------------------------------------------------------
 
--- 12,345: the client's own thousands separator where it has one
+-- 12,345: commas from a thousand, written the one way every count in
+-- BeebMod is (U.Commas; 2026-10-17, audit: six copies used the client's
+-- separator and the rest a comma)
 local function big(n)
-	n = math.floor(n or 0)
-	if type(BreakUpLargeNumbers) == "function" then
-		local ok, s = pcall(BreakUpLargeNumbers, n)
-		if ok and type(s) == "string" then
-			return s
-		end
-	end
-	local s = tostring(n)
-	local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return (out:gsub("^,", ""))
+	return BT.Util.Commas(n)
 end
 M.Big = big
 

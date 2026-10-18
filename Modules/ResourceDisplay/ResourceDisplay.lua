@@ -457,15 +457,33 @@ end
 -- the target icon. For hunters, it should also dim if the target is too
 -- close to use auto shot"). A crosshair of our own (Josh, the same day: "I
 -- meant a crosshair icon - not hunters mark"; scripts/make-crosshair.py)
--- to the left of the bars and as tall as them. It is lit in the accent, as
--- a combo point is, while your class's main attack reaches your target
--- (BT.Reach.Main, Core/Reach.lua), and grey and faint while it does not, or
--- you have no target. A hunter's main attack is Auto Shot, and the game
--- says it is out of range inside its least reach as well. Reach changes
--- with every step and no event says so, so it is asked five times a second
--- while the display is on screen.
+-- to the left of the bars and as tall as them. Reach changes with every
+-- step and no event says so, so it is asked five times a second while the
+-- display is on screen.
+-- AN ICON FOR HOW NEAR (Josh 2026-10-18: "maybe we should use a green
+-- crosshairs icon if in ranged range, and a new melee icon if in melee
+-- range. For the deadzone, we could use a new cancel or no action icon. If
+-- out of ranged range, we could still use the red crosshair icon"). How
+-- near is your class's spells' answer (BT.Reach.Band, Core/Reach.lua):
+--   melee    crossed swords, green
+--   ranged   the crosshair, green (a friend in reach of your heals too)
+--   close    a ring with a bar across, red: too close to shoot or throw,
+--            too far to hit
+--   out      the crosshair, red
+-- Grey and faint, as before, with no target, one the game is not drawing
+-- ("if target is nowhere to be seen"), or nothing that answers. Green and
+-- red: you can attack it from here, or you can't, and the icon says why. The
+-- art is white, tinted (scripts/make-reach-icons.lua). Green, yellow and
+-- red on the crosshair alone was tried the same day ("This is a bit
+-- confusing"); from 2026-10-17 it was lit while your main attack reached.
 M.REACH_ICON = "Interface\\AddOns\\BeebMod\\Art\\crosshair"
+M.REACH_ICONS = {
+	melee = "Interface\\AddOns\\BeebMod\\Art\\reach-melee",
+	close = "Interface\\AddOns\\BeebMod\\Art\\reach-close",
+}
 M.REACH_GREY = { 0.62, 0.66, 0.64 }
+M.REACH_GREEN, M.REACH_RED = { 0.36, 0.86, 0.42 }, { 0.96, 0.30, 0.26 }
+M.REACH_COLOURS = { melee = M.REACH_GREEN, ranged = M.REACH_GREEN, close = M.REACH_RED, out = M.REACH_RED }
 M.REACH_GAP, M.REACH_DIM, M.REACH_EVERY = 4, 0.35, 0.2
 -- as tall as the bars, within these, and this when they won't say
 M.REACH_MIN, M.REACH_MAX, M.REACH_SIZE = 14, 28, 18
@@ -483,6 +501,7 @@ local function reachIcon()
 	reach.icon.beebs = true
 	reach.icon:SetAllPoints()
 	reach.icon:SetTexture(M.REACH_ICON)
+	reach.file = M.REACH_ICON
 	reach.wait = 0
 	reach:SetScript("OnUpdate", function(self, elapsed)
 		self.wait = self.wait - (elapsed or 0)
@@ -495,34 +514,56 @@ local function reachIcon()
 	return reach
 end
 
--- lit or dim for what the main attack says of your target; returns it
+-- whether the target is there to measure: one you have, and the game is
+-- drawing ("if target is nowhere to be seen")
+local function seen()
+	local ok, there = pcall(UnitExists or function() return false end, "target")
+	if not (ok and not secret(there) and there) then
+		return false
+	end
+	if type(UnitIsVisible) == "function" then
+		local okV, v = pcall(UnitIsVisible, "target")
+		if okV and not secret(v) and not v then
+			return false
+		end
+	end
+	return true
+end
+
+-- the icon and its colour for how near your target is; returns the band
+-- ("melee", "ranged", "close", "out"), a secret as it came, or false when
+-- dim, and the spell that said so
 function M.PaintReach()
 	local f = reach
 	if not f then
 		return nil
 	end
-	local r = nil
-	local ok, there = pcall(UnitExists or function() return false end, "target")
-	if ok and not secret(there) and there and BT.Reach then
-		r = BT.Reach.Main("target")
+	local band, spell = nil, nil
+	if seen() and BT.Reach then
+		band, spell = BT.Reach.Band("target")
 	end
-	if secret(r) then
+	f.spell = spell
+	local file = not secret(band) and M.REACH_ICONS[band] or M.REACH_ICON
+	if f.file ~= file then
+		f.file = file
+		f.icon:SetTexture(file)
+	end
+	if secret(band) then
 		-- the client's to read: onto the alpha as it came, in the accent
 		f.icon:SetVertexColor(ACCENT[1], ACCENT[2], ACCENT[3], 1)
 		if f.SetAlphaFromBoolean then
-			pcall(f.SetAlphaFromBoolean, f, r, 1, M.REACH_DIM)
+			pcall(f.SetAlphaFromBoolean, f, band, 1, M.REACH_DIM)
 		else
 			f:SetAlpha(1)
 		end
-		f.lit = nil
-		return r
+		f.band = nil
+		return band, spell
 	end
-	local lit = r == true
-	local c = lit and ACCENT or M.REACH_GREY
-	f.icon:SetVertexColor(c[1], c[2], c[3], 1)
-	f:SetAlpha(lit and 1 or M.REACH_DIM)
-	f.lit = lit
-	return lit
+	local c = band and M.REACH_COLOURS[band]
+	f.icon:SetVertexColor((c or M.REACH_GREY)[1], (c or M.REACH_GREY)[2], (c or M.REACH_GREY)[3], 1)
+	f:SetAlpha(c and 1 or M.REACH_DIM)
+	f.band = c and band or false
+	return f.band, spell
 end
 
 -- beside the display's bars, from the top of the health to the bottom of
@@ -736,19 +777,18 @@ function M.Status()
 	return ("%d bars themed · %s · %s"):format(M.lastCount or 0, M.Said(), M.ReachSaid())
 end
 
--- the target icon in words: which spell it asked, and what it was told
+-- the target icon in words: what it was told, and by which spell
+M.REACH_WORDS = { melee = "swords, in melee", ranged = "green crosshair, in ranged reach",
+	close = "no-action sign, too close to shoot", out = "red crosshair, out of reach" }
 function M.ReachSaid()
-	local list = BT.Reach and BT.Reach.List("target")
-	local spell = list and list[1]
+	local band, spell = M.PaintReach()
 	local name = nil
 	if spell and C_Spell and type(C_Spell.GetSpellName) == "function" then
 		local ok, n = pcall(C_Spell.GetSpellName, spell)
-		name = ok and n or nil
+		name = ok and type(n) == "string" and not secret(n) and n or nil
 	end
-	local r = M.PaintReach()
-	local said = secret(r) and "hidden from addons" or (r and "lit" or "dim")
-	return ("target icon %s, by %s"):format(said, type(name) == "string" and not secret(name) and name
-		or (spell and ("spell " .. spell)) or "no spell")
+	local said = secret(band) and "hidden from addons" or M.REACH_WORDS[band] or "dim"
+	return ("target icon %s%s"):format(said, spell and (", by " .. (name or ("spell " .. spell))) or "")
 end
 
 -- the points in words; a secret count is never formatted, because a secret
@@ -803,6 +843,30 @@ local function rawAnswers(add)
 		COMBO, raw(UnitPower, "player", COMBO), raw(UnitPowerMax, "player", COMBO),
 		raw(GetComboPoints, "player", "target"), raw(UnitPowerType, "player"),
 		tostring(select(2, pcall(function() return select(2, UnitClass("player")) end)))))
+	-- HOW NEAR, AS THE CLIENT SAID IT (Josh 2026-10-18: a paladin's melee
+	-- was not seen): each spell's answer about your target, and the Attack
+	-- button's
+	local R = BT.Reach
+	if R then
+		local parts = {}
+		local inRange = C_Spell and C_Spell.IsSpellInRange
+		for _, id in ipairs(R.List("target") or {}) do
+			parts[#parts + 1] = ("%d=%s"):format(id, raw(inRange, id, "target"))
+		end
+		local slot = R.AttackSlot()
+		-- the bars' own question (C_ActionBar), and the old global's, each as
+		-- it came
+		local bar = C_ActionBar and C_ActionBar.IsActionInRange
+		parts[#parts + 1] = slot and ("Attack button %d=%s, old global=%s"):format(slot, raw(bar, slot, "target"),
+			raw(IsActionInRange, slot)) or "no Attack button"
+		local band = R.Measure("target")
+		parts[#parts + 1] = ("says %s"):format(secret(band) and "secret" or tostring(band))
+		-- (refused in a fight, so not asked in one)
+		local fighting = type(InCombatLockdown) == "function" and InCombatLockdown()
+		parts[#parts + 1] = ("near=%s"):format(fighting and "not asked in a fight"
+			or raw(CheckInteractDistance, "target", R.NEAR))
+		add("  reach: " .. table.concat(parts, " · "))
+	end
 	local h = M.PipFrame()
 	local anchor = M.pipAnchor
 	add(("  pips %s · under %s · %d squares · anchor bottom %s"):format(

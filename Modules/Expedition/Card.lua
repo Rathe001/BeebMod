@@ -56,13 +56,14 @@ Card.RATIO = 1.62
 local GROUND = { 0.071, 0.055, 0.043 }
 
 -- the metals, by tier: the lines and ornaments, the darker third line of
--- platinum, and the tier's word
+-- platinum, and the tier's word. The colours are the masteries' own
+-- (Modules/Expedition/Journal.lua, J.MASTERY), told apart since 2026-10-18.
 Card.TIERS = {
 	[0] = { name = "", color = { 0.49, 0.45, 0.40 } },
-	{ name = "Bronze", color = { 0.79, 0.54, 0.32 } },
-	{ name = "Silver", color = { 0.80, 0.83, 0.86 } },
-	{ name = "Gold", color = { 0.89, 0.74, 0.35 } },
-	{ name = "Platinum", color = { 0.75, 0.90, 0.95 }, lo = { 0.42, 0.56, 0.63 } },
+	{ name = "Bronze", color = { 0.76, 0.45, 0.24 } },
+	{ name = "Silver", color = { 0.78, 0.81, 0.85 } },
+	{ name = "Gold", color = { 1, 0.84, 0.30 } },
+	{ name = "Platinum", color = { 0.42, 0.86, 1 }, lo = { 0.24, 0.50, 0.62 } },
 }
 
 -- the keystone: gold for an elite, silver for a rare, pale gold for a rare
@@ -250,14 +251,11 @@ function Card.New(parent)
 	c.kind:SetJustifyH("CENTER")
 	c.cat = text(o, Card.FONT_TYPE)
 	c.cat:SetJustifyH("CENTER")
-	c.lore = text(o, Card.FONT_LORE)
-	c.lore:SetJustifyH("CENTER")
-	c.lore:SetJustifyV("TOP")
-	c.lore:SetWordWrap(true)
-	pcall(c.lore.SetMaxLines, c.lore, 4)
+	-- (no lore and no mastery word on a card: the lore is the enemy's page's,
+	-- and the border says the mastery. The text set aside for them, always
+	-- hidden, went 2026-10-17, audit)
 	c.kills = text(o, Card.FONT_NAME)
 	c.killsLabel = text(o, Card.FONT_NAME)
-	c.tier = text(o, Card.FONT_TYPE)
 	c.points = text(o, Card.FONT_NAME)
 	c.pointsLabel = text(o, Card.FONT_NAME)
 
@@ -515,8 +513,6 @@ function Card.Layout(c, w)
 	c.fan:ClearAllPoints()
 	c.fan:SetSize(D(128), D(16))
 	c.fan:SetPoint("TOP", c, "TOPLEFT", w / 2, -y)
-	-- the lore is the enemy's page's now, not the card's
-	c.lore:Hide()
 
 	-- KILLS AND POINTS IN THE ARCH'S SHOULDERS (Josh 2026-09-26: "the space in
 	-- the upper left and right would be perfect to show the kills and points
@@ -534,7 +530,6 @@ function Card.Layout(c, w)
 		value:SetPoint("TOP", c, "TOPLEFT", x, -D(12))
 		label:SetPoint("TOP", value, "BOTTOM", 0, -D(2))
 	end
-	c.tier:Hide()
 
 	-- the sheen: a band the height of the card, swept across it
 	c.sheen:ClearAllPoints()
@@ -738,8 +733,6 @@ function Card.Dress(c, d)
 	for _, fs in ipairs({ c.killsLabel, c.pointsLabel }) do
 		fs:SetTextColor(0.66, 0.59, 0.49)
 	end
-	c.tier:SetText(t == 0 and "" or metal.name:upper())
-	c.tier:SetTextColor(mc[1], mc[2], mc[3])
 	c.dressedTier = t
 	sweep(c, t >= 4)
 	Card.Rewrite(c)
@@ -751,7 +744,7 @@ end
 -- text is set - the page, drawing the same lore in the same face, was fine,
 -- because it was not the first. So a card's words are set again a frame
 -- after it is dressed, once the face is there.
-local TEXTS = { "name", "kind", "cat", "kills", "killsLabel", "tier", "points", "pointsLabel" }
+local TEXTS = { "name", "kind", "cat", "kills", "killsLabel", "points", "pointsLabel" }
 function Card.Rewrite(c)
 	if c.rewriting or not (C_Timer and C_Timer.After) then
 		return

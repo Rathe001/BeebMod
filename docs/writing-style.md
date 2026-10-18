@@ -120,20 +120,20 @@ So every screen reads the same:
   moves it · off, drag it by anything in it".
 - **Notes, empty states and chat lines** are full sentences with full stops.
 - **The middle dot (·)** separates pieces of data on one line ("Level 35 ·
-  Rare Elite · Duskwood"). It is not punctuation for prose; don't use it to
+  Rare elite · Duskwood"). It is not punctuation for prose; don't use it to
   join clauses.
 - **Numbers**: digits, with commas from 1,000; "1 point", "2 points"; units
   as the game writes them (ms, %, XP, g s c).
-- **Commands** are written as typed: /bt demo. Say what they do in words
-  first: "Type /bt demo to show made-up data."
+- **Commands** are written as typed: /bt, /reload. Say what they do in
+  words first: "Type /bt to open settings."
 - **Address the player as "you"**, and the addon as BeebMod (never "we",
   never "the toolkit").
 - **Chat lines** start with what they're about: "Expedition: ...",
   "Ledger: ...". A report from a button on the Testing page can be terse,
   but still plain words, not variable names.
 - **Debug tools** are buttons and switches on the Testing page, not /bt
-  commands. A command is for something the player types, such as a note, a
-  name to find or a number of days.
+  commands. BeebMod has no commands after /bt, which opens the window.
+  Everything else is a click.
 
 ## Dirty glass
 

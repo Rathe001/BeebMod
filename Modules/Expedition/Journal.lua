@@ -50,13 +50,13 @@ BT.Expedition = J
 -- one. A grey kill counts like any other (Josh: "Level 60s should be able to
 -- run old content if they want to try to get platinum for missed enemies").
 J.CATEGORIES = {
-	worldboss = { word = "World Boss", many = "World bosses", points = 20, at = { 1, 2, 3, 5 } },
-	raidboss = { word = "Raid Boss", many = "Raid bosses", points = 15, at = { 1, 3, 6, 12 } },
-	dungeonboss = { word = "Dungeon Boss", many = "Dungeon bosses", points = 6, at = { 2, 5, 10, 25 } },
-	rareelite = { word = "Rare Elite", many = "Rare elites", points = 8, at = { 2, 4, 8, 15 } },
+	worldboss = { word = "World boss", many = "World bosses", points = 20, at = { 1, 2, 3, 5 } },
+	raidboss = { word = "Raid boss", many = "Raid bosses", points = 15, at = { 1, 3, 6, 12 } },
+	dungeonboss = { word = "Dungeon boss", many = "Dungeon bosses", points = 6, at = { 2, 5, 10, 25 } },
+	rareelite = { word = "Rare elite", many = "Rare elites", points = 8, at = { 2, 4, 8, 15 } },
 	rare = { word = "Rare", many = "Rares", points = 5, at = { 2, 4, 8, 15 } },
 	elite = { word = "Elite", many = "Elites", points = 3, at = { 3, 10, 30, 100 } },
-	dungeonelite = { word = "Dungeon Elite", many = "Dungeon elites", points = 2, at = { 5, 25, 75, 250 } },
+	dungeonelite = { word = "Dungeon elite", many = "Dungeon elites", points = 2, at = { 5, 25, 75, 250 } },
 	normal = { word = "Normal", many = "Normal enemies", points = 1, at = { 10, 50, 150, 500 } },
 	critter = { word = "Critter", many = "Critters", points = 1, at = { 20, 100, 300, 1000 } },
 }
@@ -149,37 +149,10 @@ J.RANKS = {
 	{ 3600, "Expedition Leader" },
 }
 
--- WHAT HEMET SAYS TO YOU (Josh 2026-10-04: "Maybe they could give an RP
--- quoted line based on the player's current rank"). A line for each rank,
--- over the journal's tabs and in the toast for a new rank. The first is the
--- one on the Expedition's settings page.
--- IN HIS OWN VOICE (Josh 2026-10-05: "update the Nesingwary quotes to sound
--- more like something he would say. Take a look at all the Green Hills of
--- Stranglethorn quests and content"). At his camp in Stranglethorn he is a
--- jolly old hunter: "Jolly nice to make your acquaintance", "old chap",
--- "Bloody well done! Right-o!", "Cheers to you, I say! Cheers!". He chides a
--- hunter standing around the campfire, says finding the beast is half the
--- challenge, puts trophies "over the ol' hearth", and owns that King
--- Bangalash "caused me to come crawling back to camp many times". His book
--- adds the pipe, the mead and Barnil, and Ajeck Rouack is a woman (the old
--- Stalker line called her him). Taken from the 1.12 quest texts: Welcome to
--- the Jungle, Raptor Mastery, Big Game Hunter, Hunting in Stranglethorn, and
--- the pages of The Green Hills of Stranglethorn.
-local function quoted(s)
-	return "\226\128\156" .. s .. "\226\128\157"
-end
-J.QUOTES = {
-	quoted("Jolly nice to make your acquaintance! Off you go. No beast comes to the campfire."),
-	quoted("Finding the beast is half the challenge, and you've a nose for it, old chap."),
-	quoted("A good snare does the waiting for you. Set it, leave it, and have a pipe."),
-	quoted("Ajeck says you nearly crept up on her this morning. Nearly, mind you."),
-	quoted("From Lordaeron to the deepest jungle, I've rarely seen anyone cover such ground."),
-	quoted("Now that's a trophy or two over the ol' hearth! Nicely done, old chap."),
-	quoted("You're a hunter worthy of our company. Barnil, pour this one some mead!"),
-	quoted("More trophies than wall to hang them on, eh? Barnil can build you another."),
-	quoted("King Bangalash sent me crawling back to camp many a time. He runs from you."),
-	quoted("Bloody well done! The expedition is yours to lead. Cheers to you, I say! Cheers!"),
-}
+-- NO WORD FROM HEMET (Josh 2026-10-18: "I think we should probably remove
+-- the quotes on the expedition and ledger completely. The RP is a bit too
+-- cheesy"). His line for each rank (2026-10-04, in his own voice from
+-- 2026-10-05) was on the settings page and in a new rank's toast.
 
 -- A RANK'S BADGE (Josh 2026-09-29): Art/Ranks/rank1.tga to rank10.tga, drawn
 -- by scripts/make-badges.py from scripts/rank-badges.html
@@ -439,8 +412,30 @@ local QUESTS_KEPT = 300
 -- the longest a card's line of lore may run, in letters
 local LINE_MAX = 150
 
+-- A NAME AS A WORD (2026-10-17, audit): "rat" was found in "pirate", "cat"
+-- in "location" and "cow" in "coward", so a critter took a quest's words
+-- about something else. The name has to be a word of its own, or its plural
+-- ("the prideclaws" still names Prideclaw). `hay` and `needle` in lower case.
+local PLURALS = { "", "s", "es" }
+local function wordFind(hay, needle)
+	if needle == "" or not hay:find(needle, 1, true) then
+		return false
+	end
+	-- (a name that starts or ends with no letter or digit has no edge of a
+	-- word to look for there)
+	local head = needle:sub(1, 1):match("%w") and "%f[%w]" or ""
+	local tail = needle:sub(-1):match("%w") and "%f[%W]" or ""
+	local name = needle:gsub("%p", "%%%0")
+	for _, plural in ipairs(PLURALS) do
+		if hay:find(head .. name .. plural .. tail) then
+			return true
+		end
+	end
+	return false
+end
+
 local function lowerFind(hay, needle)
-	return type(hay) == "string" and needle ~= "" and hay:lower():find(needle:lower(), 1, true) ~= nil
+	return type(hay) == "string" and type(needle) == "string" and wordFind(hay:lower(), needle:lower())
 end
 
 -- the sentence of `text` that names `name`, or its first; as one line
@@ -493,18 +488,18 @@ end
 
 -- does the quest name the enemy (`name` in lower case)? in an objective, or
 -- in its story - "the prideclaws have grown bold" names Prideclaw too, the
--- name being inside its plural
+-- name's plural being a word for it too (wordFind)
 local function names(q, name)
 	if name == "" then
 		return nil
 	end
 	local l = lowerOf(q)
 	for _, o in ipairs(l.objectives) do
-		if o:find(name, 1, true) then
+		if wordFind(o, name) then
 			return "objective"
 		end
 	end
-	if l.text:find(name, 1, true) then
+	if wordFind(l.text, name) then
 		return "text"
 	end
 	return nil
@@ -598,11 +593,15 @@ end
 -- 10). Each is earned on the way to the next, so an enemy at Platinum has been
 -- worth all four - twenty points. They took the place of KillTrack's kill
 -- records, which were the same idea at 100, 500 and 1000.
+-- FOUR METALS TOLD APART (Josh 2026-10-18: "Bronze and gold are too similar,
+-- and silver and platinum are too similar"): a darker, redder bronze, a
+-- bright gold, a plain grey silver and an ice-blue platinum. The cards' and
+-- the list's metals are these (Modules/Expedition/Card.lua, Card.TIERS).
 J.MASTERY = {
-	{ n = 10, points = 2, name = "Bronze", color = { 0.80, 0.52, 0.28 } },
-	{ n = 50, points = 3, name = "Silver", color = { 0.76, 0.80, 0.85 } },
-	{ n = 150, points = 5, name = "Gold", color = { 1, 0.82, 0.30 } },
-	{ n = 500, points = 10, name = "Platinum", color = { 0.62, 0.90, 1 } },
+	{ n = 10, points = 2, name = "Bronze", color = { 0.76, 0.45, 0.24 } },
+	{ n = 50, points = 3, name = "Silver", color = { 0.78, 0.81, 0.85 } },
+	{ n = 150, points = 5, name = "Gold", color = { 1, 0.84, 0.30 } },
+	{ n = 500, points = 10, name = "Platinum", color = { 0.42, 0.86, 1 } },
 }
 
 -- FEWER KILLS FOR THE RARER KINDS (Josh 2026-09-26: "Killing 500 of the same
@@ -673,6 +672,34 @@ function J.Store()
 		s.spotsPacked = true
 	end
 	return s
+end
+
+-- REAL KILLS GO IN YOUR JOURNAL (2026-10-17, audit). While the made-up data
+-- shows the made-up journal, J.Store() is that one, so a kill made meanwhile
+-- went in it and was gone when the demo went off - and its GUID was counted,
+-- so not even its loot could count it again. `fn` is run on your own journal,
+-- the made-up one set aside meanwhile and put back after, even if `fn`
+-- fails. Nothing of the made-up one is written into yours.
+local unpack = unpack or table.unpack
+function J.Saved(fn, ...)
+	local demo = J.demo
+	if not demo then
+		return fn(...)
+	end
+	J.demo = nil
+	local r = { n = 0 }
+	local function keep(...)
+		r.n = select("#", ...)
+		for i = 1, r.n do
+			r[i] = select(i, ...)
+		end
+	end
+	keep(pcall(fn, ...))
+	J.demo = demo
+	if not r[1] then
+		error(r[2], 0)
+	end
+	return unpack(r, 2, r.n)
 end
 
 local function fresh(c)
@@ -808,18 +835,28 @@ function J.Learn(info, now)
 	if info.boss == true then
 		m.boss = true
 	end
+	-- a boss whose fight was won before its death was counted (J.EncounterWon)
+	local won = J.won
+	if won and m.name == won.name and math.abs((now or U.Now()) - won.at) <= J.WON_FOR then
+		m.boss, J.won = true, nil
+	end
 	-- its looks, a man's and a woman's (J.AddLook)
 	if info.sex == J.MALE or info.sex == J.FEMALE then
 		J.AddLook(m, info.sex, info.look)
 	end
 	local lvl = tonumber(info.level)
 	if lvl then
-		-- -1 is the skull: above anything, and kept apart from the numbers
+		-- -1 is the skull: above anything, and kept apart from the numbers.
+		-- ONLY UNTIL A LEVEL IS READ (2026-10-17, audit): the client says -1 of
+		-- any enemy ten or more levels above you, and the page said "Level ??"
+		-- for good after it, even once a later kill read its level. A level
+		-- read puts the skull away; a world boss never gives one.
 		if lvl < 0 then
-			m.skull = true
+			m.skull = m.lo == nil or nil
 		else
 			m.lo = math.min(m.lo or lvl, lvl)
 			m.hi = math.max(m.hi or lvl, lvl)
+			m.skull = nil
 		end
 	end
 	if not m.zone and type(info.zone) == "string" and info.zone ~= "" then
@@ -929,6 +966,14 @@ function J.SpellInfo(id)
 	return nil
 end
 
+-- NOT THE SERVER'S OWN MECHANICS (Josh 2026-10-18, on Azuregos's page: "not
+-- sure what summon player is doing here"). The database lists spells the
+-- server casts to run a fight, which nobody sees as an ability: Azuregos's
+-- "Summon Player" pulls a player back to him, with the game's placeholder
+-- picture. They are left out by name here, and by scripts/make-abilities.py
+-- the next time the list is made.
+J.NOT_ABILITIES = { ["Summon Player"] = true }
+
 -- every spell the enemy on this page can cast, by name:
 -- { { id, name, icon }, ... }. A page holds every npc of its name
 -- (J.PageOf), so their lists are one list; a spell Forever doesn't have is
@@ -946,7 +991,7 @@ function J.Abilities(npc)
 	for _, n in ipairs(ids) do
 		for _, id in ipairs(data[n] or {}) do
 			local name, icon = J.SpellInfo(id)
-			if name and not byName[name] then
+			if name and not byName[name] and not J.NOT_ABILITIES[name] then
 				byName[name] = true
 				out[#out + 1] = { id = id, name = name, icon = icon }
 			end
@@ -1255,17 +1300,28 @@ end
 -- A BOSS FIGHT WON (ENCOUNTER_END): the enemy of that name in the journal is a
 -- boss, where the client would not say so of the unit. An encounter named for
 -- no one enemy ("The Seven") names nothing. Whether one was marked.
-function J.EncounterWon(name)
+-- A BOSS NOT IN THE BOOK YET (2026-10-17, audit): on a first kill the fight
+-- can end before the death is counted, and there was no page to mark. The
+-- name is kept for J.WON_FOR seconds, and the kill that makes its page marks
+-- it (J.Learn). Long enough for the corpse to be looted.
+J.WON_FOR = 30
+function J.EncounterWon(name, now)
 	local s = J.Store()
 	if not (s and type(name) == "string" and name ~= "") then
 		return false
 	end
 	for _, m in pairs(s.enemies) do
 		if m.name == name then
+			if m.boss then
+				return false
+			end
 			m.boss = true
+			-- its category moved, and the points with it (J.KeptScore)
+			J.kept = nil
 			return true
 		end
 	end
+	J.won = { name = name, at = now or U.Now() }
 	return false
 end
 
@@ -1431,16 +1487,20 @@ local SLAUGHTER = {
 	{ 10000, 20, "Scourge of the Land" }, { 25000, 25, "Extinction Event" }, { 50000, 50, "Nothing Left Standing" },
 }
 local TYPE_TIERS = { { 5, 5, "I" }, { 15, 10, "II" }, { 40, 15, "III" } }
-local FAMILIES = { { 5, 5, "Tracker" }, { 10, 10, "Trapper" }, { 20, 20, "Beastmaster" } }
+-- NOT THE RANKS' NAMES (Josh 2026-10-18: "We should rename the
+-- commendations"). The first two were Tracker and Trapper, the names of the
+-- ranks at 50 and 150 points. The ids stay, so one already earned is kept.
+local FAMILIES = { { 5, 5, "Beast Watcher" }, { 10, 10, "Beast Scholar" }, { 20, 20, "Beastmaster" } }
 local RARES = { { 1, 10, "Rare Find" }, { 5, 10, "Rare Hunter" }, { 15, 20, "Rare Collector" }, { 30, 40, "Silver Standard" } }
 local ELITES = { { 10, 5, "Elite Slayer" }, { 50, 10, "Elite Hunter" }, { 150, 20, "Elite Nemesis" } }
 local ZONES = { { 5, 5, "Wanderer" }, { 15, 10, "Well Travelled" }, { 30, 20, "Everywhere at Once" } }
 
+-- (the number with commas from 1,000: "Kill 1,000 enemies", 2026-10-17, audit)
 local function tiers(out, group, id, have, list, text)
 	for _, t in ipairs(list) do
 		out[#out + 1] = {
 			id = id .. ":" .. t[1], group = group, title = t[3], points = t[2],
-			need = t[1], have = have, text = text:format(t[1]),
+			need = t[1], have = have, text = text:format(U.Commas(t[1])),
 		}
 	end
 end
@@ -1454,8 +1514,8 @@ end
 function J.List(st)
 	st = st or J.Stats()
 	local out = {}
-	tiers(out, "discover", "uniques", st.uniques, DISCOVER, "Reach %d unique kills")
-	tiers(out, "slaughter", "total", st.total, SLAUGHTER, "Kill %d enemies")
+	tiers(out, "discover", "uniques", st.uniques, DISCOVER, "Reach %s unique kills")
+	tiers(out, "slaughter", "total", st.total, SLAUGHTER, "Kill %s enemies")
 	for _, kind in ipairs(J.Types(st)) do
 		for _, t in ipairs(TYPE_TIERS) do
 			out[#out + 1] = {
@@ -1466,19 +1526,19 @@ function J.List(st)
 			}
 		end
 	end
-	tiers(out, "types", "family", st.families, FAMILIES, "Kill beasts of %d different families")
+	tiers(out, "types", "family", st.families, FAMILIES, "Kill beasts of %s different families")
 	for _, t in ipairs(RARES) do
 		out[#out + 1] = {
 			id = "rare:" .. t[1], group = "rank", title = t[3], points = t[2], need = t[1], have = st.rares,
 			text = ("Kill %d %s"):format(t[1], plural(t[1], "rare", "different rares")),
 		}
 	end
-	tiers(out, "rank", "elite", st.elites, ELITES, "Reach %d unique elite kills")
+	tiers(out, "rank", "elite", st.elites, ELITES, "Reach %s unique elite kills")
 	out[#out + 1] = {
 		id = "boss:1", group = "rank", title = "Worldbreaker", points = 25, need = 1, have = st.bosses,
 		text = "Kill a world boss",
 	}
-	tiers(out, "world", "zones", st.zones, ZONES, "Kill enemies in %d different zones")
+	tiers(out, "world", "zones", st.zones, ZONES, "Kill enemies in %s different zones")
 	out[#out + 1] = {
 		id = "feat:up5", group = "world", title = "Punching Up", points = 10, need = 1,
 		have = st.feats.up5 and 1 or 0, text = "Kill an enemy 5 or more levels above you",
@@ -1693,9 +1753,21 @@ local function stillKept(kept, c)
 	return total == kept.st.total + 1 and n == kept.st.uniques
 end
 
+-- the points the masteries from tier `from` up to tier `to` are worth
+local function stepPoints(from, to)
+	local p = 0
+	for i = from + 1, to do
+		p = p + J.MASTERY[i].points
+	end
+	return p
+end
+
 function J.Check(c, now, npc, was, onlyTotal)
 	local news = {}
 	local kept = J.kept
+	local enemy = npc and enemyOf(npc)
+	local before = npc and J.Mastery(was or 0, enemy) or 0
+	local tier, m = J.Mastery(npc and c.kills[npc] or 0, enemy)
 	local st, list
 	if onlyTotal and stillKept(kept, c) then
 		st, list = kept.st, kept.list
@@ -1705,10 +1777,16 @@ function J.Check(c, now, npc, was, onlyTotal)
 				a.have = st.total
 			end
 		end
+		-- THE POINTS KEPT TOO (2026-10-17, audit): one more of an enemy as it
+		-- was is worth what it was, and its masteries up to the one reached
+		if kept.mastery then
+			kept.mastery = kept.mastery + stepPoints(before, tier)
+		end
 	else
 		st = J.Stats(c.kills, c.feats)
 		list = J.List(st)
-		J.kept = { c = c, kills = c.kills, st = st, list = list }
+		J.kept = { c = c, kills = c.kills, st = st, list = list, unique = J.KindPoints(c.kills),
+			mastery = J.Masteries(c.kills) }
 	end
 	for _, a in ipairs(list) do
 		if a.have >= a.need and not c.earned[a.id] then
@@ -1722,13 +1800,14 @@ function J.Check(c, now, npc, was, onlyTotal)
 			news[#news + 1] = a
 		end
 	end
-	if npc then
-		local enemy = enemyOf(npc)
-		local before = J.Mastery(was or 0, enemy)
-		local tier, m = J.Mastery(c.kills[npc] or 0, enemy)
-		if tier > before then
-			local id = ("mastery:%d:%d"):format(npc, tier)
-			c.earned[id] = c.earned[id] or now
+	-- A METAL IS NEWS ONCE (2026-10-17, audit): an enemy found to be harder
+	-- than it was read (a dungeon's elite, a rare that is a boss) takes more
+	-- kills for each metal, and it climbs back through metals it already
+	-- had. Only one not earned before is said again.
+	if npc and tier > before then
+		local id = ("mastery:%d:%d"):format(npc, tier)
+		if not c.earned[id] then
+			c.earned[id] = now
 			c.earnedBy = c.earnedBy or {}
 			c.earnedBy[id] = c.earnedBy[id] or npc
 			news[#news + 1] = {
@@ -1743,17 +1822,23 @@ end
 -- whole journal twice more for the dock's line, once for the rank before it
 -- and once after - every kind three times over and the sixty-odd
 -- commendations built again, each time, for every enemy in a pack. The
--- stats and the list J.Check keeps are the ones J.Points would build; only
--- the unique kills' and the masteries' points are counted. A kept count
--- that is not this character's, or whose totals no longer match the kills,
--- is no use: then it is J.Score.
+-- stats and the list J.Check keeps are the ones J.Points would build. A kept
+-- count that is not this character's, or whose totals no longer match the
+-- kills, is no use: then it is J.Score.
+-- AND THE POINTS (2026-10-17, audit): the unique kills' and the masteries'
+-- points were still counted over every enemy, 1.5 ms a time with two
+-- thousand. J.Check keeps them as well, moved by the one kill; anything
+-- that changes an enemy's category throws the kept count away (J.Learn,
+-- merge, J.EncounterWon).
 function J.KeptScore()
 	local c = J.Mine()
 	local kept = J.kept
 	if c and kept and kept.c == c and kept.kills == c.kills then
 		local total, n = tally(c.kills)
 		if total == kept.st.total and n == kept.st.uniques then
-			local points, count = J.KindPoints(c.kills) + J.Masteries(c.kills), 0
+			kept.unique = kept.unique or J.KindPoints(c.kills)
+			kept.mastery = kept.mastery or J.Masteries(c.kills)
+			local points, count = kept.unique + kept.mastery, 0
 			for _, a in ipairs(kept.list) do
 				if a.have >= a.need then
 					points = points + a.points
@@ -1764,6 +1849,39 @@ function J.KeptScore()
 		end
 	end
 	return J.Score()
+end
+
+-- THE HIGHEST RANK REACHED, KEPT (2026-10-17, audit), as the Ledger keeps its
+-- own (Modules/Ledger/Ranks.lua). Points can fall - two pages made one at a
+-- loading screen, an enemy found to be a boss - and climbing back is not a
+-- new rank. A character from before this was kept takes the rank it has
+-- now, without a toast: asked before a kill, it is the rank the kill started
+-- from.
+function J.BestRank()
+	local c = J.Mine()
+	if not c then
+		return 0
+	end
+	if type(c.bestRank) ~= "number" then
+		c.bestRank = (J.Rank((J.KeptScore())))
+	end
+	return c.bestRank
+end
+
+-- the rank `points` make, and its title, when it is above every rank this
+-- character has had (kept from then on); nil otherwise
+function J.RankUp(points)
+	local c = J.Mine()
+	if not c then
+		return nil
+	end
+	local best = J.BestRank()
+	local rank, title = J.Rank(points)
+	if rank > best then
+		c.bestRank = rank
+		return rank, title
+	end
+	return nil
 end
 
 -- ---------------------------------------------------------------------------
@@ -1783,10 +1901,17 @@ local function byName(a, b)
 	end
 	return a.npc < b.npc
 end
+-- (each enemy's mastery worked out once before a sort, as `sortTier`, not
+-- twice a comparison: 16 ms to sort two thousand, 2026-10-17, audit)
+local function tiersOf(list)
+	for _, e in ipairs(list) do
+		e.sortTier = J.Mastery(e.n, e.m)
+	end
+end
 local SORTS = {
 	name = byName,
 	mastery = function(a, b)
-		local at, bt = J.Mastery(a.n, a.m), J.Mastery(b.n, b.m)
+		local at, bt = a.sortTier or J.Mastery(a.n, a.m), b.sortTier or J.Mastery(b.n, b.m)
 		if at ~= bt then
 			return at > bt
 		end
@@ -1903,11 +2028,12 @@ function J.SearchFields(m)
 	add(J.KindOf(m), 2, true)
 	add(m.family, 2, true)
 	add(m.zone, 2, true)
-	if m.skull then
-		add("level ?? boss skull", 1)
-	elseif m.lo then
+	-- a level read beats the skull (J.Learn)
+	if m.lo then
 		local lv = m.hi and m.hi ~= m.lo and (m.lo .. " " .. m.hi) or tostring(m.lo)
 		add("level " .. lv .. " lv " .. lv, 1)
+	elseif m.skull then
+		add("level ?? boss skull", 1)
 	end
 	-- the lore it would show: its pages' titles and words, and a quest's
 	for _, e in ipairs(J.WikiLore(m)) do
@@ -2014,11 +2140,16 @@ end
 -- a list of enemies, in one of the two orders ("All" on the rail sorts every
 -- section's enemies together)
 function J.SortEnemies(list, sort)
+	if sort == "mastery" then
+		tiersOf(list)
+	end
 	table.sort(list, SORTS[sort] or byName)
 	return list
 end
 
-function J.Pages(kills, by, sort)
+-- `unsorted`: each section left in no order, for a caller that sorts what it
+-- shows itself (the journal's grid: one section, or All in one order)
+function J.Pages(kills, by, sort, unsorted)
 	local s = J.Store()
 	local enemies = s and s.enemies or {}
 	local byKey = {}
@@ -2048,12 +2179,13 @@ function J.Pages(kills, by, sort)
 		order = J.Types({ byType = byKey })
 		order[#order + 1] = J.UNTYPED
 	end
-	local cmp = SORTS[sort] or byName
 	local out = {}
 	for _, key in ipairs(order) do
 		local list = byKey[key]
 		if list then
-			table.sort(list, cmp)
+			if not unsorted then
+				J.SortEnemies(list, sort)
+			end
 			out[#out + 1] = { kind = key, enemies = list }
 		end
 	end

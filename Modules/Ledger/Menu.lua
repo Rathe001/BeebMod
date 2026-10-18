@@ -134,7 +134,7 @@ end
 -- what the Rating entry says: the rating when there is one
 function LM.RatingText(p)
 	local r = p and p.rating
-	return r and ("Rating · %d / 5"):format(r) or "Rating"
+	return r and ("Rating · %d/5"):format(r) or "Rating"
 end
 
 -- the note panel, for this person, under `owner`; with the tag maker open

@@ -28,8 +28,9 @@ function BT.OnUnitTooltip(moduleKey, order, fn)
 end
 
 -- The same again for ITEM tooltips. They are a different data type to the
--- client and a different shape to us - nobody rebuilds an item tooltip, they
--- only mark it up - but the rule about who goes first is the same.
+-- client and a different shape to us, but the rule about who goes first is
+-- the same: the Tooltips module writes an item again as a card (order 0),
+-- and whoever comes after adds to that card.
 function BT.OnItemTooltip(moduleKey, order, fn)
 	items[#items + 1] = { module = moduleKey, order = order or 50, fn = fn }
 	table.sort(items, function(a, b) return a.order < b.order end)
@@ -81,8 +82,16 @@ local function remember(fs, tip)
 		return
 	end
 	local face, size, flags = fs:GetFont()
+	-- AND THE FONT OBJECT IT FOLLOWS (2026-10-17, audit): a line given its
+	-- face back with SetFont stops following GameTooltipText, so an addon
+	-- that changes that font no longer reached the lines we had touched
+	local object = nil
+	if fs.GetFontObject then
+		local ok, o = pcall(fs.GetFontObject, fs)
+		object = ok and o or nil
+	end
 	local was = {
-		face = face, size = size, flags = flags,
+		face = face, size = size, flags = flags, object = object,
 		justify = fs.GetJustifyH and fs:GetJustifyH() or nil,
 		-- how many lines it may wrap to (T.MaxLines)
 		maxLines = fs.GetMaxLines and fs:GetMaxLines() or nil,
@@ -214,13 +223,32 @@ function T.MaxLines(tip, i, n, side)
 	return fs
 end
 
+-- A line put back on the font object it followed, so it follows it again;
+-- false where it would not take it. The object's own face is set after it
+-- where the line still wears ours, in case handing a line the object it
+-- already has changes nothing.
+local function putObject(fs, object)
+	if not pcall(fs.SetFontObject, fs, object) then
+		return false
+	end
+	if object.GetFont then
+		local ok, face, size, flags = pcall(object.GetFont, object)
+		local nowFace, nowSize = fs:GetFont()
+		if ok and face and size and (nowFace ~= face or nowSize ~= size) then
+			pcall(fs.SetFont, fs, face, size, flags)
+		end
+	end
+	return true
+end
+
 -- Every line we touched, back the way it was. Not "the way we assume tooltip
 -- lines look": the way THAT line actually was, measured before we changed it.
 -- `tip`: only that tooltip's lines; nothing: every tooltip's
 function T.RestoreFonts(tip)
 	for fs, was in pairs(before) do
 		if not tip or was.owner == tip then
-			if was.face and was.size and fs.SetFont then
+			if not (was.object and fs.SetFontObject and putObject(fs, was.object)) and was.face and was.size
+				and fs.SetFont then
 				pcall(fs.SetFont, fs, was.face, was.size, was.flags)
 			end
 			if was.justify and fs.SetJustifyH then

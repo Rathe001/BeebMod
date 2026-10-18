@@ -7,7 +7,8 @@
 -- the one the reputation panel paints it.
 --
 -- WHAT THIS SESSION GAINED is kept per faction: watch another faction and
--- back, and the first one's gains are still there. A /reload carries the
+-- back, and the first one's gains are still there. Every faction is counted,
+-- watched or not, and losses as well as gains (M.Gain). A /reload carries the
 -- session on; a login starts a new one.
 --
 -- NO TIME TO THE NEXT STANDING (Josh 2026-09-28: "I think we can remove the
@@ -117,47 +118,87 @@ function M.Start(initial, reloading)
 	return s
 end
 
--- The faction's own record in this session, begun the first time it is seen.
-local function track(f)
-	local s = M.session
-	if not (s and f) then
-		return nil
+-- Every faction the client lists, as (name, value, id): the reputation
+-- page's own walk. A header with no standing of its own is not a faction.
+-- A folded header hides what is under it from this list, as on the page.
+-- false where the client has no such list.
+function M.EachFaction(fn)
+	local r = _G.C_Reputation
+	if not (r and type(r.GetNumFactions) == "function" and type(r.GetFactionDataByIndex) == "function") then
+		return false
 	end
-	local key = f.name
-	local t = s.factions[key]
-	if not t then
-		t = { since = U.Now(), gained = 0, value = f.value }
-		s.factions[key] = t
+	local okN, n = pcall(r.GetNumFactions)
+	for i = 1, (okN and tonumber(n)) or 0 do
+		local ok, d = pcall(r.GetFactionDataByIndex, i)
+		if ok and type(d) == "table" and type(d.name) == "string" and d.name ~= ""
+			and (not d.isHeader or d.isHeaderWithRep) then
+			fn(d.name, d.currentStanding, d.factionID)
+		end
 	end
-	return t
+	return true
 end
 
--- Every change: what went up since last time is gained. The total value
--- carries on across standings, so a new standing is no special case.
-function M.Gain()
-	local f = M.Read()
-	local t = track(f)
-	if t then
-		local up = f.value - (t.value or f.value)
-		if up > 0 then
-			t.gained = (t.gained or 0) + up
+-- EVERY FACTION THAT MOVED, BOTH WAYS (2026-10-17, audit). Only the watched
+-- faction was read, and only what it went up: a faction that moved while you
+-- watched another was left out, and a loss was dropped. Watching Booty Bay,
+-- -25 for a pirate and +25 for a quest read +25, where the truth is 0. Now
+-- each change to any faction is added with its sign. The total value carries
+-- on across standings, so a new standing is no special case. A faction is
+-- first seen at the value it has then. With `rebase`, every value is read
+-- and nothing is counted (switched back on: what moved while it was off is
+-- not this session's).
+local seen = {}
+function M.Gain(rebase)
+	local s = M.session
+	if s then
+		local now = U.Now()
+		local function saw(name, value, id)
+			if type(value) ~= "number" or (issecretvalue and issecretvalue(value)) then
+				return
+			end
+			seen[name] = true
+			local t = s.factions[name]
+			if not t then
+				s.factions[name] = { since = now, gained = 0, value = value, id = id }
+				return
+			end
+			t.id = t.id or id
+			if not rebase then
+				t.gained = (t.gained or 0) + (value - (t.value or value))
+			end
+			t.value = value
 		end
-		t.value = f.value
-		M.session.last = U.Now()
+		for name in pairs(seen) do
+			seen[name] = nil
+		end
+		M.EachFaction(saw)
+		-- the ones a folded header keeps off the list, by their id
+		local r = _G.C_Reputation
+		if r and type(r.GetFactionDataByID) == "function" then
+			for name, t in pairs(s.factions) do
+				if not seen[name] and t.id then
+					local ok, d = pcall(r.GetFactionDataByID, t.id)
+					if ok and type(d) == "table" then
+						saw(name, d.currentStanding, t.id)
+					end
+				end
+			end
+		end
+		-- and the watched one, whether or not the client lists it
+		local f = M.Read()
+		if f and not seen[f.name] then
+			saw(f.name, f.value, f.id)
+		end
+		s.last = now
 	end
 	M.Update()
 end
 
+-- 12,345: commas from a thousand, written the one way every count in
+-- BeebMod is (U.Commas; 2026-10-17, audit: six copies used the client's
+-- separator and the rest a comma)
 local function big(n)
-	n = math.floor(n or 0)
-	if type(BreakUpLargeNumbers) == "function" then
-		local ok, s = pcall(BreakUpLargeNumbers, n)
-		if ok and type(s) == "string" then
-			return s
-		end
-	end
-	local out = tostring(n):reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return (out:gsub("^,", ""))
+	return BT.Util.Commas(n)
 end
 
 -- ---------------------------------------------------------------------------
@@ -323,6 +364,11 @@ function M.Show(on)
 end
 
 function M:OnEnable()
+	-- WHAT EACH FACTION SAYS NOW (2026-10-17, audit), as Experience and
+	-- Currency do: reputation that moved while this was off is not one gain
+	if M.session then
+		M.Gain(true)
+	end
 	M.Show(true)
 	-- switched on mid-session (Core/Session.lua)
 	BT.Session.Ensure(M)

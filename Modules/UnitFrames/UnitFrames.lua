@@ -169,18 +169,24 @@ function M.PlaceHolder(key)
 	return h
 end
 
+-- IN THE HOLDER'S OWN UNITS (2026-10-17, audit): a holder is scaled with the
+-- Size, so its top is in its units and the screen's top in UIParent's. The
+-- offset SetPoint takes is in the holder's, so the screen's top is converted
+-- first, as the bag window does; at 120% the block jumped down on release.
 local function savePlace(h)
 	local num = BT.Pill.Number
 	local left, top = num(h:GetLeft(), nil), num(h:GetTop(), nil)
 	local parentTop = num(UIParent:GetTop(), nil)
-	if not (left and top and parentTop) then
+	local scale = num(h:GetEffectiveScale(), 1)
+	local parentScale = num(UIParent:GetEffectiveScale(), 1)
+	if not (left and top and parentTop) or scale <= 0 then
 		return false
 	end
 	BT.EnsureBound()
 	BT.settings.unitframes = BT.settings.unitframes or {}
 	BT.settings.unitframes.pos = BT.settings.unitframes.pos or {}
 	BT.settings.unitframes.pos[h.key] = { point = "TOPLEFT", rel = "TOPLEFT", x = math.floor(left + 0.5),
-		y = math.floor(top - parentTop + 0.5) }
+		y = math.floor(top - parentTop * parentScale / scale + 0.5) }
 	h:ClearAllPoints()
 	h:SetPoint("TOPLEFT", UIParent, "TOPLEFT", BT.settings.unitframes.pos[h.key].x, BT.settings.unitframes.pos[h.key].y)
 	return true
@@ -760,6 +766,8 @@ local PLAYER_ONLY = {
 	"UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
 	"UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE",
 	"UNIT_SPELLCAST_CHANNEL_STOP",
+	-- your level: how hard everyone else's is, in its colour
+	"UNIT_LEVEL",
 }
 
 local ENEMY_FRAMES = { "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
@@ -929,6 +937,13 @@ local function onEvent(_, event, unit, powerType)
 		if unit == "player" and M.singles.target and not F.NotCombo(powerType) then
 			F.PaintCombo(M.singles.target, F.Source("target"))
 		end
+	elseif event == "UNIT_LEVEL" then
+		-- YOUR LEVEL COLOURS THEIRS (2026-10-17, audit): every level on the
+		-- frames is coloured by how far it is from yours, and each frame only
+		-- hears its own unit's level
+		if unit == "player" then
+			M.QueuePaint()
+		end
 	elseif event == "READY_CHECK_FINISHED" then
 		M.PaintAll()
 		if C_Timer and C_Timer.After then
@@ -979,9 +994,11 @@ local function tick()
 	-- and reach, which changes with every step and tells nobody - faded as
 	-- far as the setting says, as a paint fades it: the strong figures that
 	-- stood here undid a light or medium fade four times a second
+	-- (the target's target too, 2026-10-17, audit: a paint fades it, and
+	-- skipped here its fade moved only when its unit did)
 	local far, groupFar = F.Far(false), F.Far(true)
 	for key, f in pairs(M.singles) do
-		if key ~= "targettarget" and f:IsShown() then
+		if f:IsShown() then
 			F.AlphaFrom(f, F.Source(key):InRange(), 1, far)
 		end
 	end
@@ -1230,7 +1247,7 @@ local function preview(kind, d, point, handle)
 	end
 	-- and the bars of your heals or damage over time, part run down
 	if F.Timers and not d.dead and not d.offline then
-		F.Timers.Show(f, kind)
+		F.Timers.Show(f, kind, d)
 	elseif f.bmFakeTimers then
 		for _, t in ipairs(f.bmFakeTimers) do
 			t:Hide()
@@ -1572,7 +1589,10 @@ end
 -- the cast bar take the same scale, so a larger screen or a smaller one asks
 -- for one number rather than a page of them. Secure frames are scaled out of
 -- combat only; a change made in a fight waits for its end.
-M.SCALE_MIN, M.SCALE_MAX, M.SCALE_STEP = 0.8, 1.3, 0.05
+-- AS SMALL AS THE SIZE GOES (2026-10-17, audit): the Size goes down to 70%
+-- (UI/Settings.lua), and at 70% and 75% the dock and the buffs shrank while
+-- the frames stopped at 80%
+M.SCALE_MIN, M.SCALE_MAX, M.SCALE_STEP = 0.7, 1.3, 0.05
 
 -- the one size (UI/Settings.lua), kept to what the frames allow
 function M.Scale()

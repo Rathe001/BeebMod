@@ -32,12 +32,12 @@ local UNIT = "|cff8a9894%s|r"
 local ARMOUR = "Interface\\Icons\\INV_Chest_Chain"
 
 -- every slot that takes gear, and what to call it; the shirt and tabard are
--- not gear
+-- not gear. The names are row labels, so sentence case (2026-10-17, audit).
 M.SLOTS = {
 	{ 1, "Head" }, { 2, "Neck" }, { 3, "Shoulders" }, { 15, "Back" }, { 5, "Chest" },
 	{ 9, "Wrists" }, { 10, "Hands" }, { 6, "Waist" }, { 7, "Legs" }, { 8, "Feet" },
 	{ 11, "Ring" }, { 12, "Ring" }, { 13, "Trinket" }, { 14, "Trinket" },
-	{ 16, "Main Hand" }, { 17, "Off Hand" }, { 18, "Ranged" },
+	{ 16, "Main hand" }, { 17, "Off hand" }, { 18, "Ranged" },
 }
 
 local function link(slot)

@@ -134,7 +134,7 @@ local function makeTab(i)
 	tab.mark:SetWidth(3)
 	BT.Widgets.Lit(tab.mark)
 	tab.mark:Hide()
-	-- a feature's own colour, a dot before its name (the first-login card's)
+	-- a feature's own colour, a dot before its name (as on the first login's list)
 	tab.pip = tab:CreateTexture(nil, "ARTWORK")
 	tab.pip:SetSize(6, 6)
 	tab.pip:SetPoint("LEFT", 14, 0)
@@ -234,7 +234,7 @@ W.LABELS = {
 	bagwindow = { "Bag window", "Flat bags, quality rings, and bag slots along the bottom" },
 	charsheet = { "Character sheet", "Item level on every slot you wear" },
 	chat = { "Chat", "Flat windows, short channel names and links you can copy" },
-	tooltips = { "Tooltips", "Two lines on players and NPCs, in the corner" },
+	tooltips = { "Tooltips", "Tags on players and NPCs, and an icon on items, spells and buffs" },
 	gamemenu = { "Game menu", "The menu Escape opens" },
 	dropdowns = { "Dropdown menus", "Dropdown and right-click menus" },
 	census = { "Record everyone you see", "Class, race, level, guild and zone of each player, for the charts" },
@@ -266,7 +266,11 @@ W.OPTIONS = {
 W.OPEN = {
 	ledger = function()
 		return {
+			-- the charts are the census's: without it, Open went to Find people
+			-- (UI/CensusWindow.lua), so the row is dimmed and its button off
+			-- (2026-10-17, audit)
 			{ label = "Charts", blurb = "Who is on your realm, by class, race, level and guild", button = "Open",
+				needs = function() return BT.GetModule("census") ~= nil and BT.Enabled("census") end,
 				run = function() return BT.CensusWindow and BT.CensusWindow.Show("charts") end },
 			{ label = "Find people", blurb = "By name, guild or a word you wrote", button = "Open",
 				run = function() return BT.CensusWindow and BT.CensusWindow.Show("find") end },
@@ -274,7 +278,7 @@ W.OPEN = {
 	end,
 	expedition = function()
 		return {
-			{ label = "Journal", blurb = "Or click its line in the dock, or type /bt expedition", button = "Open",
+			{ label = "Journal", blurb = "Or click its line in the dock", button = "Open",
 				run = function() return BT.ExpeditionWindow and BT.ExpeditionWindow.Show() end },
 		}
 	end,
@@ -338,42 +342,15 @@ local function header(panel, title, blurb)
 	panel.body = panel.view.content
 end
 
--- A JOURNAL'S LINE, IN ITS KEEPER'S VOICE (Josh 2026-10-04: "add a clever
--- description in the existing interfaces"; the name "right aligned and
--- prefixed with '- '"). For a Stack: it measures itself.
-local function quote(parent, text, by)
-	local f = CreateFrame("Frame", nil, parent)
-	f.text = f:CreateFontString(nil, "OVERLAY", "BeebModFontHighlight")
-	f.text:SetPoint("TOPLEFT", 2, 0)
-	f.text:SetPoint("TOPRIGHT", -2, 0)
-	f.text:SetJustifyH("LEFT")
-	f.text:SetWordWrap(true)
-	f.text:SetTextColor(0.76, 0.82, 0.80)
-	f.text:SetText(text or "")
-	f.by = f:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")
-	f.by:SetPoint("TOPRIGHT", f.text, "BOTTOMRIGHT", 0, -4)
-	f.by:SetJustifyH("RIGHT")
-	f.by:SetTextColor(0.50, 0.55, 0.53)
-	f.by:SetText(by and ("- " .. by) or "")
-	f.Measure = function(self)
-		local w = BT.Pill.Number(self:GetWidth(), 0)
-		if w <= 0 then
-			w = WINDOW_W - RAIL - PAD * 4
-		end
-		self.text:SetWidth(w - 4)
-		local h = BT.Pill.Number(self.text:GetStringHeight(), 14) + 4 + 14
-		self:SetHeight(h)
-		return h
-	end
-	return f
-end
+-- (A journal's page had its keeper's line at the top from 2026-10-04 until
+-- Josh 2026-10-18: "The RP is a bit too cheesy I think".)
 
 -- every row of the page you are on: its switch, and dimmed while what it
 -- belongs to is off. A row of the search's results says which feature it is
 -- in, and is hidden when it does not match.
 local function paintRows(panel)
 	for _, r in ipairs(panel.rows or {}) do
-		local fkey = r.feature or panel.feature
+		local fkey = r.ownFeature or r.feature or panel.feature
 		local featureOn = not fkey or BT.FeatureOn(fkey)
 		local on = true
 		if r.get then
@@ -386,7 +363,21 @@ local function paintRows(panel)
 			local ok, v = pcall(under.get)
 			underOn = ok and v and true or false
 		end
-		r:SetAlpha((featureOn and underOn) and 1 or 0.45)
+		-- a button that works only while something else is on (`needs`): dimmed,
+		-- and not to be pressed, while it is off (2026-10-17, audit)
+		local needsOn = true
+		if r.needs then
+			local ok, v = pcall(r.needs)
+			needsOn = ok and v and true or false
+			if r.go and r.go.Enable and r.go.Disable then
+				if needsOn then
+					r.go:Enable()
+				else
+					r.go:Disable()
+				end
+			end
+		end
+		r:SetAlpha((featureOn and underOn and needsOn) and 1 or 0.45)
 		if r.live ~= nil or r.match ~= nil then
 			r:SetShown(r.match ~= false and (r.live == nil or r.live()))
 		end
@@ -425,7 +416,7 @@ local function addRow(panel, section, spec, indent, sub)
 		r = Wd.Row(section, spec.label, spec.blurb or "", opts)
 	end
 	r.get, r.spec = spec.get, spec
-	r.module, r.live = spec.module, spec.live
+	r.module, r.live, r.needs = spec.module, spec.live, spec.needs
 	panel.rows[#panel.rows + 1] = r
 	return r
 end
@@ -523,6 +514,10 @@ local function dockRows(panel, sec, indent, gripped)
 			if ok and type(spec) == "table" then
 				spec.live = function() return W.DockPageLive(m.key) end
 				local r = addRow(panel, sec, spec, indent)
+				-- dimmed by its own feature, not the Dock's: the line stays in
+				-- the dock with the Dock off (Josh 2026-10-18, UI/Dock.lua
+				-- B.OwnLine)
+				r.ownFeature = BT.FeatureOf(m)
 				if gripped then
 					W.Grip(panel, r, m.key)
 				end
@@ -560,9 +555,6 @@ local function featurePage(panel, fkey)
 	panel.enableWord:SetPoint("RIGHT", panel.enable, "LEFT", -8, 0)
 	local st = BT.Widgets.Stack(panel.body)
 	panel.stack = st
-	if f.quote then
-		panel.quote = st:Add(quote(panel.body, f.quote, f.by))
-	end
 	if fkey == "dock" then
 		dockSection(panel, st)
 	else
@@ -746,6 +738,20 @@ function W.Grip(panel, row, key)
 		W.MarkDrop(panel, nil)
 		W.Drop(panel, self, key)
 	end)
+	-- PUT AWAY MID-DRAG (2026-10-17, audit). Escape, or the window closing,
+	-- while a row was dragged sent no OnDragStop: the row kept moving, the
+	-- line stayed up and the update ran every frame. Hidden, the drag lets
+	-- go, nothing moves in the dock, and the rows go back in its order.
+	row:HookScript("OnHide", function(self)
+		if not self.dragging then
+			return
+		end
+		self.dragging = false
+		self:SetScript("OnUpdate", nil)
+		self:StopMovingOrSizing()
+		W.MarkDrop(panel, nil)
+		W.Reorder(panel)
+	end)
 end
 
 -- the Testing page: things to look at, and things to ask
@@ -757,11 +763,16 @@ local function testingPage(body)
 	-- MADE-UP DATA (Josh 2026-09-27: "mock some data for me so we can show off
 	-- all the features/designs"): every feature at once, for screenshots -
 	-- nothing saved, and off again after a reload (Core/Demo.lua)
-	body.demoRow = Wd.SwitchRow(look, "Made-up data", "A made-up realm, notes, journal and party. None of it is saved.",
+	body.demoRow = Wd.SwitchRow(look, "Made-up data", "A made-up realm, notes, journal and buffs. None of it is saved.",
 		function() return BT.Demo and BT.Demo.IsOn() or false end,
 		function(on)
 			if BT.Demo then
 				BT.Demo.Set(on)
+				-- a feature that could not make its part up says so, as /bt
+				-- demo did before the commands went (Josh 2026-10-18)
+				for _, line in ipairs(BT.Demo.failed or {}) do
+					U.Print("Made-up data failed for " .. line)
+				end
 			end
 		end)
 	-- the unit frames' made-up group (Modules/UnitFrames/UnitFrames.lua)
@@ -791,9 +802,9 @@ local function testingPage(body)
 				B.Preview(on)
 			end
 		end)
-	-- THE FIRST LOGIN (Josh 2026-09-25; five cards since 2026-10-04): the
-	-- question a fresh install is asked, to see again
-	local first = Wd.Row(look, "First login", "The five cards a new install shows, one switch for each feature")
+	-- THE FIRST LOGIN (Josh 2026-09-25; a list with pictures since
+	-- 2026-10-18): the question a fresh install is asked, to see again
+	local first = Wd.Row(look, "First login", "The window a new install shows, with a switch for each feature")
 	body.firstButton = first:SetControl(Wd.Button(first, "Show", 62, 20))
 	body.firstButton:SetScript("OnClick", function()
 		if BT.Welcome then
@@ -813,8 +824,8 @@ local function testingPage(body)
 			end
 		end
 	end)
-	-- and a new rank's, with its badge (Josh 2026-09-29) and its keeper's
-	-- word (2026-10-05): each journal's, one after the other
+	-- and a new rank's, with its badge (Josh 2026-09-29): each journal's, one
+	-- after the other
 	local rankToast = Wd.Row(look, "Rank toasts", "Your ranks, shown as if you had just reached them")
 	body.rankToastButton = rankToast:SetControl(Wd.Button(rankToast, "Show", 62, 20))
 	body.rankToastButton:SetScript("OnClick", function()
@@ -900,6 +911,52 @@ local function testingPage(body)
 		run:SetScript("OnClick", c[4])
 		body[c[1]] = run
 	end
+	-- ANOTHER BOOK, MOVED IN (Josh 2026-10-18: "I actually never use the
+	-- slash commands. I'd be fine with removing these (and the others) unless
+	-- we are using them internally or for debug."). What /bt books and /bt
+	-- adopt did: a row for each other book in the saved file with characters
+	-- in it, and a button that moves them into this realm's book
+	-- (BT.AdoptBook). The rows are read again when the page is shown and
+	-- after a move. With no other book, the section is not shown.
+	local others = st:Section("Other books")
+	body.bookRows = {}
+	local function fillBooks()
+		local n = 0
+		for _, b in ipairs(BT.OtherBooks()) do
+			if b.n > 0 then
+				n = n + 1
+				local blurb = ("Moves its %s %s into this realm's book"):format(U.Commas(b.n),
+					b.n == 1 and "character" or "characters")
+				local row = body.bookRows[n]
+				if not row then
+					row = Wd.Row(others, b.name, blurb)
+					row.move = row:SetControl(Wd.Button(row, "Move in", 62, 20))
+					row.move:SetScript("OnClick", function(self)
+						local done = BT.AdoptBook(self.book)
+						if done then
+							U.Print(("Ledger: moved in %s · %s new · %s already here"):format(self.name,
+								U.Commas(done.added), U.Commas(done.folded)))
+						else
+							U.Print(("Ledger: %s is no longer in the saved file."):format(self.name))
+						end
+						body.fillBooks()
+						W.Refresh()
+					end)
+					body.bookRows[n] = row
+				end
+				row.label:SetText(b.name)
+				row.blurb:SetText(blurb)
+				row.move.book, row.move.name = b.key, b.name
+				row:Show()
+			end
+		end
+		for i = n + 1, #body.bookRows do
+			body.bookRows[i]:Hide()
+		end
+		st:Layout()
+	end
+	body.fillBooks = fillBooks
+	fillBooks()
 	-- RECORDS FOR CLAUDE (Josh 2026-09-28): what the frame dumps, the unit
 	-- probe and /bt cpu wrote into the saved file, from three buttons. Each
 	-- module's record is registered with BT.Record (Core/Init.lua).
@@ -932,53 +989,10 @@ local function testingPage(body)
 		local m = BT.GetModule("unitframes")
 		body.peopleSeg:Select(m and m.previewing or "off")
 		Wd.SyncRows()
+		fillBooks()
 	end)
 	body.peopleSeg:Select("off")
 	st:Layout()
-end
-
--- the picture of a feature: its screenshot, or its colour and name until
--- there is one (BT.FEATURES[n].art)
-local PIC_W, PIC_H = 320, 180
--- the picture is the left 455 of a 512-wide texture (a power of two each
--- way): scripts/make-feature-art.ps1
-local FEATURE_ART_U = 455 / 512
-function W.Picture(parent, f, w, h)
-	w, h = w or PIC_W, h or PIC_H
-	local pic = CreateFrame("Frame", nil, parent)
-	pic:SetSize(w, h)
-	local c = f.color or { 0.6, 0.6, 0.6 }
-	pic.fill = pic:CreateTexture(nil, "BACKGROUND")
-	pic.fill:SetAllPoints()
-	pic.fill:SetColorTexture(c[1] * 0.18, c[2] * 0.18, c[3] * 0.18, 0.95)
-	pic.art = pic:CreateTexture(nil, "ARTWORK")
-	pic.art:SetAllPoints()
-	pic.name = pic:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
-	pic.name:SetPoint("CENTER", 0, 0)
-	pic.name:SetText(f.title)
-	pic.name:SetTextColor(c[1], c[2], c[3])
-	if f.art then
-		pic.art:SetTexture(f.art)
-		pic.art:SetTexCoord(0, FEATURE_ART_U, 0, 1)
-		pic.name:Hide()
-	else
-		pic.art:Hide()
-	end
-	-- TWO PICTURES, SIDE BY SIDE (the Census and the Ledger, one feature since
-	-- 2026-10-04): the left half of each, until there is one of both
-	if f.art and f.art2 then
-		pic.art:ClearAllPoints()
-		pic.art:SetPoint("TOPLEFT", 0, 0)
-		pic.art:SetPoint("BOTTOMRIGHT", pic, "BOTTOM", -1, 0)
-		pic.art:SetTexCoord(0, FEATURE_ART_U / 2, 0, 1)
-		pic.art2 = pic:CreateTexture(nil, "ARTWORK")
-		pic.art2:SetPoint("TOPLEFT", pic, "TOP", 1, 0)
-		pic.art2:SetPoint("BOTTOMRIGHT", 0, 0)
-		pic.art2:SetTexture(f.art2)
-		pic.art2:SetTexCoord(0, FEATURE_ART_U / 2, 0, 1)
-	end
-	pic.rim = BT.Pill.Panel and select(2, BT.Pill.Panel(pic, { 0, 0, 0, 0 }, BT.Widgets.HAIR))
-	return pic
 end
 
 -- ---------------------------------------------------------------------------
@@ -1029,7 +1043,7 @@ local function panelFor(key)
 	panel:SetAllPoints()
 	panel:Hide()
 	panels[key] = panel
-	header(panel, f.title, f.blurb or f.line)
+	header(panel, f.title, f.blurb)
 	featurePage(panel, key)
 	return panel
 end
@@ -1541,8 +1555,8 @@ function W.Build()
 	frame.subtitle:SetPoint("LEFT", frame.title, "RIGHT", 8, -1)
 	W.UpdateSubtitle()
 
-	-- THE WAY OUT (Josh 2026-09-21): Escape closes this and so does the cog
-	-- that opened it, and so does this
+	-- THE WAY OUT (Josh 2026-09-21): Escape closes this, and so does this.
+	-- (The dock's cog only opens it - UI/Dock.lua - 2026-10-17, audit.)
 	frame.close = BT.Widgets.Close(frame, 20)
 	frame.close:SetPoint("TOPRIGHT", -PAD, -PAD)
 	frame.close:SetScript("OnClick", function() W.Hide() end)
@@ -1602,18 +1616,21 @@ function W.UpdateSubtitle()
 	if BT.DB and BT.db then
 		-- counted from the list alone: reading each character to count them
 		-- was a long frame on a big book every time the window opened
-		where = ("%s · %s characters"):format(where, BT.Util.Commas((BT.DB.Count(BT.db))))
+		-- "1 character", not "1 characters" (2026-10-17, audit)
+		local n = (BT.DB.Count(BT.db))
+		where = ("%s · %s %s"):format(where, BT.Util.Commas(n), n == 1 and "character" or "characters")
 	end
 	frame.subtitle:SetText(where)
 end
 
--- the version, and whether the book came back the way it should
+-- the version. THE VERSION ALONE (2026-10-17, audit): "saved ok" beside it
+-- told the baked book from the saved one, and the baked book is gone, so it
+-- said "saved ok" whatever happened.
 function W.UpdateFoot()
 	if not (rail and rail.foot) then
 		return
 	end
-	rail.foot:SetText(("%s · %s"):format(BT.VERSION or "?",
-		BT.bakedTaken and "loaded from file" or "saved ok"))
+	rail.foot:SetText(BT.VERSION or "?")
 end
 
 local refreshing = false

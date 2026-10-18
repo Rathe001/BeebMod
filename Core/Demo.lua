@@ -4,11 +4,14 @@
 -- ONE SWITCH, NOTHING SAVED. While it is on, each feature shows a made-up
 -- world instead of yours: a realm's worth of characters in the census, notes
 -- on a dozen of them (and on you) in the ledger, a journal of enemies at every
--- rank and mastery in the Expedition, a party on the unit frames. Each
+-- rank and mastery in the Expedition, a full buff tray (the made-up party is
+-- the Made-up people row's alone, Modules/UnitFrames/Demo.lua). Each
 -- feature makes its own (it registers here), so a feature that is off - or
 -- not there - simply has nothing to show. Nothing is written into your saved
 -- books; the switch is off again after a reload, and switching it off puts
--- everything back as it was.
+-- everything back as it was. The switch is Made-up data on the Testing page
+-- (UI/Window.lua). /bt demo went with the other commands (Josh 2026-10-18:
+-- "I actually never use the slash commands...", Core/Slash.lua).
 --
 --   BT.Demo.Register(key, { on = fn, off = fn, world = fn })
 --     on/off   swap your data out and back in
@@ -16,7 +19,6 @@
 --   BT.Demo.People(n)   the same made-up people for every feature that asks
 local _, BT = ...
 
-local U = BT.Util
 local D = { on = false, parts = {} }
 BT.Demo = D
 
@@ -213,21 +215,3 @@ end
 BT.OnWorld(function()
 	D.World()
 end)
-
-BT.Command("demo", function(rest)
-	local want = (rest or ""):lower()
-	local on
-	if want == "on" then
-		on = true
-	elseif want == "off" then
-		on = false
-	else
-		on = not D.on
-	end
-	D.Set(on)
-	U.Print(D.on and "Made-up data is on. BeebMod saves none of it. Type /bt demo off to see your own again."
-		or "Made-up data is off. Your own data is back.")
-	for _, line in ipairs(D.failed or {}) do
-		U.Print("|cffff6b6bCould not make up data for|r " .. line)
-	end
-end, "demo [on|off] - show made-up data in every feature, for screenshots. BeebMod saves none of it.")

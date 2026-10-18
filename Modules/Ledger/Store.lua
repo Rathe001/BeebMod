@@ -394,11 +394,13 @@ end
 N.MAX_NOTE = 140
 
 -- characters, not bytes: an accented letter is two bytes and one letter
+-- AND "||" IS ONE (2026-10-17, audit): the game hands back a "|" typed in a
+-- box as two, and the reader sees one
 function N.Length(text)
 	if type(text) ~= "string" then
 		return 0
 	end
-	return #(text:gsub("[\128-\191]", ""))
+	return #(text:gsub("[\128-\191]", ""):gsub("||", "|"))
 end
 
 -- the most a note on this row may hold: the limit, or the old note's length
@@ -407,22 +409,25 @@ function N.Room(p)
 end
 
 -- `text` cut to `most` characters, never through the middle of one
+-- NOR BETWEEN THE TWO HALVES OF "||" (2026-10-17, audit): a cut there left
+-- a lone "|", which the game reads as the start of a code
 function N.Clip(text, most)
 	if N.Length(text) <= most then
 		return text
 	end
-	local n, cut = 0, #text
-	for i = 1, #text do
+	local n, i, len = 0, 1, #text
+	while i <= len do
 		local b = text:byte(i)
 		if b < 128 or b >= 192 then
 			n = n + 1
 			if n > most then
-				cut = i - 1
-				break
+				return text:sub(1, i - 1)
 			end
 		end
+		-- "||" is one letter, two bytes long
+		i = i + ((b == 124 and text:byte(i + 1) == 124) and 2 or 1)
 	end
-	return text:sub(1, cut)
+	return text
 end
 
 function N.SetNote(key, text, info)
@@ -495,7 +500,7 @@ N.Caseless = caseless
 -- words anywhere in a guild or a note, as the census's search reads them.
 -- query = { text, class, guild, tag, mineOnly, limit, minLevel, maxLevel }
 -- (mineOnly: only the people you wrote on, not the ones you only grouped with)
--- Returns { { key, p } }, the latest written first.
+-- Returns { { key, p, named } }, a name match first, then the latest written.
 function N.Search(query)
 	query = query or {}
 	local text = (type(query.text) == "string" and query.text ~= "") and query.text:lower() or nil
@@ -504,9 +509,10 @@ function N.Search(query)
 	local found = {}
 	for key, p in N.Each() do
 		local name = p.name or key
-		local ok = true
+		local ok, named = true, true
 		if text then
-			ok = name:find(given) ~= nil or name:find(surname) ~= nil
+			named = name:find(given) ~= nil or name:find(surname) ~= nil
+			ok = named
 				or (p.guild ~= nil and p.guild ~= "" and p.guild:lower():find(text, 1, true) ~= nil)
 				or (p.note ~= nil and p.note:lower():find(text, 1, true) ~= nil)
 		end
@@ -517,10 +523,15 @@ function N.Search(query)
 		if ok and query.minLevel and (p.level or 0) < query.minLevel then ok = false end
 		if ok and query.maxLevel and (p.level or 0) > query.maxLevel then ok = false end
 		if ok then
-			found[#found + 1] = { key = key, p = p }
+			found[#found + 1] = { key = key, p = p, named = named }
 		end
 	end
+	-- the ones whose name the words begin first, as the census's search
+	-- (Core/DB.lua, DB.Search)
 	table.sort(found, function(a, b)
+		if a.named ~= b.named then
+			return a.named
+		end
 		local an, bn = a.p.noted or a.p.last or 0, b.p.noted or b.p.last or 0
 		if an ~= bn then
 			return an > bn
@@ -621,61 +632,4 @@ function N.Move()
 	end
 	N.movedOnLoad = moved > 0 and moved or nil
 	return moved
-end
-
--- ---------------------------------------------------------------------------
--- NAMES FROM A COMMAND
--- ---------------------------------------------------------------------------
-
--- your target, when it is a player: its key, its name and what it says
-function N.Target()
-	local key, info = N.Face("target")
-	if not key then
-		return nil
-	end
-	return key, info.name, info
-end
-
--- someone this book or the census knows by `key`
-local function known(key)
-	return key and (N.Get(key) or census(key)) and true or false
-end
-
--- Pulls a character off the front of a command (Josh 2026-09-18). Names have
--- two parts here, so "note Beeb Bob solid tank" has to read as Beeb Bob and
--- "solid tank", not as Beeb and "Bob solid tank". The longest thing that is
--- someone you know wins, then your target - which is how you use this
--- anyway, right after meeting someone.
---   /bt note "Beeb Bob" text     quotes win outright
---   /bt note Beeb Bob text       two words, when Beeb Bob is known
---   /bt note Beeb text           one word, when Beeb is known
---   /bt note text                your target
--- Returns key, the rest, the name, and what the target said (for a new row).
-function N.WhoAndRest(rest)
-	local quoted, qtail = rest:match('^"([^"]+)"%s*(.*)$')
-	if quoted then
-		local key, full = U.Key(quoted)
-		if key then
-			return key, qtail, full
-		end
-	end
-	local w1, w2, tail2 = rest:match("^(%S+)%s+(%S+)%s*(.*)$")
-	if w1 and w2 then
-		local key, full = U.Key(w1 .. " " .. w2)
-		if known(key) then
-			return key, tail2, full
-		end
-	end
-	local w, tail = rest:match("^(%S+)%s*(.*)$")
-	if w then
-		local key, full = U.Key(w)
-		if known(key) then
-			return key, tail, full
-		end
-	end
-	local key, tname, info = N.Target()
-	if key then
-		return key, rest, tname, info
-	end
-	return nil
 end

@@ -11,7 +11,10 @@
 --                target, focus, mouseover, the soft target, the group's
 --                targets), a few times a second: an enemy we saw alive, with
 --                the tag ours (UnitIsTapDenied false) and us on its threat,
---                that is then dead, is ours
+--                that is then dead, is ours. So is one that died to its first
+--                hit, before it had us on its threat: your target, its tag
+--                not somebody else's, with a spell or a swing of yours just
+--                before it fell (K.Struck)
 --   the XP line  "Prideclaw dies, you gain 50 experience." - the client's own
 --                word that the kill was ours, for an enemy we watched alive and
 --                then lost sight of. It names the enemy and nothing else, so it
@@ -50,8 +53,21 @@ local XP_WINDOW = 15
 -- an enemy out of sight this long is forgotten
 local FORGET = 300
 
+-- how long before a death a spell or a swing of yours still counts as the
+-- blow that killed it (K.Struck)
+--
+-- THREE SECONDS, FOR WHAT FLIES (Josh 2026-10-18: "Killing a level 1
+-- squirrel did not register on the Expedition"). It was a second and a half,
+-- counted from the end of the cast. Wrath and Shadow Bolt fly at about 20
+-- yards a second, so one cast from 30 yards lands a second and a half after
+-- the cast ends, and the look that sees the corpse comes up to a fifth of a
+-- second after that.
+local STRUCK = 3
+K.STRUCK = STRUCK
+
 -- what went where, for the tests to read
-K.stats = { watched = 0, dead = 0, xp = 0, loot = 0, notOurs = 0, xpUnmatched = 0, looks = 0, lookMisses = 0 }
+K.stats = { watched = 0, dead = 0, struck = 0, xp = 0, loot = 0, notOurs = 0, xpUnmatched = 0, looks = 0,
+	lookMisses = 0 }
 
 local function secret(v)
 	return issecretvalue ~= nil and issecretvalue(v) and true or false
@@ -230,6 +246,11 @@ function K.Count(guid, w, how)
 		return false
 	end
 	counted[guid] = true
+	for i = #K.misses, 1, -1 do
+		if K.misses[i].guid == guid then
+			table.remove(K.misses, i)
+		end
+	end
 	w.counted = true
 	w.countedAt = now()
 	K.stats[how] = (K.stats[how] or 0) + 1
@@ -244,6 +265,72 @@ end
 -- there to say otherwise, and neither comes for somebody else's kill.
 function K.Ours(w)
 	return w.denied ~= true and w.engaged == true
+end
+
+-- is this GUID your target (or the soft target your spells go to)?
+local function targeted(guid)
+	for _, u in ipairs({ "target", "softenemy" }) do
+		local g = UnitGUID and UnitGUID(u)
+		if not secret(g) and g == guid then
+			return true
+		end
+	end
+	return false
+end
+
+-- A KILL IN ONE BLOW (2026-10-17, audit). An enemy is on your threat only
+-- once you have hit it, so one that dies to the first hit is never seen
+-- alive with you on it, and its death went to notOurs. Below the level cap
+-- the XP line still counted it, but a critter, a grey enemy and every kill
+-- at 60 give no XP line, and the loot only helps if you loot. So a corpse is
+-- also yours when all of these hold: it was seen alive, its tag was not
+-- somebody else's when last read (nor is the corpse's, where the game says),
+-- it was your target or soft target, and you cast a spell or were swinging
+-- in the last STRUCK seconds. Anything less is left to the XP line and the
+-- loot: a kill missed is better than somebody else's counted.
+--
+-- THE CORPSE'S TAG IS NOT ASKED (Josh 2026-10-18, the squirrel). What the
+-- game says of a dead critter's tag was never measured, and it is the one
+-- answer here nobody had seen. The tag read while it was alive still
+-- decides. What the corpse said is kept with the reason a death was not
+-- counted (K.misses), so a kill that goes missing says why.
+function K.Struck(w, unit, guid, t)
+	if not w.alive then
+		return false, "never seen alive"
+	end
+	if w.denied == true then
+		return false, "somebody else's tag"
+	end
+	if not ((w.targetedAt and t - w.targetedAt <= STRUCK) or targeted(guid)) then
+		return false, "not your target"
+	end
+	local cast = K.castAt and t - K.castAt <= STRUCK
+	local swing = K.swinging or (K.swungAt and t - K.swungAt <= STRUCK)
+	if cast or swing then
+		return true
+	end
+	return false, ("no spell or swing of yours in the %d seconds before"):format(STRUCK)
+end
+
+-- THE LAST FEW OF YOUR TARGETS' DEATHS NOT COUNTED, AND WHY (Josh
+-- 2026-10-18): for the Testing page's report (Expedition.lua, M.Status).
+-- Deaths of enemies you never targeted are somebody else's fights and are
+-- left out; one counted later by its XP line or its loot leaves the list.
+K.misses = {}
+K.MISSES = 5
+function K.Missed(guid, w, unit, why)
+	if why == "not your target" then
+		return false
+	end
+	local tag = UnitIsTapDenied and UnitIsTapDenied(unit)
+	if secret(tag) then
+		tag = nil
+	end
+	table.insert(K.misses, 1, { guid = guid, name = w.name, why = why, corpseTag = tag })
+	while #K.misses > K.MISSES do
+		table.remove(K.misses)
+	end
+	return true
 end
 
 -- One look at a unit token.
@@ -297,6 +384,10 @@ function K.Observe(unit, t)
 	end
 	t = t or now()
 	w.t = t
+	-- your target at this look (K.Struck)
+	if unit == "target" or unit == "softenemy" then
+		w.targetedAt = t
+	end
 	if not w.learnt then
 		learn(w, unit)
 		-- every fact in hand: nothing more to ask this enemy
@@ -310,7 +401,7 @@ function K.Observe(unit, t)
 	if not dead then
 		w.alive = true
 		local denied = UnitIsTapDenied and UnitIsTapDenied(unit)
-		if denied ~= nil and not secret(denied) then
+		if not secret(denied) and denied ~= nil then
 			w.denied = denied and true or false
 		end
 		local threat = UnitThreatSituation and UnitThreatSituation("player", unit)
@@ -323,7 +414,7 @@ function K.Observe(unit, t)
 		-- no readable threat: in combat, and so are we
 		if not w.byThreat and w.threatHidden then
 			local a, b = UnitAffectingCombat(unit), UnitAffectingCombat("player")
-			if a and b and not secret(a) and not secret(b) then
+			if not secret(a) and not secret(b) and a and b then
 				w.engaged = true
 			end
 		end
@@ -331,10 +422,17 @@ function K.Observe(unit, t)
 		w.dead = t
 		-- a corpse we never saw standing is somebody's, but we cannot say whose
 		if w.alive then
+			local struck, why
+			if not K.Ours(w) then
+				struck, why = K.Struck(w, unit, guid, t)
+			end
 			if K.Ours(w) then
 				K.Count(guid, w, "dead")
+			elseif struck then
+				K.Count(guid, w, "struck")
 			else
 				K.stats.notOurs = K.stats.notOurs + 1
+				K.Missed(guid, w, unit, why)
 			end
 		end
 	end
@@ -492,8 +590,9 @@ local function isGathering(spellID)
 end
 
 -- a spell you cast (UNIT_SPELLCAST_SUCCEEDED): Pick Pocket, by its id or by
--- its name in any rank
+-- its name in any rank. Any spell is a blow struck (K.Struck).
 function K.Cast(spellID, t)
+	K.castAt = t or now()
 	local isPick = spellID == PICK_POCKET
 	if not isPick and type(GetSpellInfo) == "function" then
 		if not pickName then
@@ -509,6 +608,19 @@ function K.Cast(spellID, t)
 		K.gatheredAt = t or now()
 	end
 	return isPick
+end
+
+-- your auto-attack switched on or off (PLAYER_ENTER_COMBAT and
+-- PLAYER_LEAVE_COMBAT): a swing is a blow struck (K.Struck). It goes off
+-- when the target dies, often before the look that sees the corpse, so when
+-- it went off is kept.
+function K.Swing(on, t)
+	if on then
+		K.swinging = true
+	else
+		K.swinging = nil
+		K.swungAt = t or now()
+	end
 end
 
 -- is somebody picking this pocket? (then the loot is a living enemy's)
@@ -657,4 +769,7 @@ function K.Reset(set)
 	for guid in pairs(notEnemies) do
 		notEnemies[guid] = nil
 	end
+	-- an auto-attack left on across a loading screen or the switch is not
+	-- one now (K.Swing)
+	K.swinging = nil
 end

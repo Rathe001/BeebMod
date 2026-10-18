@@ -40,11 +40,10 @@ function M:Refresh()
 end
 
 -- Nothing on the dock: the census is something you go and look at, not
--- something you watch while you play.
-
-BT.Command("census", function()
-	BT.CensusWindow.Toggle("charts")
-end, "open the Ledger's charts", "census")
+-- something you watch while you play. The Charts row on the Ledger's page
+-- in settings opens them, and the Ledger's line in the dock opens the window
+-- they are in (/bt census went on 2026-10-18, with the other commands:
+-- Core/Slash.lua).
 
 -- WAS IN A GUILD (moved from the Ledger's tooltip, Josh 2026-09-26): a guild
 -- change is the census's to know, so it says so itself, for anyone in the

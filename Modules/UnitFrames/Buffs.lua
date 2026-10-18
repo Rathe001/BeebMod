@@ -15,7 +15,8 @@
 -- in a fight an addon may not read an aura at all, so each row is the client's
 -- aura containers, told "player", a filter and an order, filling buttons we
 -- describe - the unit frames' icon, with the time left as a thin bar inside it
--- and as words under it, both kept by the client. A row is two containers:
+-- and as words under it, both kept by the client. The buffs' row is two
+-- containers:
 --   * timed: every aura with a duration (a duration cap keeps permanent ones
 --     out - the client's own filter), longest first from the right, so the
 --     soonest ends up at the far left
@@ -23,6 +24,14 @@
 --     duration", so which spells those are is learned out of a fight, when
 --     auras can be read, and a few that are always permanent (stances, forms,
 --     stealth, aspects, auras) are known from the start
+-- THE DEBUFFS' ROW IS ONE (2026-10-17, audit). The client will not filter
+-- your debuffs by spell (Blizzard_AuraContainerUtil.lua,
+-- CanApplyIdentityCandidateFilters: no spell filter for a harmful aura on a
+-- unit you can help), so a permanent container there showed nothing, the
+-- timed one's cap kept a debuff with no duration out as well, and the count
+-- of them still moved the timed ones left. One container with no cap holds
+-- them all; the client sorts the permanent ones after the timed, which from
+-- the right is against the dock.
 --
 -- THE SURFACE follows the timed container where the client lets it (a
 -- container sizes itself to its icons, in a fight too, where the addon cannot
@@ -103,16 +112,23 @@ local function plainNumber(v)
 	return type(v) == "number" and not (issecretvalue and issecretvalue(v)) and v or nil
 end
 
+-- THE CLIENT'S OWN BANDS (2026-10-17, audit): an enchant's time is written
+-- as the client writes an aura's beside it (Blizzard_AuraContainerShared.lua,
+-- DefaultAuraDurationFormatter): seconds up to 90 seconds, minutes up to 90
+-- minutes, hours up to a day and a half, and cut down, not rounded
 local function timeWords(sec)
 	if type(sec) ~= "number" then
 		return ""
 	end
-	if sec >= 3600 then
-		return ("%d h"):format(math.floor(sec / 3600 + 0.5))
-	elseif sec >= 60 then
-		return ("%d m"):format(math.floor(sec / 60 + 0.5))
+	sec = math.max(0, sec)
+	if sec >= 1 + 1.5 * 86400 then
+		return ("%d d"):format(math.floor(sec / 86400))
+	elseif sec >= 1 + 1.5 * 3600 then
+		return ("%d h"):format(math.floor(sec / 3600))
+	elseif sec >= 1 + 1.5 * 60 then
+		return ("%d m"):format(math.floor(sec / 60))
 	end
-	return ("%d s"):format(math.max(0, math.floor(sec + 0.5)))
+	return ("%d s"):format(math.floor(sec))
 end
 B.TimeWords = timeWords
 
@@ -308,12 +324,15 @@ function B.Build()
 		row.surface:SetFrameLevel((real:GetFrameLevel() or 1) + 1)
 		BT.Widgets.Panel(row.surface)
 		-- the permanent ones, A to Z reading left to right: from the right
-		-- edge that is Z first
-		row.perm = trayContainer(real, "perm", spec.filter, B.PERM_MAX, B.PermFilter(spec.filter), byName, reverse,
-			spec.harmful)
-		-- the timed ones, longest first from the right: the soonest far left
-		row.timed = trayContainer(real, spec.key, spec.filter, spec.max, { maxDuration = B.TIMED_MAX }, byTime, reverse,
-			spec.harmful)
+		-- edge that is Z first (buffs only: see the top of this file)
+		if not spec.harmful then
+			row.perm = trayContainer(real, "perm", spec.filter, B.PERM_MAX, B.PermFilter(spec.filter), byName, reverse,
+				spec.harmful)
+		end
+		-- the timed ones, longest first from the right: the soonest far left;
+		-- the debuffs' permanent ones with them, against the dock
+		row.timed = trayContainer(real, spec.key, spec.filter, spec.max,
+			not spec.harmful and { maxDuration = B.TIMED_MAX } or nil, byTime, reverse, spec.harmful)
 		for _, pair in ipairs({ { row.perm, row.permPin }, { row.timed, row.timedPin } }) do
 			local c = pair[1]
 			if c then
@@ -485,7 +504,11 @@ function B.Update(enchantsOnly)
 	if not enchantsOnly then
 		for _, row in ipairs(B.rows) do
 			local r = B.Read(row.spec.filter)
-			if r then
+			if r and row.spec.harmful then
+				-- one container, permanent and timed together
+				row.permCount = 0
+				row.timedCount = math.min(r.perm + r.timed, row.spec.max)
+			elseif r then
 				learn(row, r.ids)
 				row.permCount = math.min(r.perm, B.PERM_MAX)
 				row.timedCount = math.min(r.timed, row.spec.max)
@@ -738,12 +761,15 @@ end
 
 function M:OnEnable()
 	M.live = true
-	-- a tray that fails is said, and the game's bar is left where it is
+	-- a tray that fails is said, and the game's bar is left where it is; the
+	-- error itself goes to the log What loaded prints (2026-10-17, audit: it was
+	-- printed raw into chat)
 	local ok, err = pcall(B.SetShown, true)
 	if not ok then
 		if not M.failed then
 			M.failed = tostring(err)
-			U.Print("Buffs: BeebMod couldn't make the buff tray. " .. M.failed)
+			BT.Err("buffs: " .. M.failed)
+			U.Print("Buffs: BeebMod couldn't make the buff tray, so the game's own buffs stay.")
 		end
 		return
 	end

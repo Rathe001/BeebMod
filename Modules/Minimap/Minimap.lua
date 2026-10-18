@@ -95,10 +95,9 @@ local CHROME = {
 	"MinimapZoomIn", "MinimapZoomOut",
 	"MinimapCompassTexture", "MinimapBackdrop",
 	"MiniMapMailBorder", "TimeManagerClockButton",
-	-- THE ADDON COMPARTMENT (Josh 2026-09-22): the client's menu of addons,
-	-- showing how many it holds - "0", on its own line, for someone with none.
-	-- Addons that register in it have their buttons in the Addon buttons line.
-	"AddonCompartmentFrame",
+	-- (The addon compartment was put away here from 2026-09-22, for the "0"
+	-- it showed with no addon in it. It is in the Addon buttons line now:
+	-- Modules/Buttons/Buttons.lua, Josh 2026-10-18.)
 }
 
 -- WHAT IS FURNITURE AND WHAT IS INFORMATION (Josh 2026-09-21). The first pass
@@ -181,7 +180,14 @@ local function put(thing, away)
 			pcall(thing.Hide, thing)
 		end
 	else
-		local h = hidden[thing] or {}
+		-- NOTHING RECORDED, NOTHING TO GIVE BACK (2026-10-17, audit). The
+		-- module can be switched off when it is already stopped (its feature
+		-- off first), and showing what was never put away showed the
+		-- compartment's "0", a clock or cluster art the client had hidden.
+		local h = hidden[thing]
+		if h == nil then
+			return false
+		end
 		if thing.SetParent and h.parent then
 			pcall(thing.SetParent, thing, h.parent)
 		end
@@ -285,11 +291,11 @@ function M.Build()
 end
 
 -- the colours the client paints its own zone caption in, by who holds the
--- ground under you
+-- ground under you. Its Minimap_Update has no colour for "combat" and
+-- writes it gold, so it has none here either (2026-10-17, audit).
 local GROUND = {
 	sanctuary = { 0.41, 0.80, 0.94 },
 	arena = { 1.0, 0.1, 0.1 },
-	combat = { 1.0, 0.1, 0.1 },
 	hostile = { 1.0, 0.1, 0.1 },
 	friendly = { 0.1, 1.0, 0.1 },
 	contested = { 1.0, 0.7, 0.0 },
@@ -351,7 +357,11 @@ function M.Caption()
 	M.coordText:Show()
 	local zone = call(_G.GetMinimapZoneText) or call(_G.GetZoneText) or ""
 	M.zoneText:SetText(zone)
-	local c = GROUND[call(_G.GetZonePVPInfo) or ""] or UNCLAIMED
+	-- C_PvP's (2026-10-17, audit): this client's API defines the call only
+	-- there, and its own Minimap_Update asks that one
+	local pvp = _G.C_PvP
+	local ground = (type(pvp) == "table" and pvp.GetZonePVPInfo) or _G.GetZonePVPInfo
+	local c = GROUND[call(ground) or ""] or UNCLAIMED
 	M.zoneText:SetTextColor(c[1], c[2], c[3])
 	M.Coords()
 end
@@ -943,6 +953,29 @@ function M.Shrink(f, map, size)
 	return true
 end
 
+-- AN ICON IN THE ROW IS SCALED, NOT SIZED (2026-10-17, audit). Sized to 18
+-- by 18, the day/night dial's ring shrank with its frame, and the sun inside
+-- it, sized by its own atlas, stayed 33 across and stuck out of the ring.
+-- Scaled, all it draws comes down together. Only down; a frame with no size
+-- yet is given the slot's.
+function M.FitIcon(f, size)
+	local ok, w, h = pcall(function()
+		return f:GetWidth(), f:GetHeight()
+	end)
+	local side = ok and math.max(BT.Pill.Number(w, 0), BT.Pill.Number(h, 0)) or 0
+	if side <= 0 then
+		if f.SetSize then
+			pcall(f.SetSize, f, size, size)
+		end
+		return false
+	end
+	if side > size + 0.5 and type(f.SetScale) == "function" then
+		pcall(f.SetScale, f, size / side)
+		return true
+	end
+	return false
+end
+
 function M.Keepers(frame, map, plain)
 	local n, seen, leftover, placed = 0, {}, {}, {}
 	-- what was faded last time and is not in this pass (taken by the addon
@@ -1183,7 +1216,8 @@ function M.Keepers(frame, map, plain)
 			local rowN = math.floor((i - 1) / perRow)
 			local slot = { spot = "BOTTOMLEFT", x = first + col * (ICON + 2),
 				y = 3 + rowN * (ICON + 2), size = ICON }
-			move(f, map, slot.spot, map, slot.spot, slot.x, slot.y, ICON)
+			move(f, map, slot.spot, map, slot.spot, slot.x, slot.y)
+			M.FitIcon(f, ICON)
 			-- and by what it draws, like the corners: the dial's picture hangs
 			-- off its button at an offset, so the button's slot is not where
 			-- the sun is
@@ -1324,6 +1358,67 @@ function M.WatchHover(frame, map)
 	return true
 end
 
+-- NO DEAD PATCH OVER THE WORLD (2026-10-17, audit). The client's
+-- MinimapCluster takes the mouse over 256 by 256 at the screen's top-right
+-- (less its hit-rect insets). With the map in the dock and the ring put
+-- away, that is an invisible patch of about 216 by 226: a click on an enemy
+-- or an NPC under it, or a camera drag started there, went to the cluster.
+-- So it stops taking the mouse while the map is in the dock, and has what it
+-- had back when the map goes home. The cluster is not protected on this
+-- build, so this works in a fight too.
+function M.ClusterMouse(on)
+	local cluster = _G.MinimapCluster
+	if not (type(cluster) == "table" and type(cluster.EnableMouse) == "function") then
+		return false
+	end
+	if on then
+		if M.clusterMouse == nil then
+			return false
+		end
+		pcall(cluster.EnableMouse, cluster, M.clusterMouse)
+		M.clusterMouse = nil
+		return true
+	end
+	if M.clusterMouse == nil then
+		local ok, was = true, true
+		if type(cluster.IsMouseEnabled) == "function" then
+			ok, was = pcall(cluster.IsMouseEnabled, cluster)
+		end
+		M.clusterMouse = not (ok and was == false)
+	end
+	pcall(cluster.EnableMouse, cluster, false)
+	return true
+end
+
+-- SQUARE, SAID TO THE OTHERS (2026-10-17, audit). Map-pin libraries
+-- (HereBeDragons-Pins, behind Questie, HandyNotes, GatherMate2 and TomTom)
+-- and LibDBIcon ask the global GetMinimapShape what shape the map is, and
+-- take "ROUND" when nothing answers: on the square map, pins in its corners
+-- were hidden and pins at its edge sat on a circle nobody could see. So
+-- while the map is in the dock, GetMinimapShape says "SQUARE". This is a
+-- global write on purpose, the one other square-map addons make. It is set
+-- only where no other addon has set it, and taken away only while it is
+-- still ours.
+local function squareShape()
+	return "SQUARE"
+end
+M.SquareShape = squareShape
+
+function M.Shape(square)
+	if square then
+		if _G.GetMinimapShape == nil or _G.GetMinimapShape == squareShape then
+			_G.GetMinimapShape = squareShape
+			return true
+		end
+		return false
+	end
+	if _G.GetMinimapShape == squareShape then
+		_G.GetMinimapShape = nil
+		return true
+	end
+	return false
+end
+
 function M.Apply(plain)
 	local map = _G.Minimap
 	if not (map and map.SetParent) then
@@ -1353,10 +1448,19 @@ function M.Apply(plain)
 		if was.w and was.h and was.w > 0 and was.h > 0 then
 			pcall(map.SetSize, map, was.w, was.h)
 		end
-		if map.SetMaskTexture and was.mask then
+		-- THE CLIENT'S OWN MASK (2026-10-17, audit). Its UpdateMinimapConfig
+		-- sets the one it uses now (ui-hud-minimap-frame-generic-mask) along
+		-- with the ring's size; the old round one is only for a client
+		-- without it.
+		local cluster = _G.MinimapCluster
+		local configured = type(cluster) == "table" and type(cluster.UpdateMinimapConfig) == "function"
+			and pcall(cluster.UpdateMinimapConfig, cluster)
+		if not configured and map.SetMaskTexture and was.mask then
 			pcall(map.SetMaskTexture, map, was.mask)
 		end
 		M.Rings(map, true)
+		M.ClusterMouse(true)
+		M.Shape(false)
 		if map.SetAlpha then
 			pcall(map.SetAlpha, map, was.alpha or 1)
 		end
@@ -1386,6 +1490,10 @@ function M.Apply(plain)
 	end
 	-- and no round band inside it (M.Rings)
 	M.Rings(map, false)
+	-- the empty cluster lets clicks through, and the pin libraries hear that
+	-- the map is square
+	M.ClusterMouse(false)
+	M.Shape(true)
 
 	-- SOLID, AND NOW WE KNOW WHY (Josh 2026-09-22). The map's alpha was tried
 	-- again as a setting, with a hole cut in the panel's fill under it: at any
@@ -1465,9 +1573,11 @@ end
 -- resource display and the status bars going as well). Laying the map out
 -- sizes it and sets its mask, and on this client that makes the map say its
 -- zoom changed; that event laid it out again, and so on without end. A zoom
--- is still followed (the wheel resets pieces the layout owns), but not one
--- arriving while the layout runs or in the quarter second after it: that one
--- is the layout's own.
+-- arriving while the layout runs or in the quarter second after it is the
+-- layout's own (M.Echo). Since 2026-10-17 (audit) the zoom event is not
+-- heard at all (M.Watch); M.applying also keeps the client's
+-- UpdateMinimapConfig, called from M.Apply(true), from laying the map out
+-- again.
 local applyNow = M.Apply
 function M.Apply(plain)
 	M.applying = true
@@ -1571,11 +1681,12 @@ function M.Redraw()
 		return false
 	end
 	M.redrawnAt = now
+	-- our own step, not the wheel: its zoom events are an echo too when the
+	-- dock resized the map outside M.Apply. Set before the steps, which may
+	-- say so at once (2026-10-17, audit).
+	M.quietUntil = math.max(M.quietUntil or 0, now + 0.25)
 	pcall(map.SetZoom, map, z > 0 and z - 1 or z + 1)
 	pcall(map.SetZoom, map, z)
-	-- our own step, not the wheel: its zoom events are an echo too when the
-	-- dock resized the map outside M.Apply
-	M.quietUntil = math.max(M.quietUntil or 0, now + 0.25)
 	return true
 end
 
@@ -1626,7 +1737,9 @@ function M.Watch()
 		if type(cluster.UpdateMinimapConfig) == "function" then
 			M.laidOut = true
 			pcall(hooksecurefunc, cluster, "UpdateMinimapConfig", function()
-				if BT.Enabled("minimap") and M.frame then
+				-- not the call M.Apply(true) makes to give the client its
+				-- own mask back (2026-10-17, audit)
+				if BT.Enabled("minimap") and M.frame and not M.applying then
 					M.Apply()
 				end
 			end)
@@ -1637,9 +1750,13 @@ function M.Watch()
 		-- NOT THE LOADING SCREEN (Josh 2026-09-30, review): every loading
 		-- screen already lays it out through OnBind, and hearing it here as
 		-- well made two full layouts of the panel, three with the new area
+		-- NOT THE ZOOM (2026-10-17, audit). Every wheel step outside the
+		-- echo's quarter second ran the whole layout again, and a zoom
+		-- changes nothing the layout owns: the client's own handler only
+		-- turns its hidden zoom buttons on or off.
 		for _, event in ipairs({
 			"ZONE_CHANGED_NEW_AREA",
-			"MINIMAP_UPDATE_ZOOM", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED",
+			"UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED",
 			-- walking into a new district changes the caption and nothing else
 			"ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
 		}) do
@@ -1651,8 +1768,6 @@ function M.Watch()
 			end
 			if event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then
 				M.Caption()
-			elseif event == "MINIMAP_UPDATE_ZOOM" and M.Echo() then
-				return
 			else
 				M.Apply()
 			end

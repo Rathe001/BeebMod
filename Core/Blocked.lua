@@ -38,7 +38,9 @@ f:SetScript("OnEvent", function(_, event, addon, func)
 	end
 	-- KEPT IN THE SAVED FILE TOO (2026-10-04: "Interface action failed
 	-- because of an AddOn", and the list had gone with the reload)
-	if type(BeebModDB) == "table" then
+	-- ONLY IN A COPY TO WORK ON (2026-10-17, audit): a player's copy has no
+	-- Record button to read it or clear it (BT.DEV)
+	if BT.DEV and type(BeebModDB) == "table" then
 		BeebModDB.blockedDump = { at = BT.Util.Now(), lines = BT.blockedLog, stack = BT.blockedStack }
 	end
 end)

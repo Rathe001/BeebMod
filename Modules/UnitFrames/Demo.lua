@@ -1,12 +1,10 @@
--- The unit frames' made-up group (Core/Demo.lua, Josh 2026-09-27): the same
--- made-up party and full buff tray the Testing page shows one at a time, both
--- at once, with the rest of the made-up data. Each only while its module is on.
+-- The unit frames' part of the made-up data (Core/Demo.lua, Josh 2026-09-27):
+-- the full buff tray the Testing page's Made-up auras shows, with the rest of
+-- the made-up data, while Buffs is on.
+-- NOT THE MADE-UP PARTY (Josh 2026-10-18: "when I load the fake data, it auto
+-- enables the group debug view for unit frames"). It drew the party too,
+-- while the Made-up people row still said Off; the party is that row's alone.
 local _, BT = ...
-
-local function frames()
-	local m = BT.GetModule("unitframes")
-	return m and m.live and m.Preview and m or nil
-end
 
 local function buffs()
 	local B = BT.UnitFrames and BT.UnitFrames.Buffs
@@ -16,10 +14,6 @@ end
 
 BT.Demo.Register("unitframes", {
 	on = function()
-		local m = frames()
-		if m then
-			m.Preview("party")
-		end
 		local B = buffs()
 		if B then
 			B.Build()
@@ -27,10 +21,6 @@ BT.Demo.Register("unitframes", {
 		end
 	end,
 	off = function()
-		local m = frames()
-		if m then
-			m.Preview(nil)
-		end
 		local B = buffs()
 		if B and B.previewing then
 			B.Preview(false)

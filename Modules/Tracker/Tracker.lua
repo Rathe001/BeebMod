@@ -834,14 +834,21 @@ local function clockColour(endsAt, now)
 end
 
 -- THE CLOCK TICKS ON ITS OWN (the list is not drawn again every second): the
--- rows that hold a clock have their words set again, once a second, while
--- any is shown
+-- rows that hold a clock have their words set again, once a second
+--
+-- AND GOES ON TICKING WHILE IT IS SCROLLED OUT OF SIGHT (2026-10-17, audit).
+-- The ticker stopped when no clock row was shown, and the list scrolled is
+-- a clock row hidden: scrolled back, it read the time it stopped at until
+-- the next quest event. It runs while any row holds a clock (stopClocks
+-- clears them when the list goes), and only the rows in sight are written.
 function M.TickClocks()
 	local now = (type(GetTime) == "function" and GetTime()) or 0
 	local any = false
 	for _, row in ipairs(rows or {}) do
-		if row.endsAt and row:IsShown() then
+		if row.endsAt then
 			any = true
+		end
+		if row.endsAt and row:IsShown() then
 			row.text:SetText(M.TimeLeft(row.endsAt, now))
 			local c = clockColour(row.endsAt, now)
 			row.text:SetTextColor(c[1], c[2], c[3])
@@ -1053,6 +1060,8 @@ function M.Update()
 	for j = i + 1, #rows do
 		rows[j]:Hide()
 		rows[j].quest = nil
+		-- a row no longer used holds no clock, or the ticker would never stop
+		rows[j].endsAt = nil
 	end
 
 	-- the whole list, however tall: the dock decides how much of it shows,
@@ -1320,10 +1329,13 @@ function M.Watch()
 	M.events = CreateFrame("Frame")
 	-- (not the loading screen: OnBind draws the list on every one already -
 	-- Josh 2026-09-30, review)
+	-- SUPER_TRACKING_CHANGED (2026-10-17, audit): a quest picked to follow on
+	-- the world map moves the band and the dot to it now, not at the next
+	-- quest event
 	for _, event in ipairs({
 		"QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_WATCH_LIST_CHANGED",
 		"QUEST_ACCEPTED", "QUEST_REMOVED",
-		"ZONE_CHANGED_NEW_AREA",
+		"ZONE_CHANGED_NEW_AREA", "SUPER_TRACKING_CHANGED",
 	}) do
 		pcall(M.events.RegisterEvent, M.events, event)
 	end

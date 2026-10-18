@@ -19,7 +19,9 @@
 -- It reads the chat window's own history and adds nothing to it: close it
 -- and the chat window is as it was.
 local _, BT = ...
-local CreateFrame = BT.Cpu.For("Modules/Chat/Reader.lua")
+-- the timer too, so the one it sets is counted with this file's CPU
+-- (2026-10-17, audit)
+local CreateFrame, C_Timer = BT.Cpu.For("Modules/Chat/Reader.lua")
 
 local M = BT.GetModule("chat")
 local W = BT.Widgets

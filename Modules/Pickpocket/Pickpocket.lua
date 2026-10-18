@@ -287,10 +287,11 @@ function M.Tip()
 		t:Header({ icon = POUCH, name = "Pick Pocket", sub = "Coin and loot, at vendor prices" })
 		local sc, si = M.Worth(s)
 		local picks = s and s.picks or 0
+		-- COMMAS FROM 1,000 (2026-10-17, audit): 1,234 pockets read "1234"
 		if picks > 0 then
 			t:Headline(coins(sc + si))
-			t:Note(("This session, from %d %s. Average %s a pocket."):format(picks, picks == 1 and "pocket" or "pockets",
-				coins(math.floor((sc + si) / picks))))
+			t:Note(("This session, from %s %s. Average %s a pocket."):format(U.Commas(picks),
+				picks == 1 and "pocket" or "pockets", coins(math.floor((sc + si) / picks))))
 		else
 			t:Headline(coins(0))
 			t:Note("No pockets picked this session.")
@@ -299,10 +300,10 @@ function M.Tip()
 		if (r.picks or 0) > 0 then
 			t:Section("All time")
 			t:Row("Coin and loot", coins(c + i))
-			t:Row("Pockets picked", r.picks)
+			t:Row("Pockets picked", U.Commas(r.picks))
 			local name, count = M.Best(r)
 			if name then
-				t:Row("Best find", ("%s ×%d"):format(name, count))
+				t:Row("Best find", ("%s ×%s"):format(name, U.Commas(count)))
 			end
 		end
 		t:Foot({ { "Right-click", "clear record" } })

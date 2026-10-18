@@ -13,13 +13,11 @@
 -- why the book belongs to the core: switching the census off must not lose a
 -- note.
 --
--- ONE BOOK PER REALM AND FACTION. The saved file is account-wide, so every
--- character you play writes into the same book as long as they stand on the
--- same realm and the same side: the alt you level tonight already knows the
--- tank you flagged on your main last week. Another realm, or the other
--- faction, gets its own book - those are different populations, you cannot see
--- most of the other side anyway, and mixing them would make "seen 4 times" a
--- lie.
+-- ONE BOOK PER REALM. The saved file is account-wide, so every character you
+-- play on a realm writes into the same book, whichever side they are on: the
+-- alt you level tonight already knows the tank you flagged on your main last
+-- week. Another realm gets its own book. (One book for both sides since
+-- 2026-09-30, the side on each row: see BT.ScopeKey.)
 --
 -- BeebModDB = {
 --   schema, settings,                         account-wide
@@ -28,60 +26,23 @@
 -- BT.db is the book for whoever is logged in; BT.settings is account-wide.
 local ADDON, BT = ...
 
--- THE BOOK THE LIVE FILE SET (Josh 2026-09-22). Data\Live\BeebMod.lua
--- is the client's own save, linked into the addon and run as the first file
--- in the TOC (see there). Whatever it assigned is held onto here, because the
--- client's broken loader runs afterwards and may clear the global again before
--- ADDON_LOADED - and then it is put back.
--- THE OLD NAME'S BOOK (Josh 2026-09-22). BeebsToolkit became BeebMod. The
--- old name's book was adopted from its own file once, and has been saved
--- under the new name since; the TOC stopped loading the old file on 09-23
--- (it held a second copy of the whole book in memory). Adopt stays for an
--- install that still has only the old file.
-local function anyRealms(db)
-	if type(db) ~= "table" or type(db.realms) ~= "table" then
-		return false
-	end
-	for _, book in pairs(db.realms) do
-		if type(book) == "table" and type(book.players) == "table" and next(book.players) then
-			return true
-		end
-	end
-	return false
-end
-
-function BT.Adopt()
-	if anyRealms(BeebModDB) then
-		return false
-	end
-	if anyRealms(BeebsToolkitDB) then
-		BeebModDB = BeebsToolkitDB
-		BT.adopted = true
-		return true
-	end
-	if type(BeebModDB) ~= "table" and type(BeebsToolkitDB) == "table" then
-		BeebModDB = BeebsToolkitDB
-		BT.adopted = true
-		return true
-	end
-	return false
-end
-
-BT.Adopt()
-BT.linked = type(BeebModDB) == "table" and BeebModDB or nil
-
 BT.NAME = ADDON
 -- THE NAME, AND THE FOLDER IT LIVES IN (Josh 2026-09-20). The addon is called
 -- BeebMod; the folder is still BeebMod and the saved variables are still
 -- BeebModDB, because renaming either of those is renaming the file the
 -- book lives in, and this client is already bad enough at handing that back.
 BT.TITLE = "BeebMod"
+-- THE CLIENT'S OWN NAME FOR IT (2026-10-17, audit): this client documents
+-- C_AddOns.GetAddOnMetadata, and may not have the old global at all, which
+-- left the version the fallback below. (Its shape is what
+-- scripts/cut-release.ps1 rewrites.)
+local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "0.1.0-beta.28"
 BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-10-17-easy-wins"
+BT.BUILD = "2026-10-18-actionbar-api"
 
 -- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
 -- to disable it in production builds so normal users don't see it?"). The
@@ -105,7 +66,6 @@ BT.SETTINGS = {
 	-- the most characters a book keeps: past it, the ones seen longest ago
 	-- go first (DB.Cap). About 9 MB of saved file, packed (Josh 2026-09-24).
 	bookCap = 150000,      -- 0 = no limit
-	dockPos = nil,         -- where you dragged the dock
 }
 
 -- ---------------------------------------------------------------------------
@@ -157,8 +117,12 @@ end
 -- THE CENSUS ALONE (Josh 2026-09-26): the Ledger keeps what you write in a
 -- book of its own, and needs nobody collected to write on someone - so the
 -- census's book is filled for the census, and only while it is on.
+-- NOT INTO THE MADE-UP BOOK (2026-10-17, audit): while the census's made-up
+-- realm is shown (Modules/Census/Demo.lua) BT.db is that book, and everyone
+-- seen went into it and was thrown away with it, counted for the Ledger's
+-- points on the way. Nobody is written down while it is shown.
 function BT.Collecting()
-	return BT.db ~= nil and BT.Enabled("census")
+	return BT.db ~= nil and not BT.db.demo and BT.Enabled("census")
 end
 
 function BT.Modules()
@@ -343,22 +307,23 @@ end
 -- ---------------------------------------------------------------------------
 -- THE SETTINGS CANVAS (Josh 2026-10-04, locked the same day): five
 -- features in two groups - what changes your interface, and the two
--- journals - each with the line its first-login card and its page show. The
--- journals' lines are in their keepers' voices (`quote`, `by`); their page
--- says plainly what they are (`blurb`). The Census is a part of the Ledger
--- now (BT.MergeCensus), and Interface is called Game frames.
+-- journals - each with a line under its page's title that says plainly what
+-- it is (`blurb`). Its keeper's words under it (`quote`, `by`) went on
+-- 2026-10-18 (Josh: "The RP is a bit too cheesy I think").
+-- NOT TONGUE IN CHEEK (Josh 2026-10-18: "Yes, let's ditch the tongue in
+-- cheek style"): the interface features' lines were jokes ("Even the
+-- seventeen quests you swear you'll finish") and are as plain as the
+-- journals' now, the welcome window's words (UI/Welcome.lua, BT.Welcome.ABOUT).
+-- The first login has its own words for each, and its pictures. The Census
+-- is a part of the Ledger now (BT.MergeCensus), and Interface is called Game
+-- frames.
 BT.FEATURES = {
-	-- each with its picture (Art/Features, made by scripts/make-feature-art.ps1
-	-- from screenshots taken with /bt demo on, Josh 2026-09-27)
 	{ key = "dock", title = "Dock", group = "interface", color = { 0.45, 0.75, 0.99 },
-		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock",
-		line = "Everything you check between pulls, in one column. Even the seventeen quests you swear you'll finish." },
+		blurb = "Your map, experience, quests and readouts, in a panel at the side of the screen" },
 	{ key = "unitframes", title = "Unit frames", group = "interface", color = { 0.49, 0.77, 0.48 },
-		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes",
-		line = "Clean frames for your group and raid, so you notice the tank dying before the tank does." },
+		blurb = "Frames for you, your group and your target, and nameplates" },
 	{ key = "interface", title = "Game frames", group = "interface", color = { 0.88, 0.64, 0.29 },
-		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface",
-		line = "The game's own bars, bags and chat, with twenty years of gold trim taken off." },
+		blurb = "The game's own bars, bags, chat, tooltips and menus, drawn to match" },
 	-- THE RAVENHOLDT LEDGER (Josh 2026-10-05: "I don't think we can use the
 	-- whole 'debt collector' theme, because we aren't actually collecting any
 	-- gold. Is there something we could use that would be more of the 'big
@@ -367,16 +332,10 @@ BT.FEATURES = {
 	-- Mountains, keeping a file on everyone, as the Expedition is
 	-- Nesingwary's. It was the Steamwheedle Ledger for a day (2026-10-04).
 	-- "Ledger" where there is no room. Its colour is a raven's violet, not
-	-- the Alliance's blue nor the Horde's red. Its picture is the Census's
-	-- and the Ledger's side by side until there is one of both (`art2`).
+	-- the Alliance's blue nor the Horde's red.
 	{ key = "ledger", title = "Ravenholdt Ledger", short = "Ledger", group = "journals", color = { 0.61, 0.50, 0.82 },
 		single = "ledger",
-		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\census",
-		art2 = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger",
-		blurb = "Everyone you see on your realm, and your notes, tags and ratings on them",
-		-- the first rank's line (Modules/Ledger/Ranks.lua, L.QUOTES)
-		quote = "\226\128\156Welcome, welcome, welcome! We have been watching you. Now you watch everyone else.\226\128\157",
-		by = "Lord Jorach Ravenholdt, Alterac Mountains" },
+		blurb = "Everyone you see on your realm, and your notes, tags and ratings on them" },
 	-- NESINGWARY'S EXPEDITION (Josh 2026-09-27: "make the player feel like
 	-- they are part of the nesingwary expidition"). Its key, module, files and
 	-- saved journal took the name too on 2026-09-29 (Core/Rename.lua).
@@ -385,16 +344,8 @@ BT.FEATURES = {
 	-- it over in The Burning Crusade.
 	{ key = "expedition", title = "Nesingwary's Expedition", short = "Expedition", group = "journals",
 		color = { 0.44, 0.64, 0.80 }, single = "expedition",
-		art = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition",
-		blurb = "A journal of every enemy you kill, with points and ranks",
-		-- the first rank's line (Modules/Expedition/Journal.lua, J.QUOTES)
-		quote = "\226\128\156Jolly nice to make your acquaintance! Off you go. No beast comes to the campfire.\226\128\157",
-		by = "Hemet Nesingwary, Stranglethorn" },
+		blurb = "A journal of every enemy you kill, with points and ranks" },
 }
--- what a feature's card says: its keeper's words, or its line
-for _, f in ipairs(BT.FEATURES) do
-	f.line = f.line or f.quote
-end
 local featureByKey = {}
 for _, f in ipairs(BT.FEATURES) do
 	featureByKey[f.key] = f
@@ -475,8 +426,8 @@ end
 -- "This addon is supposed to be an opinionated solution, not fully
 -- customizable"). Each module now does what its old switch said by default,
 -- and a saved answer to one of these is not read; so it is taken out of the
--- saved file, once, rather than kept there meaning nothing. The dock's size
--- is the one size for every panel first (BT.Settings.Scale).
+-- saved file, once, rather than kept there meaning nothing. The dock's old
+-- size becomes the one Size first (BT.Settings.Scale).
 BT.CUT_SETTINGS = {
 	top = { "dockLocked", "dockWidth", "dockScale", "metricsCols", "censusButton", "censusLive", "hideClientXP",
 		"hideClientRep", "hideClientBags", "expeditionShows",
@@ -504,6 +455,11 @@ BT.CUT_SETTINGS = {
 
 function BT.DropCutSettings()
 	local s = BT.settings
+	-- the first login's answer, written and never read (2026-10-17, audit):
+	-- dropped on every install, those that dropped the rest long ago too
+	if type(s) == "table" then
+		s.setup = nil
+	end
 	if type(s) ~= "table" or s.cutSettingsDropped then
 		return 0
 	end
@@ -699,33 +655,6 @@ function BT.EachLive(hook, ...)
 	end
 end
 
--- Slash commands, registered the same way tabs are. A command belonging to a
--- module that is switched off says so rather than half-working, because
--- "/bt note" quietly doing nothing is worse than being told the Ledger is off.
-local commands = {}
-
-function BT.Command(name, fn, help, moduleKey)
-	commands[name] = { fn = fn, help = help, module = moduleKey, name = name }
-end
-
-function BT.Commands()
-	return commands
-end
-
-function BT.RunCommand(name, rest)
-	local c = commands[name]
-	if not c then
-		return false
-	end
-	if c.module and not BT.Enabled(c.module) then
-		BT.Util.Print(("%s is switched off. Type /bt to switch it back on."):format(
-			(BT.GetModule(c.module) or {}).title or c.module))
-		return true
-	end
-	c.fn(rest or "")
-	return true
-end
-
 -- RECORDS FOR CLAUDE (Josh 2026-09-28: "We don't need hundreds of slash
 -- commands for debugging. I'd actually prefer to use the 'Testing' module
 -- with buttons/toggles going forward"). Each module that can write down how
@@ -907,12 +836,37 @@ function BT.DropBeta(realm)
 	if out.books == 0 and out.ledger == 0 and out.journals == 0 and out.records == 0 then
 		return nil
 	end
+	-- AND WHAT A BETA CHARACTER FILED UNDER ITS NAME ALONE (2026-10-17,
+	-- audit): before 2026-09-22 these were keyed by the name, with no realm,
+	-- and a launch character of the same name took them over
+	-- (BT.Session.Mine). Nothing has written one since, so on the login that
+	-- finds the beta's records they go with the rest.
+	for _, k in ipairs(BT.BETA_BARE) do
+		local store = type(BeebModDB.settings) == "table" and BeebModDB.settings[k]
+		if type(store) == "table" then
+			for who in pairs(store) do
+				if type(who) == "string" and not who:find("@", 1, true) then
+					store[who] = nil
+					out.records = out.records + 1
+				end
+			end
+		end
+	end
 	if out.books > 0 and BT.DB then
 		BT.DB.rev = (BT.DB.rev or 0) + 1
 	end
 	BT.betaDropped = out
+	-- SAID, ONCE (2026-10-17, audit): a player's copy has no Testing page,
+	-- and the journals came up empty at launch with no word why
+	if BT.Util and BT.Util.Print then
+		BT.Util.Print("Cleared the census, Ledger, Expedition and character records from the beta realms, "
+			.. "for the launch. Your settings and the tags you made are kept.")
+	end
 	return out
 end
+
+-- the settings that hold one record a character, keyed "Name@Realm" now
+BT.BETA_BARE = { "xp", "xpPace", "rep", "currency", "clock", "pvp", "pickpocket" }
 
 -- ---------------------------------------------------------------------------
 -- THE BOOK
@@ -1039,10 +993,17 @@ function BT.Unshare()
 	return BT.heardDropped
 end
 
+-- YOUR BOOK UNDER THE MADE-UP ONE (2026-10-17, audit): while the census's
+-- made-up realm is shown, BT.db is that book, so every zone-in found it was
+-- not the bound book and ran a full Bind. The book it stands in for is the
+-- one compared; it is put back for the modules, as a Bind would, and the
+-- made-up one goes back in after the loading screen (Core/Demo.lua).
 function BT.Rebind(realm, faction)
 	local key = BT.ScopeKey(realm, faction)
-	if BT.db and BT.scope and BT.scope.key == key and type(BeebModDB) == "table"
-		and type(BeebModDB.realms) == "table" and BeebModDB.realms[key] == BT.db then
+	local held = (BT.CensusDemo and BT.CensusDemo.Real and BT.CensusDemo.Real()) or BT.db
+	if held and BT.scope and BT.scope.key == key and type(BeebModDB) == "table"
+		and type(BeebModDB.realms) == "table" and BeebModDB.realms[key] == held then
+		BT.db = held
 		BT.EachLive("OnBind", BT.db, BeebModDB.schema or BT.SCHEMA)
 		return BT.db, true
 	end
@@ -1050,7 +1011,6 @@ function BT.Rebind(realm, faction)
 end
 
 function BT.Bind(realm, faction)
-	BT.Adopt()
 	BT.boot = BT.boot or BT.BootReport()
 	if type(BeebModDB) ~= "table" then
 		BeebModDB = {}
@@ -1062,10 +1022,6 @@ function BT.Bind(realm, faction)
 	BT.settings = BeebModDB.settings
 	BT.db = BeebModDB.realms[key]
 	BT.scope = { key = key, realm = rname, faction = fname }
-	-- before the modules get their OnBind: a module that sweeps marks whose tag
-	-- it cannot find would erase your judgements while the characters they
-	-- were about are being restored
-	BT.TakeBaked(key)
 	-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30: "There should
 	-- just be a single realm, and if not, we need to just combine them"). A
 	-- version that split the book by realm left its list of realm names here
@@ -1145,9 +1101,12 @@ function BT.Bind(realm, faction)
 		BT.boot.boundCount = BT.boot.boundCount + 1
 	end
 
-	-- the whole book from the per-character file, if the account one brought
-	-- none - then what you wrote, which is the floor under both
-	BT.TakeStashed(key)
+	-- AN OLD STASH LET GO (2026-10-17, audit): a copy of the whole book was
+	-- kept in the per-character file until 2026-09-22. Nothing reads it, and
+	-- left there it was written out again at every logout.
+	if type(BeebModChar) == "table" then
+		BeebModChar.book = nil
+	end
 	BT.TakeStashedSettings()
 	-- THE OLD NAMES TO THE NEW (Josh 2026-09-29, Core/Rename.lua): after the
 	-- stashes, which may carry the old ones, and before anything reads a
@@ -1181,98 +1140,6 @@ function BT.Bind(realm, faction)
 	return BT.db
 end
 
--- THE BAKED BOOK (Josh 2026-09-19). This client writes saved variables
--- correctly and then hands the addon nothing at load, so a book that lives
--- only in SavedVariables disappears every login. Data/Baked.lua is the same
--- book as an addon FILE, and addon files always load. It is taken ONLY when
--- the saved variables came up empty, so the day the client is fixed this stops
--- happening on its own - and a book you have deliberately emptied does not
--- refill itself, because by then the saved variables are arriving.
-function BT.TakeBaked(key)
-	local baked = BT.baked
-	if not (type(baked) == "table" and type(baked.realms) == "table" and BT.DB) then
-		return 0
-	end
-	-- ONE BOOK FOR BOTH SIDES (BT.JoinSides): a baked file keeps a book for
-	-- each side; every one of this realm's comes into its one book
-	local realmOf = function(k) return type(k) == "string" and k:match("^(.-)|") or nil end
-	local mine = realmOf(key)
-	local from = baked.realms[key]
-	if type(from) ~= "table" then
-		for otherKey, other in pairs(baked.realms) do
-			if realmOf(otherKey) == mine and type(other) == "table" then
-				from = from or { players = {}, realm = other.realm }
-				for who in pairs(other.players or {}) do
-					if not from.players[who] then
-						from.players[who] = BT.DB.Get(other, who)
-					end
-				end
-			end
-		end
-	end
-	local book = BeebModDB.realms[key]
-	if type(from) ~= "table" or type(book) ~= "table" then
-		return 0
-	end
-	-- THE SAVE ARRIVED, SO THE BAKED FILE ONLY FILLS GAPS (Josh 2026-09-22).
-	-- With the live file linked in, the book comes back on every launch and
-	-- the baked copy stops being the seed. It still knows characters the saves
-	-- lost while this was being worked out, so on the way out it hands over
-	-- any the book has not got - whole, into every book it carries - and
-	-- leaves every row the book already has exactly as it is.
-	if next(book.players or {}) then
-		local added = 0
-		for bakedKey, other in pairs(baked.realms) do
-			-- a side's book is its realm's one book now
-			local otherKey = bakedKey:gsub("|[^|]*$", "|" .. BT.ALL_SIDES)
-			local into = BeebModDB.realms[otherKey]
-			if type(into) ~= "table" then
-				into = newBook()
-				BeebModDB.realms[otherKey] = into
-			end
-			into.players = into.players or {}
-			for who in pairs(type(other) == "table" and other.players or {}) do
-				if not into.players[who] then
-					-- as a table: a packed row reads only with its own words
-					into.players[who] = BT.DB.Get(other, who)
-					added = added + 1
-				end
-			end
-		end
-		BT.bakedTaken = added > 0 and added or nil
-		BT.bakedFilled = true
-		return added
-	end
-	-- SETTINGS COME BACK TOO (Josh 2026-09-19). This used to restore the book
-	-- and the tags and nothing else, so every login handed back two thousand
-	-- characters and a factory-fresh addon: the dock back under the minimap,
-	-- every module switched on again, the tooltip back to full size. It read
-	-- as "the position does not save", and what was actually happening is that
-	-- NOTHING saved except the book.
-	--
-	-- Only when the file brought no settings of its own: the moment the client
-	-- starts handing saved variables back, they win and this stops happening.
-	if baked.settings and not (BT.boot and BT.boot.settings) then
-		for k, v in pairs(baked.settings) do
-			BT.settings[k] = v
-		end
-		BT.bakedSettings = true
-	end
-	local added = BT.DB.Adopt(book, from)
-	BT.bakedTaken = added
-	-- AND EVERY OTHER BOOK IT CARRIES (Josh 2026-09-21). Only this realm and
-	-- faction's book used to come across, so an alt's book - 430 Horde
-	-- characters - lived nowhere but here. The companion is written from what
-	-- is bound, so everything the baked file knows goes in on the first login.
-	for otherKey, other in pairs(baked.realms) do
-		if realmOf(otherKey) ~= mine and type(other) == "table"
-			and type(BeebModDB.realms[otherKey]) ~= "table" then
-			BeebModDB.realms[otherKey] = other
-		end
-	end
-	return added
-end
-
 -- IF THE BOOK TURNS UP LATE (Josh 2026-09-19). The addon must not decide, at
 -- one instant, that everything you collected is gone. If the saved variables
 -- land after we have already bound an empty book - a client that delivers them
@@ -1281,6 +1148,14 @@ end
 function BT.AcceptLateBook()
 	local sc = BT.scope
 	if not (sc and BT.db and type(BeebModDB) == "table" and type(BeebModDB.realms) == "table") then
+		return false
+	end
+	-- NOT WHILE THE MADE-UP BOOK IS SHOWN (2026-10-17, audit): BT.db is not
+	-- the bound book then, so it looked like a late one had come, and the
+	-- made-up realm's characters went into your real book for good. The
+	-- watch looks again a few times, and takes a late book if the switch is
+	-- off by then.
+	if BT.db.demo then
 		return false
 	end
 	local live = BeebModDB.realms[sc.key]
@@ -1339,26 +1214,10 @@ function BT.EnsureBound()
 	return BT.db ~= nil
 end
 
--- Every book in the file, this character's first. The key here is the REAL
--- one, because it is what /bt adopt takes.
-function BT.Books()
-	local out = {}
-	for key, book in pairs(BeebModDB and BeebModDB.realms or {}) do
-		local n = 0
-		for _ in pairs(book.players or {}) do
-			n = n + 1
-		end
-		out[#out + 1] = { key = key, n = n, mine = key == (BT.scope and BT.scope.key) }
-	end
-	table.sort(out, function(a, b)
-		if a.mine ~= b.mine then return a.mine end
-		return a.n > b.n
-	end)
-	return out
-end
-
--- Move another book's characters into this one. Matching is loose on purpose:
--- you type what /bt books showed you, spaces and all.
+-- Move another book's characters into this one, from its row on the Testing
+-- page. It takes the book's key ("Oldrealm|Horde") or the words the old /bt
+-- adopt took ("Oldrealm Horde"), so case, spaces and the bar are not
+-- compared.
 function BT.AdoptBook(text)
 	if not (BT.db and text and text ~= "") then
 		return nil
@@ -1373,19 +1232,32 @@ function BT.AdoptBook(text)
 	return nil
 end
 
--- What your other books hold, for The book on the Testing page.
+-- What your other books hold, for the Testing page: its Saved characters
+-- report, and a row for each book with a button that moves it in. Each is
+-- its key (what BT.AdoptBook takes), the name its row shows (the realm, and
+-- the side for a book from before the two sides were one) and how many
+-- characters it holds, the biggest first. BT.Books, the same list with
+-- yours in it, went with /bt books (Josh 2026-10-18: "I actually never use
+-- the slash commands...").
 function BT.OtherBooks()
 	local out = {}
 	for key, book in pairs(BeebModDB and BeebModDB.realms or {}) do
-		if key ~= (BT.scope and BT.scope.key) then
+		if key ~= (BT.scope and BT.scope.key) and type(book) == "table" then
 			local n = 0
 			for _ in pairs(book.players or {}) do
 				n = n + 1
 			end
-			out[#out + 1] = { key = (key:gsub("|", " ")), n = n }
+			local realm, side = tostring(key):match("^(.-)|(.*)$")
+			local name = realm and (side == BT.ALL_SIDES and realm or (realm .. " " .. side)) or tostring(key)
+			out[#out + 1] = { key = key, name = name, n = n }
 		end
 	end
-	table.sort(out, function(a, b) return a.n > b.n end)
+	table.sort(out, function(a, b)
+		if a.n ~= b.n then
+			return a.n > b.n
+		end
+		return a.name < b.name
+	end)
 	return out
 end
 
@@ -1394,79 +1266,6 @@ end
 -- Modules/Ledger/Store.lua), in the account file this client hands back
 -- since build 70009. BeebModKeep is read once more, by the Ledger's move, and
 -- written no longer.
-
--- ---------------------------------------------------------------------------
--- THE WHOLE BOOK, IN THE ONE CHANNEL THAT HAS COME BACK
--- ---------------------------------------------------------------------------
---
--- Measured rather than assumed (Josh 2026-09-21). The account file is written
--- perfectly - eighteen kilobytes, valid Lua, every character in it - and the
--- client hands back nothing at load. The per-character file HAS come back:
--- /bt boot said so, twice.
---
--- So the book goes there as well. Not on every sighting, which would copy a
--- thousand rows a minute for nothing, but once at PLAYER_LOGOUT - which fires
--- before the client writes its files, and is the last moment the book exists.
---
--- Nothing reads from it while the account book arrives intact. It is a floor.
-
-function BT.StashBook()
-	if not (BT.db and BT.scope) then
-		return 0
-	end
-	if type(BeebModChar) ~= "table" then
-		BeebModChar = {}
-	end
-	local n = 0
-	for _ in pairs(BT.db.players or {}) do
-		n = n + 1
-	end
-	BeebModChar.book = { key = BT.scope.key, at = BT.Util and BT.Util.Now(), db = BT.db }
-	-- no settings: a copy of them goes stale the moment you change one (2026-09-22)
-	return n
-end
-
--- Returns how many characters it put back.
-function BT.TakeStashed(key)
-	local stash = type(BeebModChar) == "table" and BeebModChar.book or nil
-	if not (stash and stash.key == key and type(stash.db) == "table" and BT.db) then
-		return 0
-	end
-	local have = 0
-	for _ in pairs(BT.db.players or {}) do
-		have = have + 1
-	end
-	if have > 0 then
-		return 0 -- the account file arrived: it is the truth, not this
-	end
-	local back = 0
-	BT.db.players = BT.db.players or {}
-	local keys = {}
-	for who in pairs(stash.db.players or {}) do
-		keys[#keys + 1] = who
-	end
-	for _, who in ipairs(keys) do
-		if not BT.db.players[who] then
-			BT.db.players[who] = BT.DB.Get(stash.db, who)
-			back = back + 1
-		end
-	end
-	for _, field in ipairs({ "stats", "tags" }) do
-		if stash.db[field] and not next(BT.db[field] or {}) then
-			BT.db[field] = stash.db[field]
-		end
-	end
-	-- THE CACHES KEY OFF THE REVISION (Josh 2026-09-21). Rows put back here go
-	-- straight into the table rather than through DB.SetNote and friends, so
-	-- nothing bumped the counter the census and the search cache their answers
-	-- against - and the window opened on a book it had already decided the
-	-- shape of. It read as "the data is there but the panel is a tab behind".
-	if back > 0 and BT.DB then
-		BT.DB.rev = (BT.DB.rev or 0) + 1
-	end
-	BT.stashTaken = back > 0 and back or nil
-	return back
-end
 
 -- THE SETTINGS WERE STASHED AND NEVER TAKEN BACK (Josh 2026-09-21). Logout
 -- wrote them into the per-character file along with the book, which is the one
@@ -1521,18 +1320,11 @@ loader:RegisterEvent("ADDON_LOADED")
 -- stashed in the per-character file as well, in case that channel came back
 -- when the account one did not. Neither did - and since build 70009 the
 -- client reads saved variables back the ordinary way (Josh 2026-09-24) - so
--- the stash was 2.9 MB written at every logout for nothing. BT.StashBook and
--- BT.TakeStashed stay for a file that still has one; Adopt and BT.linked stay
--- as a net should a later build lose the book again.
+-- the stash was 2.9 MB written at every logout for nothing. What was left
+-- of it is let go at the next bind (BT.Bind).
 loader:SetScript("OnEvent", function(_, event, addon)
 	if addon ~= ADDON then
 		return
-	end
-	-- the live file's book, if the client's loader cleared it after it ran
-	BT.Adopt()
-	if type(BeebModDB) ~= "table" and BT.linked then
-		BeebModDB = BT.linked
-		BT.linkedRestored = true
 	end
 	-- before anything of ours runs: what actually arrived in the file
 	BT.boot = BT.BootReport()

@@ -1,5 +1,6 @@
--- Tooltips: the same information, in two lines instead of seven
--- (Josh 2026-09-19).
+-- Tooltips: unit, item, spell and buff tooltips in BeebMod's own layout
+-- (Josh 2026-09-19; the unit tooltip as tags and rows, and items, spells and
+-- buffs as cards, 2026-10-17).
 --
 -- The default unit tooltip spends a line each on the level, the race, the
 -- class, the faction and an instruction about right-clicking, then hangs a
@@ -8,13 +9,15 @@
 -- corner you were trying to look at.
 --
 --   Beeb Magus                8        name, in class colour, level on the right
---   Gnome Mage <Nightwatch>            everything else, once (the guild green)
+--   [Gnome] [PvP]                      tags: race or type, and states
+--   <Nightwatch>                       guild or job, in the guild green
 --
 -- WHAT IT KEEPS. Everything you would actually act on: who, how tough, what
 -- they are, who they run with. What it drops: the word "(Player)", the faction
 -- you can already see on the nameplate unless it is the OTHER one, the
--- right-click instruction, and the health bar. None of them is a switch any
--- more (the settings canvas, Josh 2026-10-04).
+-- right-click instruction, and the client's health bar (a thin line of
+-- BeebMod's own takes its place). None of them is a switch any more (the
+-- settings canvas, Josh 2026-10-04).
 --
 -- It rebuilds rather than hides: ClearLines and start again is the only way to
 -- make the tooltip actually SHRINK. Blanking lines leaves their height behind,
@@ -353,6 +356,8 @@ end
 -- edge it already had rather than being told it is nothing special.
 local UNKNOWN_EDGE = {}
 M.UNKNOWN_EDGE = UNKNOWN_EDGE
+-- the last edge read, and whose (M.Compose)
+M.lastEdge = { guid = nil, edge = nil }
 
 M.lastClassification = "none yet"
 
@@ -812,7 +817,8 @@ local function clientLines(tip, spoken, name)
 	for i = 2, BT.Pill.Number(tip:NumLines(), 0) do
 		local fs = lineOf(tip, i)
 		local text = fs and fs.GetText and fs:GetText()
-		if type(text) == "string" then
+		-- a line the client keeps secret is not compared with anything
+		if type(text) == "string" and not (issecretvalue and issecretvalue(text)) then
 			local trimmed = text:match("^%s*(.-)%s*$")
 			local skip = trimmed == "" or trimmed == name or spoken[trimmed]
 			-- "Level 8 Elite", in whatever this client calls a level
@@ -847,6 +853,19 @@ end
 --
 -- So anything that is not a unit is stripped back to the plain surface first,
 -- and ComposeItem adds the item things on top if it turns out to be an item.
+-- NOT FOR OUR OWN CLEAR (2026-10-17, audit). A rebuild clears the tooltip
+-- too, and its clear set off this and M.UnitTooltipHidden again, each with
+-- its own repaint of the edge, while the rebuild dresses the tooltip itself
+-- straight after. M.clearing says the clear is ours (M.ClearLines).
+function M.ClearLines(tip)
+	M.clearing = true
+	local ok, err = pcall(tip.ClearLines, tip)
+	M.clearing = false
+	if not ok then
+		error(err, 0)
+	end
+end
+
 function M.DressPlain(tip)
 	local s = skins[tip]
 	if s then
@@ -865,12 +884,22 @@ function M.DressPlain(tip)
 		pcall(tip.SetMinimumWidth, tip, 0)
 	end
 	-- force: the padding a unit asked for has to come off even though nothing
-	-- else about the tooltip changed
+	-- else about the tooltip changed; the plain edge is painted in it
 	M.Dress(tip, true)
-	if s then
-		applyEdge(tip, s)
-	end
 	return s
+end
+
+-- THE LOG READ ONCE (2026-10-17, audit): every quest's title, kept until the
+-- log changes. A unit's tooltip is written again several times a second
+-- while you point at it, and each time it walked the whole quest log.
+local questTitles = nil
+function M.ForgetQuests()
+	questTitles = nil
+end
+if CreateFrame then
+	M.questWatch = CreateFrame("Frame")
+	pcall(M.questWatch.RegisterEvent, M.questWatch, "QUEST_LOG_UPDATE")
+	M.questWatch:SetScript("OnEvent", M.ForgetQuests)
 end
 
 -- Returns the block, and the set of raw lines it used up so the sweep above
@@ -882,14 +911,17 @@ local function questBlock(tip)
 	end
 	-- every quest in the log, not only the followed ones: a mob can count
 	-- towards one you are not tracking, and the client still says so
-	local titles = {}
-	local ok, all = pcall(BT.Quests.All)
-	if not (ok and all) then
-		return nil, used
+	if not questTitles then
+		local ok, all = pcall(BT.Quests.All)
+		if not (ok and all) then
+			return nil, used
+		end
+		questTitles = {}
+		for _, title in ipairs(all) do
+			questTitles[title] = true
+		end
 	end
-	for _, title in ipairs(all) do
-		titles[title] = true
-	end
+	local titles = questTitles
 	if not next(titles) then
 		return nil, used
 	end
@@ -897,6 +929,10 @@ local function questBlock(tip)
 	for i = 2, BT.Pill.Number(tip:NumLines(), 0) do
 		local fs = lineOf(tip, i)
 		local text = fs and fs.GetText and fs:GetText()
+		-- a line the client keeps secret is read as no line
+		if issecretvalue and issecretvalue(text) then
+			text = nil
+		end
 		local chrome = false
 		if type(text) == "string" then
 			for _, needle in ipairs(NOT_A_QUEST) do
@@ -1145,7 +1181,8 @@ function M.Compose(tip, unit)
 	if isPlayer then
 		local _, class = UnitClass(unit)
 		classFile = not (issecretvalue and issecretvalue(class)) and class or nil
-		local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+		-- a secret class is no key (2026-10-17, audit)
+		local c = classFile and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFile]
 		sr, sg, sb = (c and c.r) or 0.9, (c and c.g) or 0.9, (c and c.b) or 0.9
 	else
 		local c = reactionColor(unit)
@@ -1160,7 +1197,12 @@ function M.Compose(tip, unit)
 	-- line the client already wrote - <Innkeeper> is on the tooltip, not in an
 	-- API - so it has to be picked up while it is still there.
 	local tags, spoken, about = M.Identity(unit, isPlayer)
-	local quests, usedByQuests = questBlock(tip)
+	-- a player counts towards none of your quests: their lines are not
+	-- looked through for one (2026-10-17, audit)
+	local quests, usedByQuests = nil, nil
+	if not isPlayer then
+		quests, usedByQuests = questBlock(tip)
+	end
 	for line in pairs(usedByQuests or {}) do
 		spoken[line] = true
 	end
@@ -1239,7 +1281,7 @@ function M.Compose(tip, unit)
 		width = math.max(MIN_W, math.min(MAX_W, math.floor(needs)))
 	end
 
-	tip:ClearLines()
+	M.ClearLines(tip)
 	-- the last unit's tags go with its lines (GameTooltip's clearing says so
 	-- too; a tooltip of another name does not)
 	BT.UnitTip.HideTags(tip)
@@ -1301,16 +1343,24 @@ function M.Compose(tip, unit)
 	-- the skin, and the spine in whoever's colour this is
 	-- set before dressing: the skin applies whatever edge is remembered on it,
 	-- so a rare's silver survives the tooltip showing itself again
+	-- AN UNREADABLE ANSWER KEEPS THIS UNIT'S LAST EDGE (2026-10-17, audit).
+	-- The client clears the tooltip before every refresh, and the clear
+	-- forgets the edge (M.DressPlain), so the edge is kept here by the unit's
+	-- GUID instead: the same unit keeps it, the next one does not.
 	local edge = edgeFor(unit, isPlayer)
+	local guid = plainText(UnitGUID, unit)
+	if edge == UNKNOWN_EDGE then
+		edge = (guid and M.lastEdge.guid == guid) and M.lastEdge.edge or nil
+	else
+		M.lastEdge.guid, M.lastEdge.edge = guid, edge
+	end
 	local worn = skins[tip]
-	if worn and edge ~= UNKNOWN_EDGE then
+	if worn then
 		worn.wantEdge = edge
 	end
 	local s = M.Dress(tip, true, true)
 	if s then
-		if edge ~= UNKNOWN_EDGE then
-			s.wantEdge = edge
-		end
+		s.wantEdge = edge
 		applyEdge(tip, s)
 	end
 
@@ -1520,8 +1570,10 @@ end
 -- ---------------------------------------------------------------------------
 -- ITEM TOOLTIPS
 --
--- Nobody rebuilds an item tooltip: the client knows what a recipe says and we
--- do not. Two things are done to it instead.
+-- An item tooltip is written again as a card (M.RebuildItem, below), the
+-- comparison ones too. One in a shape the card does not know, such as a
+-- recipe, is restyled where it is (M.ItemLines). Either way, two things are
+-- done to it as well.
 --
 -- THE SPINE, IN THE ITEM'S QUALITY. Grey, white, green, blue, purple - the
 -- same edge the unit tooltip wears, answering the same kind of question one
@@ -1542,15 +1594,11 @@ local WHITE = { 1, 1, 1 }
 -- code, not ours. Both ways of asking go through a pcall now: "what item is
 -- this" is a question a tooltip is allowed to have no answer to.
 local function itemQuality(tip)
-	local link, quality
-	if TooltipUtil and TooltipUtil.GetDisplayedItem then
-		local ok, found = pcall(TooltipUtil.GetDisplayedItem, tip)
-		link = ok and found or nil
-	end
-	if not link and tip.GetItem then
-		local ok, _, found = pcall(tip.GetItem, tip)
-		link = ok and found or nil
-	end
+	local quality
+	-- THE LINK, NOT THE NAME (2026-10-17, audit): GetDisplayedItem answers
+	-- name, link and id, as GetItem does, and the quality was asked of the
+	-- name; shownItem (below) reads the link from either
+	local link = M.ShownItem(tip)
 	if not link then
 		return nil
 	end
@@ -1669,15 +1717,33 @@ function M.ItemLevelText(itemLink)
 		return nil
 	end
 	local lvl = itemlevel.LevelOf(itemLink)
-	return lvl and ("|cff8a9894ilvl|r %d"):format(lvl) or nil
+	return lvl and ("|cff8a9894ILVL|r %d"):format(lvl) or nil
 end
 
-local function itemLevel(tip)
-	if not tip.GetItem then
-		return nil
+-- THE ITEM A TOOLTIP SHOWS, ON EVERY KIND (2026-10-17, audit): the
+-- comparison tooltips have no GetItem (ShoppingTooltipTemplate is the
+-- client's TooltipDataHandlerMixin), so the client's TooltipUtil is asked
+-- first. Its link, or nil; ask before a rebuild clears the tooltip.
+function M.ShownItem(tip)
+	if TooltipUtil and TooltipUtil.GetDisplayedItem then
+		local ok, _, link = pcall(TooltipUtil.GetDisplayedItem, tip)
+		if ok and link then
+			return link
+		end
 	end
-	local ok, _, itemLink = pcall(tip.GetItem, tip)
-	local text = ok and M.ItemLevelText(itemLink)
+	if tip.GetItem then
+		local ok, _, link = pcall(tip.GetItem, tip)
+		if ok and link then
+			return link
+		end
+	end
+	return nil
+end
+local shownItem = M.ShownItem
+
+local function itemLevel(tip)
+	local itemLink = shownItem(tip)
+	local text = itemLink and M.ItemLevelText(itemLink)
 	local right = text and BT.UnitTip.LineOf(tip, 1, "TextRight")
 	-- the client's own right-hand text on the name line, if it has any, wins
 	if not right or (right.IsShown and right:IsShown() and (right:GetText() or "") ~= "") then
@@ -1728,14 +1794,27 @@ local function plainLine(v)
 	return v
 end
 
--- the client's own sentence as a pattern, its "%s" or "%d" any words
-local function sentence(global, fallback)
-	local form = type(_G[global]) == "string" and _G[global] or fallback
-	local escaped = form:gsub("[%^%$%(%)%.%[%]%*%+%-%?]", "%%%0")
-	return "^" .. escaped:gsub("%%[sd]", ".+") .. "$"
+-- some words without the colours written into them ("|cff00ff00...|r")
+function M.Bare(text)
+	return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
-M.DPS_LINE = sentence("DPS_TEMPLATE", "(%s damage per second)")
-M.DURABILITY_LINE = sentence("DURABILITY_TEMPLATE", "Durability %d / %d")
+
+-- the client's own sentence as a pattern: its numbers ("%d", "%.3g", "%s")
+-- captured, a plural ("|4sec:secs;") any word
+-- AND NOT ITS COLOURS (2026-10-17, audit): ITEM_CREATED_BY is written in
+-- green, "|cff00ff00<Made by %s>|r", and a line that came without them did
+-- not match; lines are matched bare too (M.ReadItem). The items' patterns
+-- are made here as well, so "(%.1f damage per second)" is read.
+local function shape(global, fallback)
+	local form = M.Bare(type(_G[global]) == "string" and _G[global] or fallback)
+	local holes = form:gsub("%%%%", "\2"):gsub("%%[%-%d%.]*[sdfg]", "\1"):gsub("|4[^;]*;", "\3")
+	local escaped = holes:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+	local pattern = escaped:gsub("\1", "(.-)"):gsub("\2", "%%%%"):gsub("\3", "%%a+")
+	return "^" .. pattern .. "$"
+end
+M.Shape = shape
+M.DPS_LINE = shape("DPS_TEMPLATE", "(%s damage per second)")
+M.DURABILITY_LINE = shape("DURABILITY_TEMPLATE", "Durability %d / %d")
 
 -- a line made a row of tags: its words go, the tags are laid where they were;
 -- `size` makes the line taller, and `point` hangs them from its top
@@ -1777,8 +1856,10 @@ function M.ItemLines(tip, data)
 			if (kind ~= nil and kind == LT.ItemBinding) or (left and left == _G.ITEM_UNIQUE) then
 				-- its line taller than a row of tags, and the tag at the top of
 				-- it: the room falls under it (Josh 2026-10-17: "Soulbound
-				-- needs some margin under it"), and no line is moved
-				tagLine(tip, i, { { left, "bound" } }, M.BOUND_LINE, "TOPLEFT")
+				-- needs some margin under it"), and no line is moved; "BoP" as
+				-- on a card (M.BindShort; 2026-10-17, audit)
+				local short = M.BindShort(left)
+				tagLine(tip, i, { { short or left, "bound", keepCase = short ~= nil } }, M.BOUND_LINE, "TOPLEFT")
 			elseif kind ~= nil and kind == LT.EquipSlot then
 				local tags = {}
 				for _, words in ipairs({ left or false, right or false }) do
@@ -1807,49 +1888,40 @@ function M.ItemLines(tip, data)
 end
 
 -- ---------------------------------------------------------------------------
--- AN ITEM, WRITTEN AGAIN (Josh 2026-10-17: option C of the item tooltip
--- canvas, then "Yes, build option C. Make sure we use this for the
--- "equipped" compairson tooltip as well")
+-- AN ITEM, WRITTEN AS A SPELL IS (Josh 2026-10-18: the item tooltips "don't
+-- match the spell tooltips. Might need to rework these so they match spell
+-- tooltips", then "Option 1 for the item tooltips. Instead of "Item Level"
+-- we can just use "ilvl"")
 -- ---------------------------------------------------------------------------
 --
---   [icon] the name, in its quality's colour
---          type · slot · ilvl 63
---   [BoE]                                  Requires Level 58
---   ── DAMAGE   three tiles: per second, a hit, speed (ARMOR on armour)
---   ── STATS    +13 Stamina
---   ── EQUIP    the effects, under what sets each off (Use, Chance on hit,
---               Enchant), in the game's green
+--   [icon] the name, in its quality's colour              53.8 DPS
+--          Axe · Two-Hand                                    63 ilvl
+--   [153–256 damage] [3.80 speed] [BoE] [requires level 58]
+--   +13 Stamina
+--   Equip: +62 Attack Power.            the effects as the client wrote
+--                                       them, in the game's green
 --   anything else the client said, in its own colours
 --   the flavour text, in the lore's italic
 --   [a short bar] 61/120                    the sell price, in coins
 --   Made by Lorelei
 --
--- Written from the client's own account of each line (M.ReadItem), so no
--- line is placed by guessing where it sat. A tooltip in a shape this does not
--- know - a recipe with an item inside it, a gem socket, the cost of a repair
--- - is restyled where it is instead (M.ItemLines). The icon, the tiles, the
--- rules over the headings and the bar are ours, laid over lines kept for
--- them, on each tooltip its own (M.ItemBits).
+-- The two figures and the cells are the spell card's own (c.header,
+-- c.cells): armour has its armor where a weapon has its DPS, and a potion
+-- what its Use line comes to (M.ItemFigures); a potion's cells are its
+-- amount and cooldown (M.ItemFacts). Written from the client's own account
+-- of each line (M.ReadItem), so no line is placed by guessing where it sat.
+-- A tooltip in a shape this does not know - a recipe with an item inside
+-- it, a gem socket, the cost of a repair - is restyled where it is instead
+-- (M.ItemLines). The icon, the figures, the cells and the bar are ours,
+-- laid over lines kept for them, on each tooltip its own (M.ItemBits).
 
 -- the sizes, in the game's points (Core/Fonts.lua moves them for the face)
 M.ITEM = {
 	NAME = 13.5, SUB = 10, HEAD = 8, ROW = 10.5, FLAVOUR = 12, FOOT = 9, MAKER = 9.5,
-	ICON = 26, ICON_GAP = 7, TILE_VALUE = 12.5, TILE_LABEL = 7.5, TILE_PAD = 3, TILE_SPLIT = 1,
-	TILE_GAP = 3, TILE_IN = 5, TILE_LEAST = 8, TILE_LABEL_LEAST = 6, TILE_TINT = 0.16,
+	ICON = 26, ICON_GAP = 7, ICON_TALL = 40,
 	HEADLINE = 12, FIG_SMALL = 10, FIG_LABEL = 7.5, FIG_GAP = 4, CELL_PAD = 6, CELL_PAD_Y = 2, QUIET = 9.5,
 	BAR_H = 3, BAR_W = 44, BAR_GAP = 5, MIN_W = 240, PLAIN_W = 180, INSET = 20, SPACER = 4,
 }
-
--- A TILE AS TALL AS WHAT IS IN IT (Josh 2026-10-17: "Line height issues on
--- the damage numbers"). It was a fixed 24 pixels, and the face in use draws
--- the number and its label bigger than their sizes say (Core/Fonts.lua), so
--- the label rode up into the number and the tile hung into the line under
--- it. Now: the number, its label under it, room round both, at the sizes
--- they are drawn at; and the line kept for the tiles is that tall.
-function M.TileHeight()
-	local I, size = M.ITEM, BT.Fonts.Size
-	return I.TILE_PAD * 2 + I.TILE_SPLIT + size(I.TILE_VALUE) + size(I.TILE_LABEL)
-end
 
 -- the size to give a line for it to come out `px` tall (T.SizeLine moves
 -- every size by the face's own amount)
@@ -1864,22 +1936,52 @@ local ITEM_MAKER = { 0.37, 0.68, 0.37 }
 -- a spell's description, kept where it says more than its figures: quieter
 local ITEM_QUIET = { 0.58, 0.63, 0.61 }
 
--- the client's own sentence as a pattern, its "%s" and "%d" captured
-local function capturing(global, fallback)
-	local form = type(_G[global]) == "string" and _G[global] or fallback
-	local escaped = form:gsub("[%^%$%(%)%.%[%]%*%+%-%?]", "%%%0")
-	return "^" .. escaped:gsub("%%[sd]", "(.-)") .. "$"
+-- some words in a colour of their own, inside a line of another
+local function hex(rgb, words)
+	return ("|cff%02x%02x%02x%s|r"):format(math.floor(rgb[1] * 255 + 0.5), math.floor(rgb[2] * 255 + 0.5),
+		math.floor(rgb[3] * 255 + 0.5), words)
 end
+
+-- the colour the client gave a line where it warns (a cost you cannot pay,
+-- a level you have not reached, in red), or nil
+local function warning(c)
+	return (c ~= nil and c[2] < 0.5) and c or nil
+end
+
+-- THE FACTS AS THEIR CELLS SAY THEM, a spell's and an item's alike. Each
+-- fact { text, rgb, lower }: its words, in small letters where `lower`
+-- (the client's "Requires Level 58" as "requires level 58"); all of it in
+-- `rgb` where the client warned with a colour, else its number brighter
+-- than its words, wherever in them it is. Returns c.cells' items.
+function M.FactCells(facts)
+	local items = {}
+	for _, f in ipairs(facts) do
+		local words = f.lower and f.text:lower() or f.text
+		local shown = words
+		if f.rgb then
+			shown = hex(f.rgb, words)
+		else
+			local before, n, after = words:match("^(%D-)(%+?%d[%d%.,–]*)(.*)$")
+			if n then
+				shown = before .. hex(ITEM_INK, n) .. after
+			end
+		end
+		items[#items + 1] = { shown, words }
+	end
+	return items
+end
+
+-- the client's own sentences as patterns, their numbers captured (shape)
 M.ITEM_LINES = {
-	dps = capturing("DPS_TEMPLATE", "(%s damage per second)"),
-	damage = capturing("DAMAGE_TEMPLATE", "%s - %s Damage"),
-	armor = capturing("ARMOR_TEMPLATE", "%s Armor"),
-	block = capturing("SHIELD_BLOCK_TEMPLATE", "%d Block"),
-	level = capturing("ITEM_MIN_LEVEL", "Requires Level %d"),
-	durability = capturing("DURABILITY_TEMPLATE", "Durability %d / %d"),
-	maker = capturing("ITEM_CREATED_BY", "<Made by %s>"),
-	setBonus = capturing("ITEM_SET_BONUS", "Set: %s"),
-	setBonusGrey = capturing("ITEM_SET_BONUS_GRAY", "(%d) Set: %s"),
+	dps = shape("DPS_TEMPLATE", "(%s damage per second)"),
+	damage = shape("DAMAGE_TEMPLATE", "%s - %s Damage"),
+	armor = shape("ARMOR_TEMPLATE", "%s Armor"),
+	block = shape("SHIELD_BLOCK_TEMPLATE", "%d Block"),
+	level = shape("ITEM_MIN_LEVEL", "Requires Level %d"),
+	durability = shape("DURABILITY_TEMPLATE", "Durability %d / %d"),
+	maker = shape("ITEM_CREATED_BY", "<Made by %s>"),
+	setBonus = shape("ITEM_SET_BONUS", "Set: %s"),
+	setBonusGrey = shape("ITEM_SET_BONUS_GRAY", "(%d) Set: %s"),
 }
 
 -- BOE, NOT "BINDS WHEN EQUIPPED" (Josh 2026-10-17: "can we shorted "binds
@@ -1963,6 +2065,8 @@ function M.ReadItem(data, shopping)
 			left = type(left) == "string" and left ~= "" and left or nil
 			right = type(right) == "string" and right ~= "" and right or nil
 			local lc, rc = colourOf(line.leftColor), colourOf(line.rightColor)
+			-- the words matched against the client's sentences, without colours
+			local bare = left and M.Bare(left)
 			if not item.name then
 				if not left then
 					return nil
@@ -1970,7 +2074,8 @@ function M.ReadItem(data, shopping)
 				item.name, item.quality = left, lc
 			elseif kind ~= nil and kind == LT.ItemBinding then
 				item.bind = left
-			elseif left and (left == _G.ITEM_UNIQUE or left == "Unique" or left == _G.ITEM_UNIQUE_EQUIPPABLE) then
+			elseif left and (left == _G.ITEM_UNIQUE or left == "Unique" or left == _G.ITEM_UNIQUE_EQUIPPABLE
+				or left:find("^Unique %(%d+%)$")) then
 				item.unique = left
 			elseif kind ~= nil and kind == LT.EquipSlot then
 				item.slot, item.kind = left, right
@@ -1988,28 +2093,28 @@ function M.ReadItem(data, shopping)
 				-- a blank the client spaced with: our own spacing stands in
 			elseif kind ~= nil and kind == LT.ItemEnchantmentPermanent then
 				item.effects[#item.effects + 1] = { head = "Enchant", text = left, rgb = lc }
-			elseif left:find(P.dps) then
-				item.dps = left:match(P.dps)
-			elseif right and left:find(P.damage) and right:find("%d") then
-				local lo, hi = left:match(P.damage)
+			elseif bare:find(P.dps) then
+				item.dps = bare:match(P.dps)
+			elseif right and bare:find(P.damage) and right:find("%d") then
+				local lo, hi = bare:match(P.damage)
 				-- "41 - 77 Shadow Damage": the school comes off the top number
 				local top, school = hi:match("^([%d%.,]+)%s+(.+)$")
 				item.damage, item.speed = ("%s–%s"):format(lo, top or hi), right:match("([%d%.,]+)")
 				item.school = school
-			elseif left:find(P.damage) then
+			elseif bare:find(P.damage) then
 				item.extraDamage[#item.extraDamage + 1] = { text = left, rgb = lc }
-			elseif left:find(P.armor) then
-				item.armor = left:match(P.armor)
-			elseif left:find(P.block) then
-				item.block = left:match(P.block)
-			elseif left:find(P.level) then
+			elseif bare:find(P.armor) then
+				item.armor = bare:match(P.armor)
+			elseif bare:find(P.block) then
+				item.block = bare:match(P.block)
+			elseif bare:find(P.level) then
 				item.require = { text = left, rgb = lc }
-			elseif left:find(P.durability) then
-				local now, most = left:match(P.durability)
+			elseif bare:find(P.durability) then
+				local now, most = bare:match(P.durability)
 				item.durability = { now = tonumber(now), most = tonumber(most), text = now .. "/" .. most }
-			elseif left:find(P.maker) then
-				item.maker = left:match(P.maker)
-			elseif left:find(P.setBonus) or left:find(P.setBonusGrey) then
+			elseif bare:find(P.maker) then
+				item.maker = bare:match(P.maker)
+			elseif bare:find(P.setBonus) or bare:find(P.setBonusGrey) then
 				-- a set's bonus stays with the set's name and pieces above it,
 				-- in the client's order: green as it is, it is not an enchant
 				item.rest[#item.rest + 1] = { text = left, rgb = lc, wrap = true }
@@ -2018,7 +2123,9 @@ function M.ReadItem(data, shopping)
 			else
 				local head, text = trigger(left)
 				if head then
-					item.effects[#item.effects + 1] = { head = head, text = text, rgb = lc }
+					-- what sets it off, and the line whole, "Equip:" and all, as the
+					-- card writes it with no headings now
+					item.effects[#item.effects + 1] = { head = head, text = text, rgb = lc, line = left }
 				elseif left:find("^[%+%-]%d") and not isGreen(lc) then
 					item.stats[#item.stats + 1] = { text = left, rgb = lc }
 				elseif isGreen(lc) and not left:find("^%(") then
@@ -2038,6 +2145,56 @@ function M.ReadItem(data, shopping)
 	return item
 end
 
+-- a line's text colour as three numbers, where the client lets us read it
+local function inkOf(fs)
+	if not (fs and fs.GetTextColor) then
+		return nil
+	end
+	local ok, r, g, b = pcall(fs.GetTextColor, fs)
+	r, g, b = ok and plainLine(r), ok and plainLine(g), ok and plainLine(b)
+	if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+		return { r, g, b }
+	end
+	return nil
+end
+
+-- OTHER ADDONS' LINES COME ALONG (2026-10-17, audit). An addon that loaded
+-- before BeebMod adds its lines (an auction price) in its own post call,
+-- which runs before ours, and the rebuild's clear took them away. They are
+-- the lines after the last one the client's data drew, read before the
+-- clear, each { text, rgb, right, rrgb } in its own colours; nil for none.
+function M.OthersLines(tip, data)
+	if not (tip and tip.NumLines and type(data) == "table" and type(data.lines) == "table") then
+		return nil
+	end
+	local most = 0
+	for _, line in ipairs(data.lines) do
+		local i = type(line) == "table" and plainLine(line.lineIndex) or nil
+		if type(i) == "number" and i > most then
+			most = i
+		end
+	end
+	-- data that says nothing of where its lines went says nothing of these
+	if most == 0 then
+		return nil
+	end
+	local out = nil
+	for i = most + 1, BT.Pill.Number(tip:NumLines(), 0) do
+		local left, right = lineOf(tip, i), lineOf(tip, i, "TextRight")
+		local text = left and left.GetText and plainLine(left:GetText())
+		if type(text) == "string" and text:find("%S") and text ~= BT.UnitTip.TAG_BLANK then
+			local row = { text = text, rgb = inkOf(left) }
+			local said = right and right.IsShown and right:IsShown() and right.GetText and plainLine(right:GetText())
+			if type(said) == "string" and said:find("%S") then
+				row.right, row.rrgb = said, inkOf(right)
+			end
+			out = out or {}
+			out[#out + 1] = row
+		end
+	end
+	return out
+end
+
 -- WHAT A POTION, BANDAGE OR DRINK DOES, AS A FIGURE (Josh 2026-10-17, choosing
 -- "Give potions, food and bandages the spell figures"): from its Use line, as
 -- a spell's from its description. One that works over time, a second of it
@@ -2045,20 +2202,162 @@ end
 -- middle of what it does ("Restores 140 to 180 health": 160 HEALING). Nil
 -- where it says no amount.
 function M.UseFigures(item)
+	local use = M.UseAmount(item)
+	if use then
+		local word, ink = M.PerSecond(use.label)
+		if type(use.over) == "number" and use.over > 0 then
+			return { { M.Figure(use.amount / use.over), word, ink } }
+		elseif not use.over then
+			return { { M.Middle(use.amount), use.label, ink } }
+		end
+	end
+	return nil
+end
+
+-- A USE LINE'S COOLDOWN, as the client adds it to the line: "(2 Min
+-- Cooldown)" (ITEM_COOLDOWN_TOTAL), the words in it captured
+function M.CooldownPattern()
+	local form = M.Bare(type(_G.ITEM_COOLDOWN_TOTAL) == "string" and _G.ITEM_COOLDOWN_TOTAL or "(%s Cooldown)")
+	local holes = form:gsub("%%[%-%d%.]*[sd]", "\1")
+	local escaped = holes:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+	return "%s*" .. escaped:gsub("\1", "([^()]-)") .. "%s*$"
+end
+
+-- A Use line without its cooldown, and the cooldown's words ("2 Min"), or
+-- nil for none
+function M.WithoutCooldown(text)
+	local p = M.CooldownPattern()
+	local said = text:match(p)
+	if not said then
+		return text, nil
+	end
+	return (text:gsub(p, "")), said
+end
+
+-- What the first Use line that says an amount does, as M.SpellAmount reads
+-- it, without its cooldown: { effect, label, value, amount, over, after },
+-- or nil where none says one
+function M.UseAmount(item)
 	for _, e in ipairs(item.effects or {}) do
 		if e.head == "Use" then
-			local label, _, amount, over = M.SpellAmount(e.text)
+			local text = M.WithoutCooldown(e.text)
+			local label, value, amount, over, _, after = M.SpellAmount(text)
 			if label and amount then
-				local word, ink = M.PerSecond(label)
-				if type(over) == "number" and over > 0 then
-					return { { M.Figure(amount / over), word, ink } }
-				elseif not over then
-					return { { M.Middle(amount), label, ink } }
-				end
+				return { effect = e, text = text, label = label, value = value, amount = amount, over = over, after = after }
 			end
 		end
 	end
 	return nil
+end
+
+-- THE TWO FIGURES AT THE RIGHT, AS A SPELL'S (Josh 2026-10-18, picking
+-- option 1: "Instead of "Item Level" we can just use "ilvl""): beside the
+-- name, a weapon's DPS in red, armour's armor in the body's ink, or what a
+-- potion's Use line comes to (M.UseFigures); beside the line under it, the
+-- item level. Only what the item has: figures for c.header, or nil for
+-- neither.
+-- IN CAPITALS, AS ITS NEIGHBOURS (Josh 2026-10-18: "Let's go with ILVL"):
+-- it was "ilvl", as players write it, beside DPS and ARMOR.
+function M.ItemFigures(item, level)
+	local figs = {}
+	if item.dps then
+		figs[1] = { item.dps, "DPS", M.FIGURE_INK.dps }
+	elseif item.armor then
+		figs[1] = { item.armor, "Armor", ITEM_INK }
+	else
+		local use = M.UseFigures(item)
+		figs[1] = use and use[1] or nil
+	end
+	if level then
+		figs[2] = { tostring(level), "ilvl", M.FIGURE_INK.level }
+	end
+	if figs[1] or figs[2] then
+		return figs
+	end
+	return nil
+end
+
+-- what an amount is of, in a potion's cell: "70–90 health", as its line
+-- says; anything else as a spell's cell says it ("47 absorb")
+local USE_WORDS = { Healing = "health" }
+
+-- a number as the cells write it: thousands marked, a decimal left be
+local function commas(value)
+	if value:find("%.") then
+		return value
+	end
+	return (value:gsub(",", ""):gsub("%d+", U.Commas))
+end
+
+-- THE FACTS IN CELLS, AS A SPELL'S (option 1): what it does in a fight, a
+-- weapon's damage and speed, or a potion's amount and cooldown; then how it
+-- binds (BoE and BoP as players write them, "soulbound" as a word) and the
+-- level it asks for. Only what the item has. Returns the facts for
+-- M.FactCells, the Use line the cells say all of (or nil), and the Use
+-- line whose cooldown is in a cell (or nil).
+function M.ItemFacts(item)
+	local facts = {}
+	local function add(text, rgb, lower)
+		facts[#facts + 1] = { text = text, rgb = rgb, lower = lower }
+	end
+	if item.damage then
+		-- a wand's names its school: "17–32 fire damage"
+		add(("%s %sdamage"):format(item.damage, item.school and (item.school:lower() .. " ") or ""))
+	end
+	if item.speed then
+		add(item.speed .. " speed")
+	end
+	-- armor on a weapon, whose figure is its DPS; a shield's block
+	if item.armor and item.dps then
+		add(item.armor .. " armor")
+	end
+	if item.block then
+		add(item.block .. " block")
+	end
+	local said = nil
+	local use = M.UseAmount(item)
+	if use then
+		add(("%s %s%s"):format(commas(use.value), USE_WORDS[use.label] or use.label:lower(),
+			type(use.over) == "number" and (" over " .. M.Lasting(use.over)) or ""))
+		-- A USE LINE THAT SAYS NO MORE GOES, as a spell's description does
+		-- (M.SaysNoMore): "Restores 70 to 90 health." is all in the cells
+		if M.SaysNoMore(use.text, use.after) then
+			said = use.effect
+		end
+	end
+	local timed = nil
+	for _, e in ipairs(item.effects) do
+		local cooldown = e.head == "Use" and select(2, M.WithoutCooldown(e.text))
+		if cooldown then
+			add(cooldown .. " cooldown", nil, true)
+			timed = e
+			break
+		end
+	end
+	if item.require then
+		add(M.Bare(item.require.text), warning(item.require.rgb), true)
+	end
+	return facts, said, timed
+end
+
+-- HOW IT BINDS, AS A TAG UNDER WHAT IT IS (Josh 2026-10-18: ""Soulbound",
+-- "BoE" and "BoP" should be moved out of the grid somehow, and placed as a
+-- tag under the item type. Maybe increase the icon size a bit so everything
+-- lines up... This will allow us to remove the grid on non equipment items").
+-- An apple's only cell was "soulbound". The binding (BoE, BoP as players
+-- write them; Soulbound a word) and whether it is unique are outlined tags
+-- on a line of their own under the kind and slot, and the icon grows to the
+-- three lines. Each { words, look, keepCase } for T.TagsOnLine.
+function M.ItemTags(item)
+	local tags = {}
+	if item.bind then
+		local short = M.BindShort(item.bind)
+		tags[#tags + 1] = { short or item.bind, "bound", keepCase = short ~= nil }
+	end
+	if item.unique then
+		tags[#tags + 1] = { item.unique, "bound" }
+	end
+	return tags
 end
 
 -- an item's icon, by its id
@@ -2079,8 +2378,11 @@ function M.ItemIcon(id)
 end
 
 -- what kind of thing an item is, in the client's words, for one with no slot
--- line: its class and subclass ("Consumable", "Bandage"), once where they are
--- the same word; nil where the client will not say
+-- line; nil where the client will not say.
+-- THE SUBCLASS ALONE (Josh 2026-10-18, picking option 1, whose potion says
+-- "Potion"): a weapon's line says "Axe", not "Weapon · Axe", so a potion's
+-- says "Potion" and a bandage's "Bandage"; the class where there is no
+-- subclass
 function M.ItemClass(id)
 	id = plainLine(id)
 	local get = (C_Item and C_Item.GetItemInfoInstant) or _G.GetItemInfoInstant
@@ -2091,13 +2393,12 @@ function M.ItemClass(id)
 	if not ok then
 		return nil
 	end
-	local out = {}
-	for _, words in ipairs({ plainLine(kind) or false, plainLine(sub) or false }) do
-		if type(words) == "string" and words ~= "" and words ~= out[1] then
-			out[#out + 1] = words
+	for _, words in ipairs({ plainLine(sub) or false, plainLine(kind) or false }) do
+		if type(words) == "string" and words ~= "" then
+			return { words }
 		end
 	end
-	return #out > 0 and out or nil
+	return nil
 end
 
 -- the price in the game's own coins
@@ -2117,15 +2418,15 @@ function M.Coins(price)
 	return table.concat(out, " ")
 end
 
--- ours on each tooltip: the icon and its edge, the tiles, the rules and the
--- bar, made the first time an item is written on it
+-- ours on each tooltip: the icon and its edge, the figures, the cells and
+-- the bar, made the first time a card is written on it
 local bitsOf = setmetatable({}, { __mode = "k" })
 function M.ItemBits(tip)
 	local b = bitsOf[tip]
 	if b then
 		return b
 	end
-	b = { tiles = {}, rules = {} }
+	b = {}
 	b.holder = CreateFrame("Frame", nil, tip)
 	-- ours: the comparison tooltip's tab is looked for among its children
 	-- (restyleTab), and this is not it
@@ -2144,8 +2445,8 @@ function M.ItemBits(tip)
 	-- the durability's numbers, beside the bar (M.WriteItem, the foot)
 	b.worn = b.holder:CreateFontString(nil, "OVERLAY")
 	b.worn:SetPoint("LEFT", b.barBg, "RIGHT", M.ITEM.BAR_GAP, 0)
-	-- a spell's two figures at the right of its name and rank, each a number
-	-- and its label; and its facts' cells, made as they are wanted
+	-- the two figures at the right of the name and the line under it, each a
+	-- number and its label; and the facts' cells, made as they are wanted
 	b.figs = {}
 	for i = 1, 2 do
 		b.figs[i] = { num = b.holder:CreateFontString(nil, "OVERLAY"), label = b.holder:CreateFontString(nil, "OVERLAY") }
@@ -2179,70 +2480,38 @@ function M.HideItemBits(tip)
 	if b.deltaRule then
 		b.deltaRule:Hide()
 	end
-	for _, t in ipairs(b.tiles) do
-		t.bg:Hide()
-		t.value:Hide()
-		t.label:Hide()
-	end
-	for _, r in ipairs(b.rules) do
-		r:Hide()
-	end
 	b.holder:Hide()
 end
 BT.UnitTip.OnGone(M.HideItemBits)
 
-local function tile(b, i)
-	local t = b.tiles[i]
-	if t then
-		return t
-	end
-	t = {}
-	t.bg = b.holder:CreateTexture(nil, "ARTWORK")
-	t.value = b.holder:CreateFontString(nil, "OVERLAY")
-	t.label = b.holder:CreateFontString(nil, "OVERLAY")
-	local I = M.ITEM
-	local number = BT.Tip and BT.Tip.NUMBER
-	if number then
-		pcall(t.value.SetFont, t.value, number, BT.Fonts.Size(I.TILE_VALUE), "")
-	else
-		BT.Fonts.Set(t.value, "text", I.TILE_VALUE)
-	end
-	BT.Fonts.Set(t.label, "name", I.TILE_LABEL)
-	-- the number's own font, to go back to after one too wide was set smaller
-	t.font = { t.value:GetFont() }
-	t.labelFont = { t.label:GetFont() }
-	t.value:SetPoint("TOPLEFT", t.bg, "TOPLEFT", I.TILE_IN, -I.TILE_PAD)
-	-- hung from the number, so the two never meet whatever the face
-	t.label:SetPoint("TOPLEFT", t.value, "BOTTOMLEFT", 0, -I.TILE_SPLIT)
-	b.tiles[i] = t
-	return t
+-- a figure's label as it is drawn: in capitals, or as written where it
+-- keeps its case
+local function figLabel(f)
+	return f.keepCase and f[2] or f[2]:upper()
 end
 
 -- THE PIECES EVERY CARD IS WRITTEN WITH (Josh 2026-10-17: "I'd like a
 -- cohesive tooltip look across the board", then "Yes, spell and buff
 -- tooltips should get the same look"). An item, a spell and a buff are
--- written alike: the name with a line under it beside the icon, small
--- headings over rules, tiles, rows, laid on `tip` from its first line.
+-- written alike: the name with a line under it beside the icon, two
+-- figures at their right, the facts in cells, then rows, laid on `tip`
+-- from its first line.
+-- NO HEADINGS AND NO TILES ANY MORE (Josh 2026-10-18, picking option 1 for
+-- the items: the spell card's look): the items were the last to use them.
 local function card(tip)
 	local T, I = BT.UnitTip, M.ITEM
 	local b = M.ItemBits(tip)
-	tip:ClearLines()
+	M.ClearLines(tip)
 	T.HideTags(tip)
 	M.HideItemBits(tip)
 	b.holder:Show()
-	local c = { b = b, heads = {}, tileLines = {}, tileH = M.TileHeight(), off = 0 }
+	local c = { b = b, off = 0 }
 	function c.last()
 		return BT.Pill.Number(tip:NumLines(), 1)
 	end
 	function c.spacer()
 		tip:AddLine(" ")
 		T.SizeLine(tip, c.last(), I.SPACER, nil, "text")
-	end
-	function c.section(title)
-		c.spacer()
-		tip:AddLine(title:upper(), ITEM_HEAD[1], ITEM_HEAD[2], ITEM_HEAD[3])
-		T.SizeLine(tip, c.last(), I.HEAD, nil, "name")
-		c.heads[#c.heads + 1] = c.last()
 	end
 	-- Facts in cells, in rows no wider than `inner`, on a line kept for
 	-- them as tall as the rows; each item { shown words, plain words }
@@ -2265,12 +2534,6 @@ local function card(tip)
 		T.SizeLine(tip, c.last(), lineFor(#rows * h + 1), nil, "text")
 		c.cellRows = { line = c.last(), rows = rows, h = h }
 	end
-	-- `list`: { value, label } each; a missing value leaves no tile
-	function c.tiles(list)
-		tip:AddLine(T.TAG_BLANK)
-		T.SizeLine(tip, c.last(), lineFor(c.tileH), nil, "text")
-		c.tileLines[#c.tileLines + 1] = { line = c.last(), list = list }
-	end
 	function c.row(text, rgb, right, rrgb, wrap)
 		rgb = rgb or ITEM_INK
 		if right then
@@ -2288,11 +2551,15 @@ local function card(tip)
 	-- beside it, the next line ran under the icon, so the line is kept even
 	-- with nothing to say.
 	-- `figs`, where given, are a figure for the right of the name and one for
-	-- the right of the line under it, each { number, label, ink }; either may
-	-- be missing. The lines keep a blank at their right, as tall as the line,
-	-- for the figures to be laid against (c.finish).
-	function c.header(name, rgb, icon, sub, edge, figs)
-		c.off = icon and (I.ICON + I.ICON_GAP) or 0
+	-- the right of the line under it, each { number, label, ink, keepCase };
+	-- either may be missing. The lines keep a blank at their right, as tall
+	-- as the line, for the figures to be laid against (c.finish).
+	-- `tags`, where there are any, are a row of tags on a third line, under
+	-- the line under the name, and the icon is as tall as the three (M.ItemTags)
+	function c.header(name, rgb, icon, sub, edge, figs, tags)
+		c.tags = (tags and #tags > 0) and tags or nil
+		local size = c.tags and I.ICON_TALL or I.ICON
+		c.off = icon and (size + I.ICON_GAP) or 0
 		local said = type(sub) == "string" and sub ~= ""
 		if figs then
 			tip:AddDoubleLine(name, T.TAG_BLANK, rgb[1], rgb[2], rgb[3], 1, 1, 1, false, c.off)
@@ -2305,10 +2572,16 @@ local function card(tip)
 		else
 			tip:AddLine(name, rgb[1], rgb[2], rgb[3], false, c.off)
 			T.SizeLine(tip, 1, I.NAME, nil, "name")
-			if said or icon then
+			if said or icon or c.tags then
 				tip:AddLine(said and sub or " ", ITEM_SUB[1], ITEM_SUB[2], ITEM_SUB[3], false, c.off)
 				T.SizeLine(tip, 2, I.SUB, nil, "text")
 			end
+		end
+		if c.tags then
+			tip:AddLine(T.TAG_BLANK, 1, 1, 1, false, c.off)
+			c.tagLine = c.last()
+			T.SizeLine(tip, c.tagLine, T.TAG_LINE + 2, nil, "text")
+			T.TagsOnLine(tip, c.tagLine, c.tags)
 		end
 		if icon then
 			local fs = T.LineOf(tip, 1)
@@ -2316,14 +2589,33 @@ local function card(tip)
 			b.icon:SetTexture(icon)
 			b.icon:ClearAllPoints()
 			b.icon:SetPoint("TOPLEFT", fs, "TOPLEFT", -c.off, 1)
-			b.icon:SetSize(I.ICON, I.ICON)
+			b.icon:SetSize(size, size)
 			b.edge:SetColorTexture(e[1], e[2], e[3], 0.9)
 			b.icon:SetShown(fs ~= nil)
 			b.edge:SetShown(fs ~= nil)
 		end
 	end
+	-- How wide the name and the line under it need the card, each with its
+	-- figure at its right (after c.header, which sets the icon's room)
+	function c.needs(name, sub, figs)
+		local Measure = T.Measure
+		-- the tags' row, if there is one, wants its room too
+		local tagsW = 0
+		for i, tag in ipairs(c.tags or {}) do
+			tagsW = tagsW + T.TagWidth(tag[1], tag.keepCase) + (i > 1 and T.TAG_GAP or 0)
+		end
+		if not figs then
+			return math.max(Measure(name, I.NAME, "name"), tagsW) + c.off + 24
+		end
+		local function fig(i, size)
+			local f = figs[i]
+			return f and (Measure(f[1], size, "text") + I.FIG_GAP + Measure(figLabel(f), I.FIG_LABEL, "name")) or 0
+		end
+		return math.max(Measure(name, I.NAME, "name") + fig(1, I.HEADLINE),
+			Measure(sub or "", I.SUB, "text") + fig(2, I.FIG_SMALL), tagsW) + c.off + 24 + 12
+	end
 	-- As wide as `needs`, never narrower than `floor`; shown, so it has a
-	-- width; then the rules and tiles laid by that width. Returns it.
+	-- width; then the figures and cells laid by that width. Returns it.
 	function c.finish(floor, needs)
 		if tip.SetMinimumWidth then
 			pcall(tip.SetMinimumWidth, tip, math.max(floor, math.min(MAX_W, math.floor(needs))))
@@ -2333,83 +2625,15 @@ local function card(tip)
 		M.composing = false
 		local inner = BT.Pill.Number(tip.GetWidth and tip:GetWidth(), floor) - I.INSET
 		inner = math.max(floor - I.INSET, inner)
-		for i, line in ipairs(c.heads) do
-			local fs = T.LineOf(tip, line)
-			local r = b.rules[i]
-			if not r then
-				r = b.holder:CreateTexture(nil, "ARTWORK")
-				b.rules[i] = r
-			end
-			if fs then
-				r:ClearAllPoints()
-				r:SetPoint("BOTTOMLEFT", fs, "TOPLEFT", 0, 3)
-				r:SetSize(inner, 1)
-				r:SetColorTexture(SKIN_RIM[1], SKIN_RIM[2], SKIN_RIM[3], 0.9)
-				r:Show()
-			end
-		end
-		-- three to a row, or as many as there are past three (a spell's cost,
-		-- range, cast and cooldown)
-		local n = 0
-		for _, at in ipairs(c.tileLines) do
-			local fs = T.LineOf(tip, at.line)
-			local shown = 0
-			for _, t in ipairs(at.list) do
-				if t[1] then
-					shown = shown + 1
-				end
-			end
-			local slots = math.max(3, shown)
-			local tileW = math.floor((inner - (slots - 1) * I.TILE_GAP) / slots)
-			local x = 0
-			for _, t in ipairs(at.list) do
-				if t[1] and fs then
-					n = n + 1
-					local it = tile(b, n)
-					it.bg:ClearAllPoints()
-					it.bg:SetPoint("TOPLEFT", fs, "TOPLEFT", x, 0)
-					it.bg:SetSize(tileW, c.tileH)
-					-- faintly its own colour where it has one (a DPS tile red),
-					-- or the plain wash
-					local tint = t[4]
-					if tint then
-						it.bg:SetColorTexture(tint[1], tint[2], tint[3], I.TILE_TINT)
-					else
-						it.bg:SetColorTexture(1, 1, 1, 0.045)
-					end
-					-- in its own colour where the client gave it one (a cost you
-					-- cannot pay, in red)
-					local ink = t[3] or ITEM_INK
-					local f = it.font
-					if f and f[1] and f[2] then
-						pcall(it.value.SetFont, it.value, f[1], f[2], f[3])
-					end
-					it.value:SetText(t[1])
-					it.value:SetTextColor(ink[1], ink[2], ink[3])
-					-- A NUMBER NEVER RUNS OUT OF ITS TILE (Josh 2026-10-17: "The
-					-- spell stat lines "Instant" goes out of the box"): one wider
-					-- than its tile is set smaller until it fits
-					local wide = BT.Pill.Number(it.value.GetStringWidth and it.value:GetStringWidth(), 0)
-					local room = tileW - 2 * I.TILE_IN
-					if f and f[1] and f[2] and wide > room then
-						pcall(it.value.SetFont, it.value, f[1], math.max(I.TILE_LEAST, f[2] * room / wide), f[3])
-					end
-					-- and the label likewise, never under its least
-					local lf = it.labelFont
-					if lf and lf[1] and lf[2] then
-						pcall(it.label.SetFont, it.label, lf[1], lf[2], lf[3])
-					end
-					it.label:SetText(t[2]:upper())
-					local lw = BT.Pill.Number(it.label.GetStringWidth and it.label:GetStringWidth(), 0)
-					if lf and lf[1] and lf[2] and lw > room then
-						pcall(it.label.SetFont, it.label, lf[1], math.max(I.TILE_LABEL_LEAST, lf[2] * room / lw), lf[3])
-					end
-					it.label:SetTextColor(ITEM_HEAD[1], ITEM_HEAD[2], ITEM_HEAD[3])
-					it.bg:Show()
-					it.value:Show()
-					it.label:Show()
-					x = x + tileW + I.TILE_GAP
-				end
+		-- the tall icon from the name's top to the tags' foot, where the client
+		-- says where they are, within a few points of the room kept for it
+		if c.tagLine and b.icon:IsShown() then
+			local top, foot = T.LineOf(tip, 1), T.LineOf(tip, c.tagLine)
+			local t = top and top.GetTop and BT.Pill.Number(top:GetTop(), nil)
+			local f = foot and foot.GetBottom and BT.Pill.Number(foot:GetBottom(), nil)
+			if t and f and t > f then
+				local s = math.max(I.ICON, math.min(I.ICON_TALL + 2, math.floor(t - f + 1.5)))
+				b.icon:SetSize(s, s)
 			end
 		end
 		-- THE FIGURES, PLAIN AND RIGHT-ALIGNED (Josh 2026-10-17, picking D of
@@ -2429,7 +2653,7 @@ local function card(tip)
 				BT.Fonts.Set(g.label, "name", I.FIG_LABEL)
 				g.num:SetText(f[1])
 				g.num:SetTextColor(f[3][1], f[3][2], f[3][3])
-				g.label:SetText(f[2]:upper())
+				g.label:SetText(figLabel(f))
 				g.label:SetTextColor(ITEM_HEAD[1], ITEM_HEAD[2], ITEM_HEAD[3])
 				g.label:ClearAllPoints()
 				g.label:SetPoint("RIGHT", at, "RIGHT", 0, -math.floor((size - BT.Fonts.Size(I.FIG_LABEL)) / 2))
@@ -2445,12 +2669,21 @@ local function card(tip)
 		local cr = c.cellRows
 		local at = cr and T.LineOf(tip, cr.line)
 		if at then
+			-- ONE SCREEN PIXEL, NOT ONE UNIT (Josh 2026-10-18: "the bottom
+			-- border of the first row of the grid looks like it is 2px. Can we
+			-- make sure the border is a uniform 1px on all cells?"): at a scale
+			-- where a unit is a little more than a pixel, a line one unit thick
+			-- covered two rows of pixels wherever it landed across them. Every
+			-- line is one pixel at the scale the tooltip is drawn at, as the
+			-- panels' rims are (UI/Pill.lua, P.Px).
+			local one = BT.Pill.Px(b.holder, 1) or 1
 			local nLine, nText = 0, 0
 			local function rule(x, y, w, h)
 				nLine = nLine + 1
 				local t = b.cellLines[nLine]
 				if not t then
 					t = b.holder:CreateTexture(nil, "ARTWORK")
+					BT.Pill.Snap(t)
 					b.cellLines[nLine] = t
 				end
 				t:ClearAllPoints()
@@ -2461,7 +2694,7 @@ local function card(tip)
 			end
 			for r, row in ipairs(cr.rows) do
 				local y = (r - 1) * cr.h
-				rule(0, y, inner, 1)
+				rule(0, y, inner, one)
 				local natural = 0
 				for _, cell in ipairs(row) do
 					natural = natural + cell.w
@@ -2471,7 +2704,7 @@ local function card(tip)
 				for k, cell in ipairs(row) do
 					local left = math.floor(x + 0.5)
 					if k > 1 then
-						rule(left, y, 1, cr.h + 1)
+						rule(left, y, one, cr.h + one)
 					end
 					nText = nText + 1
 					local t = b.cellText[nText]
@@ -2489,9 +2722,9 @@ local function card(tip)
 				end
 			end
 			local tall = #cr.rows * cr.h
-			rule(0, tall, inner, 1)
-			rule(0, 0, 1, tall + 1)
-			rule(inner - 1, 0, 1, tall + 1)
+			rule(0, tall, inner, one)
+			rule(0, 0, one, tall + one)
+			rule(inner - one, 0, one, tall + one)
 		end
 		return inner
 	end
@@ -2505,14 +2738,16 @@ function M.WriteItem(tip, item, icon, level)
 	local T, I = BT.UnitTip, M.ITEM
 	local c = card(tip)
 	local b = c.b
-	local spacer, section, tiles, row = c.spacer, c.section, c.tiles, c.row
+	local spacer, row = c.spacer, c.row
 
-	-- the name, and what it is, beside its icon: its kind, slot and level, or
-	-- for something with no slot what kind of thing it is ("Trade Goods")
+	-- the name, and what it is, beside its icon: its kind and slot ("Axe ·
+	-- Two-Hand"), or for something with no slot what kind of thing it is
+	-- ("Trade Goods"). Its level is a figure at the right now, not words in
+	-- this line.
 	local q = item.quality or ITEM_INK
 	level = level or item.level
 	local sub = {}
-	for _, words in ipairs({ item.kind or false, item.slot or false, level and ("ilvl " .. level) or false }) do
+	for _, words in ipairs({ item.kind or false, item.slot or false }) do
 		if words then
 			sub[#sub + 1] = words
 		end
@@ -2522,63 +2757,56 @@ function M.WriteItem(tip, item, icon, level)
 			sub[#sub + 1] = words
 		end
 	end
-	c.header(item.name, q, icon, table.concat(sub, " · "), nil, M.UseFigures(item))
+	sub = table.concat(sub, " · ")
+	local figs = M.ItemFigures(item, level)
+	c.header(item.name, q, icon, sub, nil, figs, M.ItemTags(item))
 
-	-- how it binds, and what it asks of you
-	local tagsHere = {}
-	if item.bind then
-		local short = M.BindShort(item.bind)
-		tagsHere[#tagsHere + 1] = { short or item.bind, "bound", keepCase = short ~= nil }
+	-- as wide as the name and the line under it need, each with its figure,
+	-- as a spell's card is; and the foot, whose left side the client cannot
+	-- measure: the bar and its numbers are ours. A bolt of cloth with no
+	-- figures is let be narrower.
+	local floor = figs and I.MIN_W or I.PLAIN_W
+	local needs = c.needs(item.name, sub, figs)
+	local d = item.durability
+	local hasBar = d ~= nil and d.most ~= nil and d.most > 0
+	if hasBar then
+		needs = math.max(needs, I.BAR_W + I.BAR_GAP + T.Measure(d.text, I.FOOT, "text")
+			+ (item.price and T.Measure(M.Coins(item.price), I.FOOT, "text") or 0) + 24 + I.INSET)
 	end
-	if item.unique then
-		tagsHere[#tagsHere + 1] = { item.unique, "bound" }
-	end
-	if #tagsHere > 0 or item.require then
+	needs = math.min(MAX_W, needs)
+
+	-- what it does in a fight and what it asks of you, in cells
+	local facts, said, timed = M.ItemFacts(item)
+	if #facts > 0 then
 		spacer()
-		local need = item.require
-		local nr = (need and need.rgb) or ITEM_SUB
-		tip:AddDoubleLine(T.TAG_BLANK, need and need.text or " ", 1, 1, 1, nr[1], nr[2], nr[3])
-		T.SizeLine(tip, c.last(), T.TAG_LINE, nil, "text")
-		T.SizeLine(tip, c.last(), I.SUB, "TextRight", "text")
-		T.TagsOnLine(tip, c.last(), tagsHere)
+		c.cells(M.FactCells(facts), math.max(floor, needs) - I.INSET)
 	end
 
-	-- what it does in a fight
-	if item.dps or item.damage or item.speed then
-		section("Damage")
-		-- a wand's hit names its school ("Shadow, a hit"), and the tile keeps
-		-- only the numbers
-		-- DPS, red, as a spell's is (Josh 2026-10-17: "The dps box should be
-		-- red")
-		tiles({ { item.dps, "DPS", nil, M.TILE_TINTS.dps },
-			{ item.damage, item.school and (item.school .. ", a hit") or "A hit" }, { item.speed, "Speed" } })
-		for _, d in ipairs(item.extraDamage) do
-			row(d.text, d.rgb)
-		end
+	-- then its stats and what it does beyond them, as plain lines with no
+	-- headings over them: the effects as the client wrote them ("Equip: +62
+	-- Attack Power."), in the game's green, in the order they came. A Use
+	-- line the cells say all of is left out, and a cooldown in a cell is
+	-- not said again.
+	local body = {}
+	for _, x in ipairs(item.extraDamage) do
+		body[#body + 1] = { x.text, x.rgb }
 	end
-	if item.armor or item.block then
-		section("Armor")
-		tiles({ { item.armor, "Armor" }, { item.block, "Block" } })
+	for _, s in ipairs(item.stats) do
+		body[#body + 1] = { s.text, s.rgb }
 	end
-	if #item.stats > 0 then
-		section("Stats")
-		for _, s in ipairs(item.stats) do
-			row(s.text, s.rgb)
-		end
-	end
-	-- the effects, under what sets each off, in the order they came
-	local order, byHead = {}, {}
 	for _, e in ipairs(item.effects) do
-		if not byHead[e.head] then
-			byHead[e.head] = {}
-			order[#order + 1] = e.head
+		if e ~= said then
+			local text = e.line or e.text
+			if e == timed then
+				text = M.WithoutCooldown(text)
+			end
+			body[#body + 1] = { text, e.rgb or ITEM_GREEN, true }
 		end
-		table.insert(byHead[e.head], e)
 	end
-	for _, head in ipairs(order) do
-		section(head)
-		for _, e in ipairs(byHead[head]) do
-			row(e.text, e.rgb or ITEM_GREEN, nil, nil, true)
+	if #body > 0 then
+		spacer()
+		for _, r in ipairs(body) do
+			row(r[1], r[2], nil, nil, r[3])
 		end
 	end
 	-- whatever else the client said, as it said it
@@ -2605,11 +2833,9 @@ function M.WriteItem(tip, item, icon, level)
 	-- than it was asked to, so the bar lay over the first figure. Now the
 	-- line keeps no words of its own on the left, and the numbers hang off
 	-- the bar's end.
-	local footLine, hasBar = nil, false
-	if item.durability or item.price then
+	local footLine = nil
+	if d or item.price then
 		spacer()
-		local d = item.durability
-		hasBar = d ~= nil and d.most ~= nil and d.most > 0
 		local worn = " "
 		if d then
 			worn = hasBar and T.TAG_BLANK or d.text
@@ -2628,27 +2854,10 @@ function M.WriteItem(tip, item, icon, level)
 		tip:AddLine(note)
 	end
 
-	-- as wide as the name and its icon need, and never narrower than three
-	-- tiles do; a bolt of cloth with no tiles is let be narrower
-	local floor = #c.tileLines > 0 and I.MIN_W or I.PLAIN_W
-	local needs = BT.UnitTip.Measure(item.name, I.NAME, "name") + c.off + 24
-	-- and its figure at the right of its name
-	local figs = M.UseFigures(item)
-	if figs then
-		needs = needs + BT.UnitTip.Measure(figs[1][1], I.HEADLINE, "text") + I.FIG_GAP
-			+ BT.UnitTip.Measure(figs[1][2]:upper(), I.FIG_LABEL, "name") + 12
-	end
-	-- and the foot, whose left side the client cannot measure: the bar and
-	-- its numbers are ours
-	if hasBar then
-		needs = math.max(needs, I.BAR_W + I.BAR_GAP + BT.UnitTip.Measure(item.durability.text, I.FOOT, "text")
-			+ (item.price and BT.UnitTip.Measure(M.Coins(item.price), I.FOOT, "text") or 0) + 24 + I.INSET)
-	end
 	c.finish(floor, needs)
 
 	if hasBar then
 		local fs = T.LineOf(tip, footLine)
-		local d = item.durability
 		local share = math.max(0, math.min(1, (d.now or 0) / d.most))
 		local col = share > 0.5 and { 0.31, 0.78, 0.42 } or share > 0.25 and { 0.89, 0.75, 0.30 } or { 0.89, 0.38, 0.35 }
 		if fs then
@@ -2669,13 +2878,11 @@ function M.WriteItem(tip, item, icon, level)
 	return true
 end
 
--- the item's level, for the line under its name: on things you wear only
+-- the item's level, for its figure beside the line under its name: on
+-- things you wear only
 local function levelOf(tip)
-	if not tip.GetItem then
-		return nil
-	end
-	local ok, _, link = pcall(tip.GetItem, tip)
-	local text = ok and M.ItemLevelText(link)
+	local link = shownItem(tip)
+	local text = link and M.ItemLevelText(link)
 	return text and text:match("(%d+)%s*$") or nil
 end
 
@@ -2694,6 +2901,21 @@ function M.RebuildItem(tip, data)
 	local item = M.ReadItem(data, tip.isShopping and true or false)
 	if not item then
 		return false
+	end
+	-- another addon's lines, with the client's other lines after the effects
+	-- (M.OthersLines); a footnote among them stays a footnote
+	-- NOT THE PRICE TWICE (Josh's screenshots, 2026-10-18): the client adds its
+	-- own "Sell Price:" line after its data, and the card already says the
+	-- price in its footer, so that one is not carried
+	for _, row in ipairs(M.OthersLines(tip, data) or {}) do
+		local note = isFootnote(row.text)
+		if note == "price" then
+			-- (the footer's coins say it)
+		elseif note then
+			item.notes[#item.notes + 1] = row.text
+		else
+			item.rest[#item.rest + 1] = row
+		end
 	end
 	local id = type(data) == "table" and data.id or nil
 	item.class = M.ItemClass(id)
@@ -2761,9 +2983,9 @@ function M.ComposeItem(tip, data)
 	--
 	-- An item name already says what it is by its quality colour. It does not
 	-- need to be bigger as well.
-	-- WRITTEN AGAIN IN OPTION C'S SHAPE (M.RebuildItem), or, for a shape that
-	-- does not know, its lines in the unit tooltip's style where they are;
-	-- then the footnotes quiet
+	-- WRITTEN AGAIN AS A SPELL'S CARD IS (M.RebuildItem), or, for a shape
+	-- that does not know, its lines in the unit tooltip's style where they
+	-- are; then the footnotes quiet
 	M.Seen("item", data)
 	local rebuilt = M.RebuildItem(tip, data)
 	if rebuilt == false then
@@ -2771,15 +2993,14 @@ function M.ComposeItem(tip, data)
 	else
 		-- DRESSED AGAIN AFTER THE REBUILD (Josh 2026-10-17: "Looks like we
 		-- lost the left border that indicates item rarity"). The rebuild
-		-- clears the tooltip, and a clear takes the spine off (M.DressPlain)
-		-- and gives a comparison tooltip the client's own background back
-		-- (GameTooltip_ClearStyle).
+		-- clears the tooltip, and a clear gives a comparison tooltip the
+		-- client's own background back (GameTooltip_ClearStyle).
 		spine()
 	end
 	quietFooter(tip)
 	shadowTitle(tip)
 	-- before the Show below, which measures the tooltip with it in; a rebuilt
-	-- one says its level under its name
+	-- one has its level as a figure (M.ItemFigures)
 	if not rebuilt then
 		itemLevel(tip)
 	end
@@ -2802,8 +3023,10 @@ BT.OnItemTooltip("tooltips", 0, M.ComposeItem)
 -- "Fold the Equipped tooltip's "If you replace this item..." lines into the
 -- card"). The client writes those lines after the card is written, so they
 -- came out in its own style under ours. Once it has, the line that heads them
--- is set as a heading of the card's, "If replaced", over a rule, and the
--- changes under it at the rows' size, in the colours the client gave them.
+-- is set as a small heading, "If replaced", over a rule, and the changes
+-- under it at the rows' size, in the colours the client gave them. It is the
+-- one heading a card still has (2026-10-18): what is under it is the
+-- client's, written after the card, not part of the item.
 M.DELTA_HEAD = "If replaced"
 local function isDeltaHead(text)
 	if type(text) ~= "string" then
@@ -2900,16 +3123,7 @@ end
 -- which. So each half is read by its words. A line with a half that nothing
 -- here knows stays a row, as the client wrote it.
 
--- the client's own sentence as a pattern: its numbers ("%d", "%.3g", "%s")
--- captured, a plural ("|4sec:secs;") any word
-local function shape(global, fallback)
-	local form = type(_G[global]) == "string" and _G[global] or fallback
-	local holes = form:gsub("%%%%", "\2"):gsub("%%[%-%d%.]*[sdfg]", "\1"):gsub("|4[^;]*;", "\3")
-	local escaped = holes:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
-	local pattern = escaped:gsub("\1", "(.-)"):gsub("\2", "%%%%"):gsub("\3", "%%a+")
-	return "^" .. pattern .. "$"
-end
-M.Shape = shape
+-- (the client's sentences are made patterns by `shape`, by the items' own)
 
 -- each kind of half: the patterns it is written in, its tile's label, and
 -- what follows the number in the tile
@@ -2991,11 +3205,8 @@ local function isRemaining(text)
 	return text:find(" remaining$") ~= nil
 end
 
--- some words in a colour of their own, inside a line of another
-local function hex(rgb, words)
-	return ("|cff%02x%02x%02x%s|r"):format(math.floor(rgb[1] * 255 + 0.5), math.floor(rgb[2] * 255 + 0.5),
-		math.floor(rgb[3] * 255 + 0.5), words)
-end
+-- (`hex` is with the items' colours, by M.FactCells, which writes both
+-- cards' cells)
 
 -- the game's gold, which a spell's description is written in
 local function isGold(c)
@@ -3010,7 +3221,8 @@ end
 -- The client's lines, sorted into what the tooltip shows; nil for a shape
 -- this does not know. `kind`: "spell" or "aura". `fresh`: lines fetched,
 -- not drawn, so none says which tooltip line it went on; all are shown.
-function M.ReadSpell(data, kind, fresh)
+-- `enemy`: an enemy's ability, whose DPS goes by its cooldown.
+function M.ReadSpell(data, kind, fresh, enemy)
 	if type(data) ~= "table" or type(data.lines) ~= "table" then
 		return nil
 	end
@@ -3063,7 +3275,9 @@ function M.ReadSpell(data, kind, fresh)
 							spell.facts[#spell.facts + 1] = fact
 							if label == "Cast" then
 								spell.cast = value
-							elseif label ~= "Cooldown" then
+							elseif label == "Cooldown" then
+								spell.cooldown = value
+							else
 								spell.cost = tile
 							end
 						end
@@ -3111,10 +3325,10 @@ function M.ReadSpell(data, kind, fresh)
 	-- comes to a second where it works over time; it costs nothing, so has
 	-- no per mana
 	do
-		local label, value, amount, over, weapon, after, bonus
+		local label, value, amount, over, weapon, after, bonus, hit
 		local found = nil
 		for _, r in ipairs(spell.rows) do
-			label, value, amount, over, weapon, after, bonus = M.SpellAmount(r.text)
+			label, value, amount, over, weapon, after, bonus, hit = M.SpellAmount(r.text)
 			if label then
 				found = r
 				break
@@ -3153,7 +3367,7 @@ function M.ReadSpell(data, kind, fresh)
 		if not secs and spell.cast == (_G.SPELL_CAST_CHANNELED or "Channeled") and type(over) == "number" then
 			secs = over
 		end
-		local gcd = M.GcdFor(power)
+		local gcd = M.GCD
 		-- DPS OR HPS AT THE TOP RIGHT (Josh 2026-10-17, choosing option B of the
 		-- spell tooltip canvas: "if we don't have the boxes like in option A, I
 		-- think we can get rid of "Throughput" and move "HPS" or "DPS" down"):
@@ -3182,10 +3396,24 @@ function M.ReadSpell(data, kind, fresh)
 		end
 		if resource == "energy" then
 			each = amount and cost and cost > 0 and amount / cost * M.EnergyRegen() or nil
+			-- A BLEED IS NO FASTER THAN IT TICKS (2026-10-17, audit): energy
+			-- would let you put Garrote's 144 over 18 sec on every 5 sec, but
+			-- one bleed does 8 a second, so the slower of the two
+			if each and type(over) == "number" and over > 0 then
+				each = math.min(each, amount / over)
+			end
 		elseif amount and type(over) == "number" and over > 0 then
 			each = amount / over
 		elseif amount and secs and not over then
 			each = amount / math.max(secs, gcd)
+		end
+		-- AN ENEMY'S NO FASTER THAN ITS COOLDOWN (Josh 2026-10-18: "yes, use the
+		-- cooldown for enemy abilities"): Stitches's Aura of Rot does its 38
+		-- once every 3 sec, 12.7 a second, not 25.3 by the global cooldown. A
+		-- spell of yours keeps the figure for casting it as fast as you can.
+		local cd = enemy and M.CastSeconds(spell.cooldown)
+		if each and cd and cd > 0 then
+			each = math.min(each, amount / cd)
 		end
 		-- BOTH FIGURES AT THE TOP RIGHT (Josh 2026-10-17: "I'm also not 100%
 		-- sold on the healing per mana and casts to empty line... Just go ahead
@@ -3195,12 +3423,17 @@ function M.ReadSpell(data, kind, fresh)
 		-- energy's as well as mana's and rage's. The casts to empty are gone
 		-- ("I think we should just remove the total number of casts as well...
 		-- not really valuable").
+		-- NEITHER FOR DAMAGE ON A HIT (Josh 2026-10-18: "I'm not sure the 'per
+		-- mana' makes sense here though, since it is a buff"): Thorns does its
+		-- 3 on each of many hits, so it has no DPS and no per mana
+		-- (M.ON_A_HIT). With no figures, the name and rank are written as for
+		-- a spell that says no amount, with no room kept at their right.
 		local figs = {}
-		if each then
+		if each and not hit then
 			local word, ink = M.PerSecond(label)
 			figs[1] = { M.Figure(each), word, ink }
 		end
-		if amount and cost and cost > 0 then
+		if amount and cost and cost > 0 and not hit then
 			figs[2] = { ("%.2f"):format(math.floor(amount / cost * 100 + 0.5) / 100), "per " .. power:lower(),
 				M.FIGURE_INK[resource] or ITEM_INK }
 		end
@@ -3263,22 +3496,16 @@ function M.SaysNoMore(text, after)
 	return rest:find("^%s*%.?%s*$") ~= nil
 end
 
--- the global cooldown, which an instant spell still takes; an energy
--- ability's is a second
-M.GCD, M.GCD_ENERGY = 1.5, 1.0
-function M.GcdFor(power)
-	if type(power) == "string" and power:lower() == (_G.ENERGY or "Energy"):lower() then
-		return M.GCD_ENERGY
-	end
-	return M.GCD
-end
+-- the global cooldown, which an instant spell still takes (an energy
+-- ability's DPS goes by the energy coming back instead)
+M.GCD = 1.5
 
 -- an amount's middle as the line of facts says it: 28.5, or 51 where it is
--- whole
+-- whole; a whole one with its thousands marked, "1,400" (2026-10-17, audit)
 function M.Middle(n)
 	n = M.Tenths(n)
 	if n == math.floor(n) then
-		return ("%d"):format(n)
+		return U.Commas(n)
 	end
 	return ("%.1f"):format(n)
 end
@@ -3289,26 +3516,23 @@ function M.Tenths(n)
 	return math.floor(n * 10 + 0.5) / 10
 end
 
--- a worked-out figure as a tile shows it: one place under a hundred
+-- a worked-out figure as a tile shows it: one place under a hundred, and
+-- whole with its thousands marked above
 function M.Figure(n)
 	if n < 100 then
 		return ("%.1f"):format(M.Tenths(n))
 	end
-	return ("%d"):format(math.floor(n + 0.5))
+	return U.Commas(math.floor(n + 0.5))
 end
 
--- a figure's own colour at the top right of a spell
+-- a figure's own colour at the top right of a card; an item's level a
+-- quiet grey, under its DPS or armor
 M.FIGURE_INK = {
 	dps = { 1.00, 0.54, 0.48 }, hps = { 0.50, 0.91, 0.60 },
 	mana = { 0.56, 0.71, 1.00 }, energy = { 1.00, 0.88, 0.48 }, rage = { 1.00, 0.44, 0.53 },
+	level = { 0.76, 0.80, 0.78 },
 }
 
--- the faint colour behind a tile
-M.TILE_TINTS = {
-	dps = { 1.00, 0.32, 0.24 }, hps = { 0.30, 0.85, 0.42 },
-	mana = { 0.30, 0.55, 1.00 }, energy = { 1.00, 0.84, 0.22 }, rage = { 0.72, 0.10, 0.18 },
-}
--- the resource's, by the word the client wrote its cost in, or nil
 -- which of mana, energy and rage the word the client wrote a cost in is,
 -- or nil
 function M.PowerKind(power)
@@ -3381,7 +3605,9 @@ function M.CastSeconds(value)
 	if not n then
 		return nil
 	end
-	return unit == "min" and n * 60 or n
+	-- (a cooldown may be hours or days)
+	local scale = { min = 60, hrs = 3600, days = 86400 }
+	return n * (scale[unit] or 1)
 end
 
 -- WHAT A SPELL DOES, IN NUMBERS: the client says it only in its description,
@@ -3389,14 +3615,83 @@ end
 -- damage over 6 sec"). Read in this order, because an absorb and a heal are
 -- also written with the word "damage". Each is a pattern with the amount, or
 -- the lowest and the highest, in its captures.
+-- ALSO "OF", "LIFE", "6-11" AND "TRANSFERS" (2026-10-17, audit): Renew's
+-- first rank "Heals the target of 45 damage", a Healthstone's "restores 100
+-- life", a finishing move's "1 point: 6-11 damage" (its middle, not the 11)
+-- and Drain Life's "Transfers 10 health". A number standing alone starts
+-- where no other number does, so the 5 of "2.5 additional damage" is not one.
 M.AMOUNTS = {
 	{ "Absorb", { "[Aa]bsorbing ([%d,]+)", "[Aa]bsorbs? ([%d,]+)" } },
 	{ "Healing", { "[Hh]eal[sing]* [^%.]-for ([%d,]+) to ([%d,]+)", "[Hh]eal[sing]* [^%.]-for ([%d,]+)",
-		"[Hh]eals? ([%d,]+)", "[Rr]estores ([%d,]+) to ([%d,]+) health", "[Rr]estores ([%d,]+) health" } },
+		"[Hh]eals? ([%d,]+)", "[Hh]eals? [^%.]-of ([%d,]+)", "[Rr]estores ([%d,]+) to ([%d,]+) health",
+		"[Rr]estores ([%d,]+) health", "[Rr]estores ([%d,]+) to ([%d,]+) life", "[Rr]estores ([%d,]+) life" } },
 	-- a drink, or a mana potion
 	{ "Mana", { "[Rr]estores ([%d,]+) to ([%d,]+) mana", "[Rr]estores ([%d,]+) mana" } },
-	{ "Damage", { "([%d,]+) to ([%d,]+) [%a ]-damage", "([%d,]+) %a* ?damage" } },
+	{ "Damage", { "%f[%d%.,]([%d,]+) to ([%d,]+) [%a ]-damage", "%f[%d%.,]([%d,]+)%-([%d,]+) [%a ]-damage",
+		"%f[%d%.,]([%d,]+) %a* ?damage", "[Tt]ransfers ([%d,]+) health" } },
 }
+
+-- NOT AN AMOUNT (2026-10-17, audit): a number followed by a length of time
+-- or a distance, or by the rest of a decimal. Healing Stream Totem lasts
+-- "for 1 min that heals ... for 6": the 1 is how long, and the 6 is the heal.
+M.NOT_AMOUNTS = { "^%.%d", "^%s*sec", "^%s*min", "^%s*hours?%f[%A]", "^%s*yards?%f[%A]", "^%s*yd%f[%A]" }
+local function notAnAmount(after)
+	for _, p in ipairs(M.NOT_AMOUNTS) do
+		if after:find(p) then
+			return true
+		end
+	end
+	return false
+end
+
+-- How long a description says it lasts, in seconds: the first "for 15 sec",
+-- "Lasts 5 sec" or "for 1 min" in it; nil where it says none
+function M.LastsFor(text)
+	local best, at = nil, nil
+	for _, p in ipairs({ "()for (%d+) (%a+)", "()[Ll]asts (%d+) (%a+)" }) do
+		for pos, n, unit in text:gmatch(p) do
+			if unit:find("^sec") or unit:find("^min") then
+				if not at or pos < at then
+					best, at = tonumber(n) * (unit:find("^min") and 60 or 1), pos
+				end
+				break
+			end
+		end
+	end
+	return best
+end
+
+-- AT NO RATE YOU SET (2026-10-17, audit): a totem that attacks as often as
+-- it likes (Searing Totem). It works over time at a rate the words do not
+-- give, so it has no DPS.
+-- NOR PER MANA (2026-10-18, as Thorns): its 10 is one attack of the dozen
+-- or so it makes for the mana, so 0.40 per mana said a twelfth of it.
+M.NO_RATE = { "repeatedly" }
+
+-- ON A HIT, NO RATE AT ALL (Josh 2026-10-18: "I'm not sure the 'per mana'
+-- makes sense here though, since it is a buff"). Thorns does its 3 each
+-- time an enemy strikes the target, so 3 for 35 mana counts one hit of
+-- many, and its 10 minutes say nothing of how often. Damage to whoever
+-- strikes you (Lightning Shield, Retribution Aura, Fire Shield,
+-- Shadowguard), on a block (Holy Shield) and on each swing of your weapon
+-- (Seal of Righteousness, Flametongue Weapon) is the same. Such a spell
+-- keeps its amount, what one hit does, and has no DPS and no per mana.
+-- It is read by the words, so every rank is covered. "A hammer that
+-- strikes an enemy" is a hit of your own, and Overpower's "cannot be
+-- blocked" and Revenge's "must follow a block" are not damage on a block.
+M.ON_A_HIT = { "when hit", "when struck", "attackers?", "any %a+ that strikes", "who strikes", "attacks? blocked",
+	"each melee attack", "each hit" }
+
+-- whether `text` has one of `words` in it, each a whole word or words
+local function says(text, words)
+	local lower = text:lower()
+	for _, word in ipairs(words) do
+		if lower:find("%f[%a]" .. word .. "%f[%A]") then
+			return true
+		end
+	end
+	return false
+end
 
 -- A MELEE OR RANGED ABILITY ADDS TO YOUR WEAPON (Josh 2026-10-17, picking
 -- "Count weapon damage"). "Causes 3 damage in addition to your normal weapon
@@ -3467,57 +3762,88 @@ local function weaponAmount(text)
 	return nil
 end
 
+-- One amount M.SpellAmount found, as it returns it. An amount each second,
+-- or every few, for so long is the whole of it: "26 Arcane damage each
+-- second for 3 sec" is 78.
+-- EVERY FEW SECONDS, HOWEVER IT SAYS HOW LONG (2026-10-17, audit): "every 1
+-- sec. Lasts 15 sec." (Hellfire), "every 1 sec, and ... Lasts 10 sec."
+-- (Hurricane), "every 1 second for 6 sec" (Volley), and a totem's "for 1 min
+-- that heals ... for 6 every 2 seconds", which says how long before it.
+local function amountOf(label, text, lo, hi, after)
+	-- how many times it lands, and for how long, where the words say
+	local times, lasts = 1, nil
+	local each = after:match("^%s*%a*%s*each second for (%d+) sec")
+	local every, rest = after:match("^[^%.]-every (%d+) sec%a*%.?(.*)$")
+	-- "every second" is every 1 sec (Drain Life, as the Classic database
+	-- words it: 2026-10-18)
+	if not every then
+		rest = after:match("^[^%.]-every second%.?(.*)$")
+		every = rest and 1 or nil
+	end
+	every = tonumber(every)
+	if each then
+		times, lasts = tonumber(each), tonumber(each)
+	elseif every and every > 0 then
+		local long = M.LastsFor(rest) or M.LastsFor(text)
+		if long then
+			times, lasts = math.floor(long / every), long
+		end
+	end
+	if not lasts then
+		local n, unit = after:match("^%s*%a*%s*over (%d+) (%a+)")
+		if n then
+			lasts = tonumber(n) * (unit:find("^min") and 60 or 1)
+		end
+	end
+	-- over time: for how many seconds, or only that it is (M.NO_RATE,
+	-- M.ON_A_HIT)
+	local hit = says(text, M.ON_A_HIT) or says(text, M.NO_RATE)
+	local over = lasts
+		or (times > 1 or after:find("^%s*%a*%s*each second") ~= nil or every ~= nil or hit)
+	local a, b = number(lo), hi and number(hi)
+	if not (a and (not hi or b)) then
+		return nil
+	end
+	local value
+	if times > 1 then
+		value = b and (a * times .. "–" .. b * times) or tostring(a * times)
+	else
+		value = (hi and hi ~= lo) and (lo .. "–" .. hi) or lo
+	end
+	return label, value, ((a + (b or a)) / 2) * times, over, false, after, nil, hit
+end
+
 -- Reads what a description does: its tile's label and value ("56–73"), the
 -- amount in one number (the middle of a range), whether it works over time
 -- (for how many seconds, where it says, or true), whether your weapon's
--- damage is in it, what follows the amount, and what it adds to a plain
--- hit of the weapon where that is a number. Nil where it says no amount.
--- An amount each second, or every few, for so long is the whole of it: "26
--- Arcane damage each second for 3 sec" is 78.
+-- damage is in it, what follows the amount, what it adds to a plain hit of
+-- the weapon where that is a number, and whether it lands on a hit, so has
+-- no rate (M.ON_A_HIT). Nil where it says no amount.
 function M.SpellAmount(text)
 	if type(text) ~= "string" then
 		return nil
 	end
 	local wl, wv, wa, wo, ww, wafter, wbonus = weaponAmount(text)
 	if wl then
-		return wl, wv, wa, wo, ww, wafter, wbonus
+		return wl, wv, wa, wo, ww, wafter, wbonus, says(text, M.ON_A_HIT)
 	end
 	for _, kind in ipairs(M.AMOUNTS) do
 		for _, p in ipairs(kind[2]) do
-			local _, last, lo, hi = text:find(p)
-			if lo then
+			-- the first match that is an amount; one that is a length of time
+			-- or a distance is passed over (M.NOT_AMOUNTS)
+			local from = 1
+			while true do
+				local first, last, lo, hi = text:find(p, from)
+				if not first then
+					break
+				end
 				local after = text:sub(last + 1)
-				-- how many times it lands, and for how long, where the words say
-				local times, lasts = 1, nil
-				local each = after:match("^%s*%a*%s*each second for (%d+) sec")
-				if each then
-					times, lasts = tonumber(each), tonumber(each)
-				else
-					local every, long = after:match("^%s*%a*%s*every (%d+) sec%.? for (%d+) sec")
-					if every and tonumber(every) > 0 then
-						times, lasts = math.floor(tonumber(long) / tonumber(every)), tonumber(long)
-					end
+				-- (a comma alone is no amount: "the friendly target, reducing
+				-- damage" in Blessing of Sanctuary, 2026-10-18)
+				if lo and lo:find("%d") and not notAnAmount(after) then
+					return amountOf(kind[1], text, lo, hi, after)
 				end
-				if not lasts then
-					local n, unit = after:match("^%s*%a*%s*over (%d+) (%a+)")
-					if n then
-						lasts = tonumber(n) * (unit:find("^min") and 60 or 1)
-					end
-				end
-				-- over time: for how many seconds, or only that it is
-				local over = lasts or (times > 1 or after:find("^%s*%a*%s*each second") ~= nil
-					or after:find("^%s*%a*%s*every ") ~= nil)
-				local a, b = number(lo), hi and number(hi)
-				if not (a and (not hi or b)) then
-					return nil
-				end
-				local value
-				if times > 1 then
-					value = b and (a * times .. "–" .. b * times) or tostring(a * times)
-				else
-					value = (hi and hi ~= lo) and (lo .. "–" .. hi) or lo
-				end
-				return kind[1], value, ((a + (b or a)) / 2) * times, over, false, after
+				from = first + 1
 			end
 		end
 	end
@@ -3593,44 +3919,18 @@ end
 function M.WriteSpell(tip, spell, icon)
 	local I = M.ITEM
 	local c = card(tip)
-	c.header(spell.name, spell.nameRgb or ITEM_INK, icon, table.concat(spell.sub, " · "), spellColour(spell),
-		spell.figs)
+	local sub = table.concat(spell.sub, " · ")
+	c.header(spell.name, spell.nameRgb or ITEM_INK, icon, sub, spellColour(spell), spell.figs)
 	-- as wide as the name and the line under it, each with its figure, need
-	local Measure = BT.UnitTip.Measure
 	local floor = spell.figs and I.MIN_W or I.PLAIN_W
-	local needs = Measure(spell.name, I.NAME, "name") + c.off + 24
-	if spell.figs then
-		local function fig(i, size)
-			local f = spell.figs[i]
-			return f and (Measure(f[1], size, "text") + I.FIG_GAP + Measure(f[2]:upper(), I.FIG_LABEL, "name")) or 0
-		end
-		needs = math.max(Measure(spell.name, I.NAME, "name") + fig(1, I.HEADLINE),
-			Measure(table.concat(spell.sub, " · "), I.SUB, "text") + fig(2, I.FIG_SMALL)) + c.off + 24 + 12
-	end
-	needs = math.min(MAX_W, needs)
+	local needs = math.min(MAX_W, c.needs(spell.name, sub, spell.figs))
 	-- the plain facts - what it does, what it costs, how long it takes - in
 	-- cells, their numbers brighter than their words, a cost you cannot pay
-	-- in the client's red, in rows as wide as the card
+	-- in the client's red, in rows as wide as the card (M.FactCells, which
+	-- an item's cells are written by too)
 	if #spell.facts > 0 then
-		local items = {}
-		for _, f in ipairs(spell.facts) do
-			local words = f.text
-			if f.lower then
-				words = words:lower()
-			end
-			local shown = words
-			if f.rgb then
-				shown = hex(f.rgb, words)
-			else
-				local n, rest = words:match("^(%+?[%d%.,–]+)(.*)$")
-				if n then
-					shown = hex(ITEM_INK, n) .. rest
-				end
-			end
-			items[#items + 1] = { shown, words }
-		end
 		c.spacer()
-		c.cells(items, math.max(floor, needs) - I.INSET)
+		c.cells(M.FactCells(spell.facts), math.max(floor, needs) - I.INSET)
 	end
 	-- what it asks of you, then what it does, then anything after: each run
 	-- with a little room before it; a description that says no more than
@@ -3706,6 +4006,16 @@ function M.Dump()
 end
 BT.Record("tooltipsDump", M.Dump, "tooltips")
 
+-- Whether the tooltip shows an enemy's ability: the Expedition's enemy pages
+-- mark their ability icons so (Modules/Expedition/Window.lua, V.SpellIcons)
+function M.ShowsEnemyAbility(tip)
+	if not tip.GetOwner then
+		return false
+	end
+	local ok, owner = pcall(tip.GetOwner, tip)
+	return ok and type(owner) == "table" and owner.beebEnemyAbility == true
+end
+
 function M.ComposeSpell(tip, data, kind)
 	-- whatever a unit left on the tooltip goes, as for an item
 	local s = skins[tip]
@@ -3716,6 +4026,9 @@ function M.ComposeSpell(tip, data, kind)
 		pcall(tip.SetMinimumWidth, tip, 0)
 	end
 	M.Seen(kind, data)
+	-- another addon's lines, read off the lines the data drew before a macro's
+	-- data is swapped for its spell's (M.OthersLines)
+	local others = M.OthersLines(tip, data)
 	-- A MACRO SHOWING A SPELL is written as the spell; one showing an item,
 	-- or only its own name, is left as the client drew it. Its data's id is
 	-- the macro's, not the spell's, so its picture is found by the spell's
@@ -3748,7 +4061,13 @@ function M.ComposeSpell(tip, data, kind)
 		end
 		kind = "spell"
 	end
-	local spell = M.ReadSpell(data, kind, fresh)
+	local spell = M.ReadSpell(data, kind, fresh, M.ShowsEnemyAbility(tip))
+	if spell then
+		for _, row in ipairs(others or {}) do
+			spell.rows[#spell.rows + 1] = { text = row.text, rgb = row.rgb or ITEM_INK, right = row.right, rrgb = row.rrgb,
+				desc = false }
+		end
+	end
 	if spell and tip.ClearLines and tip.AddLine then
 		local icon = (id and M.SpellIcon(id)) or (byName and M.SpellIconByName(spell.name))
 			or M.SpellIcon(spellOf(tip, data))
@@ -3757,7 +4076,7 @@ function M.ComposeSpell(tip, data, kind)
 			BT.Err("tooltips.spell: " .. tostring(err))
 		end
 	end
-	-- dressed after the rebuild: its clearing took the spine off
+	-- dressed after the rebuild, as an item is (M.ComposeItem)
 	s = M.Dress(tip, true)
 	if s then
 		local a = spellColour(spell)
@@ -3862,8 +4181,8 @@ BT.OnUnitTooltip("tooltips", 0, M.Compose)
 --   FriendsTooltip                the friends list
 --
 -- Any that this build does not have are simply skipped. They get the skin, the
--- size and the quality spine; they are not rebuilt, because the client's own
--- layout is the point of a compare.
+-- size and the quality spine here. An item or a spell on one is written again
+-- as a card (M.ComposeItem, M.ComposeSpell), the compare included.
 local OTHER_TOOLTIPS = {
 	"ShoppingTooltip1", "ShoppingTooltip2",
 	"ItemRefTooltip", "ItemRefShoppingTooltip1", "ItemRefShoppingTooltip2",
@@ -3926,7 +4245,11 @@ local function restyleTab(tip)
 		-- item's tiles sit on frames of ours over the whole tooltip, with words
 		-- and art on them: taken for the tab, each was given a surface, and
 		-- that surface lay over every line the client wrote.
-		if holder.GetRegions and not holder.beebs then
+		-- NOR THE "EQUIPPED" HEADER (2026-10-17, audit): it is dressed as
+		-- furniture (dressHeader), and a second surface here took its colours
+		-- down after the furniture had changed them, so switching the module
+		-- off put the furniture's colour back over the client's gold.
+		if holder.GetRegions and not holder.beebs and holder ~= tip.CompareHeader then
 			local label, art = nil, {}
 			for _, region in ipairs({ holder:GetRegions() }) do
 				local kind = region.GetObjectType and region:GetObjectType()
@@ -4247,14 +4570,41 @@ end
 -- and that is the moment the last one's styling stops being true.
 --
 -- Everything is taken off here; Compose and ComposeItem put back whatever the
--- new thing needs a moment later.
+-- new thing needs a moment later. Not for a rebuild's own clear (M.ClearLines).
 if GameTooltip and GameTooltip.HookScript then
 	GameTooltip:HookScript("OnTooltipCleared", function(tip)
-		if BT.Enabled("tooltips") then
+		if BT.Enabled("tooltips") and not M.clearing then
 			-- an error here comes out of whatever was writing the tooltip
 			local ok, err = pcall(M.DressPlain, tip)
 			if not ok then
 				BT.Err("tooltips.cleared: " .. tostring(err))
+			end
+		end
+	end)
+end
+
+-- THE CHAT LINK'S WINDOW IS WRITTEN AGAIN IN PLACE TOO (2026-10-17, audit).
+-- Click a quest link while an item's card is open in it, and the quest came
+-- up held to the card's width with the item's quality down its left: the
+-- window stays open, so it never shows itself again (dressOther). Its clear
+-- lets the width go and takes the spine off; a card written on it next puts
+-- both back.
+function M.RefCleared(tip)
+	if tip.SetMinimumWidth then
+		pcall(tip.SetMinimumWidth, tip, 0)
+	end
+	local s = skins[tip]
+	if s and s.accent then
+		s.accent:Hide()
+		M.LeftBar(s)
+	end
+end
+if _G.ItemRefTooltip and _G.ItemRefTooltip.HookScript then
+	_G.ItemRefTooltip:HookScript("OnTooltipCleared", function(tip)
+		if BT.Enabled("tooltips") and not M.clearing then
+			local ok, err = pcall(M.RefCleared, tip)
+			if not ok then
+				BT.Err("tooltips.refcleared: " .. tostring(err))
 			end
 		end
 	end)
@@ -4317,7 +4667,8 @@ end
 -- forgotten; only the painting waits for the module to be on.
 function M.UnitTooltipHidden()
 	local s = skins[GameTooltip]
-	if s then
+	-- (a rebuild's own clear is not the tooltip going: M.ClearLines)
+	if s and not M.clearing then
 		s.accent:Hide()
 		if s.crest then
 			s.crest:Hide()

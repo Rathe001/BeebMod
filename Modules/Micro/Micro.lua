@@ -67,12 +67,18 @@ end
 -- Which buttons
 -- ---------------------------------------------------------------------------
 
--- The client keeps a list of its own; the names are the fallback for a build
--- that does not, or that adds one we have not heard of.
+-- THE MENU SAYS WHAT IS IN IT (2026-10-17, audit). This build has no
+-- MICRO_BUTTONS list, and the names below were the only source: the
+-- professions, legacy and housing buttons the client puts in its menu came
+-- into the dock with it still in the client's art. The client numbers every
+-- button it adds to MicroMenu (layoutIndex), so those come first, in its
+-- order; a list of the client's own, then the names, are the fallback for a
+-- build without one.
 local NAMES = {
-	"CharacterMicroButton", "SpellbookMicroButton", "TalentMicroButton",
-	"QuestLogMicroButton", "SocialsMicroButton", "GuildMicroButton",
-	"LFDMicroButton", "CollectionsMicroButton", "EJMicroButton",
+	"CharacterMicroButton", "ProfessionMicroButton", "SpellbookMicroButton",
+	"TalentMicroButton", "PlayerSpellsMicroButton", "LegacyMicroButton",
+	"QuestLogMicroButton", "HousingMicroButton", "SocialsMicroButton",
+	"GuildMicroButton", "LFDMicroButton", "CollectionsMicroButton", "EJMicroButton",
 	"AchievementMicroButton", "MainMenuMicroButton", "HelpMicroButton",
 	"StoreMicroButton", "WorldMapMicroButton",
 }
@@ -89,8 +95,29 @@ local PLATES = {
 	"MicroButtonAndBagsBar", "MicroMenuContainer", "MicroMenu",
 }
 
+-- the buttons the client has put in its MicroMenu, in its order
+local function inMenu()
+	local menu = _G.MicroMenu
+	if not (type(menu) == "table" and type(menu.GetChildren) == "function") then
+		return {}
+	end
+	local ok, kids = pcall(function() return { menu:GetChildren() } end)
+	local out = {}
+	for _, b in ipairs(ok and kids or {}) do
+		if type(b) == "table" and type(b.layoutIndex) == "number" then
+			out[#out + 1] = b
+		end
+	end
+	table.sort(out, function(a, b) return a.layoutIndex < b.layoutIndex end)
+	return out
+end
+
 function M.Buttons()
 	local out, seen = {}, {}
+	for _, b in ipairs(inMenu()) do
+		seen[b] = true
+		out[#out + 1] = b
+	end
 	local list = _G.MICRO_BUTTONS
 	if type(list) == "table" then
 		for _, entry in ipairs(list) do
@@ -476,7 +503,7 @@ function M.Watch()
 		for _, event in ipairs({
 			"UPDATE_BINDINGS", "PLAYER_LEVEL_UP",
 			"PLAYER_SPECIALIZATION_CHANGED", "UPDATE_SHAPESHIFT_FORMS",
-			"PORTRAITS_UPDATED",
+			"PORTRAITS_UPDATED", "PLAYER_REGEN_ENABLED",
 		}) do
 			pcall(M.events.RegisterEvent, M.events, event)
 		end
@@ -487,7 +514,15 @@ function M.Watch()
 		else
 			pcall(M.events.RegisterEvent, M.events, "UNIT_PORTRAIT_UPDATE")
 		end
-		M.events:SetScript("OnEvent", function()
+		M.events:SetScript("OnEvent", function(_, event)
+			-- the end of a fight: what waited for it (see fighting)
+			if event == "PLAYER_REGEN_ENABLED" then
+				if M.waiting then
+					M.waiting = false
+					M.Apply()
+				end
+				return
+			end
 			if BT.Enabled("micro") then
 				M.StyleAll()
 			end
@@ -608,6 +643,30 @@ local function placed(f)
 	return f:IsShown() and f.GetLeft and f:GetLeft() ~= nil
 end
 
+-- the menu anchored by its centre to the line's, and by nothing else
+local function centred(menu)
+	local ok, n, point, rel, relPoint, x, y = pcall(function()
+		local count = menu.GetNumPoints and menu:GetNumPoints() or 1
+		return count, menu:GetPoint(1)
+	end)
+	return ok and n == 1 and point == "CENTER" and rel == M.section and relPoint == "CENTER"
+		and math.abs(BT.Pill.Number(x, 1)) < 0.01 and math.abs(BT.Pill.Number(y, 1)) < 0.01
+end
+
+-- NEVER IN A FIGHT (2026-10-17, audit). Whether the client protects these
+-- buttons on this build is not known. If it does, moving, scaling or
+-- re-parenting their menu in combat is an "action blocked", and so is
+-- showing or hiding the line the menu sits in, which puts the whole dock
+-- out of reach until the fight ends. So in a fight nothing here moves: it
+-- waits for the fight to end (PLAYER_REGEN_ENABLED, M.Watch) and runs then.
+local function fighting()
+	if type(InCombatLockdown) == "function" and InCombatLockdown() then
+		M.waiting = true
+		return true
+	end
+	return false
+end
+
 local function layoutMenu(menu)
 	-- NOT INTO A LINE THAT IS NOT ON SCREEN (Josh 2026-09-22). Moved into a
 	-- hidden line, the menu was hidden with it, and showing the line showed
@@ -638,9 +697,13 @@ local function layoutMenu(menu)
 	-- strip of icons in the middle of the panel; the width decides now, and
 	-- the line is as tall as that makes them.
 	local scale = (width - EDGE * 2) / w
-	menu:SetScale(scale)
-	menu:ClearAllPoints()
-	menu:SetPoint("CENTER", M.section, "CENTER", 0, 0)
+	-- ALREADY THERE, LEFT ALONE (2026-10-17, audit): the client asks for this
+	-- on every quest update, and nearly every time the menu is where it was
+	if not (math.abs(BT.Pill.Number(menu:GetScale(), 0) - scale) < 0.001 and centred(menu)) then
+		menu:SetScale(scale)
+		menu:ClearAllPoints()
+		menu:SetPoint("CENTER", M.section, "CENTER", 0, 0)
+	end
 	-- the line as tall as the menu came out, and no taller
 	local want = math.ceil(h * scale) + PAD_Y * 2
 	if M.section.wantHeight ~= want then
@@ -653,7 +716,7 @@ end
 
 local laying = false
 function M.Layout()
-	if laying or not (M.section and BT.Enabled("micro") and M.InPanel()) then
+	if laying or not (M.section and BT.Enabled("micro") and M.InPanel()) or fighting() then
 		return 0
 	end
 	laying = true
@@ -727,17 +790,36 @@ end
 -- own layout pass all hand the buttons back to the client's row; each time,
 -- they come straight back here. A button appearing or going (the store, the
 -- guild) is a new layout too.
+--
+-- ONCE A FRAME (2026-10-17, audit). The group finder's button asks the
+-- client to update every micro button on each QUEST_LOG_UPDATE, so every
+-- kill for a quest came back here and laid the menu out again, several times
+-- over. However many ask in a frame, the menu is laid out once, a frame on.
+local queued = false
+local function again()
+	if queued or not (BT.Enabled("micro") and M.InPanel()) then
+		return
+	end
+	if not (C_Timer and C_Timer.After) then
+		M.Fill()
+		return
+	end
+	queued = true
+	C_Timer.After(0, function()
+		queued = false
+		if BT.Enabled("micro") and M.InPanel() then
+			M.Fill()
+		end
+	end)
+end
+M.Again = again
+
 local hooked = false
 local function watchClient()
 	if hooked or type(hooksecurefunc) ~= "function" then
 		return
 	end
 	hooked = true
-	local function again()
-		if BT.Enabled("micro") and M.InPanel() then
-			M.Fill()
-		end
-	end
 	for _, name in ipairs({ "UpdateMicroButtonsParent", "MoveMicroButtons", "UpdateMicroButtons" }) do
 		if type(_G[name]) == "function" then
 			pcall(hooksecurefunc, name, again)
@@ -769,6 +851,9 @@ end
 -- line still up, that came straight back here, again and again
 local filling = false
 local function fill()
+	if fighting() then
+		return false
+	end
 	local section = M.Section()
 	if #M.Shown() == 0 then
 		if section:IsShown() then
@@ -796,60 +881,16 @@ function M.Fill()
 	return ok and r or false
 end
 
--- WHICH BUTTONS (Josh 2026-09-24): any of the game's menu buttons can be
--- left out. It stays in the client's menu, hidden - moving one out once broke
--- the client's own layout - and hidden again if the client shows it; the
--- client's grid closes the gap. Switched back in, or the module off, it is
--- shown again (only the ones hidden here).
-M.LABELS = {
-	CharacterMicroButton = "Character", SpellbookMicroButton = "Spellbook", TalentMicroButton = "Talents",
-	QuestLogMicroButton = "Quest log", SocialsMicroButton = "Social", GuildMicroButton = "Guild",
-	LFDMicroButton = "Group finder", CollectionsMicroButton = "Collections", EJMicroButton = "Adventure guide",
-	AchievementMicroButton = "Achievements", MainMenuMicroButton = "Game menu", HelpMicroButton = "Help",
-	StoreMicroButton = "Shop", WorldMapMicroButton = "World map",
-}
-
--- EVERY BUTTON SHOWS (the settings canvas, Josh 2026-10-04, cut a switch
--- for each): none is held back, and one held back before is let go
-function M.Hidden(b)
-	return false
-end
-
-local held = setmetatable({}, { __mode = "k" })
-function M.ApplyHidden(plain)
-	for _, b in ipairs(M.Buttons()) do
-		local hide = not plain and BT.Enabled("micro") and M.Hidden(b)
-		if hide then
-			held[b] = true
-			if not b.beebsHideHooked and b.HookScript then
-				b.beebsHideHooked = true
-				b:HookScript("OnShow", function(self)
-					if held[self] and BT.Enabled("micro") and M.Hidden(self) then
-						self:Hide()
-					end
-				end)
-			end
-			b:Hide()
-		elseif held[b] then
-			held[b] = nil
-			b:Show()
-		end
-	end
-	local menu = _G.MicroMenu
-	if type(menu) == "table" and type(menu.Layout) == "function" then
-		pcall(menu.Layout, menu)
-	end
-end
-
 function M.Apply()
 	local on = BT.Enabled("micro") and M.InPanel()
+	if fighting() then
+		return on
+	end
 	local section = M.Section()
 	if on then
 		watchClient()
 		M.Fill()
-		M.ApplyHidden()
 	else
-		M.ApplyHidden(true)
 		M.Release()
 		section:Hide()
 	end

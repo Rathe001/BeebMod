@@ -77,16 +77,22 @@ T.KINDS = {
 -- personal resource display - the nameplates version deprecates that"). They
 -- went over the resource display under your character from 2026-09-24; every
 -- enemy's plate has them now, your target's included, so they are on the
--- plate alone, and back over the target frame while the plates are off.
+-- plate alone, and over the target frame when its plate does not carry them.
+--
+-- WHEN THE PLATE CARRIES THEM (2026-10-17, audit). The target frame lost its
+-- lanes whenever the module was on, but only the first twenty plates wear
+-- ours: with the game's enemy plates switched off, a target out of plate
+-- range, or one on a later token in a crowded pull, no timer showed anywhere.
+-- The lanes can only be made out of a fight, and which plate is your target
+-- changes in one, so the target frame keeps its lanes always and they are
+-- put out of sight (alpha, which the client allows in a fight) while your
+-- target's plate wears ours with lanes on it (T.PaintTargetDots).
 function T.OnPlates()
 	return BT.Enabled and BT.Enabled("nameplates") and true or false
 end
 
--- what a frame of this kind shows today
+-- what a frame of this kind shows
 function T.Kinds(kind)
-	if kind == "target" and T.OnPlates() then
-		return { "hot" }
-	end
 	return T.KINDS[kind]
 end
 T.LANE_H = { party = 3, target = 3, focus = 3, boss = 3, raid = 2, tank = 2 }
@@ -314,7 +320,8 @@ T.seen = { inits = 0, bars = 0, texts = 0 }
 -- every frame - and a text can be a picture: an inline texture exactly the
 -- lane's size, red. The curve switches it on and off in the last seconds,
 -- each half-blink shorter than the last (under a tenth of a second at the
--- very end, half a second when it starts), and keeps it out of sight before.
+-- very end, about 0.3 seconds when it starts from 3 seconds), and
+-- keeps it out of sight before.
 -- One curve for heals and one for damage, each from its own T.BLINK_FROM.
 local curves = {}
 function T.BlinkCurve(which)
@@ -547,6 +554,21 @@ local function dotSignature(lanes)
 end
 
 local function dotStack(b, set, lanes)
+	-- NONE KNOWN, NONE MADE (2026-10-17, audit): a class that knows none of
+	-- its damage yet (a rogue below 14, a warrior below 4) made a container,
+	-- hid it and made another at the next rebuild, on every frame, at every
+	-- SPELLS_CHANGED - and the client never gives a frame back
+	local any = false
+	for _, lane in ipairs(lanes) do
+		local spells = T.Ids(lane.name)
+		if spells and next(spells) then
+			any = true
+			break
+		end
+	end
+	if not any then
+		return nil
+	end
 	local h, barH = T.LaneHeight(set.kind, "dot"), T.Height(set.kind, "dot")
 	local w = T.LaneWidth(b)
 	local ok, c = pcall(CreateFrame, "AuraContainer", nil, set.host, "CustomAuraContainerTemplate")
@@ -669,6 +691,9 @@ function T.Build(b, remake)
 			c:Show()
 		end
 	end
+	if set.kind == "target" then
+		T.PaintTargetDots()
+	end
 	local shown = 0
 	for key, c in pairs(set.timers) do
 		if not want[key] then
@@ -722,6 +747,21 @@ function T.Attach(b)
 	return T.Build(b)
 end
 
+-- the target frame's damage, out of sight while your target's plate wears
+-- ours with lanes on it (F.TargetOnPlate, Modules/Nameplates) and in sight
+-- otherwise; by alpha, so in a fight too. True when the plate has them.
+function T.PaintTargetDots()
+	local onPlate = T.OnPlates() and F.TargetOnPlate and F.TargetOnPlate() or false
+	for b in pairs(wearing) do
+		local set = b.bmAuras
+		local c = set and set.kind == "target" and set.timers and set.timers.dot
+		if c then
+			pcall(c.SetAlpha, c, onPlate and 0 or 1)
+		end
+	end
+	return onPlate and true or false
+end
+
 -- Over-time bars, on the Testing page: where the lanes got to, from the
 -- spells found to the blink
 local function say(...)
@@ -738,7 +778,7 @@ function T.Report()
 				list[#list + 1] = tostring(id)
 			end
 			table.sort(list)
-			say(("  %s %s · ids %s"):format(which, name,
+			say(("  %s lane · spell IDs %s"):format(name,
 				#list > 0 and table.concat(list, ",") or "|cffff6b6bnone found|r"))
 		end
 	end
@@ -747,15 +787,18 @@ function T.Report()
 		frames = frames + 1
 		local set = b.bmAuras
 		if set and set.timers and (set.unit == "player" or set.kind == "target") then
+			local who = set.unit == set.kind and (set.kind .. " frame")
+				or ("%s frame (%s)"):format(set.kind, tostring(set.unit))
 			for key, c in pairs(set.timers) do
 				local kids = c.GetNumChildren and c:GetNumChildren() or 0
-				say(("  %s %s · %s · shown %s · buttons %d"):format(set.kind, tostring(set.unit), key,
-					tostring(c:IsShown()), kids))
+				local lane = key == "dot" and "damage lanes" or ((key:match(":(.+)$") or key) .. " lane")
+				local seen = c:IsVisible() and (c:GetAlpha() or 1) > 0
+				say(("  %s · %s · on screen %s · buttons %d"):format(who, lane, seen and "yes" or "no", kids))
 			end
 		end
 	end
 	local s = T.seen
-	say(("  frames with lanes %d · buttons redrawn %d · duration bars taken %d · flashes taken %d")
+	say(("  frames with lanes %d · buttons dressed %d · duration bars taken %d · flashes taken %d")
 		:format(frames, s.inits, s.bars, s.texts))
 	if s.barRefused then
 		say("  |cffff6b6bduration bar refused|r " .. s.barRefused:sub(1, 120))
@@ -784,11 +827,16 @@ end
 
 local FAKE_LEFT = { 0.8, 0.45, 0.6, 0.3 }
 
-function T.Show(b, kind)
+-- `d` is the made-up unit's data, whose reaction says friend or enemy
+function T.Show(b, kind, d)
 	b.bmFakeTimers = b.bmFakeTimers or {}
 	local lanes = T.Kinds(kind) and T.Lanes(kind) or {}
-	-- a made-up friend shows your heals, a made-up enemy your damage
+	-- a made-up friend shows your heals, a made-up enemy your damage (by its
+	-- reaction, 2026-10-17, audit: the hostile made-up target wore a heal)
 	local friendly = kind ~= "boss" and kind ~= "focus"
+	if d and d.reaction then
+		friendly = d.reaction == "friendly"
+	end
 	local mine = {}
 	for _, lane in ipairs(lanes) do
 		if (lane.which == "hot") == friendly then

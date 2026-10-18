@@ -57,17 +57,11 @@ local TAB_ON = { 1, 1, 1 }
 local NAME_W = 150
 local STAT_GAP = 22
 
--- 12,345
+-- 12,345: commas from a thousand, written the one way every count in
+-- BeebMod is (U.Commas; 2026-10-17, audit: six copies used the client's
+-- separator and the rest a comma)
 local function big(n)
-	n = math.floor(n or 0)
-	if type(BreakUpLargeNumbers) == "function" then
-		local ok, s = pcall(BreakUpLargeNumbers, n)
-		if ok and type(s) == "string" then
-			return s
-		end
-	end
-	local s = tostring(n):reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return (s:gsub("^,", ""))
+	return BT.Util.Commas(n)
 end
 Bk.Big = big
 
@@ -78,9 +72,9 @@ Bk.Big = big
 -- RANK FIRST (Josh 2026-10-15: "I'd like to make this look more professional";
 -- option B of the canvas "Journal headers"). The keeper's face and his line
 -- under the title made the header read as a quest window, and took 142 pixels
--- with the tabs. The keeper still speaks when you reach a rank (the toast);
--- the header is the book's name and tabs on one row, and your rank on a strip
--- under it.
+-- with the tabs. The header is the book's name and tabs on one row, and your
+-- rank on a strip under it. (The keeper spoke in a new rank's toast until
+-- 2026-10-18, Modules/Expedition/Toast.lua.)
 
 -- The tabs: words with a line under the one you are on, in the title row.
 -- `buttons`, `Select` and `Relayout` (after a tab is hidden, the rest close up).
@@ -364,7 +358,7 @@ function Bk.SetHeader(f, h)
 	else
 		rb.fill:Show()
 		rb.fill:SetWidth(w)
-		rb.points:SetText(("|cffffffff%s|r points"):format(big(points)))
+		rb.points:SetText(("|cffffffff%s|r %s"):format(big(points), points == 1 and "point" or "points"))
 		rb.next:SetText("Highest rank")
 	end
 	f.rankShown = n
@@ -727,7 +721,9 @@ function Bk.RankTip(r)
 	if points >= at then
 		GameTooltip:AddLine(r.here and "Your rank" or "Reached", GOLD[1], GOLD[2], GOLD[3])
 	else
-		GameTooltip:AddLine(("%s points to go"):format(big(at - points)), DIM[1], DIM[2], DIM[3])
+		local left = at - points
+		local togo = ("%s %s to go"):format(big(left), left == 1 and "point" or "points")
+		GameTooltip:AddLine(togo, DIM[1], DIM[2], DIM[3])
 	end
 	GameTooltip:Show()
 end
@@ -873,7 +869,8 @@ end
 --   focus, scrollToFocus }
 -- An item is { id, title, text, points, need, have, color, right, at }; a
 -- group with a `count` is a tally (what each unique kill or note is worth),
--- not things to earn.
+-- not things to earn, though a tile of it with a `need` above 1 and no
+-- `right` is still drawn with its bar (the masteries nearest to being earned).
 function Bk.DrawCommendations(a, d)
 	local accent = BT.Widgets.ACCENT
 	Bk.DrawStrip(a.strip, d.ranks, d.badge, d.points or 0, d.colour)
@@ -940,7 +937,14 @@ function Bk.DrawCommendations(a, d)
 				r:ClearAllPoints()
 				r:SetPoint("TOPLEFT", a.list.content, "TOPLEFT", col * (tileW + Bk.TILE_GAP), -y)
 				r:SetWidth(tileW)
-				local done = it.have >= it.need and not g.count
+				-- A TALLY BY THE TILE, NOT THE GROUP (2026-10-17, audit): the
+				-- Masteries group is a tally, and its five enemies nearest their
+				-- next mastery lost their "57 / 100" and their bar with it. A
+				-- tile of a tally group is a tally when it says its own count
+				-- (`right`) or has nothing to count up to; one with kills to go
+				-- has its bar.
+				local tally = g.count ~= nil and (it.right ~= nil or (it.need or 0) <= 1)
+				local done = it.have >= it.need and not tally
 				r.points:SetText(tostring(it.points or ""))
 				r.ptsLabel:SetShown(it.points ~= nil)
 				r.title:SetText(it.title)
@@ -964,13 +968,16 @@ function Bk.DrawCommendations(a, d)
 					r.right:SetTextColor(DIM[1], DIM[2], DIM[3])
 					r.track:Hide()
 					r.fill:Hide()
-				elseif it.right or g.count then
-					-- a tally, or a tier nobody has reached yet: a count, not a bar
+				elseif tally or it.right then
+					-- a tally, or a tier nobody has reached yet: a count, not a
+					-- bar. A tier somebody is at wears its metal.
 					r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
-					if g.count then
-						r.title:SetTextColor(1, 1, 1)
-					else
+					if it.have < it.need then
 						r.title:SetTextColor(0.62, 0.66, 0.64)
+					elseif c then
+						r.title:SetTextColor(c[1], c[2], c[3])
+					else
+						r.title:SetTextColor(1, 1, 1)
 					end
 					r.right:SetText(it.right or "")
 					r.right:SetTextColor(0.75, 0.78, 0.77)

@@ -106,6 +106,10 @@ A.SPECS = {
 	-- AN ENEMY'S NAMEPLATE: no rows, only your damage over time in lanes above
 	-- it (Timers.lua), which hang off this holder like any frame's
 	plate = {},
+	-- A MAIN TANK: no rows, only your heal's lane along it (2026-10-17, audit:
+	-- with no entry here the lane was never made, so a druid's Rejuvenation
+	-- showed on the tank's raid cell and not in the tank column)
+	tank = {},
 }
 
 -- The colour of a dispel type, as a curve the client evaluates in its own
@@ -576,6 +580,10 @@ local waiting = setmetatable({}, { __mode = "k" })
 
 function A.SetUnit(b, unit)
 	local set = b.bmAuras
+	-- THE LAST WORD WINS (2026-10-17, audit): a cell that went raid5, raid6
+	-- and back to raid5 in one fight kept raid6 waiting, and the fight's end
+	-- pointed its rows at raid6 while the cell showed raid5
+	waiting[b] = nil
 	if not (set and unit) then
 		return
 	end

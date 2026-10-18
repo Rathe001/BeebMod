@@ -114,17 +114,32 @@ function M.DressMenu(menu)
 	return true
 end
 
--- a menu the client is still building, dressed when it has finished
-function M.DressSoon(menu)
-	if C_Timer and C_Timer.After then
-		C_Timer.After(0, function()
-			if BT.Enabled("dropdowns") then
-				M.DressMenu(menu)
-			end
-		end)
+-- ONCE A MENU, NOT TWICE (2026-10-17, audit). A menu the manager opens has
+-- its look built as it is made, and both the build and the opening asked for
+-- it to be dressed a frame later: two walks of the whole menu every time one
+-- opened. A menu already waiting to be dressed is not asked for again.
+-- `pick`, when given, says at that moment which menu it is.
+local waiting = setmetatable({}, { __mode = "k" })
+local function later(menu, pick)
+	if waiting[menu] then
 		return true
 	end
-	return false
+	if not (C_Timer and C_Timer.After) then
+		return false
+	end
+	waiting[menu] = true
+	C_Timer.After(0, function()
+		waiting[menu] = nil
+		if BT.Enabled("dropdowns") then
+			M.DressMenu((pick and pick()) or menu)
+		end
+	end)
+	return true
+end
+
+-- a menu the client is still building, dressed when it has finished
+function M.DressSoon(menu)
+	return later(menu)
 end
 
 -- the one the manager says is open, and the entries it has just made
@@ -140,15 +155,7 @@ function M.AfterOpen()
 	if not menu then
 		return false
 	end
-	if C_Timer and C_Timer.After then
-		C_Timer.After(0, function()
-			if BT.Enabled("dropdowns") then
-				M.DressMenu(M.OpenMenu() or menu)
-			end
-		end)
-		return true
-	end
-	return false
+	return later(menu, M.OpenMenu)
 end
 
 function M.OpenMenu()

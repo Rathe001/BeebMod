@@ -126,6 +126,9 @@ function S.Lift(b)
 	call(_G.PickupBagFromSlot, b.inv)
 end
 
+-- IN A FIGHT TOO (Josh 2026-10-18), as the dock's click is
+-- (Modules/Bags/Bags.lua). ToggleBag has no combat check and shows only
+-- plain frames.
 function S.Click(b)
 	if S.Drop(b) then
 		return
@@ -240,6 +243,11 @@ end
 
 local KEY_ICON = "Interface\\ContainerFrame\\KeyRing-Bag-Icon"
 
+-- THE KEYRING BY TOGGLEBAG (2026-10-18). This client has no ToggleKeyRing,
+-- which is Classic's; the forever branch has no Keyring.lua. The game's own
+-- keyring button opens it with ToggleBag(KEYRING_CONTAINER)
+-- (Blizzard_MainMenuBarBagButtons/Camelot), and so does this one, in a
+-- fight too.
 function S.KeyClick()
 	if cursorHasItem() then
 		call(_G.PutKeyInKeyRing)

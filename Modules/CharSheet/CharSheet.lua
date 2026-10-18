@@ -1064,6 +1064,22 @@ local function compactExtent(h)
 end
 M.CompactExtent = compactExtent
 
+-- THE WINDOW'S OWN SIZE IS THE GAME'S TO GIVE BACK (2026-10-17, audit). The
+-- character window's size was first seen at login, 338 by 424, before the
+-- game had sized it; put back, the window dropped to that with its panes
+-- sticking out. Where the game can size it (UpdateSize), it is asked to, if
+-- the window is open; a closed one is sized by the game as it opens.
+local function sheetSize(f)
+	if type(f.UpdateSize) ~= "function" then
+		return false
+	end
+	local okShown, shown = pcall(f.IsShown, f)
+	if okShown and shown then
+		pcall(f.UpdateSize, f)
+	end
+	return true
+end
+
 local function unplace()
 	for f, p in pairs(placed) do
 		if p.moved then
@@ -1072,7 +1088,8 @@ local function unplace()
 				pcall(f.SetPoint, f, pt[1], pt[2], pt[3], pt[4], pt[5])
 			end
 		end
-		if p.sized and p.w and p.h and f.SetSize then
+		if p.sized and p.w and p.h and f.SetSize
+			and not (f == _G.CharacterFrame and sheetSize(f)) then
 			pcall(f.SetSize, f, p.w, p.h)
 		end
 		if p.coords and f.SetTexCoord then
@@ -1151,17 +1168,30 @@ local function header(words)
 	end
 end
 
+-- ONCE A ROW, NOT ON EVERY FRAME OF A SCROLL (2026-10-17, audit). A list
+-- runs this on every row each time it updates. What the game leaves alone
+-- once set - a row's height, its fonts, where its bar and words sit - is set
+-- the first time a row is seen; what the game writes again each time it
+-- fills a row (a header's words, its fold marker, a row's name, which it
+-- anchors again) is put right every time. Undress forgets the rows.
+local compacted = setmetatable({}, { __mode = "k" })
+
 local function compactRow(row)
 	if type(row) ~= "table" or not row.GetHeight then
 		return
 	end
+	local first = not compacted[row]
+	compacted[row] = true
 	local content = row.Content
 	if not content then
 		-- a header: a banner (gone), its words and a fold marker. The marker
 		-- goes to the LEFT of the words, where the mockup has its chevron and
 		-- where every other fold in the toolkit is (Josh 2026-09-22).
 		if row.Name and not row.Label then
-			shorter(row)
+			if first then
+				shorter(row)
+				place(row.Name, { { "LEFT", row, "LEFT", 16, 0 } })
+			end
 			header(row.Name)
 			-- THE TOOLKIT'S CHEVRON (Josh 2026-09-22): the game's minus is a
 			-- 13px dash, twice the mark the mockup has and nothing like the
@@ -1180,7 +1210,14 @@ local function compactRow(row)
 					c:Show()
 				end
 			end
-			place(row.Name, { { "LEFT", row, "LEFT", 16, 0 } })
+		end
+		return
+	end
+	local name = content.Name
+	local bar = content.ReputationBar or content.SkillsBar
+	if not first then
+		if bar and name then
+			place(name, { { "LEFT", content, "LEFT", 6, M.ROW_TEXT_Y } })
 		end
 		return
 	end
@@ -1191,8 +1228,6 @@ local function compactRow(row)
 			{ "TOPLEFT", content, "TOPLEFT", 0, 0 }, { "BOTTOMRIGHT", content, "BOTTOMRIGHT", 0, 0 },
 		})
 	end
-	local name = content.Name
-	local bar = content.ReputationBar or content.SkillsBar
 	if name then
 		sized(name, 12)
 	end
@@ -2025,14 +2060,16 @@ local function layoutSide(frame, right)
 	local bar = pick(frame, "PaperDollSidebarTabs")
 	if bar then
 		place(bar, { { "TOPLEFT", right, "TOPLEFT", 8, -6 }, { "TOPRIGHT", right, "TOPRIGHT", -8, -6 } }, nil, 24)
-		for i = 1, 3 do
+		-- EVERY TAB THERE IS (2026-10-17, audit): since build 70291 a fourth,
+		-- the pet's, shows beside the third for a character with a pet
+		local i = 1
+		while _G["PaperDollSidebarTab" .. i] do
 			local t = _G["PaperDollSidebarTab" .. i]
-			if t then
-				place(t, { { "LEFT", bar, "LEFT", (i - 1) * 27, 0 } }, 24, 24)
-				if t.Icon then
-					place(t.Icon, { { "TOPLEFT", t, "TOPLEFT", 2, -2 }, { "BOTTOMRIGHT", t, "BOTTOMRIGHT", -2, 2 } })
-				end
+			place(t, { { "LEFT", bar, "LEFT", (i - 1) * 27, 0 } }, 24, 24)
+			if t.Icon then
+				place(t.Icon, { { "TOPLEFT", t, "TOPLEFT", 2, -2 }, { "BOTTOMRIGHT", t, "BOTTOMRIGHT", -2, 2 } })
 			end
+			i = i + 1
 		end
 	end
 	-- your level and class go up into the title bar, beside your name (see
@@ -2629,6 +2666,10 @@ end
 
 function M.Undress()
 	M.Unlayout()
+	-- every row dressed afresh when the theme comes back (compactRow)
+	for row in pairs(compacted) do
+		compacted[row] = nil
+	end
 	-- the selected tab's glow and art, which stayDown kept hidden while the
 	-- theme was on, come back if the client wanted them shown
 	for tex in pairs(held) do
@@ -2704,6 +2745,85 @@ function M.OnSheetSized()
 	return false
 end
 
+-- what a list does each time the game updates it (hooked in watchTheme;
+-- by itself so the tests can drive it)
+function M.ListUpdated(self)
+	if not M.Themed() then
+		return
+	end
+	dressTree(self, 0)
+	-- the stat rows as stats, every other list's rows compact - as
+	-- M.EachRow does. Both on every list gave the pet's stats the
+	-- player's folds, and its rows the stats' heights in a list
+	-- that measures them its own way (Josh 2026-09-23, audit).
+	local stats = pick(_G.CharacterFrame, "CharacterStatsPaneScrollBox")
+	local petStats = pick(_G.CharacterFrame, "CharacterStatsPanePetScrollBox")
+	local isStats = stats and stats.ScrollBox == self
+	local target = self.ScrollTarget
+	if target and target.GetChildren then
+		for _, row in ipairs({ target:GetChildren() }) do
+			if isStats then
+				M.StatRow(row)
+			else
+				M.CompactRow(row)
+			end
+		end
+	end
+	-- A STATS REFRESH MOVES NOTHING OUTSIDE ITS LIST (2026-10-17,
+	-- audit). The game refreshes your stats and your pet's on every
+	-- buff, stat, bag and target change while the sheet is open,
+	-- and each laid the whole window out again: in a fight, up to
+	-- ten times a second. Their rows are dressed above; nothing
+	-- else is touched, and nothing here sizes the list or asks it
+	-- to draw (see M.FOLDS).
+	if isStats or (petStats and petStats.ScrollBox == self) then
+		return
+	end
+	-- CHOOSING A ROW REFILLS THE PANE BESIDE IT, in the game's own
+	-- order and anchors; the layout runs again so it is laid out
+	-- in ours. Not on every frame of a scroll: a tenth of a second
+	-- apart is faster than anyone picks a faction. The last of a
+	-- burst still gets one, a moment late - a pick inside the tenth
+	-- was left in the game's layout (Josh 2026-09-23, audit).
+	-- A page's list lays out only the pages (M.LayoutPages); the
+	-- titles and the sets, the whole window; the stats, nothing.
+	local page = false
+	for _, key in ipairs({ "ReputationFrame", "SkillsFrame", "StatisticsFrame", "TokenFrame" }) do
+		local p = pick(_G.CharacterFrame, key)
+		if p and p.ScrollBox == self then
+			page = true
+		end
+	end
+	local now = (type(GetTime) == "function" and GetTime()) or 0
+	if now - (M.laidAt or 0) > 0.1 then
+		M.laidAt = now
+		if page then
+			M.LayoutPages()
+		else
+			M.Layout()
+		end
+	elseif C_Timer and C_Timer.After then
+		-- the late one is the whole window if any list in the burst
+		-- needed it
+		M.layLateAll = M.layLateAll or not page
+		if not M.layLate then
+			M.layLate = true
+			C_Timer.After(0.1, function()
+				local all = M.layLateAll
+				M.layLate, M.layLateAll = false, false
+				if M.Themed() then
+					M.laidAt = (type(GetTime) == "function" and GetTime()) or 0
+					if all then
+						M.Layout()
+					else
+						M.LayoutPages()
+					end
+				end
+			end)
+		end
+	end
+end
+
 local watching = false
 local function watchTheme()
 	if watching then
@@ -2720,7 +2840,9 @@ local function watchTheme()
 	-- window of two thousand pieces, and a dozen layouts queued behind them.
 	-- The first in a frame dresses (so nothing flashes in the game's look);
 	-- the rest wait for the one layout that follows.
-	local dressed, trailing = false, false
+	-- (dressedNow, not dressed: that name is the module's table of our
+	-- surfaces - 2026-10-17, audit)
+	local dressedNow, trailing = false, false
 	local function again()
 		if not M.Themed() then
 			return
@@ -2729,8 +2851,8 @@ local function watchTheme()
 			M.Dress()
 			return
 		end
-		if not dressed then
-			dressed = true
+		if not dressedNow then
+			dressedNow = true
 			M.Dress()
 		end
 		-- and once more after the game's own layout pass, which can put a
@@ -2738,7 +2860,7 @@ local function watchTheme()
 		if not trailing then
 			trailing = true
 			C_Timer.After(0, function()
-				dressed, trailing = false, false
+				dressedNow, trailing = false, false
 				if M.Themed() then
 					M.Layout()
 					-- and the stats' folds, now their headers are drawn
@@ -2790,69 +2912,7 @@ local function watchTheme()
 		if f.ScrollTarget and type(f.Update) == "function" and not f.beebsHooked then
 			f.beebsHooked = true
 			pcall(hooksecurefunc, f, "Update", function(self)
-				if not M.Themed() then
-					return
-				end
-				dressTree(self, 0)
-				-- the stat rows as stats, every other list's rows compact - as
-				-- M.EachRow does. Both on every list gave the pet's stats the
-				-- player's folds, and its rows the stats' heights in a list
-				-- that measures them its own way (Josh 2026-09-23, audit).
-				local stats = pick(_G.CharacterFrame, "CharacterStatsPaneScrollBox")
-				local isStats = stats and stats.ScrollBox == self
-				local target = self.ScrollTarget
-				if target and target.GetChildren then
-					for _, row in ipairs({ target:GetChildren() }) do
-						if isStats then
-							M.StatRow(row)
-						else
-							M.CompactRow(row)
-						end
-					end
-				end
-				-- CHOOSING A ROW REFILLS THE PANE BESIDE IT, in the game's own
-				-- order and anchors; the layout runs again so it is laid out
-				-- in ours. Not on every frame of a scroll: a tenth of a second
-				-- apart is faster than anyone picks a faction. The last of a
-				-- burst still gets one, a moment late - a pick inside the tenth
-				-- was left in the game's layout (Josh 2026-09-23, audit).
-				-- A page's list lays out only the pages (M.LayoutPages); any
-				-- other list - the stats, the titles, the sets - the whole window.
-				local page = false
-				for _, key in ipairs({ "ReputationFrame", "SkillsFrame", "StatisticsFrame", "TokenFrame" }) do
-					local p = pick(_G.CharacterFrame, key)
-					if p and p.ScrollBox == self then
-						page = true
-					end
-				end
-				local now = (type(GetTime) == "function" and GetTime()) or 0
-				if now - (M.laidAt or 0) > 0.1 then
-					M.laidAt = now
-					if page then
-						M.LayoutPages()
-					else
-						M.Layout()
-					end
-				elseif C_Timer and C_Timer.After then
-					-- the late one is the whole window if any list in the burst
-					-- needed it
-					M.layLateAll = M.layLateAll or not page
-					if not M.layLate then
-						M.layLate = true
-						C_Timer.After(0.1, function()
-							local all = M.layLateAll
-							M.layLate, M.layLateAll = false, false
-							if M.Themed() then
-								M.laidAt = (type(GetTime) == "function" and GetTime()) or 0
-								if all then
-									M.Layout()
-								else
-									M.LayoutPages()
-								end
-							end
-						end)
-					end
-				end
+				M.ListUpdated(self)
 			end)
 		end
 		local okC, kids = pcall(function() return { f:GetChildren() } end)
@@ -2880,11 +2940,14 @@ local function watchTheme()
 			pcall(hooksecurefunc, sel, "SetShown", lit)
 		end
 	end
-	for i = 1, 3 do
+	-- the pet's tab as well (2026-10-17, audit)
+	local i = 1
+	while _G["PaperDollSidebarTab" .. i] do
 		local tab = _G["PaperDollSidebarTab" .. i]
-		if tab and tab.HookScript then
+		if tab.HookScript then
 			tab:HookScript("OnClick", again)
 		end
+		i = i + 1
 	end
 end
 M.WatchTheme = watchTheme

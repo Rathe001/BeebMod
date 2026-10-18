@@ -403,6 +403,18 @@ function P.Level(s)
 	return level > 0 and level or nil
 end
 
+-- THE SEARCH READS NUMBERS (2026-10-17, audit): a search of the whole book
+-- unpacked every row to read a guild. These give the places as the string
+-- holds them: the class's in words.class, the guild's code (0 none on file,
+-- 1 no guild, n + 1 words.guild[n]).
+function P.ClassCode(s)
+	return VALUE[byte(s, 1)]
+end
+
+function P.GuildCode(s)
+	return (VALUE[byte(s, 4)] * 64 + VALUE[byte(s, 5)]) * 64 + VALUE[byte(s, 6)]
+end
+
 -- the race token on file, nil without one
 function P.Race(db, s)
 	local i = VALUE[byte(s, 2) or 0] or 0

@@ -3,7 +3,8 @@
 -- type, every rank - ordinary, elite, rare, rare elite, world boss - and every
 -- mastery from none to Platinum, over a dozen zones, with the commendations
 -- that earns. None of it is saved: while it is shown the journal reads this
--- store instead of yours (J.Store), and a kill made meanwhile is made here.
+-- store instead of yours (J.Store), and a kill made meanwhile goes in yours
+-- (J.Saved, 2026-10-17, audit).
 local _, BT = ...
 
 local J = BT.Expedition

@@ -1,12 +1,12 @@
-# Rules for the Expedition's mob descriptions
+# Rules for the Expedition's enemy descriptions
 
 For anyone sorting, rewriting or checking the descriptions in the
-Expedition's field journal (`Modules/Expedition/LoreData.lua`). Read this and
+Expedition's journal (`Modules/Expedition/LoreData.lua`). Read this and
 `docs/writing-style.md`; nothing else is needed.
 
 ## What a description is
 
-A few sentences shown on a mob's page: what it is, where it lives, anything
+A few sentences shown on an enemy's page: what it is, where it lives, anything
 notable about it. Most are one or two sentences. They come from the opening
 lines of Warcraft Wiki pages (CC BY-SA 3.0).
 
@@ -25,10 +25,10 @@ lines of Warcraft Wiki pages (CC BY-SA 3.0).
    part; don't replace it with something you believe.
 3. **Plain words**, as `docs/writing-style.md` describes: what it is, said
    plainly, one idea per sentence, no pitch, no drama, no dashes as asides.
-   Present tense for what a mob is ("Hogger is a gnoll in Elwynn Forest").
-4. **Short.** One to three sentences. The page shows the mob's model above
-   it; the text doesn't need to describe how it looks unless that's the
-   point.
+   Present tense for what an enemy is ("Hogger is a gnoll in Elwynn Forest").
+4. **Short.** One to three sentences. The page shows the enemy's model or
+   its map above it; the text doesn't need to describe how it looks unless
+   that's the point.
 5. **Keep names as the game writes them** (Mor'Ladim, Zul'Farrak, the
    Defias Brotherhood). Keep item names in square brackets only if the
    source has them.
@@ -38,7 +38,7 @@ lines of Warcraft Wiki pages (CC BY-SA 3.0).
 ## Sorting (keep / rewrite / drop)
 
 - **keep**: already plain, Classic-only, one to three sentences. Most short
-  mob pages are like this ("Aarux is a bone spider in Razorfen Downs.").
+  enemy pages are like this ("Aarux is a bone spider in Razorfen Downs.").
 - **rewrite**: true for Classic but wordy, garbled, cut off mid-thought, or
   carrying a clause about later content that can be removed.
 - **drop**: the page is about something that isn't in Classic at all (a

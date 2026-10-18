@@ -539,7 +539,9 @@ function F.NoteCast(unit, name, icon, shield, important)
 	end
 	F.castNotes[kind] = ("%s (%s): name=%s icon=%s noKick=%s important=%s"):format(kind, tostring(unit),
 		describe(name), describe(icon), describe(shield), describe(important))
-	if type(BeebModDB) == "table" then
+	-- A WORKING COPY'S RECORD (2026-10-17, audit): a released copy has no
+	-- Record button to read it with or clear it, so only BT.DEV writes it
+	if BT.DEV and type(BeebModDB) == "table" then
 		local lines = {}
 		for _, line in pairs(F.castNotes) do
 			lines[#lines + 1] = line
@@ -1364,6 +1366,11 @@ local function alphaFrom(region, v, on, off)
 end
 F.AlphaFrom = alphaFrom
 
+-- TOO HIGH TO SAY IS RED (2026-10-17, audit): U.LevelColour has no colour for
+-- a skull's -1, so the target and boss frames wrote "??+" in white while its
+-- plate wrote it red; both use this one now
+local SKULL_RED = { 1, 0.29, 0.24 }
+
 local function levelText(src)
 	local level = src:Level()
 	if type(level) ~= "number" then
@@ -1379,7 +1386,7 @@ local function levelText(src)
 	end
 	-- how hard, by the shared rule (Core/Util.lua, U.LevelColour): the
 	-- client's own answer is the modern game's on this build
-	local c = BT.Util.LevelColour(level)
+	local c = level < 0 and SKULL_RED or BT.Util.LevelColour(level)
 	if c then
 		local function hex(v) return math.floor(v * 255 + 0.5) end
 		return ("|cff%02x%02x%02x%s|r "):format(hex(c[1]), hex(c[2]), hex(c[3]), tag)
@@ -1395,15 +1402,13 @@ function F.LevelTag(src)
 	if type(level) ~= "number" then
 		return ""
 	end
-	if level < 0 then
-		return "|cffff4a3d??|r"
-	end
-	local c = BT.Util.LevelColour(level)
+	local c = level < 0 and SKULL_RED or BT.Util.LevelColour(level)
+	local tag = level < 0 and "??" or tostring(level)
 	if c then
 		local function hex(v) return math.floor(v * 255 + 0.5) end
-		return ("|cff%02x%02x%02x%d|r"):format(hex(c[1]), hex(c[2]), hex(c[3]), level)
+		return ("|cff%02x%02x%02x%s|r"):format(hex(c[1]), hex(c[2]), hex(c[3]), tag)
 	end
-	return tostring(level)
+	return tag
 end
 
 -- A NAME IS WRITTEN FROM EMPTY EVERY TIME (Josh 2026-09-23: "after
@@ -1689,6 +1694,28 @@ function F.PaintThreat(b, src, gone)
 	end
 end
 
+-- the raid marker on a frame; a mark moved to another unit repaints this
+-- alone (F.PaintMarker)
+local function paintMarker(b, src)
+	local marker = src:Marker()
+	if secret(marker) then
+		-- never read, only handed to the client to draw
+		b.marker:SetShown(F.DrawMarker(b.marker, marker))
+	elseif type(marker) == "number" and marker > 0 and marker <= 8 then
+		if _G.SetRaidTargetIconTexture then
+			_G.SetRaidTargetIconTexture(b.marker, marker)
+		else
+			-- the client's own sheet is four across: star, circle, diamond,
+			-- triangle, then moon, square, cross, skull
+			local col, row = (marker - 1) % 4, math.floor((marker - 1) / 4)
+			b.marker:SetTexCoord(col * 0.25, (col + 1) * 0.25, row * 0.25, (row + 1) * 0.25)
+		end
+		b.marker:Show()
+	else
+		b.marker:Hide()
+	end
+end
+
 -- The whole button, from its source. Every call is a setter, and nothing is
 -- laid out except the combo row. An event about one thing paints that thing
 -- alone (F.OnUnitEvent); this is everything else, and a frame's first paint.
@@ -1746,23 +1773,7 @@ function F.Paint(b, src)
 	F.PaintThreat(b, src, gone)
 
 	-- the marks
-	local marker = src:Marker()
-	if secret(marker) then
-		-- never read, only handed to the client to draw
-		b.marker:SetShown(F.DrawMarker(b.marker, marker))
-	elseif type(marker) == "number" and marker > 0 and marker <= 8 then
-		if _G.SetRaidTargetIconTexture then
-			_G.SetRaidTargetIconTexture(b.marker, marker)
-		else
-			-- the client's own sheet is four across: star, circle, diamond,
-			-- triangle, then moon, square, cross, skull
-			local col, row = (marker - 1) % 4, math.floor((marker - 1) / 4)
-			b.marker:SetTexCoord(col * 0.25, (col + 1) * 0.25, row * 0.25, (row + 1) * 0.25)
-		end
-		b.marker:Show()
-	else
-		b.marker:Hide()
-	end
+	paintMarker(b, src)
 	b.leader:SetShown(k.group and src:Leader() or false)
 	paintLedger(b, gone)
 	if b.rest then
@@ -1950,12 +1961,12 @@ F.UNIT_EVENTS = {
 -- was painted in full for every mana tick and every cast of its member.
 -- Power only where there is a power bar, casts only where there is a cast
 -- bar, a pet's mood only on a pet.
-local POWER = { UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true, UNIT_DISPLAYPOWER = true }
+local POWER_EVENTS = { UNIT_POWER_FREQUENT = true, UNIT_MAXPOWER = true, UNIT_DISPLAYPOWER = true }
 function F.EventsFor(b)
 	local out = {}
 	for _, event in ipairs(F.UNIT_EVENTS) do
 		local want = true
-		if POWER[event] then
+		if POWER_EVENTS[event] then
 			want = b.power ~= nil
 		elseif event:find("^UNIT_SPELLCAST") then
 			want = b.cast ~= nil
@@ -2008,11 +2019,19 @@ function F.PaintRange(b, src)
 	end
 end
 
+-- THE MARK ALONE (2026-10-17, audit): a raid marker moved to the next enemy
+-- mid-pull is a mark on two plates, and nothing else on them changed
+function F.PaintMarker(b, src)
+	if painted(b, src) and b.marker then
+		paintMarker(b, src)
+	end
+end
+
 -- which painter each event goes to, by name; any other event paints it all
 local PIECE = { UNIT_HEALTH = "PaintHealth", UNIT_MAXHEALTH = "PaintHealth", UNIT_HEAL_PREDICTION = "PaintHealth",
 	UNIT_ABSORB_AMOUNT_CHANGED = "PaintHealth", UNIT_IN_RANGE_UPDATE = "PaintRange",
 	UNIT_THREAT_SITUATION_UPDATE = "PaintThreat", UNIT_THREAT_LIST_UPDATE = "PaintThreat" }
-for event in pairs(POWER) do
+for event in pairs(POWER_EVENTS) do
 	PIECE[event] = "PaintPower"
 end
 for _, event in ipairs(F.UNIT_EVENTS) do

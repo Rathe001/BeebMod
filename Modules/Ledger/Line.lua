@@ -9,8 +9,7 @@
 -- drag it like any other row.
 --
 -- It also says what the Ledger earns (UI/Notice.lua): a commendation for a
--- moment on the row, more points as they come, and a new rank as a toast
--- with a word from Jorach.
+-- moment on the row, more points as they come, and a new rank as a toast.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Line.lua")
 
@@ -125,9 +124,18 @@ function M.Tip()
 		local realm = BT.scope and BT.scope.realm
 		t:Header({ name = f and f.title or "Ravenholdt Ledger", sub = realm and ("Your book on %s"):format(realm) or nil,
 			pill = ("Rank %d / %d"):format(rank, #L.RANKS) })
-		t:Title(title, points > 0 and ("%s points"):format(big(points)) or nil)
+		t:Title(title, points > 0 and ("%s %s"):format(big(points), points == 1 and "point" or "points") or nil)
 		if points == 0 then
-			t:Note("Nothing in the book yet. A note is worth 2 points and a tag 1, and every 100 characters recorded 1.")
+			-- THE NUMBERS IN ROWS (2026-10-17, audit): three of them were in
+			-- one sentence
+			local function pts(n)
+				return n == 1 and "1 point" or ("%s points"):format(big(n))
+			end
+			t:Note("Nothing in the book yet.")
+			t:Section("Points")
+			t:ListRow("A note", pts(L.NOTE_POINTS))
+			t:ListRow("A tag", pts(L.TAG_POINTS))
+			t:ListRow(("%s characters recorded"):format(big(L.PER_CHARACTERS)), pts(1))
 			if nextAt then
 				t:Section()
 				t:ListRow("Next rank", ("%s at %s"):format(nextTitle, big(nextAt)))
@@ -146,17 +154,25 @@ function M.Tip()
 				t:ListRow(a.title, ("%s / %s"):format(big(a.have), big(a.need)), nil, nil, { a.have / a.need, f and f.color })
 			end
 		end
+		-- (and only for the book it began on, not the made-up realm)
 		local s = M.session
-		if s then
+		if s and s.db == BT.db then
 			local more = (L.characters or 0) - s.characters
 			local notes, tags = c.notes - s.notes, c.tags - s.tags
-			if more > 0 or notes > 0 or tags > 0 then
+			-- only what this session added: no "+0 notes" (2026-10-17, audit)
+			local tiles = {}
+			if more > 0 then
+				tiles[#tiles + 1] = { "+" .. big(more), more == 1 and "character" or "characters", "good" }
+			end
+			if notes > 0 then
+				tiles[#tiles + 1] = { "+" .. notes, notes == 1 and "note" or "notes" }
+			end
+			if tags > 0 then
+				tiles[#tiles + 1] = { "+" .. tags, tags == 1 and "tag" or "tags" }
+			end
+			if #tiles > 0 then
 				t:Section("This session")
-				t:Stats({
-					{ "+" .. big(math.max(0, more)), more == 1 and "character" or "characters", more > 0 and "good" or nil },
-					{ "+" .. math.max(0, notes), notes == 1 and "note" or "notes" },
-					{ "+" .. math.max(0, tags), tags == 1 and "tag" or "tags" },
-				})
+				t:Stats(tiles)
 			end
 		end
 		t:Foot({ { "Click", "open Ledger" } })
@@ -207,20 +223,19 @@ local function openOn(id)
 	end
 end
 
--- a new rank's toast, with its badge and Jorach's word on it; a click opens
--- the Ledger's Commendations. Off with the Ledger's Rank toasts switch.
+-- a new rank's toast, with its badge; a click opens the Ledger's
+-- Commendations. Off with the Ledger's Rank toasts switch.
 function M.RankToast(rank)
 	if not on("ledgerToasts", true) then
 		return false
 	end
-	local f = feature()
 	local _, title = L.RankByNumber(rank)
 	-- the journals' one toast (Modules/Expedition/Toast.lua, loaded after this)
 	local T = BT.ExpeditionToast
 	return T.Push({
 		head = "Ledger rank", text = ("%s %s"):format(title, WORDS:format(("· rank %d of %d"):format(rank, #L.RANKS))),
 		icon = T.RANK_ICON, badge = L.RankBadge(rank), book = "Ledger",
-		quote = L.QUOTES[rank], by = f and f.by, sound = on("ledgerSound", true),
+		sound = on("ledgerSound", true),
 		onClick = function()
 			if BT.CensusWindow then
 				BT.CensusWindow.Show("comm")
@@ -229,12 +244,30 @@ function M.RankToast(rank)
 	})
 end
 
+-- THE BOOK COUNTED IS NOT A GAIN (2026-10-17, audit). The line is drawn at
+-- bind, before the census's book is counted, so its points left the
+-- characters out, and the first look said them as a gain: "+405" at every
+-- login and /reload. The made-up realm (the Testing page's Made-up data)
+-- swapped in or out is a book counted again too. Counting the book behind
+-- BT.db, when it is not the one counted, starts the points afresh: nothing
+-- is said for it. Returns whether it counted.
+local function recount()
+	if L.countedFor == BT.db then
+		return false
+	end
+	L.CountCharacters()
+	L.countedFor = BT.db
+	M.points = nil
+	return true
+end
+
 -- the book looked at again: the commendations it earned said on the row,
 -- more points by the points, a new rank toasted (L.Changed, a beat after)
 function M.Changed()
 	if not BT.Enabled("ledgerline") then
 		return
 	end
+	recount()
 	local before = M.points
 	local news, up, points = L.Check()
 	local earned = 0
@@ -297,10 +330,7 @@ end
 -- tidying (BT.OnWorld, below), and what it finds is said as any change is
 -- (M.Changed). The very first look still writes down quietly (L.Check).
 local function look()
-	if L.countedFor ~= BT.db then
-		L.CountCharacters()
-		L.countedFor = BT.db
-	end
+	recount()
 	if not M.session or M.session.db ~= BT.db then
 		local c = L.Counts()
 		M.session = { db = BT.db, characters = L.characters or 0, notes = c.notes or 0, tags = c.tags or 0 }
@@ -354,7 +384,7 @@ function M:Parts()
 	local toastGet, toastSet = setting("ledgerToasts")
 	local soundGet, soundSet = setting("ledgerSound")
 	return {
-		{ label = "Rank toasts", blurb = "When you reach a new rank, with a word from Jorach",
+		{ label = "Rank toasts", blurb = "When you reach a new rank",
 			get = toastGet, set = toastSet, field = "ledgerToasts" },
 		{ label = "Sound", get = soundGet, set = soundSet, sub = true, field = "ledgerSound" },
 	}

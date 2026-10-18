@@ -1,12 +1,16 @@
--- /bt, and the commands the toolkit itself owns (Josh 2026-09-19): help, and
--- What loaded for the Testing page.
+-- /bt and /beeb, which open the window, and What loaded for the Testing page.
 --
--- Modules register their own with BT.Command, so this file never grows a
--- branch for a utility it has not heard of, and a command belonging to
--- something you have switched off says so instead of half-working.
---
--- A command that names a character is the Ledger's, and reads the name the
--- Ledger's way (BT.Notes.WhoAndRest): your target when you leave it out.
+-- NO COMMANDS AFTER /bt (Josh 2026-10-18: "I actually never use the slash
+-- commands. I'd be fine with removing these (and the others) unless we are
+-- using them internally or for debug."). /bt help, the Ledger's note, tag,
+-- rate and find, the census's prune, autopurge and cap, and the rest went
+-- that day, with BT.Command, which registered them. The right-click menu on
+-- a player writes notes, tags and ratings, the Find page searches and makes
+-- tags, and the Testing page has the made-up data, the first login and the
+-- other books. Nothing on screen changes the purge's days or the book's size
+-- limit (BT.SETTINGS, Core/Init.lua). The welcome tells you to type /bt, so
+-- /bt stays, and whatever you type after it is not read: /bt anything opens
+-- the window as /bt does.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Core/Slash.lua")
 
@@ -21,6 +25,9 @@ local U = BT.Util
 
 -- what the saved file handed back at login (BT.BootReport), and what was done
 -- to it while the book was bound
+-- WITH COMMAS (2026-10-17, audit): "150000 characters" read as a code, not
+-- a count (U.Commas, as everywhere else)
+local C = U.Commas
 local function bootLines(say)
 	local b = BT.boot
 	if not b then
@@ -29,29 +36,20 @@ local function bootLines(say)
 	if b.type ~= "table" then
 		say(("saved file: nothing arrived (%s). Nothing is lost. The file is still on disk."):format(tostring(b.type)))
 	else
-		say(("saved file: schema %s · settings %s · %d characters in %d book%s"):format(tostring(b.schema),
-			b.settings and "yes" or "no", b.total, #b.books, #b.books == 1 and "" or "s"))
+		say(("saved file: schema %s · settings %s · %s characters in %s book%s"):format(tostring(b.schema),
+			b.settings and "yes" or "no", C(b.total), C(#b.books), #b.books == 1 and "" or "s"))
 	end
 	if b.bound then
-		say(("bound: %s · %d at login"):format((b.bound:gsub("|", " ")), b.boundCount or 0))
-	end
-	if BT.linkedRestored then
-		say("saved data restored after the game cleared it")
-	end
-	if BT.stashTaken then
-		say(("%d put back from the stashed book"):format(BT.stashTaken))
-	end
-	if BT.bakedTaken then
-		say(("%d taken from the baked file"):format(BT.bakedTaken))
+		say(("bound: %s · %s at login"):format((b.bound:gsub("|", " ")), C(b.boundCount)))
 	end
 	if BT.slimmedOnLoad then
-		say(("%d rows slimmed of fields they did not need"):format(BT.slimmedOnLoad))
+		say(("%s rows slimmed of fields they did not need"):format(C(BT.slimmedOnLoad)))
 	end
 	if BT.foldedOnLoad then
-		say(("%d folded in from the realm's old name"):format(BT.foldedOnLoad))
+		say(("%s folded in from the realm's old name"):format(C(BT.foldedOnLoad)))
 	end
 	if BT.renamedOnLoad then
-		say(("%d settings moved to their new names"):format(BT.renamedOnLoad))
+		say(("%s settings moved to their new names"):format(C(BT.renamedOnLoad)))
 	end
 	-- the launch reset (BT.DropBeta): what told it this is the beta, and what
 	-- it dropped the day neither did
@@ -64,13 +62,13 @@ local function bootLines(say)
 	end
 	local gone = BT.betaDropped
 	if gone then
-		say(("beta records dropped: %s characters seen in %d book%s · %s people in the Ledger · %d Expedition characters · %s enemies · %d other character records"):format(
-			U.Commas(gone.characters), gone.books, gone.books == 1 and "" or "s", U.Commas(gone.people), gone.journals,
-			U.Commas(gone.enemies), gone.records or 0))
+		say(("beta records dropped: %s characters seen in %s book%s · %s people in the Ledger · %s Expedition characters · %s enemies · %s other character records"):format(
+			C(gone.characters), C(gone.books), gone.books == 1 and "" or "s", C(gone.people), C(gone.journals),
+			C(gone.enemies), C(gone.records)))
 	end
 	if BT.lateBook then
-		say(("saved data loaded late · %d found · %d seen since login kept"):format(BT.lateBook.found,
-			BT.lateBook.kept))
+		say(("saved data loaded late · %s found · %s seen since login kept"):format(C(BT.lateBook.found),
+			C(BT.lateBook.kept)))
 	end
 end
 
@@ -80,7 +78,7 @@ function BT.WhatLoaded()
 	U.Print(("book: %s · settings: %s · characters: %s"):format(
 		BT.scope and BT.scope.key or "|cffff6b6bnone|r",
 		BT.settings and "yes" or "|cffff6b6bnone|r",
-		(BT.DB and BT.db) and tostring(BT.DB.Stats(BT.db).total) or "-"))
+		(BT.DB and BT.db) and C(BT.DB.Stats(BT.db).total) or "-"))
 	bootLines(U.Print)
 	local on = {}
 	for _, m in ipairs(BT.Modules()) do
@@ -135,56 +133,11 @@ function BT.WhatLoaded()
 	end
 end
 
-BT.Command("help", function()
-	U.Print(("%s commands. Type /bt on its own to open the window."):format(BT.TITLE))
-	local names = {}
-	for name in pairs(BT.Commands()) do
-		names[#names + 1] = name
-	end
-	table.sort(names)
-	for _, name in ipairs(names) do
-		local c = BT.Commands()[name]
-		if c.help and (not c.module or BT.Enabled(c.module)) then
-			-- a help line that already starts with its own command is printed
-			-- as written, so "/bt find <text> - search ..." does not come out
-			-- as "/bt find - find <text> - search ..." (Josh 2026-09-19)
-			local line = c.help:sub(1, #name) == name
-				and ("/bt " .. c.help)
-				or ("/bt %s - %s"):format(name, c.help)
-			-- the module by the name its tab shows, not its key: the short one
-			-- where it has one, as the rail does
-			if c.module then
-				local m = BT.GetModule(c.module)
-				line = line .. " |cff6e7b75(" .. tostring(m and (m.short or m.title) or c.module) .. ")|r"
-			end
-			U.Print(line)
-		end
-	end
-end, "list these commands")
-
+-- /bt opens the window, and a second /bt closes it. What follows it, if
+-- anything, is not read (see the top of this file).
 SLASH_BEEBSTOOLKIT1, SLASH_BEEBSTOOLKIT2 = "/bt", "/beeb"
-SlashCmdList.BEEBSTOOLKIT = function(msg)
-	-- every command needs a book; bind one now if login never did
+SlashCmdList.BEEBSTOOLKIT = function()
+	-- the window needs a book; bind one now if login never did
 	BT.EnsureBound()
-	local cmd, rest = (msg or ""):match("^(%S*)%s*(.-)%s*$")
-	cmd = (cmd or ""):lower()
-	if cmd == "" then
-		BT.Window.Toggle()
-		return
-	end
-	if BT.RunCommand(cmd, rest) then
-		return
-	end
-	-- a module's key opens its tab: /bt census, /bt ledger
-	-- its own tab, switched on or not: that is where the switch is now
-	if BT.GetModule(cmd) then
-		BT.Window.Show(cmd)
-		return
-	end
-	-- anything else is a search, because that is what you meant
-	if BT.Enabled("ledger") then
-		BT.RunCommand("find", msg)
-	else
-		BT.RunCommand("help", "")
-	end
+	BT.Window.Toggle()
 end

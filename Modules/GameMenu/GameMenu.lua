@@ -283,8 +283,12 @@ function M.DressNow(frame)
 					if ok and dressed then
 						n = n + 1
 					elseif not ok and not M.failed then
+						-- IN WORDS, NOT THE ERROR (2026-10-17, audit): the error
+						-- goes in the log every module writes to, which What
+						-- loaded on the Testing page prints
 						M.failed = tostring(dressed)
-						U.Print("Game menu: could not redraw a button. " .. M.failed)
+						BT.Err("gamemenu: " .. M.failed)
+						U.Print("Game menu: BeebMod couldn't redraw a button, so it keeps the game's look.")
 					end
 				else
 					walk(child, depth + 1)

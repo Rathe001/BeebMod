@@ -25,7 +25,10 @@ CAST_SPELL = 15
 # effects the database lists that nobody sees cast: procs, visuals, triggers
 NOT_SEEN = re.compile(r"\bDND\b|visual|trigger|transform|channeling|particles|proc\b|passive|"
                       r"random aggro|root self|self stun|despawn|becomes visible|zero mana|^clone$|"
-                      r"^spawn |zzold|forsaken skills|selection", re.I)
+                      r"^spawn |zzold|forsaken skills|selection|"
+                      # the server's own mechanics, with the placeholder picture
+                      # (Josh 2026-10-18: Azuregos's "Summon Player")
+                      r"^summon player$", re.I)
 
 db = sqlite3.connect(sys.argv[1])
 

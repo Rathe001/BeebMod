@@ -7,22 +7,14 @@
 ## Author: Josh
 ## Version: 0.1.0-beta.28
 ## X-Curse-Project-ID: 1711982
-# TWO VARIABLES, NOT ONE (Josh 2026-09-20). BeebModDB is the whole book -
-# every character ever seen, a megabyte and a half of it. BeebModKeep is
-# only what you WROTE: the notes, the tags, the ratings, the settings. A few
-# kilobytes.
-#
-# They are separated because losing the book is an inconvenience and losing
-# your notes is not, and because this client hands back neither reliably: if
-# the small one returns and the big one does not, the cause is size, and we
-# will know that the first time it happens.
+# ONE VARIABLE IN USE, TWO KEPT FOR READING (Josh 2026-09-20; 2026-10-17,
+# audit). BeebModDB holds everything BeebMod keeps: the book of every character
+# seen, the Ledger's notes, tags and ratings, the Expedition and the settings.
+# BeebModKeep (per account) and BeebModChar (per character) were second copies
+# of what you wrote, made while this client lost saved files before build
+# 70009. They are still listed so an old copy can be read once, by the moves
+# that take what is in them into BeebModDB; nothing writes them any more.
 ## SavedVariables: BeebModDB, BeebModKeep
-# And a THIRD, per character rather than per account. It holds the same few
-# kilobytes as the second one, and it exists to answer a question no amount of
-# reading the file can: the client writes account saved variables correctly and
-# hands back nothing, and per-character ones are a different file written by
-# different code. If this one comes back when the others do not, everything
-# moves here and the problem is over.
 ## SavedVariablesPerCharacter: BeebModChar
 
 # THE CLIENT READS SAVED VARIABLES AGAIN (Josh 2026-09-24). Build 70009

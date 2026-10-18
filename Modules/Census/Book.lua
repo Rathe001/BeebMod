@@ -1,7 +1,13 @@
--- The book's commands (Josh 2026-09-26: moved out of Core/Slash.lua, the
--- core's own, when the census became a thing of its own): how long it keeps
--- characters, how many it keeps, and the other books in the file. How many
--- are in it is a report on the Testing page (BT.StatsReport).
+-- The book's report on the Testing page (BT.StatsReport): how many
+-- characters it holds, how it is kept, and the other books in the file.
+--
+-- NO COMMANDS (Josh 2026-10-18: "I actually never use the slash commands.
+-- I'd be fine with removing these (and the others) unless we are using them
+-- internally or for debug."). /bt prune, /bt autopurge, /bt cap, /bt books
+-- and /bt adopt lived here, and nothing but a player typing ran them. The
+-- purge at each loading screen and the size limit at login still run, with
+-- the days and the limit in BT.SETTINGS (Core/Init.lua). Another book is
+-- moved in from its row on the Testing page (BT.AdoptBook).
 local _, BT = ...
 
 local U, DB = BT.Util, BT.DB
@@ -19,84 +25,19 @@ function BT.StatsReport()
 	-- how the book is kept (Core/Pack.lua): packed, and how big it may grow
 	local n, packed = DB.Count(BT.db)
 	local cap = BT.settings.bookCap or 0
-	U.Print(("%d of %d packed · %s"):format(packed, n,
-		cap > 0 and ("keeps up to %d"):format(cap) or "no size limit"))
+	U.Print(("%s of %s packed · %s"):format(U.Commas(packed), U.Commas(n),
+		cap > 0 and ("keeps up to %s"):format(U.Commas(cap)) or "no size limit"))
 	local r = BT.lastRun
 	if r and ((r.identified or 0) > 0 or (r.cleaned or 0) > 0 or (r.pruned or 0) > 0 or (r.capped or 0) > 0) then
-		U.Print(("last login · identified %d · cleaned %d · purged %d · over the limit %d")
-			:format(r.identified or 0, r.cleaned or 0, r.pruned or 0, r.capped or 0))
+		U.Print(("last login · identified %s · cleaned %s · purged %s · over the limit %s")
+			:format(U.Commas(r.identified), U.Commas(r.cleaned), U.Commas(r.pruned), U.Commas(r.capped)))
 	end
 	local others = BT.OtherBooks()
 	if #others > 0 then
 		local bits = {}
 		for _, b in ipairs(others) do
-			bits[#bits + 1] = ("%s %d"):format(b.key, b.n)
+			bits[#bits + 1] = ("%s %s"):format(b.name, U.Commas(b.n))
 		end
 		U.Print("Other books: " .. table.concat(bits, ", "))
 	end
 end
-
-BT.Command("prune", function(rest)
-	local days = tonumber(rest)
-	-- AT LEAST A DAY (Josh 2026-09-23, audit): "0" meant "older than now",
-	-- which is every unwritten sighting in the book
-	if not days or days < 1 then
-		U.Print("Type /bt prune <days> to drop old sightings. Days must be 1 or more.")
-		return
-	end
-	days = math.floor(days)
-	local dropped = DB.Prune(BT.db, days)
-	U.Print(("Ledger: dropped %d %s you haven't noted and haven't seen in %d %s."):format(dropped,
-		dropped == 1 and "character" or "characters", days, days == 1 and "day" or "days"))
-end, "prune <days> - drop characters you haven't noted and haven't seen in that many days")
-
-BT.Command("autopurge", function(rest)
-	-- 0 IS OFF, NOT ONE DAY (Josh 2026-09-23, audit): "0" was raised to 1,
-	-- and the next loading screen dropped every unwritten sighting older than
-	-- a day - most of the book
-	local n = tonumber(rest)
-	if rest == "off" or (n and n <= 0) then
-		BT.settings.pruneDays = 0
-	elseif n then
-		BT.settings.pruneDays = math.max(1, math.floor(n))
-	end
-	local d = BT.settings.pruneDays or 0
-	U.Print(d > 0
-		and ("Ledger: auto-purge after %d day%s, for characters you haven't noted."):format(d, d == 1 and "" or "s")
-		or "Ledger: auto-purge off.")
-end, "autopurge <days|off> - at each loading screen, drop characters you haven't noted and haven't seen in that many days")
-
--- THE BOOK HAS A SIZE (Josh 2026-09-24): past it, the characters seen
--- longest ago go at the next login (DB.Cap). Never below a thousand: a limit
--- that small is a typo, and it would take most of the book with it.
-BT.Command("cap", function(rest)
-	local n = tonumber(rest)
-	if rest == "off" or (n and n <= 0) then
-		BT.settings.bookCap = 0
-	elseif n then
-		BT.settings.bookCap = math.max(1000, math.floor(n))
-	end
-	local c = BT.settings.bookCap or 0
-	U.Print(c > 0
-		and ("Ledger: keeps up to %d characters. At login, BeebMod drops levels 1-10 first, then those seen longest ago. Characters you've noted stay."):format(c)
-		or "Ledger: no size limit.")
-end, "cap <characters|off> - how many characters the census keeps")
-
-BT.Command("books", function()
-	for _, b in ipairs(BT.Books()) do
-		U.Print(("%s%s  %d"):format(b.mine and "* " or "   ", (b.key:gsub("|", " ")), b.n))
-	end
-	U.Print("* is this character's book. Type /bt adopt <book> to move another one across.")
-end, "list every book in the file")
-
-BT.Command("adopt", function(rest)
-	local done = BT.AdoptBook(rest)
-	if not done then
-		U.Print("No such book. Type /bt books to list them.")
-		return
-	end
-	U.Print(("Ledger: adopted %s · %d brought over · %d merged")
-		:format((done.key:gsub("|", " ")), done.added, done.folded))
-	BT.Window.Refresh()
-end, "adopt <book> - merge another book into this one")
-

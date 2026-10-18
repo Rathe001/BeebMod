@@ -22,6 +22,7 @@
 -- art comes straight back.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Bars/Bars.lua")
+local unpack = unpack or table.unpack
 
 local U = BT.Util
 
@@ -153,7 +154,8 @@ end
 M.SnapshotTexture, M.RestoreTexture = snapshot, restoreTex
 
 -- Everything the client draws round the outside. Hidden rather than removed:
--- switching the module off has to give every one of them back.
+-- switching the module off has to give every one of them back. (Border is
+-- the green edge on an equipped item: ours stands in for it, see equipped.)
 local ART = {
 	{ "NormalTexture", "NormalTexture" },
 	{ "SlotBackground", nil },
@@ -198,15 +200,35 @@ local function hideArt(button, hide)
 	end
 end
 
+-- AND THEIR OWN COLOUR BACK (2026-10-17, audit). The hotkey and the count
+-- were given ours and never the client's again, so with the module off they
+-- kept ours until /reload. What each was is written down the first time.
+local function tint(fs, colour, plain)
+	if not (fs and fs.SetTextColor) then
+		return
+	end
+	if plain then
+		local was = fs.beebsColour
+		if was then
+			fs:SetTextColor(was[1], was[2], was[3], was[4])
+		end
+		fs.beebsColour = nil
+		return
+	end
+	if fs.beebsColour == nil then
+		local ok, r, g, b, a = pcall(function() return fs:GetTextColor() end)
+		fs.beebsColour = (ok and type(r) == "number") and { r, g, b, a } or false
+	end
+	fs:SetTextColor(colour[1], colour[2], colour[3])
+end
+
 local function styleText(button, hide)
 	local name = button.GetName and button:GetName()
 	local hotkey = piece(button, "HotKey", "HotKey")
 	if hotkey then
 		-- shown either way: ours are only a quieter colour
 		hotkey:SetAlpha(1)
-		if not hide and hotkey.SetTextColor then
-			hotkey:SetTextColor(0.55, 0.63, 0.59)
-		end
+		tint(hotkey, { 0.55, 0.63, 0.59 }, hide)
 	end
 	local macro = piece(button, "Name", "Name")
 	if macro then
@@ -215,10 +237,7 @@ local function styleText(button, hide)
 		-- client's look back", and its names show.
 		macro:SetAlpha(hide and 1 or 0)
 	end
-	local count = piece(button, "Count", "Count")
-	if count and count.SetTextColor and not hide then
-		count:SetTextColor(0.87, 0.92, 0.89)
-	end
+	tint(piece(button, "Count", "Count"), { 0.87, 0.92, 0.89 }, hide)
 	if name then
 		local border = _G[name .. "FloatingBG"]
 		if border and border.SetAlpha then
@@ -286,6 +305,62 @@ local function styleStates(button, plain)
 	end
 end
 
+-- THE GREEN EDGE ON AN EQUIPPED ITEM (2026-10-17, audit). Border is not
+-- frame art: the client shows it, tinted green, round a trinket or a weapon
+-- you wear, and hides it on every other action. It was see-through with the
+-- rest of the art, so nothing on a bar said what you had on. Its picture is
+-- the client's bevelled frame, so it stays see-through, and a one-pixel ring
+-- of ours in its colour shows while the client shows it, the way the bag
+-- window rings an item's quality.
+local equipped = setmetatable({}, { __mode = "k" })
+
+local function paintEquipped(button)
+	local e = equipped[button]
+	local border = piece(button, "Border", "Border")
+	if not (e and border) then
+		return
+	end
+	-- the hooks cannot be taken off: switched off, ours stays down
+	local ok, shown = pcall(function() return border:IsShown() end)
+	if e.on and BT.Enabled("bars") and ok and shown then
+		local okC, r, g, b = pcall(function() return border:GetVertexColor() end)
+		if not (okC and type(r) == "number") then
+			r, g, b = 0, 1, 0
+		end
+		BT.Pill.PaintRing(e.ring, { r, BT.Pill.Number(g, 1), BT.Pill.Number(b, 0), 1 })
+	else
+		BT.Pill.HideRing(e.ring)
+	end
+end
+M.PaintEquipped = paintEquipped
+
+local function styleEquipped(button, plain)
+	local border = piece(button, "Border", "Border")
+	local e = equipped[button]
+	if not (border and (e or not plain)) then
+		return
+	end
+	if not e then
+		e = { ring = BT.Pill.Ring(button, "OVERLAY", 7) }
+		equipped[button] = e
+		-- the client shows it or hides it on every update of the action
+		if type(hooksecurefunc) == "function" then
+			for _, method in ipairs({ "Show", "Hide", "SetShown" }) do
+				if type(border[method]) == "function" then
+					pcall(hooksecurefunc, border, method, function()
+						paintEquipped(button)
+					end)
+				end
+			end
+		end
+	end
+	e.on = not plain
+	if e.on then
+		BT.Pill.PlaceRing(e.ring, button, 0, 1, 0)
+	end
+	paintEquipped(button)
+end
+
 -- `plain` puts the client's own look back rather than applying ours.
 function M.StyleButton(button, plain)
 	if not (button and button.GetName) then
@@ -295,6 +370,7 @@ function M.StyleButton(button, plain)
 	hideArt(button, not plain)
 	styleText(button, plain)
 	styleStates(button, plain)
+	styleEquipped(button, plain)
 
 	local s = skin(button)
 	if s then

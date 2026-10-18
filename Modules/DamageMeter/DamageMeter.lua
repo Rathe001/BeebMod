@@ -30,6 +30,8 @@
 --     its total, "8,421 (93.5)" - the breakdown's own way of writing it. Both
 --     from the client's meter, and only where it says them plainly: a secret
 --     number (restricted content, in a fight) is left as the client wrote it.
+--     Neither is added where the client already shows it (M.ClientClock,
+--     M.WantsRate).
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/DamageMeter/DamageMeter.lua")
 
@@ -383,6 +385,50 @@ function M.PerSecond(data, duration)
 	return nil
 end
 
+-- a value the client keeps on a row or a window, by field or by its getter
+local function own(obj, field, getter)
+	local v = obj and obj[field]
+	if v == nil and obj and getter and type(obj[getter]) == "function" then
+		local ok, got = pcall(obj[getter], obj)
+		v = ok and got or nil
+	end
+	if v == nil or secret(v) then
+		return nil
+	end
+	return v
+end
+
+-- WHERE THE CLIENT SAYS THE RATE OR KEEPS IT OUT (2026-10-17, audit). The DPS
+-- and HPS types show the rate as the row's number already; Compact and
+-- Complete numbers put it in brackets themselves; Interrupts and Dispels
+-- leave it out on purpose, and Deaths has none. So a rate is added only to a
+-- Minimal number, on a type that has a rate and does not show it.
+function M.WantsRate(row, win, data)
+	data = type(data) == "table" and data or nil
+	for _, field in ipairs({ "showsValuePerSecondAsPrimary", "suppressValuePerSecond" }) do
+		if own(data, field) == true or own(row, field) == true then
+			return false
+		end
+	end
+	local T = Enum and Enum.DamageMeterType
+	local kind = own(data, "damageMeterType") or own(row, "damageMeterType")
+		or own(win, "damageMeterType", "GetDamageMeterType")
+	if T and kind ~= nil then
+		for _, name in ipairs({ "Dps", "Hps", "Interrupts", "Dispels", "Deaths" }) do
+			if T[name] ~= nil and kind == T[name] then
+				return false
+			end
+		end
+	end
+	local N = Enum and Enum.DamageMeterNumbers
+	local how = own(row, "numberDisplayType", "GetNumberDisplayType")
+		or own(win, "numberDisplayType", "GetNumberDisplayType")
+	if N and N.Minimal ~= nil and how ~= nil and how ~= N.Minimal then
+		return false
+	end
+	return true
+end
+
 local rowWindow = setmetatable({}, { __mode = "k" })
 local shown = setmetatable({}, { __mode = "k" })
 
@@ -404,7 +450,13 @@ local function decorate(fs)
 		return
 	end
 	local okD, data = pcall(function() return row.GetElementData and row:GetElementData() end)
-	local rate = M.PerSecond(okD and data or nil, M.Duration(win))
+	data = okD and data or nil
+	-- the client has just written this one, so where it wants no rate its
+	-- own words already stand
+	if not M.WantsRate(row, win, data) then
+		return
+	end
+	local rate = M.PerSecond(data, M.Duration(win))
 	if not rate then
 		return
 	end
@@ -422,15 +474,8 @@ function M.RateText(rate)
 	if rate < 999.95 then
 		return ("%.1f"):format(rate)
 	end
-	local n = math.floor(rate + 0.5)
-	if type(BreakUpLargeNumbers) == "function" then
-		local ok, s = pcall(BreakUpLargeNumbers, n)
-		if ok and type(s) == "string" then
-			return s
-		end
-	end
-	local out = tostring(n):reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return (out:gsub("^,", ""))
+	-- with commas, as every count in BeebMod is written (U.Commas)
+	return BT.Util.Commas(math.floor(rate + 0.5))
 end
 
 -- the rows a window has made so far, each hooked once
@@ -531,13 +576,39 @@ function M.NameWidth(win, name)
 	return w and w > 0 and w or nil
 end
 
+-- THE CLIENT'S OWN CLOCK (2026-10-17, audit). The session window has a fight
+-- timer of its own, SessionTimer, "[0:42] " at the header's left, in a fight
+-- and for a past fight. While it says something, the clock here would say
+-- the same again, so it waits. A secret there is the client saying something.
+function M.ClientClock(win)
+	local fs = win.SessionTimer
+	if type(fs) ~= "table" or type(fs.GetText) ~= "function" then
+		return false
+	end
+	local okShown, isShown = pcall(fs.IsShown, fs)
+	if okShown and isShown == false then
+		return false
+	end
+	local ok, text = pcall(fs.GetText, fs)
+	if not ok then
+		return false
+	end
+	if secret(text) then
+		return true
+	end
+	return type(text) == "string" and text:find("%S") ~= nil
+end
+
 -- the header's clock, now
 function M.Tick(win)
 	local clock = win.beebsClock
 	if not clock then
 		return
 	end
-	local secs = BT.Enabled("damagemeter") and M.Duration(win)
+	local secs = nil
+	if BT.Enabled("damagemeter") and not M.ClientClock(win) then
+		secs = M.Duration(win)
+	end
 	clock:SetText(secs and M.Clock(secs) or "")
 	clock:SetShown(secs ~= nil)
 	-- after the name as written now (the type is picked from a menu, and

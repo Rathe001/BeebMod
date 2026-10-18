@@ -11,9 +11,8 @@
 --
 -- THE EXPEDITION'S SISTER (Josh 2026-10-04: "Ledger and expedition should
 -- have similar experiences"; the "Sister journals" canvas, locked
--- 2026-10-05). The window is the journals' own (UI/Book.lua): Jorach's face
--- and a line from him at your rank over the tabs, your rank in the box at the
--- right, a rail down each page's left and a toolbar over its column, and a
+-- 2026-10-05). The window is the journals' own (UI/Book.lua): your rank
+-- under the tabs, a rail down each page's left and a toolbar over its column, and a
 -- third tab, Commendations, the same page as the Expedition's.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("UI/CensusWindow.lua")
@@ -105,6 +104,13 @@ function C.Build()
 		if counter then
 			counter:SetScript("OnUpdate", nil)
 		end
+		-- THE OPENING COUNT TOO (2026-10-17, audit): the one the charts
+		-- began (Chart.lua) went on at a few milliseconds a frame after the
+		-- window shut
+		local m = BT.GetModule("census")
+		if m and m.view and BT.Census and BT.Census.Stop then
+			BT.Census.Stop(m.view)
+		end
 	end)
 	return frame
 end
@@ -157,6 +163,19 @@ end
 -- drawn again only if it has changed since.
 local EVERY = 2
 
+local function clock()
+	return (type(GetTime) == "function" and GetTime()) or 0
+end
+
+-- a count still going: the window's own (C.Count), or the one the charts
+-- began on opening or on a click (Chart.lua)
+local function counting(view)
+	if counter and counter:GetScript("OnUpdate") then
+		return true
+	end
+	return view ~= nil and view.counting ~= nil
+end
+
 function C.Tick()
 	if not (frame and frame:IsShown()) or C.Tab() ~= "charts" then
 		return false
@@ -169,12 +188,20 @@ function C.Tick()
 	-- every second there, so every tick redrew - two walks of the whole book
 	-- and a sort of every character's age. Drawn at once when opened, and
 	-- again at most every ten seconds after that.
-	local now = (type(GetTime) == "function" and GetTime()) or 0
+	local now = clock()
 	if C.drawnTime and now - C.drawnTime < 10 then
 		return false
 	end
-	C.drawnAt, C.drawnTime = rev, now
 	local m = BT.GetModule("census")
+	-- ONE COUNT AT A TIME (2026-10-17, audit): a big book takes longer than
+	-- ten seconds at a few milliseconds a frame, and each new count threw
+	-- the last away, so the charts never changed. The one going is left to
+	-- finish, and the ten seconds start again from when it does.
+	if counting(m and m.view) then
+		C.drawnTime = now
+		return false
+	end
+	C.drawnAt, C.drawnTime = rev, now
 	if m and m.view then
 		C.Count(m)
 	end
@@ -297,7 +324,9 @@ local function drawCommendations(points)
 	local total, _, c, characters, entries = L.Score()
 	local groups = C.Groups(c)
 	-- the entries' tally says its points, as the Expedition's unique kills do
-	groups[1].count = ("%s points"):format(Bk.Big(characters + entries))
+	-- ("1 point", not "1 points": 2026-10-17, audit)
+	local entryPoints = characters + entries
+	groups[1].count = ("%s %s"):format(Bk.Big(entryPoints), entryPoints == 1 and "point" or "points")
 	local f = feature()
 	local focus, scroll = C.focus, C.scrollToFocus
 	C.scrollToFocus = nil
@@ -417,7 +446,10 @@ function C.Show(tab)
 	end
 	BT.CallHook(m, "ShowTab")
 	header()
-	C.drawnAt, C.drawnTime = BT.DB and BT.DB.rev, nil
+	-- COUNTED ON OPENING (2026-10-17, audit): ShowTab just counted, so the
+	-- window's own count waits its ten seconds. It began two seconds later,
+	-- beside the first.
+	C.drawnAt, C.drawnTime = BT.DB and BT.DB.rev, clock()
 	if not C.ticker and C_Timer and C_Timer.NewTicker then
 		C.ticker = C_Timer.NewTicker(EVERY, C.Tick)
 	end

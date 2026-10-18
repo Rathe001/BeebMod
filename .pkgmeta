@@ -12,6 +12,7 @@ ignore:
   - scripts
   - docs
   - README.md
+  - CLAUDE.md
   - .pkgmeta
   - .github
   - .gitattributes

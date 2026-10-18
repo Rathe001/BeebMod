@@ -73,8 +73,10 @@ function BT.AddTag(label, colorIndex, key)
 	if label == "" then
 		return nil, "a tag needs a name."
 	end
-	if #label > 20 then
-		return nil, "that name is too long for a button."
+	-- LETTERS, NOT BYTES (2026-10-17, audit): an accented letter is two
+	-- bytes, so a name of eleven letters could be refused
+	if #(label:gsub("[\128-\191]", "")) > 20 then
+		return nil, "a tag name can be 20 letters at most."
 	end
 	for _, f in ipairs(BT.AllTags()) do
 		if f.label:lower() == label:lower() then

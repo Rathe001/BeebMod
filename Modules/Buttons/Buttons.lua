@@ -33,13 +33,25 @@ local INSET = 6
 local PAD_Y = 4
 
 -- the client's own furniture on the minimap, which is the Minimap module's
+-- (the addon compartment is the client's too, and is taken by name: M.IsCompartment)
 local BLIZZARD = {
 	"^Mini[Mm]ap", "^GameTimeFrame", "^TimeManager", "^QueueStatus", "^Garrison",
 	"^ExpansionLanding", "^Queue", "^LFG", "^Battlefield", "^BeebMod",
-	-- the client's addon compartment: a menu button with a count on it (the
-	-- "0" that got a line of its own), which the Minimap module puts away
 	"^AddonCompartment",
 }
+
+-- THE ADDON COMPARTMENT, IN THE LINE (Josh 2026-10-18: "Show the addon
+-- compartment"). The client's menu of addons, a small button with a count on
+-- it, was put away from 2026-09-22 for the "0" it showed with nothing in it.
+-- An addon that registers only there (## AddonCompartmentFunc) has no
+-- minimap button, so with the compartment away it could not be opened at
+-- all. The client shows it only while it holds an addon (its UpdateDisplay,
+-- Blizzard_Minimap/Mainline/AddonCompartment.lua on the forever branch), so
+-- it takes a place in this line only then, first, and works as the client
+-- made it: a click opens its menu.
+function M.IsCompartment(f)
+	return f ~= nil and f == _G.AddonCompartmentFrame
+end
 
 -- the ring and the disc behind the icon, by file ID or by name
 local RING = { [136430] = true, [136467] = true }
@@ -99,7 +111,7 @@ end
 
 -- whether this line has taken a button (the Minimap module leaves those alone)
 function M.Claims(f)
-	return BT.Enabled("buttons") and (owned[f] ~= nil or M.IsAddonButton(f))
+	return BT.Enabled("buttons") and (owned[f] ~= nil or M.IsAddonButton(f) or M.IsCompartment(f))
 end
 
 -- Every addon button there is: LibDBIcon's own list where it has one, and
@@ -107,11 +119,12 @@ end
 function M.Find()
 	local out, seen = {}, {}
 	local function take(f)
-		if type(f) == "table" and not seen[f] and M.IsAddonButton(f) then
+		if type(f) == "table" and not seen[f] and (M.IsAddonButton(f) or M.IsCompartment(f)) then
 			seen[f] = true
 			out[#out + 1] = f
 		end
 	end
+	take(_G.AddonCompartmentFrame)
 	local stub = _G.LibStub
 	local lib = type(stub) == "table" and stub.GetLibrary and select(2, pcall(stub.GetLibrary, stub, "LibDBIcon-1.0", true))
 	if type(lib) == "table" and type(lib.objects) == "table" then
@@ -132,8 +145,13 @@ function M.Find()
 	for f in pairs(owned) do
 		take(f)
 	end
-	-- the same order every time: by name
-	table.sort(out, function(a, b) return (nameOf(a) or "") < (nameOf(b) or "") end)
+	-- the same order every time: the compartment first, then by name
+	table.sort(out, function(a, b)
+		if M.IsCompartment(a) ~= M.IsCompartment(b) then
+			return M.IsCompartment(a)
+		end
+		return (nameOf(a) or "") < (nameOf(b) or "")
+	end)
 	return out
 end
 
@@ -179,7 +197,8 @@ local function take(b)
 	-- one that shows or hides it ("hide minimap icon") closes the line up
 	if hooksecurefunc and not b.beebsHooked then
 		b.beebsHooked = true
-		for _, method in ipairs({ "SetPoint", "Show", "Hide" }) do
+		-- (and SetShown: the compartment is shown and hidden that way)
+		for _, method in ipairs({ "SetPoint", "Show", "Hide", "SetShown" }) do
 			pcall(hooksecurefunc, b, method, function()
 				if owned[b] and not M.placing then
 					M.Queue()
@@ -339,19 +358,33 @@ function M.Build()
 end
 
 -- addons make their buttons as they load, and some a moment after login
+--
+-- ONE LAYOUT FOR A RUN OF ADDONS (2026-10-17, audit): each addon that loaded
+-- asked for a layout of its own half a second on, so ten loading in a row
+-- laid out the line and the dock ten times. One waits at a time, for each of
+-- the two delays.
 M.events = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "ADDON_LOADED" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
+local waiting = {}
 M.events:SetScript("OnEvent", function(_, event)
 	if not (BT.Enabled("buttons") and M.frame) then
 		return
 	end
-	if C_Timer and C_Timer.After then
-		C_Timer.After(event == "PLAYER_ENTERING_WORLD" and 2 or 0.5, M.Layout)
-	else
+	if not (C_Timer and C_Timer.After) then
 		M.Layout()
+		return
 	end
+	local delay = event == "PLAYER_ENTERING_WORLD" and 2 or 0.5
+	if waiting[delay] then
+		return
+	end
+	waiting[delay] = true
+	C_Timer.After(delay, function()
+		waiting[delay] = false
+		M.Layout()
+	end)
 end)
 
 function M:OnEnable()
@@ -376,7 +409,8 @@ end
 function M.Status()
 	local names = {}
 	for _, b in ipairs(M.list or {}) do
-		names[#names + 1] = ((nameOf(b) or "?"):gsub("^LibDBIcon10_", ""))
+		names[#names + 1] = M.IsCompartment(b) and "the addon compartment"
+			or ((nameOf(b) or "?"):gsub("^LibDBIcon10_", ""))
 	end
 	return #names > 0 and ("in the line: " .. table.concat(names, ", ")) or "no addon has a minimap button"
 end

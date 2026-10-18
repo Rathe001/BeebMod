@@ -96,6 +96,34 @@ function M.Token(i)
 	return "nameplate" .. i
 end
 
+-- WHERE YOUR TARGET'S DAMAGE GOES (2026-10-17, audit): true while your
+-- target's plate wears ours with lanes on it, so the target frame puts its
+-- own out of sight (Timers.lua, T.PaintTargetDots). The plate is matched as a
+-- frame: a plate's own token is empty on this client.
+F.TargetOnPlate = function()
+	if not BT.Enabled("nameplates") then
+		return false
+	end
+	local plate = M.PlateOf("target")
+	if not plate then
+		return false
+	end
+	for _, s in pairs(M.skins) do
+		if s.bmPlate == plate and s:IsShown() then
+			local set = s.bmAuras
+			return (set and set.timers and set.timers.dot) and true or false
+		end
+	end
+	return false
+end
+
+-- the target frame's lanes told, after a plate came, went or changed hands
+local function targetDots()
+	if F.Timers and F.Timers.PaintTargetDots then
+		F.Timers.PaintTargetDots()
+	end
+end
+
 -- ---------------------------------------------------------------------------
 -- Our frames, made once
 -- ---------------------------------------------------------------------------
@@ -1147,6 +1175,31 @@ local function hideFriend(token)
 	end
 end
 
+-- FRIEND OR ENEMY AS THE GAME DECIDES (Josh 2026-10-18: "I feel like we
+-- should use UnitIsFriend if that's what the game uses"). The client's own
+-- plate asks UnitIsFriend("player", unit) (Blizzard_NamePlateUnitFrame.lua,
+-- UpdateIsFriend), where this asked whether you can attack the unit. The two
+-- part ways over a unit you cannot attack that is no friend either: a neutral
+-- NPC in yellow, or a player of the other faction who is not flagged for PvP.
+-- Both had a friend's name, and wear an enemy's frame now, as the game gives
+-- them its enemy plate. The client asks one more thing of a player in your
+-- party: one you can attack (of the other faction, out of an instance) is an
+-- enemy. In a duel the client counts on your opponent being no friend while
+-- it lasts, and asks again on UNIT_FACTION, as M.Recheck does. With no answer
+-- (no such call, or a hidden one), whether you can attack them decides, as
+-- before.
+function M.IsFriend(token)
+	local friend = F.Plain(_G.UnitIsFriend, "player", token)
+	if friend == nil then
+		return not F.Source(token):CanAttack()
+	end
+	if friend and (F.Plain(UnitIsPlayer, token) or F.Plain(_G.UnitTreatAsPlayerForDisplay, token))
+		and F.Plain(_G.UnitInParty, token) and F.Source(token):CanAttack() then
+		return false
+	end
+	return friend and true or false
+end
+
 -- A plate came into view: ours on it, the client's put away - an enemy's
 -- whole frame, or a friend's name. True when ours is on.
 function M.Added(token)
@@ -1154,7 +1207,9 @@ function M.Added(token)
 		return false
 	end
 	local src = F.Source(token)
-	local friend = not src:CanAttack()
+	local friend = M.IsFriend(token)
+	-- which way it was drawn, for M.Recheck
+	M.side[token] = friend
 	local s = M.skins[token]
 	if friend and not opt("friends", true) or not friend and not s then
 		-- a friend with their names switched off, or an enemy past the first
@@ -1179,6 +1234,7 @@ function M.Added(token)
 				waiter.bmWaiting = nil
 				if M.PlateOf(token) == plate then
 					M.Added(token)
+					targetDots()
 				end
 			end)
 		end
@@ -1210,8 +1266,13 @@ function M.Added(token)
 	s.bmPlate = plate
 	-- somebody new: the bars jump to them, and the lanes read them afresh
 	F.Fresh(s)
+	-- ONE PAINT (2026-10-17, audit): a skin that was hidden is painted by its
+	-- own OnShow (Unit.lua, F.Dress), so only one already up is painted here
+	local up = s:IsShown()
 	s:Show()
-	F.Paint(s, src)
+	if up then
+		F.Paint(s, src)
+	end
 	M.PaintEnemyGuild(s, src)
 	if F.Auras then
 		F.Auras.Refresh(s)
@@ -1258,11 +1319,43 @@ function M.Removed(token)
 	giveBack(token)
 end
 
--- every plate in view, dressed or given back as the module is now
+-- FRIEND OR ENEMY, AGAIN (2026-10-17, audit). Which frame a plate wears is
+-- chosen when it is added, and the client restyles its own plate in place
+-- when a unit's faction changes, without taking it away and adding it again:
+-- a guildmate who starts a duel kept a friend's name with no health bar, and
+-- an enemy who flagged for PvP the same. [token] = whether it was drawn as a
+-- friend; a plate is dressed again only when that has changed. The side is
+-- the game's (M.IsFriend), asked again on UNIT_FACTION as the client's own
+-- plate does, and on UNIT_FLAGS as well.
+M.side = {}
+function M.Recheck(token)
+	local was = M.side[token]
+	if was == nil or not F.Plain(UnitExists, token) then
+		return false
+	end
+	local friend = M.IsFriend(token)
+	if friend == was then
+		return false
+	end
+	if M.PlateOf(token) then
+		M.Added(token)
+	else
+		-- a plate the client keeps from addons now: nothing of ours left on it
+		M.side[token] = friend
+		M.Removed(token)
+	end
+	return true
+end
+
+-- every plate in view, dressed or given back as the module is now.
+-- ALL FORTY (2026-10-17, audit): a friend's name and a totem's frame put
+-- away can be on any plate, not only the first M.PLATES, and the sweep
+-- stopped at those; a friend past them kept the game's style until they left
+-- view, and a totem's frame stayed at no alpha with the module off.
 function M.Sweep()
 	local on = BT.Enabled("nameplates")
 	local n = 0
-	for i = 1, M.PLATES do
+	for i = 1, M.MAX_PLATES do
 		local token = M.Token(i)
 		if on and F.Plain(UnitExists, token) then
 			if M.Added(token) then
@@ -1270,14 +1363,20 @@ function M.Sweep()
 			end
 		else
 			M.Removed(token)
+			M.side[token] = nil
 		end
 	end
-	-- a friend's name can be on a plate past the first M.PLATES too
-	for token, f in pairs(M.friends) do
-		if f:IsShown() and not (on and opt("friends", true) and F.Plain(UnitExists, token)) then
-			M.Removed(token)
+	-- and any frame of the client's still put away for a plate that is gone
+	local left = {}
+	for token in pairs(M.lent) do
+		if not (on and F.Plain(UnitExists, token)) then
+			left[#left + 1] = token
 		end
 	end
+	for _, token in ipairs(left) do
+		M.Removed(token)
+	end
+	targetDots()
 	return n
 end
 
@@ -1293,12 +1392,23 @@ function M.TargetChanged()
 			F.AlphaFrom(f.under, F.Source(token):IsTarget(), 1, 0)
 		end
 	end
+	targetDots()
+end
+
+-- every plate's lanes reading while the module is on, and put away while it
+-- is off (A.Pause in Auras.lua, out of combat only)
+local function pauseAll(paused)
+	if F.Auras then
+		for _, s in pairs(M.skins) do
+			F.Auras.Pause(s, paused)
+		end
+	end
 end
 
 M.events = CreateFrame("Frame")
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
 	"PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "UNIT_NAME_UPDATE", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW",
-	"UNIT_LEVEL" }) do
+	"UNIT_LEVEL", "RAID_TARGET_UPDATE", "UNIT_FACTION", "UNIT_FLAGS" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
 M.events:SetScript("OnEvent", function(_, event, token)
@@ -1307,8 +1417,17 @@ M.events:SetScript("OnEvent", function(_, event, token)
 		-- plate the client is about to hand to somebody else
 		if type(token) == "string" then
 			M.Removed(token)
+			M.side[token] = nil
 		end
+		targetDots()
 		return
+	end
+	if event == "PLAYER_REGEN_ENABLED" then
+		-- PAUSED AS THE MODULE IS (2026-10-17, audit): the client refuses a
+		-- pause in a fight and nothing asked again, so a module switched on
+		-- in one left every plate's lanes put away, and one switched off left
+		-- them reading
+		pauseAll(not BT.Enabled("nameplates"))
 	end
 	if not BT.Enabled("nameplates") then
 		return
@@ -1316,6 +1435,31 @@ M.events:SetScript("OnEvent", function(_, event, token)
 	if event == "NAME_PLATE_UNIT_ADDED" then
 		if type(token) == "string" then
 			M.Added(token)
+		end
+		targetDots()
+	elseif event == "UNIT_FACTION" or event == "UNIT_FLAGS" then
+		-- a duel, a PvP flag: friend or enemy again, for that plate - or for
+		-- every plate when it is yours that changed
+		if token == "player" then
+			local all = {}
+			for t in pairs(M.side) do
+				all[#all + 1] = t
+			end
+			for _, t in ipairs(all) do
+				M.Recheck(t)
+			end
+			targetDots()
+		elseif type(token) == "string" and M.side[token] ~= nil and M.Recheck(token) then
+			targetDots()
+		end
+	elseif event == "RAID_TARGET_UPDATE" then
+		-- THE SKULL MOVES ON (2026-10-17, audit): only the unit frames heard
+		-- this, so mid-pull the next enemy's plate showed no mark and the last
+		-- one kept it until it died. The marks alone, on every plate up.
+		for t, s in pairs(M.skins) do
+			if s:IsShown() then
+				F.PaintMarker(s, F.Source(t))
+			end
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		M.TargetChanged()
@@ -1339,6 +1483,15 @@ M.events:SetScript("OnEvent", function(_, event, token)
 		for t, f in pairs(M.friends) do
 			if f:IsShown() and (token == "player" or t == token) then
 				M.PaintFriend(f, F.Source(t))
+			end
+		end
+		-- an enemy's level tab too (2026-10-17, audit); its own new level it
+		-- hears itself
+		if token == "player" then
+			for t, s in pairs(M.skins) do
+				if s:IsShown() and s.levelText then
+					s.levelText:SetText(F.LevelTag(F.Source(t)))
+				end
 			end
 		end
 	elseif event == "PLAYER_REGEN_ENABLED" then
@@ -1439,7 +1592,7 @@ function M.DumpPlates(lines)
 			end
 			local alpha = BT.Pill.Number(plate.GetEffectiveAlpha and plate:GetEffectiveAlpha(), -1)
 			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f"):format(token,
-				describe(F.Plain(UnitName, token)), describe(player), describe(not F.Source(token):CanAttack()),
+				describe(F.Plain(UnitName, token)), describe(player), describe(M.IsFriend(token)),
 				ours, alpha)
 		end
 	end
@@ -1486,7 +1639,8 @@ function M.Dump()
 	for i = 1, 40 do
 		local token = M.Token(i)
 		local src = F.Source(token)
-		if F.Plain(UnitExists, token) and not src:CanAttack() and not src:IsPlayer() then
+		-- the NPCs that wear a friend's name, where a role's picture goes
+		if F.Plain(UnitExists, token) and M.IsFriend(token) and not src:IsPlayer() then
 			local title, tipName = M.Subtitle(token)
 			local role = M.RoleOf(token)
 			local interactable = F.Raw(_G.UnitIsInteractable, token)
@@ -1516,16 +1670,10 @@ BT.Record("nameplatesDump", M.Dump, "nameplates")
 function M:OnEnable()
 	M.MakeAll()
 	-- the lanes read again, if they were put away with the module
-	for _, s in pairs(M.skins) do
-		if F.Auras then
-			F.Auras.Pause(s, false)
-		end
-	end
+	pauseAll(false)
+	-- (the sweep tells the target frame whether its plate carries your
+	-- damage now: Timers.lua, T.PaintTargetDots)
 	M.Sweep()
-	-- your target's damage leaves the target frame for its plate (Timers.lua)
-	if F.Timers then
-		F.Timers.Rebuild()
-	end
 	if opt("minions", true) then
 		M.ShowMinions(true)
 	end
@@ -1539,16 +1687,9 @@ end
 
 -- every plate back as the game draws it, and the lanes stop reading
 function M:OnDisable()
+	-- (and your target's damage back over the target frame, by the sweep)
 	M.Sweep()
-	for _, s in pairs(M.skins) do
-		if F.Auras then
-			F.Auras.Pause(s, true)
-		end
-	end
-	-- and goes back over the target frame
-	if F.Timers then
-		F.Timers.Rebuild()
-	end
+	pauseAll(true)
 	-- the game's pet plates as you had them
 	M.ShowMinions(false)
 end

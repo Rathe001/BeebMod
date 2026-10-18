@@ -34,6 +34,13 @@ local function build()
 	return b
 end
 
+-- YOUR BOOK, WHILE THE MADE-UP ONE IS SHOWN (2026-10-17, audit): the loading
+-- screen's quiet rebind (BT.Rebind) asks which book is yours, and BT.db is not
+-- it. nil when the made-up book is not in place.
+function CD.Real()
+	return (book ~= nil and BT.db == book) and real or nil
+end
+
 local function swapIn()
 	if not (BT.DB and BT.db) then
 		return

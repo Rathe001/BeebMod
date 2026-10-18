@@ -31,9 +31,6 @@ local M = BT.Module({
 })
 
 local WORDS = "|cff8a9894%s|r"
-local FULL = "|cfff26659"
-local TIGHT = "|cfff2c75a"
-local PLAIN = "|cffe6ebe8"
 
 local function container(fn)
 	local c = _G.C_Container
@@ -75,21 +72,6 @@ function M.Bags()
 	return out
 end
 
--- "28/80", amber at four or fewer free and red when there are none
-local function space(label, b)
-	local free = b.total - b.used
-	local colour = free <= 0 and FULL or (free <= 4 and TIGHT or PLAIN)
-	return ("%s %s%d|r%s"):format(WORDS:format(label), colour, b.used,
-		WORDS:format("/" .. b.total))
-end
-
-function M.Lines(b)
-	b = b or M.Bags()
-	local left = space("Bags", b.bags)
-	local right = b.reagents.total > 0 and space("Reagents", b.reagents) or ""
-	return left, right
-end
-
 -- ---------------------------------------------------------------------------
 -- Class reagents
 -- ---------------------------------------------------------------------------
@@ -105,11 +87,60 @@ M.CLASS_REAGENTS = {
 	PRIEST = { 17028, 17029, 17056 },               -- Holy Candle, Sacred Candle, Light Feather
 	PALADIN = { 17033, 21177 },                     -- Symbol of Divinity, Symbol of Kings
 	DRUID = { 17034, 17035, 17036, 17037, 17038,    -- the rebirth seeds
-		17021, 17026, 22147 },                      -- and the Gift of the Wild herbs
+		17021, 17026 },                             -- and the Gift of the Wild herbs
 	SHAMAN = { 17030 },                             -- Ankh
 	WARLOCK = { 6265, 5565, 16583 },                -- Soul Shard, Infernal Stone, Demonic Figurine
 }
 local ALWAYS = { [6265] = true }
+
+-- ONLY FOR SPELLS YOU KNOW (Josh 2026-10-18: "Item 22147 looks like a bug.
+-- We should probably only show the seeds that are used by spells I have
+-- learned, not all of them"). A level 10 druid's hover listed all five
+-- Rebirth seeds and both Gift of the Wild herbs in red, and "item 22147",
+-- Flintweed Seed, a seed for a Rebirth this client does not have (now off
+-- the list). A reagent is listed when you know a spell that takes it, any
+-- rank, or you carry some; a shard always. Each reagent's spells, by id:
+M.REAGENT_SPELLS = {
+	[5140] = { 1856, 1857 },                                 -- Flash Powder: Vanish
+	[5530] = { 2094 },                                       -- Blinding Powder: Blind
+	[17031] = { 3561, 3562, 3563, 3565, 3566, 3567 },        -- Rune of Teleportation: the teleports
+	[17032] = { 10059, 11416, 11417, 11418, 11419, 11420 },  -- Rune of Portals: the portals
+	[17020] = { 23028 },                                     -- Arcane Powder: Arcane Brilliance
+	[17056] = { 130, 1706 },                                 -- Light Feather: Slow Fall, Levitate
+	[17028] = { 21562 },                                     -- Holy Candle: Prayer of Fortitude 1
+	[17029] = { 21564, 27681, 27683 },                       -- Sacred Candle: Prayer of Fortitude 2,
+	                                                         -- of Spirit, of Shadow Protection
+	[17033] = { 19752 },                                     -- Symbol of Divinity: Divine Intervention
+	[21177] = { 25782, 25916, 25894, 25918, 25890, 25895, 25898, 25899 }, -- Symbol of Kings: the
+	                                                         -- Greater Blessings
+	[17034] = { 20484 }, [17035] = { 20739 }, [17036] = { 20742 }, -- the seeds: Rebirth 1 to 5
+	[17037] = { 20747 }, [17038] = { 20748 },
+	[17021] = { 21849 }, [17026] = { 21850 },                -- Gift of the Wild 1 and 2
+	[17030] = { 20608 },                                     -- Ankh: Reincarnation
+	[5565] = { 1122 },                                       -- Infernal Stone: Inferno
+	[16583] = { 18540 },                                     -- Demonic Figurine: Ritual of Doom
+}
+
+-- whether you know a spell that takes `id`; true where the client cannot
+-- say, so a reagent is never hidden for want of an answer
+function M.Learned(id)
+	local spells = M.REAGENT_SPELLS[id]
+	local player, known = _G.IsPlayerSpell, _G.IsSpellKnown
+	if not spells or (type(player) ~= "function" and type(known) ~= "function") then
+		return true
+	end
+	for _, spell in ipairs(spells) do
+		for _, ask in ipairs({ player or false, known or false }) do
+			if ask then
+				local ok, yes = pcall(ask, spell)
+				if ok and yes == true then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
 -- the hunter's is the ammo slot rather than an item list
 local AMMO_SLOT = 0
 
@@ -166,8 +197,9 @@ local function nameOf(id)
 	return ("item %d"):format(id)
 end
 
--- Every reagent of the player's class: its icon, name, how many are carried,
--- and whether it is shown even at nothing.
+-- Every reagent of the player's class that you know a spell for or carry
+-- (M.Learned): its icon, name, how many are carried, and whether it is shown
+-- even at nothing.
 function M.Reagents()
 	local class = playerClass()
 	local out = {}
@@ -188,8 +220,11 @@ function M.Reagents()
 		return out
 	end
 	for _, id in ipairs(M.CLASS_REAGENTS[class or ""] or {}) do
-		out[#out + 1] = { id = id, name = nameOf(id), icon = iconOf(id), count = count(id),
-			always = ALWAYS[id] == true }
+		local n = count(id)
+		if ALWAYS[id] or n > 0 or M.Learned(id) then
+			out[#out + 1] = { id = id, name = nameOf(id), icon = iconOf(id), count = n,
+				always = ALWAYS[id] == true }
+		end
 	end
 	return out
 end
@@ -202,7 +237,7 @@ end
 -- backpack and "17/38", amber at four free and red when full, and a click
 -- opens them. Each class reagent the line used to list on a second row is a
 -- cell of its own: the item's icon and how many you carry. The space in
--- reagent bags is on the hover, with every reagent of the class.
+-- special bags is on the hover, with every reagent of the class.
 local BACKPACK = "Interface\\Icons\\INV_Misc_Bag_08"
 
 local function state(free)
@@ -241,6 +276,13 @@ function M.ReagentCells(list)
 	return out
 end
 
+-- IN A FIGHT AS WELL (Josh 2026-10-18: "Opening bags from the dock doesn't
+-- need to work in combat, but it would be nice if it did"). The click works
+-- in a fight as it does out of one, and nothing is held back for later. The
+-- client's ToggleAllBags has no combat check, and the bag windows and their
+-- slots are plain frames, none of them protected (ContainerFrame.lua and
+-- ContainerFrame.xml in Blizzard_UIPanels_Game/Mainline on the forever
+-- branch, read 2026-10-18). The game's own B key runs the same function.
 local function openBags()
 	if type(ToggleAllBags) == "function" then
 		pcall(ToggleAllBags)
@@ -265,7 +307,7 @@ function M.Tip(owner)
 	-- ONE SET OF BAGS ON THE TOP HALF (Josh 2026-09-30, review). The count
 	-- of bags and their segments took in a soul bag or a herb bag, and the
 	-- free slots under them did not: a warlock read "5 bags" over the room in
-	-- four. Those bags are the Reagent bags row's.
+	-- four. Those bags are the Special bags row's.
 	local ordinary = {}
 	for _, bag in ipairs(b.each) do
 		if not bag.special then
@@ -286,8 +328,11 @@ function M.Tip(owner)
 			segs[#segs + 1] = { share, left <= 0 and "bad" or (left <= 2 and "warn" or nil) }
 		end
 		t:Segments(segs)
+		-- SPECIAL BAGS, NOT REAGENT BAGS (2026-10-17, audit): the row counts
+		-- quivers, ammo pouches, soul bags and herb bags as well as the
+		-- reagent bag, and a hunter read "Reagent bags" for a quiver
 		if b.reagents.total > 0 then
-			t:Row("Reagent bags", ("%d free of %d"):format(b.reagents.total - b.reagents.used, b.reagents.total))
+			t:Row("Special bags", ("%d free of %d"):format(b.reagents.total - b.reagents.used, b.reagents.total))
 		end
 		-- every reagent of the class, the ones you have none of included
 		local list = M.Reagents()
@@ -359,7 +404,9 @@ end
 -- bag. Now: the settled event, your own inventory, a name for one of your
 -- class's reagents, and one read a frame however many ask.
 M.events = CreateFrame("Frame")
-for _, event in ipairs({ "BAG_UPDATE_DELAYED", "PLAYER_ENTERING_WORLD", "GET_ITEM_INFO_RECEIVED" }) do
+-- (and a spell learnt, which may want its reagent: M.Learned, 2026-10-18)
+for _, event in ipairs({ "BAG_UPDATE_DELAYED", "PLAYER_ENTERING_WORLD", "GET_ITEM_INFO_RECEIVED",
+	"LEARNED_SPELL_IN_TAB", "SPELLS_CHANGED" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
 -- a hunter's ammunition is in the ammo slot, not a bag

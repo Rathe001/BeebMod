@@ -589,12 +589,15 @@ function P.SetHole(frame, hole)
 	return true
 end
 
-function P.Recolour(frame, fill, edge)
+-- `thick`: a rim of its own width, not the setting's, as a tooltip's rarity
+-- has (an Expedition list row's mastery, Modules/Expedition/Window.lua)
+function P.Recolour(frame, fill, edge, thick)
 	local h = panels[frame]
 	if not h then
 		return false
 	end
 	h.fillColour, h.edgeColour = fill or h.fillColour, edge or h.edgeColour
+	h.ownThick = thick or h.ownThick
 	return P.Repaint(h)
 end
 
@@ -602,7 +605,7 @@ function P.Repaint(h)
 	if not (h and h.frame and h.fillColour and h.edgeColour) then
 		return false
 	end
-	applyShape(h, h.frame, h.fillColour, h.edgeColour)
+	applyShape(h, h.frame, h.fillColour, h.edgeColour, h.ownThick)
 	return true
 end
 

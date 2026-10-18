@@ -291,13 +291,14 @@ function Nt.Bar(owner, it)
 	BT.Pill.Recolour(b, nil, { c[1], c[2], c[3], 0.6 })
 	b.badge:SetTexture(owner.badge and owner.badge.GetTexture and owner.badge:GetTexture() or nil)
 	-- with no row to say whose it is, a commendation names its journal:
-	-- "Fine Print  Ledger commendation  +10"
+	-- "Fine Print · Ledger commendation · +10", its pieces parted by the
+	-- middle dot as the dock's row parts them (2026-10-17, audit)
 	local what = it.what
 	if it.kind == "commendation" and it.merged == nil and owner.book then
 		what = ("%s commendation"):format(owner.book)
 	end
-	b.text:SetText(("%s%s%s"):format(it.name or "", what and WORDS:format("  " .. what) or "",
-		it.points and ("  " .. light(c) .. "+" .. tostring(it.points) .. "|r") or ""))
+	b.text:SetText(("%s%s%s"):format(it.name or "", what and WORDS:format(" · " .. what) or "",
+		it.points and (WORDS:format(" · ") .. light(c) .. "+" .. tostring(it.points) .. "|r") or ""))
 	local w = BT.Pill.Number(b.text.GetStringWidth and b.text:GetStringWidth(), 200)
 	b:SetWidth(math.max(160, math.floor(w + 44)))
 	b.onClick = it.onClick

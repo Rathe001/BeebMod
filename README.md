@@ -1,25 +1,22 @@
 # BeebMod
 
-Small utilities for WoW: Forever. You set them all in one window, and the cog
-in the dock opens it.
-
-    /bt            open the window
-    /bt <name>     find someone
-    /bt help       list every command, including each utility's own
+Small utilities for WoW: Forever. You set them all in one window. Click the
+cog in the dock or type `/bt` to open it.
 
 ## Features
 
-BeebMod is opinionated. It asks whether you want each part, not how each part
-should look. It has five features in two groups, and each feature has one
+BeebMod is opinionated. It asks whether you want each part, and it decides
+how each part looks. It has five features in two groups, and each feature has one
 switch:
 
 - **Interface:** the Dock, Unit frames and Game frames
 - **Journals:** the Ravenholdt Ledger and Nesingwary's Expedition
 
-On your first login BeebMod asks which features you want. It shows five
-cards under the same two headings, each with a picture and a line on what the
-feature does. The settings window's rail lists General, then the features
-under their headings. Each feature has one page:
+On your first login BeebMod asks which features you want. Its window lists
+the five under the same two headings, each with a few words on it and its
+switch. Click a feature to see pictures of it, a line on what it does and
+what it adds. The settings window's rail lists
+General, then the features under their headings. Each feature has one page:
 its switch at the top right, then a switch for each of its parts, a part of a
 part indented under it. Switch a feature off and everything in it goes off.
 Each part keeps its own switch, and the setting stays as you left it while
@@ -58,17 +55,17 @@ dock.
 | **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
 | **Micro menu** | The game's menu buttons, in the dock. |
 
-One option is on the Dock's page: **Fade in combat**, to 70% until you point
-at the dock.
+The Dock's page has one more switch. **Fade in combat** fades the dock to 70%
+in a fight until you point at it.
 
 **Unit frames** are what you watch in a fight.
 
 | part | what it is |
 |---|---|
-| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar, with a switch each for party, raid, main tanks, bosses and your cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. The target, focus and boss frames fade when none of your class's skills reaches them, such as a hunter's Auto Shot or Raptor Strike, and the party and raid fade when the game says they are out of range. Type `/bt demo` to see a made-up party. Switch them off, or one type of frame off, and the game's own frames come back. |
+| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar, with a switch each for party, raid, main tanks, bosses and your cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. The target, focus and boss frames fade when none of your class's skills reaches them, such as a hunter's Auto Shot or Raptor Strike, and the party and raid fade when the game says they are out of range. Switch them off, or one type of frame off, and the game's own frames come back. |
 | **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
 | **Nameplates** | Enemy nameplates in BeebMod's look, with the enemy's level, name and health. A ring means it is attacking you, and a white outline marks your target; the others step back while you have one. Casts show under the plate with the spell's icon and name, and a red rim marks a cast the game says to interrupt. An enemy player's guild sits under their bar in green, out of the way while they cast. Your damage over time shows above the plate. Friendly nameplates show a name and no bar. A player's name is in class colour, with their level before it and their guild under it in green. An NPC's is smaller and green, with a picture for what it does, such as selling, training or flying you, and its title under it. Another player's pet has its owner's name under it, and totems have no name. Friendly nameplates, and pets and minions, have a switch each. The game has at most 40 plates out at once, so in a crowded city some players have none. |
-| **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). A crosshair to its left lights while your main attack reaches your target: Auto Shot for a hunter, so it goes dark too close as well as too far, melee for a warrior or rogue, and your usual spell for a caster. |
+| **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). An icon to its left says how near your target is: green crossed swords in melee range, a green crosshair in reach of your ranged attack or spells (Throw or Shoot for a warrior or rogue, Auto Shot for a hunter, your furthest-reaching spell for a caster), a red no-action sign when it is too close to shoot and too far to hit, and a red crosshair out of reach. With no target it is a grey, faint crosshair. |
 | **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
 
 **Game frames** are the game's own windows and menus, drawn to match BeebMod.
@@ -77,7 +74,7 @@ at the dock.
 |---|---|
 | **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The game's bag bar is hidden while the bag window or the Bags readout is on. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
 | **Character sheet** | Item level on every slot, and BeebMod's look. |
-| **Tooltips** | Unit tooltips rebuilt in BeebMod's look: the name and level, then small tags for what they are and what state they are in, then a row each for a quest objective, your kills of an enemy, and your note. Elites and rares get a gold or silver border. Item tooltips, and the Equipped tooltips beside them, are written again in the same look: the item's icon beside its name, how it binds as a small tag (BoE, BoP), damage as three tiles, stats and effects under headings, and durability as a bar beside the sell price. |
+| **Tooltips** | Unit tooltips rebuilt in BeebMod's look: the name and level, then small tags for what they are and what state they are in, then a row each for a quest objective, your kills of an enemy, and your note. Elites and rares get a gold or silver border. Item tooltips, and the Equipped tooltips beside them, are written again in the spell tooltips' look: the item's icon beside its name, its DPS or armor at the right with its item level (ilvl) under it, how it binds (BoE, BoP, Soulbound) and whether it is unique as small tags under its kind, a row of cells for its damage, speed and the level it needs, then its stats and effects as plain lines, and durability as a bar beside the sell price. A potion's cells say what it restores and its cooldown. An item with none of those has no cells. |
 | **Game menu**, **Dropdown menus** | The menu Escape opens, and every dropdown and right-click menu. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
 
 **The journals** are the Ledger and the Expedition. Their windows are the
@@ -85,25 +82,24 @@ same shape. The top row has the journal's name and its tabs. Under it is your
 rank, with a bar to the next one and three numbers for the journal; click it
 to see the commendations. Each tab has a list on the left that picks what the
 page shows. A new rank shows a
-toast with the keeper's line, and a sound. A commendation or a mastery shows
+toast with its badge, and a sound. A commendation or a mastery shows
 on the journal's line in the dock for a few seconds; with the line off, a
 small bar at the top of the screen shows it. Several at once are one notice.
 Rank toasts and their sound have a switch each on the journal's page.
 
 **The Ravenholdt Ledger** (the Ledger, for short) keeps a record of everyone
-you see, and notes, tags and a rating on the people you meet. Lord Jorach
-Ravenholdt is its keeper. Its window has three tabs. **Charts** shows your
+you see, and notes, tags and a rating on the people you meet. Its window has
+three tabs. **Charts** shows your
 realm by class, race, level, guild and zone; pick the chart on the left.
 Tiles across the top show the faction, gender and level split, and a click on
 any part of one narrows every chart to it. **Find people** searches by name,
 guild or a word you wrote, and the list on the left shows everyone, your
-notes, or the people with one tag. Type `/bt` and a name to open it on a
-search. **Commendations** lists what the Ledger rewards: characters
-recorded, notes, tags, groups and duels. Every 100 characters you record is
+notes, or the people with one tag. **Commendations** lists what the Ledger
+rewards: characters recorded, notes, tags, groups and duels. Every 100 characters you record is
 worth 1 point, a note 2 and a tag 1, and each commendation its own. The
 points set your rank, from Fledgling to Eye of Ravenholdt, and your
 characters on one realm share it. Open the window from the Ledger's line in
-the dock, or type `/bt census`. BeebMod never shares any of it. It holds only the people you saw, in one book for
+the dock. BeebMod never shares any of it. It holds only the people you saw, in one book for
 each realm, and so for each ruleset, with both factions in it.
 Recording everyone you see is a part with its own switch. Your notes,
 tags and ratings are kept in a book of their own (`BeebModDB.ledger`), so
@@ -118,22 +114,22 @@ a dungeon. It keeps your duel scores too: how many duels you won and lost
 against each player.
 
 **Nesingwary's Expedition** is a journal of every enemy you have
-killed. Hemet Nesingwary is its keeper. Each has a card with its model, its
+killed. Each has a card with its model, its
 lore from the Warcraft Wiki and its mastery. On its page, a Model · Map switch shows the zone's map with
 a dot for each place you killed it, or a dungeon's loading screen. The page also lists
 the enemy's abilities, from the VMaNGOS database. Every unique kill and every commendation is worth points. The
 points set your rank, from Greenhorn to Expedition Leader. A line in the
-dock shows your points and rank. Click it to open the journal, or type
-`/bt expedition`.
+dock shows your points and rank. Click it to open the journal.
 
-**Made-up data** is for screenshots. `/bt demo` shows a made-up realm,
-notes, a journal and a party in every feature at once. BeebMod saves none
-of it. A copy run from this folder also has a switch for it on the Testing
-page.
+**Made-up data** is for screenshots, and its switch is on the Testing page.
+It shows a made-up realm, notes, a journal and a party in every feature at
+once. BeebMod saves none of it. **Made-up people** on the same page shows the
+unit frames as a party or a raid.
 
 **The Testing page** is also where the debug tools are. Its buttons show
 sample notices and rank toasts, print BeebMod's reports to chat (What loaded, Over-time
-bars, Saved characters), and write records for Claude into the saved file. Record
+bars, Saved characters), move another book's characters into this realm's
+book, and write records for Claude into the saved file. Record
 writes down how the game built each part you have on, and also the next menu
 you open and your next fight. Clear takes the records out again. CPU use times
 BeebMod for 10 seconds. Type `/reload` after a record to save it.
@@ -160,12 +156,11 @@ local M = BT.Module({
 function M:Parts() return { ... } end  -- switches under its row: label, get, set
 local section = BT.Dock.Section("myutility", 50)  -- its own part of the dock
 function M:OnBind(db) ... end          -- the settings are bound: migrate, sweep
-BT.Command("mycmd", function(rest) ... end, "what it does", "myutility")
 BT.Record("myutilityDump", M.Dump, "myutility")  -- a record for the Testing page
 ```
 
-A command is for something you type, such as a name or a number of days. A
-debug tool is a button on the Testing page instead. A dump of the game's
+BeebMod has no commands after `/bt`, which opens the window. A debug tool is
+a button or a switch on the Testing page. A dump of the game's
 frames is a function that writes into `BeebModDB` under its own key and
 returns how many lines it wrote. `BT.Record` registers it, so the page's
 Record button runs it and its Clear button takes it out.
@@ -192,13 +187,15 @@ lives in `Modules/Ledger`.
                          and Pick Pocket: when one starts, and the rate per hour
     Core/DB.lua          one row per character: read, write, merge, prune
     Core/Collect/        what the client tells BeebMod without being asked
-    Core/Slash.lua       /bt, /bt help, and What loaded for the Testing page
+    Core/Slash.lua       /bt, which opens the window, and What loaded for the
+                         Testing page
     Core/Boot.lua        the core's own login: the settings, the dock, then BT.OnWorld
     Core/Demo.lua        made-up data for screenshots: one switch, each feature's own
     UI/Window.lua        the window: General, the features under two headings
                          and Testing down the side, a page per feature, and
                          the search in the title bar
-    UI/Welcome.lua       the first login's five cards, a switch per feature
+    UI/Welcome.lua       the first login's window: the features in a list, a
+                         switch each, and pictures of the one you click
     UI/Settings.lua      General: the colours, one size, and positions
     UI/CensusWindow.lua  the Ledger's window: Charts, Find people and
                          Commendations
@@ -292,8 +289,10 @@ lives in `Modules/Ledger`.
                          well as its colour
     Art/Rank/            the Art Deco corner and crest round an elite or rare
                          enemy's frame, gold or silver (scripts/make-rank.py)
-    Art/crosshair.tga    the resource display's crosshair, white, tinted lit
-                         or dim (scripts/make-crosshair.py)
+    Art/crosshair.tga    the resource display's crosshair, white, tinted green,
+                         red or dim (scripts/make-crosshair.py)
+    Art/reach-melee.tga  its crossed swords and no-action sign, white, tinted
+    Art/reach-close.tga  (scripts/make-reach-icons.lua)
     Art/tipicons.tga     the unit tooltip's row pictures: a quest mark, a paw,
                          a quotation mark, a tag, two people, a star, crossed
                          swords and a banner (scripts/make-tip-icons.py)
@@ -336,19 +335,20 @@ It goes to:
 
 ## The unit tooltip has one hook
 
-Two modules change it. **Tooltips** rebuilds it in a compact form, and the
-**Ledger** adds your note and your tags. If each hooked `GameTooltip` on its
-own, they would run in whatever order the files loaded, and the rebuild would
-wipe out the Ledger's lines. So `Core/Tooltip.lua` hooks it once and calls
-each module in a fixed order (compose at 0, decorate at 20). It skips any
-module that is switched off, so you can switch either one off and the other
-works as before.
+Three modules change it. **Tooltips** rebuilds it in a compact form, the
+**Ledger** adds your note and your tags, and the census adds the guild someone
+was in before. If each hooked `GameTooltip` on its own, they would run in
+whatever order the files loaded, and the rebuild would wipe out the others'
+lines. So `Core/Tooltip.lua` hooks it once and calls each module in a fixed
+order (Tooltips at 0, the Ledger at 20, the census at 30). It skips any module
+that is switched off, so you can switch any one off and the others work as
+before.
 
 Tooltips rebuilds the tooltip instead of hiding lines. Calling `ClearLines`
 and starting again is the only way to make a tooltip shrink, because a blank
 line still takes up its height.
 
-It has four parts, from the tooltip canvas Josh picked on 2026-10-17
+It has five parts, from the tooltip canvas Josh picked on 2026-10-17
 ("C, everything as tags"):
 
 - a **header**: the name, biggest, in class colour, with the level opposite.
@@ -380,7 +380,7 @@ bar of BeebMod's own that is handed the secret value as it comes. A player's
 tooltip has their side's crest behind its right half: the client's own logo
 (`Interface\Timer\Horde-Logo`, `Alliance-Logo`, which this client's Inspect
 window draws 256 pixels wide), added to the fill, so it can only lighten it.
-It is meant as a faint background, nothing more. Each side has its own
+It is meant as a faint background. Each side has its own
 strength (`M.CREST_LOOK`), because the art is not alike: the Alliance's pale
 lion is greyed, tinted blue and added at 12%; the Horde's dark mark keeps its
 own red, which is bright in thin strokes, and is added at 15%. Measured from
@@ -392,7 +392,7 @@ coordinates, and laid again whenever the card changes size.
 
 Items, spells and buffs are written again as cards of one shape (`card` in
 `Modules/Tooltips/Tooltips.lua`): the icon with the name and a line under
-it, small headings over rules, tiles, then rows. The client hands each line
+it, two figures at their right, the facts in cells, then rows. The client hands each line
 with its kind (`tooltipData.lines[i].type`), but a spell's cost, range, cast
 time and cooldown come as plain lines of two halves, so each half is read by
 the client's own sentence for it (`SPELL_RANGE`, `SPELL_CAST_TIME_SEC`, …). A
@@ -412,9 +412,15 @@ rim's colour, drawn by BeebMod over a line kept as tall as their rows
 tooltip is written as its spell's when its first line is not an item's;
 where its first line only names the spell (`tooltipType`, `tooltipID`), the
 spell's own tooltip is fetched and read. A buff's card has the same
-cells, with the time it has left as a fact. An item with a Use line that
-says an amount (a bandage, a potion, food or drink) gets its figure at the
-right of its name (`M.UseFigures`). On an Equipped tooltip, the client's
+cells, with the time it has left as a fact. An item's card has the same
+figures and cells, as Josh chose them on 2026-10-18 (`M.ItemFigures`,
+`M.ItemFacts`, and `M.FactCells` for both kinds): a weapon's DPS or
+armour's armor beside the name, the item level beside the line under it,
+and the damage, speed, binding and level needed in cells. An item with a
+Use line that says an amount (a bandage, a potion, food or drink) has that
+line's figure where a weapon has its DPS (`M.UseFigures`), its amount and
+cooldown in cells, and no Use line when the line says no more than the
+cells (`M.SaysNoMore`). On an Equipped tooltip, the client's
 "If you replace this item..." lines, written after the card, are folded
 into it afterwards by a hook on `TooltipComparisonManager.SetItemTooltip`
 (`M.FoldDelta`). A next-swing ability (Heroic Strike, Maul) counts only
@@ -440,10 +446,10 @@ say it reaches more than its target, such as "yards" or "party"). The
 Testing page's Record keeps the last six of each kind as the client sent
 them, under `tooltipsDump`.
 
-The tags, the item's tiles and the health line sit on frames of BeebMod's
+The tags, the cards' figures and cells, and the health line sit on frames of BeebMod's
 own over the tooltip. Each is marked `beebs`, because the Equipped tooltip's
 tab is found by looking for a child frame with words and art on it, and a
-frame of ours taken for the tab was given a fill over every line.
+BeebMod frame taken for the tab was given a fill over every line.
 
 BeebMod sets the sizes on Blizzard's own FontStrings, which every other
 tooltip in the game shares, so `Core/Tooltip.lua` puts them all back as soon
@@ -455,7 +461,8 @@ pointing at. The client's border is a `NineSlice`, a child frame that draws
 over anything put on the tooltip itself. So BeebMod hides it instead of
 covering it, and shows it again when you switch the module off. Every tooltip
 gets the look, because a hidden border with nothing in its place leaves text
-floating on the screen. Only unit tooltips get the coloured spine.
+floating on the screen. The spine's colour comes from what the tooltip shows:
+a unit's class or reaction, an item's quality, a debuff's type.
 
 ## One panel
 
@@ -498,12 +505,11 @@ fixed QUESTS line, with a scroll bar at the right edge.
 
 ## The spine
 
-Tooltips and the quest tracker both have a two-pixel edge down the left side,
-coloured by the thing you are asking about. On a person it is their class, or
-red when they are hostile. On an item it is its quality (grey, white, green,
-blue, purple). On the tracker it is BeebMod's jade. It replaced a bar across
-the top and two hairlines, and saves five pixels of height on every tooltip in
-the game.
+Tooltips have a three-pixel edge down the left side, coloured by the thing
+you are asking about. On a person it is their class, or red when they are
+hostile. On an item it is its quality (grey, white, green, blue, purple), and
+on a debuff its type. It replaced a bar across the top and two hairlines, and
+saves five pixels of height on every tooltip in the game.
 
 ## BeebMod draws its own quest tracker
 
@@ -589,8 +595,8 @@ The charts show what BeebMod doesn't know. The class chart has "Unknown" as
 its own grey row, so it counts every character in the book and shows how much
 of the realm you have identified. The race and level charts leave those
 characters out, because an unknown bar in all three would count the same
-people three times. Each of them says so, for example "125 of 195 characters;
-70 have no race on file".
+people three times. Each of them says so under its bars, for example "70
+with no race on file".
 
 ## No /who
 
@@ -606,7 +612,8 @@ until you see them. The census charts show that gap.
 
 ## Notes on the client
 
-Built against build 1.60.1.70009 (`wow_classic_beta`). The TOC says
+Built against the beta's builds from 1.60.1.70009 to 1.60.1.70450
+(`wow_classic_beta`). The TOC says
 `## Interface: 16001`, checked in the game with
 `/dump select(4, GetBuildInfo())` on build 1.60.1.69893. The client writes
 1.60.1 as 1-60-01, not 11600. A beta build can change it. If the addon ever
@@ -628,9 +635,7 @@ directory junction to `WTF/Account/<account>/SavedVariables`, and the TOC
 listed `Data\Live\BeebMod.lua` first, so the client ran its own last save as
 an addon file. [ForeverSVFix](https://github.com/nobewayo/ForeverSVFix) does
 the same. Before that (09-19 to 09-22) BeebMod kept the book in a generated
-`Data/Baked.lua`. `BT.Adopt` and `BT.linked` in `Core/Init.lua` stay in case a
-later build loses the book again. While the book loads normally they do
-nothing.
+`Data/Baked.lua`. The code for both was removed on 2026-10-17.
 
 **At launch the beta's records go.** The census, the Ledger, the
 Expedition and every record kept for one character file what they keep

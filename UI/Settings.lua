@@ -76,7 +76,9 @@ function S.Build(parent)
 	-- the dock's, the unit frames', the buffs' and the tooltips' sizes are
 	-- one; every reset of a place is one)
 	local place = stack:Section("Size and place")
-	local size = W.Row(place, "Size", "Every BeebMod panel: the dock, frames, buffs and tooltips")
+	-- (what it sizes, named: the settings window, the journals and the notice
+	-- bar keep their own size - 2026-10-17, audit)
+	local size = W.Row(place, "Size", "The dock, unit frames, buffs and tooltips")
 	S.sizeStep = size:SetControl(W.Stepper(size, function(dir)
 		S.SetScale(S.Scale() + dir * S.SCALE_STEP)
 		S.Refresh()
@@ -223,7 +225,8 @@ end
 
 S.SCALE_MIN, S.SCALE_MAX, S.SCALE_STEP = 0.7, 1.3, 0.05
 
--- every panel's size (the dock's old one is moved into it once, at bind:
+-- the size of the dock, the unit frames, the buffs and the tooltips (the
+-- dock's old one is moved into it once, at bind:
 -- BT.DropCutSettings)
 function S.Scale()
 	local s = BT.settings and tonumber(BT.settings.scale) or 1

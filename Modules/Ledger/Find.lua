@@ -75,11 +75,11 @@ local CARDS, CARD_GAP = 5, 6
 -- the line saying who wrote that note, and when.
 local CARD_PLAIN, CARD_RICH, CARD_CREDIT = 32, 54, 68
 local TAG_ROW_H = 20
--- CARDS_TOP is measured inside the find view, which itself starts VIEW_TOP
--- below the window's top edge. Mixing the two frames of reference is what put
--- the first card on top of the filter buttons (Josh 2026-09-19). The view is
--- the page's column now (UI/Book.lua), with nothing over the cards in it.
-local VIEW_TOP, CARDS_TOP, WINDOW_MIN = BT.Book.BODY_Y + BT.Book.COL_Y, 0, 190
+-- CARDS_TOP is measured inside the find view, not from the window's top
+-- edge. Mixing the two frames of reference is what put the first card on top
+-- of the filter buttons (Josh 2026-09-19). The view is the page's column now
+-- (UI/Book.lua), with nothing over the cards in it.
+local CARDS_TOP = 0
 local panel, cards, searchBox, results, selected = nil, {}, nil, {}, nil
 local findView, editor, emptyLine, moreLine
 -- the rail of who to show, rebuilt with the tags; defined after refreshFind
@@ -89,7 +89,7 @@ local buildFilters
 local state = { mineOnly = false, tagFilter = nil }
 -- declared here because the panel's open and close paths use them before the
 -- file gets round to defining them
-local editorTop, fitWindow, shownCards, cardsHeight = nil, nil, 0, 0
+local fitWindow, shownCards, cardsHeight = nil, 0, 0
 
 -- WHAT THE UNIT SAID, FOR ITS OWN PERSON ONLY (2026-10-05, audit). The panel
 -- keeps what a unit said about whoever it was opened on (B.OpenEditorFor),
@@ -209,7 +209,7 @@ local function buildEditor(parent, anchor, label, paint)
 	e.newTag:SetHeight(E_ROW)
 	e.newTag.text = editorLine(e.newTag, 10, 0.42, 0.48, 0.45)
 	e.newTag.text:SetPoint("LEFT", 0, 0)
-	e.newTag.text:SetText("+  Tag")
+	e.newTag.text:SetText("+  New tag")
 	e.newTag:SetScript("OnEnter", function(self)
 		local c = BT.Widgets.ACCENT
 		self.text:SetTextColor(c[1], c[2], c[3])
@@ -573,8 +573,8 @@ function B.ConfirmTagDelete(tag)
 		return
 	end
 	editor.confirm.text:SetText(
-		("Delete %s? It's on %d character%s%s.")
-			:format(tag.label, characters, characters == 1 and "" or "s",
+		("Delete %s? It's on %s character%s%s.")
+			:format(tag.label, U.Commas(characters), characters == 1 and "" or "s",
 				books > 1 and (" in %d books"):format(books) or ""))
 	editor.confirm.yes:SetScript("OnClick", function()
 		BT.RemoveTag(tag.key)
@@ -754,7 +754,10 @@ function B.SaveText(key, text)
 	end
 	local info = infoFor(key)
 	local p = face(key, info)
-	if p and (p.note or "") ~= text then
+	-- AS IT WOULD BE KEPT (2026-10-17, audit): a space typed at the end was a
+	-- change, and re-dated the note and put your name on it. N.SetNote trims
+	-- what it keeps, so the box is trimmed before it is compared.
+	if p and (p.note or "") ~= text:match("^%s*(.-)%s*$") then
 		step("write", N.SetNote, key, text, info)
 		return true
 	end
@@ -924,13 +927,6 @@ local function layTags(card, p, open)
 	return shown, rows
 end
 
--- Where the cards end, which is where the panel docks and where the window
--- stops. A window with five empty card slots under one result is mostly a
--- reminder that you searched for something rare.
-function editorTop()
-	return VIEW_TOP + CARDS_TOP + cardsHeight + 4
-end
-
 -- The window is one fixed size now that it holds tabs for everything, so
 -- there is nothing left to resize: the panel is as tall as its tab. Kept as a
 -- no-op because the editor's open and close paths still call it, and they will
@@ -939,8 +935,8 @@ function fitWindow()
 end
 
 -- One card: who they are, what you tagged them, what you wrote. Returns how
--- tall it had to be.
-local function fillCard(card, row)
+-- tall it had to be. `text`: what the search box holds.
+local function fillCard(card, row, text)
 	local p = row.p
 	card.key = row.key
 	card.name:SetText(U.Colorize(p.name, p.class))
@@ -948,6 +944,13 @@ local function fillCard(card, row)
 	-- and how often you grouped with them, after it (Modules/Ledger/Groups.lua)
 	local small = {}
 	small[#small + 1] = p.level and U.LevelText(p) or nil
+	-- THE GUILD, WHEN IT IS WHY THEY ARE HERE (Josh 2026-10-18: "not sure how
+	-- some of these show as results for "kitten""): Brit Magoo was found by
+	-- Discord Kittens, which the card did not say
+	local guild = type(p.guild) == "string" and p.guild ~= "" and p.guild or nil
+	if guild and type(text) == "string" and text ~= "" and guild:lower():find(text:lower(), 1, true) then
+		small[#small + 1] = ("<%s>"):format(guild)
+	end
 	small[#small + 1] = BT.LedgerGroups and BT.LedgerGroups.Line(p) or nil
 	-- and your duels with them (Modules/Ledger/Duels.lua)
 	small[#small + 1] = BT.LedgerDuels and BT.LedgerDuels.Line(p) or nil
@@ -1044,8 +1047,13 @@ local function refreshFind()
 				if #results >= query.limit then
 					break
 				end
+				-- THE LEDGER'S OWN ROW (2026-10-17, audit): someone the census
+				-- found by a guild the Ledger's row lacks was drawn from the
+				-- census's row, which holds no note and no tags. The card
+				-- showed an empty note box, and leaving it saved "" over the
+				-- real note. A key the Ledger knows shows the Ledger's row.
 				if not have[r.key] then
-					results[#results + 1] = r
+					results[#results + 1] = { key = r.key, p = N.Get(r.key) or r.p }
 				end
 			end
 		end
@@ -1054,7 +1062,7 @@ local function refreshFind()
 	for i, card in ipairs(cards) do
 		local row = results[i]
 		if row and i <= CARDS then
-			local h = fillCard(card, row)
+			local h = fillCard(card, row, query.text)
 			card:ClearAllPoints()
 			card:SetPoint("TOPLEFT", findView, "TOPLEFT", 0, -(CARDS_TOP + cardsHeight))
 			card:SetPoint("TOPRIGHT", findView, "TOPRIGHT", 0, -(CARDS_TOP + cardsHeight))
@@ -1071,10 +1079,20 @@ local function refreshFind()
 		-- the book changes, and in a city it changes every second, so each
 		-- tick unpacked every row in the book to say how many there are.
 		-- DB.Count only counts them, as the window's subtitle does.
-		local C = census()
-		emptyLine:SetText(C
-			and ("%s characters · %s you've noted"):format(U.Commas((C.Count(BT.db))), U.Commas(N.CountNoted()))
-			or ("%s characters you've noted"):format(U.Commas(N.CountNoted())))
+		-- AND NOT COUNTED AGAIN (2026-10-17, audit): the Ledger's ranks keep
+		-- the census's count for the book in place (BT.LedgerRanks), so the
+		-- book is only counted here when they have not counted it
+		local C, L = census(), BT.LedgerRanks
+		local noted = N.CountNoted()
+		local function many(n, one, more)
+			return ("%s %s"):format(U.Commas(n), n == 1 and one or more)
+		end
+		if C then
+			local all = (L and L.countedFor == BT.db and L.characters) or C.Count(BT.db)
+			emptyLine:SetText(("%s · %s you've noted"):format(many(all, "character", "characters"), U.Commas(noted)))
+		else
+			emptyLine:SetText(("%s you've noted"):format(many(noted, "character", "characters")))
+		end
 		emptyLine:Show()
 	elseif #results == 0 then
 		emptyLine:SetText("Nobody matches that.")
@@ -1085,11 +1103,6 @@ local function refreshFind()
 	moreLine:SetText(#results > CARDS and ("More than %d match. Type more to narrow it."):format(CARDS) or "")
 	moreLine:ClearAllPoints()
 	moreLine:SetPoint("TOPLEFT", 2, -(CARDS_TOP + cardsHeight))
-	-- the panel rides under whatever is on screen now
-	if editor and editor:IsShown() and editor:GetParent() == panel then
-		editor:ClearAllPoints()
-		editor:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -editorTop())
-	end
 end
 
 -- Called on a timer while the window is open: the book fills up as you play,
@@ -1338,19 +1351,22 @@ function B.Build(parent, shell)
 	-- nobody read. One is scheduled a moment ahead instead, and every letter
 	-- that lands before it fires is absorbed - so a word costs one search and
 	-- the box still keeps up with you.
-	local pending = false
+	-- AFTER THE LAST LETTER (2026-10-17, audit): the moment was counted from
+	-- the first letter, so a word typed at an ordinary pace was still a search
+	-- every 0.12 seconds. Each letter starts it again; only the last one's
+	-- timer searches.
+	local typed = 0
 	searchBox:SetScript("OnTextChanged", function()
 		if not (C_Timer and C_Timer.After) then
 			refreshFind()
 			return
 		end
-		if pending then
-			return
-		end
-		pending = true
+		typed = typed + 1
+		local this = typed
 		C_Timer.After(0.12, function()
-			pending = false
-			refreshFind()
+			if this == typed then
+				refreshFind()
+			end
 		end)
 	end)
 	searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
@@ -1500,7 +1516,9 @@ function B.Selected()
 	return selected
 end
 
--- /bt find <text>: open the Ledger on a search, whatever was on screen.
+-- Open the Ledger on a search, whatever was on screen. /bt find and /bt with
+-- a name ran it until the commands went (Josh 2026-10-18: Core/Slash.lua);
+-- the tests still do.
 function B.Search(text)
 	if BT.CensusWindow then
 		BT.CensusWindow.Show("find")

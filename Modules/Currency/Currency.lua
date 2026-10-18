@@ -171,7 +171,9 @@ function M.Tip()
 		local net = (s.earned or 0) - (s.spent or 0)
 		local long = U.Now() - (s.start or U.Now())
 		local moved = (s.earned or 0) > 0 or (s.spent or 0) > 0
-		t:Header({ name = "Money", sub = UnitName and UnitName("player") or nil,
+		-- YOUR WHOLE NAME (2026-10-17, audit). UnitName gives only the first
+		-- half on this client (Core/Util.lua, U.Me).
+		t:Header({ name = "Money", sub = U.Me and U.Me() or nil,
 			pill = moved and (net >= 0 and "Up" or "Down") or nil, pillState = net >= 0 and "good" or "bad" })
 		t:Headline(M.Coins(money()))
 		if not moved then
@@ -182,7 +184,9 @@ function M.Tip()
 			t:Section("This session")
 			t:Row("Earned", M.Coins(s.earned or 0))
 			t:Row("Spent", M.Coins(s.spent or 0))
-			local rate = long >= 60 and net * 3600 / long or nil
+			-- ONE RULE FOR A RATE (2026-10-17, audit). The rate follows the
+			-- sessions' rule and waits S.SETTLE (Core/Session.lua, S.Rate).
+			local rate = BT.Session.Rate(net, s.start)
 			if rate then
 				t:Row("Net per hour", (rate >= 0 and "+" or "-") .. M.Coins(math.abs(rate), true),
 					rate >= 0 and "good" or "bad")

@@ -48,7 +48,7 @@ local function rowLabel(mode, key)
 	elseif key == S.UNGUILDED then
 		return "No guild"
 	elseif key == S.OTHER then
-		return mode == "guild" and "Other guilds" or "Elsewhere"
+		return (mode == "guild" and "Other guilds") or (mode == "tag" and "Other tags") or "Elsewhere"
 	end
 	if mode == "class" then
 		return prettyClass(key)
@@ -377,9 +377,11 @@ end
 -- census counted elsewhere (BT.Stats.Census has the shape)
 function C.Filter(view)
 	-- a pick on a chart that is not there today (tags, with the Ledger off)
-	-- is a filter nobody can see or undo
+	-- is a filter nobody can see or undo; so is one on a tag since deleted,
+	-- which stayed as a chip named "tag5" over an empty chart (2026-10-17,
+	-- audit)
 	local pick = view.pick
-	if pick and pick.mode == "tag" and not BT.Enabled("ledger") then
+	if pick and pick.mode == "tag" and not (BT.Enabled("ledger") and U.TagByKey(pick.key)) then
 		view.pick, pick = nil, nil
 	end
 	return { bands = bandFilter(view), seen = view.seen, pick = pick,
@@ -452,7 +454,7 @@ function C.Loading(view, on, share, size)
 	end
 	l:SetShown(on and true or false)
 	if on then
-		local n = size and (type(BreakUpLargeNumbers) == "function" and BreakUpLargeNumbers(size) or tostring(size)) or "the"
+		local n = size and U.Commas(size) or "the"
 		l.label:SetText(("Counting %s characters · %d%%"):format(n, math.floor((share or 0) * 100)))
 		for _, row in ipairs(view.rows or {}) do
 			row:Hide()
@@ -483,6 +485,18 @@ local function countSliced(view, step, key, size)
 			C.Loading(view, true, share, size)
 		end
 	end)
+end
+
+-- THE WINDOW SHUT (2026-10-17, audit): the count stops, and forgets what it
+-- was counting, so opening the window again counts afresh rather than
+-- waiting on a count that is no longer running
+function C.Stop(view)
+	if runner then
+		runner:SetScript("OnUpdate", nil)
+	end
+	if view then
+		view.counting = nil
+	end
 end
 
 -- `census`, when given, is one already counted (a slice a frame - here, or

@@ -166,7 +166,10 @@ end
 -- A duel line: counted when you are in it. Returns the row it counted on,
 -- and whether you won.
 function D.Heard(text, now)
-	if not D.On() then
+	-- NOT INTO THE MADE-UP NOTES (2026-10-17, audit): while they stand in for
+	-- this book (Modules/Ledger/Demo.lua) a duel went into them and was lost
+	-- with them, as Groups.lua already guards against
+	if not D.On() or N.demo then
 		return nil
 	end
 	local winner, loser = D.Parse(text)
@@ -174,13 +177,25 @@ function D.Heard(text, now)
 		return nil
 	end
 	local me = U.Me()
+	-- YOUR WHOLE NAME FIRST (2026-10-17, audit): your given name alone is you
+	-- too, so "Beeb has defeated Beeb", from a duel between Beeb Bob and Beeb
+	-- Magus, was always your win. A name that is yours in full decides it;
+	-- when both are only your given name, the line cannot say which is you.
 	local won
-	if same(winner, me) then
-		won = true
-	elseif same(loser, me) then
-		won = false
+	local winMe, loseMe = me ~= nil and bare(winner) == bare(me), me ~= nil and bare(loser) == bare(me)
+	if winMe ~= loseMe then
+		won = winMe
+	elseif winMe then
+		return nil
 	else
-		return nil -- somebody else's duel
+		winMe, loseMe = same(winner, me), same(loser, me)
+		if winMe and loseMe then
+			return nil
+		elseif winMe or loseMe then
+			won = winMe
+		else
+			return nil -- somebody else's duel
+		end
 	end
 	local key, info = D.Opponent(won and loser or winner)
 	local p = key and N.Ensure(key, info)

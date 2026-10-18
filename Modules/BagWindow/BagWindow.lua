@@ -195,6 +195,19 @@ function M.Rings()
 	return true
 end
 
+-- PLACED ONCE, PAINTED WHEN IT CHANGES (2026-10-17, audit). The client
+-- paints a slot's quality in three calls (shown, picture, colour), each one
+-- hooked, and each placed the ring again and painted it: a full backpack
+-- open while you loot was some ten thousand calls a refresh. The ring is
+-- placed when the slot is dressed (M.StyleSlot), and again only if the
+-- window's scale has changed since; the hooks paint it or hide it, and only
+-- when what the client shows has changed.
+local function placeRing(s, b)
+	BT.Pill.PlaceRing(s.quality, b, 0, 1, 0)
+	s.placedAt = BT.Furniture.Call(b, "GetEffectiveScale")
+	s.lit = nil
+end
+
 local function paintQuality(b)
 	local s = slots[b]
 	local border = b.IconBorder
@@ -208,11 +221,20 @@ local function paintQuality(b)
 	if on then
 		border:SetAlpha(M.Rings() and 0 or 1)
 	end
-	local shown = on and M.Rings() and BT.Furniture.Call(border, "IsShown")
+	local shown = (on and M.Rings() and BT.Furniture.Call(border, "IsShown")) and true or false
+	local r, g, bl
 	if shown then
-		local r, g, bl = BT.Furniture.Call(border, "GetVertexColor")
+		r, g, bl = BT.Furniture.Call(border, "GetVertexColor")
 		r, g, bl = BT.Pill.Number(r, 1), BT.Pill.Number(g, 1), BT.Pill.Number(bl, 1)
-		BT.Pill.PlaceRing(s.quality, b, 0, 1, 0)
+		if BT.Furniture.Call(b, "GetEffectiveScale") ~= s.placedAt then
+			placeRing(s, b)
+		end
+	end
+	if s.lit == shown and (not shown or (s.litR == r and s.litG == g and s.litB == bl)) then
+		return
+	end
+	s.lit, s.litR, s.litG, s.litB = shown, r, g, bl
+	if shown then
 		BT.Pill.PaintRing(s.quality, { r, g, bl, 1 })
 	else
 		BT.Pill.HideRing(s.quality)
@@ -247,6 +269,7 @@ function M.StyleSlot(b, plain, force)
 		end
 		BT.Pill.ShowSurface(s.surface, false)
 		BT.Pill.HideRing(s.quality)
+		s.lit = nil
 		for key, alpha in pairs(s.was) do
 			local t = key == "NormalTexture" and BT.Furniture.Call(b, "GetNormalTexture") or b[key]
 			if t and t.SetAlpha then
@@ -298,6 +321,8 @@ function M.StyleSlot(b, plain, force)
 		icon:SetPoint("TOPLEFT", 1, -1)
 		icon:SetPoint("BOTTOMRIGHT", -1, 1)
 	end
+	-- the ring's corners follow the slot's, so a new size needs nothing more
+	placeRing(s, b)
 	paintQuality(b)
 	s.dressed = true
 	return true
@@ -313,6 +338,11 @@ function M.StyleAll(plain, force)
 		dresser:Undress()
 		for _, w in ipairs(M.Windows()) do
 			w.beebsBagDressed = nil
+			-- THE HANDLE GOES TOO (2026-10-17, audit): left up, it was a strip
+			-- across the title of the client's window that took its clicks
+			if w.beebsHandle then
+				w.beebsHandle:Hide()
+			end
 		end
 		for b in pairs(slots) do
 			M.StyleSlot(b, true)
@@ -333,6 +363,10 @@ function M.StyleAll(plain, force)
 	-- each time, shown or not. Each is dressed once at least, and a hidden one
 	-- is dressed again when it shows (its OnShow asks) or for a new theme.
 	for _, w in ipairs(M.Windows()) do
+		-- its handle back, the first pass after the module was off
+		if w.beebsHandle and not w.beebsBagDressed then
+			w.beebsHandle:Show()
+		end
 		if force or not w.beebsBagDressed or BT.Furniture.Call(w, "IsShown") then
 			local ok, err = pcall(function()
 				n = n + (dresser:DressRoot(w) or 0)
@@ -392,6 +426,15 @@ M.Soon = soon
 
 -- a window shown, or laying its slots out again, is dressed again: a bag
 -- bought or swapped makes slots the last pass never saw
+--
+-- B IN A FIGHT (Josh 2026-10-18: "Hotkey 'B' definitely needs to still work
+-- in combat though"). B is the game's OPENALLBAGS, which runs ToggleAllBags
+-- (Bindings_Camelot.xml). The client makes the window's slots on that open,
+-- from a pool of plain buttons, so nothing here is made late or has to be
+-- made before a fight. Everything here runs after the game's call, as hooks
+-- that leave that call as it was, and touches only plain frames: textures on
+-- the slots, the row of bag slots, and the window put back where you left
+-- it, which movable() holds back for a window the client has made protected.
 function M.Hook()
 	for _, w in ipairs(M.Windows()) do
 		if w.HookScript and not w.beebsBagHooked then

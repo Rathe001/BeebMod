@@ -21,6 +21,7 @@ local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Chat/Chat.lua")
 
 local U = BT.Util
+local unpack = unpack or table.unpack
 
 local M = BT.Module({
 	key = "chat",

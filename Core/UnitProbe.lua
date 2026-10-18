@@ -50,16 +50,23 @@ local function say(v)
 end
 
 -- every result of a call, as words; an error is an answer too
+-- COUNTED AS THEY CAME (2026-10-17, audit): the count was taken from the
+-- table, which can stop at the first nil, so a call that returned nil in the
+-- middle lost everything after it
+local function pack(...)
+	return { n = select("#", ...), ... }
+end
+
 local function ask(fn, ...)
 	if type(fn) ~= "function" then
 		return "absent"
 	end
-	local out = { pcall(fn, ...) }
+	local out = pack(pcall(fn, ...))
 	if not out[1] then
 		return "error: " .. tostring(out[2]):sub(1, 80)
 	end
 	local bits = {}
-	for i = 2, math.max(2, select("#", unpack(out))) do
+	for i = 2, math.max(2, out.n) do
 		bits[#bits + 1] = say(out[i])
 	end
 	return table.concat(bits, ", ")

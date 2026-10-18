@@ -1,15 +1,58 @@
 -- Headless tests for the parts that are pure Lua: names and keys, sightings,
 -- guild history, notes and tags, search and prune.
 --   lua tests/run.lua
+-- first, before any addon file: string.format as the game's Lua 5.1 does it,
+-- and the client's secrets (tests/strict.lua)
+local Strict = dofile("tests/strict.lua")
 local failures = 0
 local function check(ok, what)
 	print((ok and "ok   " or "FAIL ") .. what)
 	if not ok then failures = failures + 1 end
 end
 
+-- 0. WHAT LUA 5.1 HAS NOT GOT (2026-10-17, audit). The tests run on 5.4 and
+-- the game on 5.1, so a `//`, a `goto` or a bare table.unpack runs here and
+-- breaks there. Every file the TOC lists is read for them.
+do
+	local hits, n = {}, 0
+	for line in io.lines("BeebMod.toc") do
+		line = line:gsub("%s+$", "")
+		if line ~= "" and not line:match("^#") and not line:match("^Data\\Live\\") then
+			n = n + 1
+			for _, h in ipairs(Strict.Scan51((line:gsub("\\", "/")))) do
+				hits[#hits + 1] = h
+			end
+		end
+	end
+	check(n > 50 and #hits == 0, ("no file of the %d the TOC lists uses what Lua 5.1 has not got%s")
+		:format(n, #hits > 0 and (":\n     " .. table.concat(hits, "\n     ")) or ""))
+	-- and the scan does find them: one of each, written out
+	local found = Strict.Scan51("sample.lua", table.concat({
+		"local a = 7 // 2", "local b = x & y | z ~ w", "goto done", "::done::", "local c <const> = 1",
+		"local s = \"\\x41\"", "local t = table.unpack(x)", "local u = unpack(x)", "local v = utf8.char(1)",
+		"local fine = unpack or table.unpack", "local w = { warn = 1 } -- table.unpack", "",
+	}, "\n"))
+	local said = table.concat(found, "\n")
+	check(#found >= 10 and said:find("floor division", 1, true) and said:find("goto (", 1, true)
+		and said:find("<const>", 1, true) and said:find("\\x escape", 1, true) and said:find("table.unpack (Lua 5.2)", 1, true)
+		and said:find("bare global unpack", 1, true) and said:find("utf8", 1, true) and not said:find(":10:", 1, true)
+		and not said:find(":11:", 1, true), "the scan finds each of them, and passes a guarded unpack: " .. #found)
+	-- string.format: what 5.1 refuses is refused, and what it truncates is truncated
+	check(not pcall(string.format, "%s", nil) and not pcall(string.format, "%s", true)
+		and not pcall(string.format, "%s", {}), "string.format refuses %s of a nil, a boolean or a table, as 5.1 does")
+	check(string.format("%d", 2.7) == "2" and string.format("%d", -2.7) == "-2" and string.format("%s", 5.0) == "5",
+		"and writes %d of 2.7 as 2, and %s of 5.0 as 5, as 5.1 does")
+end
+
 -- the few globals these files touch
+-- (a frame answers its methods, names with a capital, and no other field:
+-- one that answered every key made `frame.anything` true, 2026-10-17, audit)
 _G.CreateFrame = function()
-	return setmetatable({}, { __index = function() return function() return nil end end })
+	return setmetatable({}, { __index = function(_, k)
+		if type(k) == "string" and k:match("^%u") then
+			return function() return nil end
+		end
+	end })
 end
 _G.GetRealmName = function() return "Whitemane" end
 _G.RAID_CLASS_COLORS = { WARRIOR = { r = 0.78, g = 0.61, b = 0.43 } }
@@ -41,6 +84,31 @@ for _, f in ipairs({ "Core/Init.lua", "Core/Rename.lua", "Core/Cpu.lua", "Core/U
 	assert(loadfile(f), "cannot load " .. f)("BeebMod", BT)
 end
 local U, DB, N = BT.Util, BT.DB, BT.Notes
+-- the UI parts the modules here reach for when they are switched on or off,
+-- which this file does not load: the window's search, the dock, and the
+-- tracker's drawing in it (tests/load.lua builds those for real)
+BT.Find = BT.Find or { CloseEditor = function() end }
+BT.Dock = BT.Dock or setmetatable({}, { __index = function() return function() end end })
+do
+	local tracker = BT.GetModule("tracker")
+	tracker.Build, tracker.Update = function() end, function() end
+end
+
+-- EVERY ERROR THE ADDON CATCHES IS LOOKED AT (2026-10-17, audit): a module's
+-- hook runs under pcall and its error goes to BT.Err's log while the test goes
+-- on green. Each one is kept here, whatever a test does to the log, and the
+-- last check in this file fails on any but those made on purpose.
+local caught = {}
+do
+	local logErr = BT.Err
+	for _, msg in ipairs(BT.moduleErrors or {}) do
+		caught[#caught + 1] = msg
+	end
+	BT.Err = function(msg)
+		caught[#caught + 1] = tostring(msg)
+		return logErr(msg)
+	end
+end
 
 -- A note or a tag written straight onto the census's row, the way every
 -- version before the Ledger's own book did (Josh 2026-09-26): what the census
@@ -208,6 +276,14 @@ do
 		"\"My notes\" leaves it out; a plain search still finds it")
 	check(N.CountNoted() == 1 and N.Count() == 2, "and \"you've noted\" does not count it")
 	people["Grouped Once"] = nil
+	-- THE NAME BEFORE THE GUILD (Josh 2026-10-18, on "kitten"): a Nightjar
+	-- written on long ago comes before Just Met of Night Watch
+	N.SetNote("Nightjar Fell", "x", { name = "Nightjar Fell", class = "MAGE", level = 5 })
+	people["Nightjar Fell"].noted = 1
+	local night = N.Search({ text = "night" })
+	check(#night == 2 and night[1].key == "Nightjar Fell" and night[1].named and not night[2].named,
+		"the Ledger's own: a name match first, then a guild's")
+	N.SetNote("Nightjar Fell", "")
 end
 
 -- 5. Search: a prefix of EITHER half of the name, substrings in guilds and
@@ -235,6 +311,88 @@ do
 	local all = DB.Search(db, {})
 	check(all[1].key == "Beeb Bob" and all[2].key == "Beebles Ann",
 		"yours first, then most recently seen")
+	-- THE NAME BEFORE THE GUILD (Josh 2026-10-18: "not sure how some of these
+	-- show as results for "kitten""): yours first, then a name the words
+	-- begin, and only then Corwin Bob of Nightwatch, though seen later
+	DB.Note(db, "Nightingale Sky", nil, { class = "MAGE", level = 20 }, 500)
+	local night = DB.Search(db, { text = "night" })
+	check(#night == 3 and night[1].key == "Beeb Bob" and night[2].key == "Nightingale Sky" and night[3].key == "Corwin Bob",
+		"yours, then a name, then a guild")
+	local two = DB.Search(db, { text = "night", limit = 2 })
+	check(#two == 2 and two[2].key == "Nightingale Sky", "and so with a limit")
+end
+
+-- 5b. A SEARCH OF A PACKED BOOK (2026-10-17, audit): the rows it does not
+-- return stay strings, the best few come in the same order as every match
+-- sorted, and the last answer is kept until the book changes under it.
+do
+	local db = newdb()
+	local T = BT.Pack.EPOCH + 40 * 86400
+	for i = 1, 40 do
+		DB.Note(db, "Nightly Walk" .. string.char(97 + (i - 1) % 26, 97 + math.floor((i - 1) / 26)), nil,
+			{ class = i % 2 == 0 and "MAGE" or "ROGUE", level = i, guild = i % 3 == 0 and "Night Watch" or "" }, T + i * 60)
+	end
+	DB.Note(db, "Quiet Stranger", nil, { class = "MAGE", guild = "Old Guard" }, T)
+	DB.PackAll(db)
+	local whole = DB.Search(db, { text = "night" })
+	local few = DB.Search(db, { text = "night", limit = 6 })
+	local same = #few == 6
+	for i = 1, 6 do
+		same = same and few[i].key == whole[i].key
+	end
+	check(#whole == 40 and same, ("the best six are the first six of every match, in order (%d)"):format(#whole))
+	local strings = 0
+	for _, row in pairs(db.players) do
+		if type(row) == "string" then strings = strings + 1 end
+	end
+	check(strings == 41 - 40, ("a search with no limit unpacks what it returns, and nothing else (%d)"):format(strings))
+	DB.PackAll(db)
+	DB.Search(db, { text = "night", limit = 2 })
+	strings = 0
+	for _, row in pairs(db.players) do
+		if type(row) == "string" then strings = strings + 1 end
+	end
+	check(strings == 39, ("with a limit of two, two rows are unpacked (%d strings left)"):format(strings))
+	check(#DB.Search(db, { text = "night watch", class = "ROGUE", limit = 50 }) == 7
+		and #DB.Search(db, { guild = "Night Watch", minLevel = 30, limit = 50 }) == 4
+		and #DB.Search(db, { text = "old", limit = 50 }) == 1,
+		"a packed row's guild, class and level are read off the string")
+
+	-- the kept answer: counted by how often a guild is read off a string
+	local P = BT.Pack
+	local real, reads = P.GuildCode, 0
+	P.GuildCode = function(s) reads = reads + 1 return real(s) end
+	local q = { text = "watch", limit = 6 }
+	local first = DB.Search(db, q)
+	local fresh = reads
+	reads = 0
+	local again = DB.Search(db, q)
+	check(fresh > 0 and reads == 0 and #again == #first and again[1].key == first[1].key and again[1].p,
+		"the same question again is answered from what was kept")
+	DB.Note(db, "Quiet Stranger", nil, { level = 5 }, T + 5000)
+	DB.Search(db, q)
+	check(reads == 0, "a sighting of someone not in the answer keeps it")
+	DB.Note(db, first[2].key, nil, { level = 50 }, T + 6000)
+	DB.Search(db, q)
+	check(reads > 0, "a sighting of someone in the answer asks the book again")
+	reads = 0
+	DB.Note(db, "Brand Newface", nil, { guild = "Night Watch" }, T + 7000)
+	local withNew = DB.Search(db, q)
+	check(reads > 0 and withNew[1].key == "Brand Newface", "and so does a new row, which is in the answer")
+	reads = 0
+	DB.rev = DB.rev + 1 -- any other write: a purge, a merge, a fold
+	DB.Search(db, q)
+	check(reads > 0, "and so does any other write")
+	reads = 0
+	DB.Search(newdb(), q)
+	check(#DB.Search(db, q) == #withNew and reads > 0, "and so does another book")
+	P.GuildCode = real
+	-- a packed name match before the packed guild matches seen since
+	DB.Note(db, "Watchet Low", nil, { class = "MAGE", level = 3 }, T)
+	DB.PackAll(db)
+	local watch = DB.Search(db, { text = "watch", limit = 3 })
+	check(#watch == 3 and watch[1].key == "Watchet Low" and watch[2].p.guild == "Night Watch",
+		"a packed row found by name comes before one found by guild")
 end
 
 -- 6. Prune drops noise and never touches what you wrote.
@@ -383,51 +541,17 @@ do
 	_G.BeebModKeep = nil
 end
 
--- 6e3. THE WHOLE BOOK, IN THE ONE CHANNEL THAT HAS COME BACK (Josh 2026-09-21).
---
--- The account file is written perfectly and the client hands back nothing at
--- load; the per-character file has come back. So the book is stashed there at
--- logout, and taken from there when the account one brings nothing.
+-- 6e3. A STALE COPY NEVER BEATS THE REAL ONE (Josh 2026-09-22). A snapshot
+-- of the settings rode along in the per-character file, and at login it
+-- filled in every module with no answer - which was every module switched
+-- ON, since on used to be written as no answer at all. Metrics, switched on,
+-- came back off after every reload.
+-- AN OLD STASH LET GO (2026-10-17, audit): the per-character file also kept
+-- a copy of the whole book until 2026-09-22, and nothing reads it now.
 do
-	local db = newdb()
-	DB.Note(db, "Horde One", nil, { class = "SHAMAN", level = 12 })
-	DB.Note(db, "Horde Two", nil, { class = "WARLOCK", level = 9 })
-	-- THE SETTINGS WERE STASHED AND NEVER TAKEN BACK (Josh 2026-09-21).
-	-- Logout wrote them into the per-character file along with the book, which
-	-- is the one channel this client hands back - and then nothing read them.
-	-- Every choice on the Settings tab survived to disk and died at the next
-	-- login: the theme reverted and switched-off modules came back on.
-	BT.settings.theme = { preset = "custom", rim = { 0.8, 0.2, 0.2, 1 }, radius = 6 }
-	BT.settings.modules = BT.settings.modules or {}
-	BT.settings.modules.chat = false
-
-	check(BT.StashBook() == 2, "logging out stashes the whole book")
-	check(type(_G.BeebModChar.book) == "table", "in the per-character file")
-	check(_G.BeebModChar.settings == nil,
-		"but not the settings: a copy goes stale the moment you change one")
-
-	-- the account file brings nothing, the way it does
-	_G.BeebModDB = nil
-	BT.boot = nil
-	local revBefore = DB.rev
-	local fresh = BT.Bind("Whitemane", "Alliance")
-	-- THE CACHES KEY OFF THE REVISION (Josh 2026-09-21). Rows put back go
-	-- straight into the table rather than through DB.SetNote, so nothing
-	-- bumped the counter the census caches its answers against - the window
-	-- opened on a book it had already decided the shape of, and it read as
-	-- "the data is there but the panel is a tab behind".
-	check(DB.Stats(fresh).total == 2, "and the book comes back whole")
-	check(DB.rev > revBefore, "with the revision moved, so the caches know")
-	check(DB.Get(fresh, "Horde One") ~= nil, "every character in it")
-	check(BT.Stats.Census(fresh).total == 2,
-		"and the census counts them without being asked twice")
-
-	-- A STALE COPY NEVER BEATS THE REAL ONE (Josh 2026-09-22). A snapshot of
-	-- the settings rode along with every note, and at login it filled in
-	-- every module with no answer - which was every module switched ON, since
-	-- on used to be written as no answer at all. Metrics, switched on, came
-	-- back off after every reload.
-	_G.BeebModChar.settings = { modules = { metrics = false, chat = false } }
+	newdb()
+	_G.BeebModChar = { book = { key = BT.scope.key, at = 1, db = { players = {} } },
+		settings = { modules = { metrics = false, chat = false } } }
 	_G.BeebModKeep = { realms = {}, settings = { modules = { metrics = false } } }
 	_G.BeebModDB.settings.modules = { metrics = true }
 	BT.boot = nil
@@ -438,34 +562,10 @@ do
 	check(BT.settings.modules.chat == nil, "and the old copy fills nothing in")
 	check(_G.BeebModChar.settings == nil and _G.BeebModKeep.settings == nil,
 		"and is dropped, so it cannot do it on a later login")
-
-	-- and when the account file DOES arrive, it wins
-	local kept = BT.db
-	BT.boot = nil
-	local again = BT.Bind("Whitemane", "Alliance")
-	check(again == kept and DB.Stats(again).total == 2,
-		"a book that arrived is the truth, not the stash")
-end
-
--- 6e4. THE OLD NAME'S BOOK (Josh 2026-09-22). BeebsToolkit became BeebMod. The
--- saved file of the old name still sits beside the new one and is loaded first,
--- so a book written under the old name is adopted once and saved under the new.
-do
-	_G.BeebModDB = nil
-	_G.BeebsToolkitDB = { realms = { ["Whitemane:Alliance"] = { players = { ["Old One"] = {
-		name = "Old One", realm = "Whitemane", level = 12,
-	} } } }, settings = { modules = {} } }
-	check(BT.Adopt() == true, "a book under the old name is adopted")
-	check(_G.BeebModDB == _G.BeebsToolkitDB, "and is the book from then on")
-
-	-- once there is a book under the new name, the old one is only history
-	_G.BeebModDB = { realms = { ["Whitemane:Alliance"] = { players = { ["New One"] = {
-		name = "New One", realm = "Whitemane", level = 3,
-	} } } }, settings = {} }
-	local keep = _G.BeebModDB
-	check(BT.Adopt() == false, "the new name's book is not replaced by the old one")
-	check(_G.BeebModDB == keep, "whatever the old file still holds")
-	_G.BeebsToolkitDB = nil
+	check(_G.BeebModChar.book == nil, "and the old copy of the whole book goes, so it is not saved again")
+	check(BT.StashBook == nil and BT.TakeStashed == nil and BT.TakeBaked == nil and BT.Adopt == nil,
+		"nothing makes or reads such a copy any more")
+	_G.BeebModChar, _G.BeebModKeep = nil, nil
 end
 
 -- 6f. The census charts, and how old the book is.
@@ -503,10 +603,67 @@ do
 	local c2 = BT.Stats.Census(db, now)
 	check(c2.level[6].n == 1 and c2.level[7].n == 1, "a fifty-eight is not a sixty")
 	check(c.tag[1].key == "troll" and c.tag[1].n == 1, "your tags are the fourth chart")
+	-- ELEVEN AND THE REST (2026-10-17, audit): fifteen tags on a chart of
+	-- twelve rows, the smallest summed into one
+	do
+		local d = newdb()
+		local marks = 0
+		for i = 1, 15 do
+			for j = 1, i do
+				local key = ("Tagged %sx%s"):format(string.char(64 + i), string.char(96 + j))
+				DB.Note(d, key, nil, {}, now)
+				oldTag(d, key, "t" .. i)
+				marks = marks + 1
+			end
+		end
+		local tags = BT.Stats.Census(d, now).tag
+		local sum = 0
+		for _, r in ipairs(tags) do
+			sum = sum + r.n
+		end
+		check(#tags == 12 and tags[1].key == "t15" and tags[12].key == BT.Stats.OTHER and tags[12].n == 1 + 2 + 3 + 4,
+			("the four smallest are one row (%d rows)"):format(#tags))
+		check(sum == marks, "and the rows still add up to every mark")
+	end
 	check(c.age.buckets[1].key == "today" and c.age.buckets[1].n == 1
 		and c.age.buckets[2].n == 1 and c.age.buckets[3].n == 0 and c.age.buckets[4].n == 2,
 		"sightings fall into today, this week, this month, older")
 	check(BT.Stats.AgeLine(c):find("^Half were last seen in the past") ~= nil, "the age line reads as a sentence")
+	-- ROUNDED UP, AND COUNTED BY STEPS (2026-10-17, audit): a middle of 1.9
+	-- days is "the past 2 days", and the steps the count keeps say what the
+	-- middle age itself would
+	do
+		local S = BT.Stats
+		local function line(ages)
+			local d = newdb()
+			for i, a in ipairs(ages) do
+				DB.Note(d, "Aged " .. string.char(64 + i) .. "x", nil, {}, now - a)
+			end
+			local census = S.Census(d, now)
+			table.sort(ages)
+			local exact = S.AgeLine({ book = #ages, age = { median = ages[math.floor((#ages + 1) / 2)] } })
+			return S.AgeLine(census), exact
+		end
+		local got = line({ 1.9 * 86400, 1.9 * 86400, 5 * 86400 })
+		check(got == "Half were last seen in the past 2 days", "1.9 days rounds up: " .. got)
+		got = line({ 1800 })
+		check(got == "Half were last seen in the past hour", "half an hour is the past hour: " .. got)
+		got = line({ 20.5 * 3600 })
+		check(got == "Half were last seen in the past 21 hours", "20.5 hours: " .. got)
+		got = line({ 23.5 * 3600 })
+		check(got == "Half were last seen in the past day", "23.5 hours is the past day: " .. got)
+		local same = true
+		math.randomseed(7)
+		for _ = 1, 40 do
+			local ages = {}
+			for i = 1, math.random(1, 9) do
+				ages[i] = math.random(0, 60 * 86400)
+			end
+			local stepped, exact = line(ages)
+			same = same and stepped == exact
+		end
+		check(same, "the line from the steps is the line from the middle age itself")
+	end
 	-- the line under a chart says how many are not on it: the census
 	-- redesign's "1 with no class on file" (Modules/Census/Chart.lua)
 	check(c.unknown.class == 1, "the class chart owns up to its gap")
@@ -657,6 +814,12 @@ do
 	check(#BT.AllTags() == 4, "which joins the three on every list")
 	check(select(2, BT.AddTag("ninja")) ~= nil, "the same name twice is refused")
 	check(select(2, BT.AddTag("   ")) ~= nil, "and so is no name at all")
+	-- LETTERS, NOT BYTES (2026-10-17, audit)
+	local accented = BT.AddTag("Érudit Âgé Fiévreux")
+	check(accented and accented.label == "Érudit Âgé Fiévreux", "a name of 19 letters is taken, accents and all")
+	check(select(2, BT.AddTag(string.rep("x", 21))) == "a tag name can be 20 letters at most.",
+		"and one of 21 is refused, with the limit said")
+	BT.RemoveTag(accented.key)
 
 	DB.Note(db, "Sticky Fingers", nil, {}, 1000)
 	N.SetTag("Sticky Fingers", tag.key, true)
@@ -770,15 +933,32 @@ do
 	check(BT.boot.bound == "Whitemane|All" and BT.boot.boundCount == 0,
 		"and that this login bound an empty book")
 
-	local books = BT.Books()
-	check(#books == 2 and books[1].mine and books[1].n == 0 and books[2].key == "OldRealm|Alliance",
-		"both books are listed, this character's first")
+	-- the other book, as the Testing page lists it to move in (BT.Books, with
+	-- yours in it too, went with /bt books on 2026-10-18)
+	local books = BT.OtherBooks()
+	check(#books == 1 and books[1].key == "OldRealm|Alliance" and books[1].name == "OldRealm Alliance"
+		and books[1].n == 2, "the other book is listed, with its key, its name and its characters")
+	check(BT.Books == nil, "and the list with yours in it is gone")
 
 	-- something of our own in the new book, to prove adopting does not trample it
 	DB.Note(db, "Beeb Bob", "Whitemane", { guid = "Player-1-BBB" }, 100)
 	oldNote(db, "Beeb Bob", "met again")
 
+	-- (2026-10-17, audit) the Ledger's count of the book, wrong on purpose:
+	-- adopting counts it again
+	BT.LedgerRanks.characters = 0
+	local oldBook = _G.BeebModDB.realms["OldRealm|Alliance"]
 	local done = BT.AdoptBook("OldRealm Alliance")
+	check(BT.LedgerRanks.characters == (DB.Count(db)) and BT.LedgerRanks.characters > 0,
+		("the Ledger counts the characters that came across (%d)"):format(BT.LedgerRanks.characters))
+	-- MOVED, NOT SHARED (2026-10-17, audit)
+	check(next(oldBook.players) == nil and (oldBook.stats.sightings or 0) == 0,
+		"the adopted book's characters and sightings leave it")
+	local sightings, seen = db.stats.sightings, DB.Get(db, "Arch Droob").seen
+	local again = BT.AdoptBook("OldRealm Alliance")
+	check(again and again.added == 0 and again.folded == 0 and db.stats.sightings == sightings
+		and DB.Get(db, "Arch Droob").seen == seen, "adopting it again adds nothing twice")
+	check(DB.Adopt(db, db) == 0 and DB.Get(db, "Arch Droob"), "and a book is not adopted into itself")
 	-- ONE BOOK A REALM, AND NO REALM IN A KEY (Josh 2026-09-30): another
 	-- realm's book comes across by name, and a name already here is one row
 	check(done and done.added == 1 and done.folded == 1,
@@ -825,82 +1005,9 @@ do
 		"and the delivered side's book is folded into the realm's one book")
 	check(BT.AcceptLateBook() == false, "taking it twice does nothing")
 
-	-- THE BAKED BOOK. When the client hands over nothing, the history is read
-	-- from the addon's own file instead - including the tags, because a mark
-	-- whose tag is missing gets swept off every character it was on.
-	BT.baked = {
-		settings = {
-			nextTag = 4,
-			tags = { { key = "tag3", label = "Friendly", short = "Friendly",
-				color = { 0.31, 0.82, 0.48 } } },
-			dockPos = { point = "TOPLEFT", rel = "TOPLEFT", x = 12, y = -300 },
-			modules = { census = false },
-			-- the Tooltips page's options, under the key they had before
-			-- 2026-09-29: they come in, and move to the new one (this file is
-			-- about the moving, so the cut answers are left in it)
-			tips = { scale = 0.8 },
-			cutSettingsDropped = true,
-		},
-		realms = { ["Whitemane|Alliance"] = {
-			players = {
-				["Baked Bread"] = { name = "Baked Bread", first = 1, last = 2, seen = 4,
-					class = "ROGUE", guid = "Player-1-DDD", tags = { tag3 = true }, note = "shared a quest" },
-				["Baked Beans"] = { name = "Baked Beans", first = 1, last = 2, seen = 1 },
-			},
-			guids = { ["Player-1-DDD"] = "Baked Bread" },
-			stats = { sightings = 12 },
-		} },
-	}
-	_G.BeebModDB = nil
-	BT.boot = nil
-	local fresh = BT.Bind("Whitemane", "Alliance")
-	check(BT.bakedTaken == 2, ("the baked book is taken when nothing arrived (%s)"):format(tostring(BT.bakedTaken)))
-	check(DB.Get(fresh, "Baked Bread") and DB.Get(fresh, "Baked Beans"),
-		"its characters are in the book we write in")
-	check(fresh.guids == nil, "and no GUID index is saved in the book any more")
-	check(N.Get("Baked Bread") and N.Get("Baked Bread").tags.tag3 == true,
-		"a custom tag survives, because its definition came across first")
-	check(BT.Util.TagByKey("tag3") ~= nil, "and the tag itself is a tag again")
-
-	-- AND THE SETTINGS WITH IT. The login that hands back two thousand
-	-- characters has to hand back where you put the dock and what you switched
-	-- off, or the addon is factory-fresh every morning with a full book in it.
-	check(BT.settings.dockPos and BT.settings.dockPos.point == "TOPLEFT",
-		"where the dock was dragged to comes back")
-	check(BT.settings.modules and BT.settings.modules.census == false,
-		"and a utility you switched off stays off")
-	check(BT.settings.tooltips and BT.settings.tooltips.scale == 0.8 and BT.settings.tips == nil,
-		"and a module's own options, moved from the name an older file used")
-
-	-- and the settings the file DID bring win over the baked ones
-	_G.BeebModDB = { schema = BT.SCHEMA, settings = { dockPos = { point = "CENTER" } }, realms = {} }
-	BT.boot = nil
-	BT.bakedSettings = nil
-	BT.Bind("Whitemane", "Alliance")
-	check(BT.settings.dockPos and BT.settings.dockPos.point == "CENTER" and not BT.bakedSettings,
-		"settings that arrived in the file are never overwritten by the baked ones")
-
-	-- THE SAVE ARRIVED, SO THE BAKED FILE ONLY FILLS GAPS (Josh 2026-09-22):
-	-- a character the book has is left exactly as it is, and one only the
-	-- baked file knows is handed over whole
-	BT.bakedTaken = nil
-	_G.BeebModDB = { schema = BT.SCHEMA, settings = {}, realms = { ["Whitemane|Alliance"] = {
-		players = { ["Real Person"] = { name = "Real Person", first = 1, last = 2, seen = 1 } },
-		guids = {}, stats = { sightings = 1 } } } }
-	BT.boot = nil
-	local live = BT.Bind("Whitemane", "Alliance")
-	check(BT.bakedTaken == 2, ("a book that arrived gets only what it lacks (%s)"):format(tostring(BT.bakedTaken)))
-	check(DB.Get(live, "Real Person").seen == 1, "and what it has is left exactly as it is")
-	check(DB.Get(live, "Baked Bread") ~= nil and DB.Get(live, "Baked Bread").guid == "Player-1-DDD",
-		"with the missing ones whole")
-	check(BT.settings.dockPos and BT.settings.dockPos.point ~= "TOPLEFT" or not BT.bakedSettings,
-		"and the baked settings never override the book's")
-	BT.baked = nil
-
 	-- THE REALM THAT GREW A "2". Same people, two spellings, counted twice.
 	_G.BeebModDB = nil
 	BT.boot = nil
-	BT.baked = nil
 	local two = BT.Bind("ClassicBetaPvE2", "Alliance")
 	two.players = {
 		["Ola Bard@ClassicBetaPvE"] = { name = "Ola Bard", first = 5, last = 50, seen = 2,
@@ -950,6 +1057,10 @@ do
 				tags = { { key = "tag3", label = "Friendly", short = "Friendly", color = { 0.31, 0.82, 0.48 } } },
 				-- every other module's records, one character each
 				xp = { ["Beeb Bob@ClassicBetaPvE2"] = { start = 1 }, ["Ola Bard@Whitemane"] = { start = 2 } },
+				-- and two a beta character filed under its name alone, before
+				-- 2026-09-22 (2026-10-17, audit)
+				rep = { ["Beeb Bob"] = { start = 1 }, ["Ola Bard@Whitemane"] = { start = 2 } },
+				clock = { ["Ola Bard"] = { played = 9 } },
 				xpPace = { ["Beeb Bob@ClassicBetaPvE2"] = { { t = 1, xp = 10 } } },
 				pickpocket = { ["Beeb Bob@ClassicBetaPvE2"] = { copper = 500 } },
 				expedition = {
@@ -989,20 +1100,29 @@ do
 	local saved = betaFile()
 	BT.Bind("Classic Beta PvE 2", "Alliance")
 	check(BT.betaCheck.realm and not BT.betaDropped and saved.realms["ClassicBetaPvE2|All"]
-		and saved.ledger.realms["ClassicBetaPvE2|All"] and saved.settings.expedition.chars["Beeb Bob@ClassicBetaPvE2"],
+		and saved.ledger.realms["ClassicBetaPvE2|All"] and saved.settings.expedition.chars["Beeb Bob@ClassicBetaPvE2"]
+		and saved.settings.rep["Beeb Bob"],
 		"on a beta realm every beta record is kept")
 
 	-- the same file on a launch realm
+	local said, realPrint = {}, _G.print
+	_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
 	BT.Bind("Whitemane", "Alliance")
+	_G.print = realPrint
 	local gone = BT.betaDropped
 	check(gone and gone.books == 1 and gone.characters == 2 and gone.ledger == 1 and gone.people == 1
-		and gone.journals == 1 and gone.enemies == 1 and gone.records == 3,
+		and gone.journals == 1 and gone.enemies == 1 and gone.records == 5,
 		("on a launch realm the beta's records go, and are counted (%s)"):format(
 			gone and ("%d %d %d %d %d %d %d"):format(gone.books, gone.characters, gone.ledger, gone.people,
 				gone.journals, gone.enemies, gone.records) or "nothing dropped"))
 	check(saved.settings.xp["Beeb Bob@ClassicBetaPvE2"] == nil and saved.settings.xp["Ola Bard@Whitemane"]
 		and next(saved.settings.xpPace) == nil and next(saved.settings.pickpocket) == nil,
 		"a beta character's XP and pickpocket records go, a launch character's stay")
+	check(saved.settings.rep["Beeb Bob"] == nil and saved.settings.rep["Ola Bard@Whitemane"]
+		and saved.settings.clock["Ola Bard"] == nil,
+		"and so do the ones filed under a name alone, so no launch character of that name takes them over")
+	check(#said == 1 and said[1]:find("Cleared the census, Ledger, Expedition and character records from the beta realms, for the launch.", 1, true),
+		"and one line in chat says so: " .. table.concat(said, " | "))
 	check(saved.realms["ClassicBetaPvE2|All"] == nil and DB.Get(BT.db, "Home Body") ~= nil,
 		"the census's beta book goes, and this realm's stays")
 	check(saved.ledger.realms["ClassicBetaPvE2|All"] == nil and N.Get("Home Body")
@@ -1054,6 +1174,13 @@ do
 		"every module is part of a feature (an older group reads as one, the Census the Ledger's)")
 	check(#BT.FEATURES == 5 and BT.Feature("census") == nil and BT.Feature("interface").title == "Game frames",
 		"five features, Interface called Game frames")
+	-- PLAIN WORDS (Josh 2026-10-18: "let's ditch the tongue in cheek style")
+	local plainWords = true
+	for _, f in ipairs(BT.FEATURES) do
+		plainWords = plainWords and type(f.blurb) == "string" and f.line == nil and f.quote == nil
+	end
+	check(plainWords and not BT.Feature("dock").blurb:find("seventeen", 1, true),
+		"each feature's page says plainly what it is, and nothing more")
 	check(type(BT.settings.features) == "table" and BT.FeatureOn("dock") and BT.FeatureOn("ledger"),
 		"a fresh install's features are on")
 	-- an install from before features: its switches say what it had on
@@ -1176,7 +1303,7 @@ do
 		prdDump = { at = at + 1 }, menuDump = { at = at + 2 }, menusDump = { at = at + 3 }, framesDump = { at = at + 4 },
 		bagDump = { at = at + 5 }, sheetDump = { at = at + 6 }, meterDump = { at = at + 7 },
 	}
-	BT.boot, BT.baked = nil, nil
+	BT.boot = nil
 	BT.Bind("Whitemane", "Alliance")
 	local s = BT.settings
 	check(s.modules.currency == false and s.modules.bags == true and s.modules.performance == false
@@ -1229,6 +1356,8 @@ do
 	s.modules.tooltips = false
 
 	-- both names: the new one wins, the old one is left exactly as it was
+	-- (the log starts empty so its line is written afresh; what it held is in
+	-- `caught` already, for the last check)
 	BT.moduleErrors, BT.errorCounts = nil, nil
 	local oldTips, newTips = { scale = 0.7 }, { scale = 0.9 }
 	local both = {
@@ -1334,7 +1463,6 @@ end
 do
 	_G.BeebModDB = nil
 	BT.boot = nil
-	BT.baked = nil
 	local db = BT.Bind("Whitemane", "Alliance")
 
 	local keys = {}
@@ -1355,19 +1483,10 @@ do
 	BT.SetEnabled("census", true)
 	check(#BT.Live() == 4, "and back on again")
 
-	-- a command belonging to something switched off says so rather than running
-	local said = {}
-	local realPrint = BT.Util.Print
-	BT.Util.Print = function(text) said[#said + 1] = text end
-	local ran = false
-	BT.Command("selftest", function() ran = true end, "a test", "census")
-	BT.SetEnabled("census", false)
-	check(BT.RunCommand("selftest", "") == true and ran == false,
-		"a command of a switched-off module is refused, not ignored")
-	check(#said == 1 and said[1]:find("switched off", 1, true), "and it says why")
-	BT.SetEnabled("census", true)
-	check(BT.RunCommand("selftest", "") and ran, "and runs once it is back on")
-	BT.Util.Print = realPrint
+	-- NO COMMANDS AFTER /bt (Josh 2026-10-18: "I actually never use the slash
+	-- commands..."): nothing registers one, so the registry is gone
+	check(BT.Command == nil and BT.Commands == nil and BT.RunCommand == nil,
+		"there is no command registry")
 
 	-- THE SWEEP. "tank" is a retired tag: with the Ledger on it becomes a tag
 	-- of your own, and with the Ledger off nothing touches it at all.
@@ -1399,7 +1518,6 @@ end
 do
 	_G.BeebModDB = nil
 	BT.boot = nil
-	BT.baked = nil
 	local db = BT.Bind("Whitemane", "Alliance")
 	DB.Note(db, "Searcher One", "Whitemane", { class = "MAGE" }, 100)
 	DB.SetGuild(DB.Get(db, "Searcher One"), "Old Guard", 100)
@@ -1615,30 +1733,6 @@ do
 	_G.GetUnitName = nil
 end
 
--- THE LIVE SAVE, AS ADDON CODE (Josh 2026-09-22). The client never reads
--- saved variables back, so the TOC runs the save itself as its first file.
--- Init.lua holds whatever that set, and puts it back if the client's loader
--- clears the global before ADDON_LOADED.
-do
-	local held = BT.linked
-	BT.linked = { schema = BT.SCHEMA, settings = {}, realms = { ["Whitemane|Alliance"] = {
-		players = { ["Linked Friend"] = { name = "Linked Friend", first = 1, last = 2, seen = 1 } },
-		guids = {}, stats = { sightings = 1 } } } }
-	_G.BeebModDB = nil
-	BT.linkedRestored = nil
-	-- what the loader does at ADDON_LOADED, run by hand
-	if type(_G.BeebModDB) ~= "table" and BT.linked then
-		_G.BeebModDB = BT.linked
-		BT.linkedRestored = true
-	end
-	BT.boot = nil
-	local db = BT.Bind("Whitemane", "Alliance")
-	check(BT.linkedRestored and DB.Get(db, "Linked Friend") ~= nil,
-		"a book the live file set is put back and bound")
-	BT.linked = held
-	BT.linkedRestored = nil
-end
-
 -- THE AUDIT (Josh 2026-09-23): listed is not seen; a guild seen again is the
 -- same stretch in it; the only guild someone left still shows.
 do
@@ -1653,6 +1747,12 @@ do
 	check(#p.guilds == 1 and p.guilds[1].last == 7000, "the same guild again is the same stretch, not a new row")
 	DB.SetGuild(p, "", 8000)
 	check(DB.FormerGuild(p) == "Nightwatch", "someone who left their only guild was in it")
+	-- (2026-10-17, audit) a later /who that says no guild again is not a
+	-- sighting in the old one
+	DB.SetGuild(p, "", 9000)
+	local former, at = DB.FormerGuild(p)
+	check(former == "Nightwatch" and at == 7000 and p.guildAt == 9000,
+		("still unguilded keeps when they were last in it (%s)"):format(tostring(at)))
 end
 
 -- SESSIONS, ONCE (Josh 2026-09-24): the rules Currency, Experience, Reputation
@@ -2032,6 +2132,19 @@ do
 	check(gave == 2 and gs.lore and gs.lore.quest == "Pride of the Isle", "a quest that names an enemy in its objectives gives it lore")
 	check(pc.lore and pc.lore.line == "The prideclaws stalk the ridge at dusk.", "and one that names it in the story, plural and all")
 	check(J.LoreLine(pc) == "The prideclaws stalk the ridge at dusk.", "the card's line is the quest's")
+	-- A NAME AT THE START OF A WORD (2026-10-17, audit): a rat is not in a
+	-- pirate's quest, nor a cow in a coward's
+	J.Learn({ npc = 5004, name = "Rat", kind = "Critter" })
+	J.Learn({ npc = 5005, name = "Cow", kind = "Critter" })
+	J.QuestSeen({ id = 902, title = "Pirate Trouble", text = "A pirate cove lies south. Only a coward stays home.",
+		objectives = { "Bloodsail Pirate slain: 0/8" } })
+	check(J.Store().enemies[5004].lore == nil and J.Store().enemies[5005].lore == nil,
+		"a name inside another word is not the enemy's")
+	J.QuestSeen({ id = 903, title = "Vermin", text = "The cellar is full of them. Rats everywhere!" })
+	check(J.Store().enemies[5004].lore and J.Store().enemies[5004].lore.line == "Rats everywhere!",
+		"and at the start of one, plural and all, it is")
+	J.Store().enemies[5004], J.Store().enemies[5005] = nil, nil
+	J.Store().quests[902], J.Store().quests[903] = nil, nil
 	-- an enemy met after the quest still finds it
 	J.Learn({ npc = 5003, name = "Ridge Stalker" })
 	J.QuestSeen({ id = 901, title = "Up the Ridge", text = "Something hunts on the ridge. Find the Ridge Stalker and end it." })
@@ -2162,6 +2275,16 @@ do
 	local points, count, _, uniquePoints = J.Score("char")
 	check(points == 20 and count == 2 and uniquePoints == 10,
 		("five points each, and a point for each of the ten unique kills (%d, %d from them)"):format(points, uniquePoints))
+	-- digits with commas from 1,000 (2026-10-17, audit)
+	do
+		local texts = {}
+		for _, a in ipairs(J.List(J.Stats({}, {}))) do
+			texts[a.id] = a.text
+		end
+		check(texts["total:1000"] == "Kill 1,000 enemies" and texts["uniques:1000"] == "Reach 1,000 unique kills"
+			and texts["total:100"] == "Kill 100 enemies", "a commendation's number has its commas: "
+			.. tostring(texts["total:1000"]))
+	end
 	-- the ranks: Novice at nothing, Polymath at the top, each from its own points
 	local r0, t0 = J.Rank(0)
 	local r1, t1, at1, nextAt, nextTitle = J.Rank(49)
@@ -2221,6 +2344,55 @@ do
 	local again151 = false
 	for _, a in ipairs(got151) do again151 = again151 or a.mastery end
 	check(not again151, "the 151st is not Gold again")
+	-- A METAL IS NEWS ONCE (2026-10-17, audit): an enemy found to be harder
+	-- takes more kills a metal, and climbs back through one it had
+	do
+		local c = J.Mine()
+		local function metals(news)
+			local out = {}
+			for _, a in ipairs(news) do
+				if a.mastery then out[#out + 1] = a.name end
+			end
+			return table.concat(out, ",")
+		end
+		local said = {}
+		for i = 1, 4 do
+			local _, news = J.Kill({ npc = 90080, name = "Twice Silver", rank = "rareelite", guid = "ts" .. i }, T + 310 + i)
+			said[#said + 1] = metals(news)
+		end
+		check(table.concat(said, "|") == "|Bronze||Silver", "a rare elite is Bronze at 2 and Silver at 4: "
+			.. table.concat(said, "|"))
+		-- found to be a dungeon's boss: Silver is 5 kills now, and the 4 are Bronze
+		J.Learn({ npc = 90080, instance = "party", boss = true })
+		check(J.Mastery(4, J.Store().enemies[90080]) == 1, "a dungeon boss's 4 kills are Bronze")
+		local _, fifth = J.Kill({ npc = 90080, name = "Twice Silver", guid = "ts5" }, T + 316)
+		check(metals(fifth) == "", "and the fifth reaches Silver again, which is not said twice: " .. metals(fifth))
+		check(J.KeptScore() == J.Score(), "the kept score follows the enemy's new category")
+		J.Store().enemies[90080], c.kills[90080], c.first[90080] = nil, nil, nil
+		for tier = 1, 4 do
+			c.earned["mastery:90080:" .. tier] = nil
+			if c.earnedBy then c.earnedBy["mastery:90080:" .. tier] = nil end
+		end
+		J.kept = nil
+	end
+	-- THE HIGHEST RANK REACHED, KEPT (2026-10-17, audit): points that fall
+	-- and climb back are no new rank, and a character from before this was
+	-- kept takes the rank it has, without a toast
+	do
+		local c = J.Mine()
+		local hadBest = c.bestRank
+		c.bestRank = nil
+		local now = J.Rank((J.Score()))
+		check(J.BestRank() == now and c.bestRank == now and J.RankUp((J.Score())) == nil,
+			"a character with no rank kept takes the one it has, with no toast")
+		c.bestRank = 4
+		check(J.RankUp(160) == nil and c.bestRank == 4, "points fallen back to Trapper are no new rank")
+		check(J.RankUp(300) == nil, "nor is climbing back to Stalker")
+		local up, title = J.RankUp(500)
+		check(up == 5 and title == "Pathfinder" and c.bestRank == 5 and J.RankUp(500) == nil,
+			"Pathfinder is, once")
+		c.bestRank = hadBest
+	end
 	-- a Gold enemy has been worth Bronze, Silver and Gold: 2 + 3 + 5
 	local masteryTotal, byTier = J.Masteries({ [90001] = 150, [90002] = 10, [90003] = 9 })
 	check(masteryTotal == 12 and byTier[3].enemies == 1 and byTier[1].enemies == 1 and byTier[1].points == 4,
@@ -2289,6 +2461,34 @@ do
 	check(J.Category(J.Store().enemies[90090]) == "dungeonelite" and J.EncounterWon("Edwin VanCleef")
 		and J.Category(J.Store().enemies[90090]) == "dungeonboss" and not J.EncounterWon("The Seven"),
 		"a won encounter makes its enemy a dungeon boss")
+	-- A BOSS NOT IN THE BOOK YET (2026-10-17, audit): the fight's end came
+	-- before the death was counted, so the kill that makes its page marks it
+	do
+		local c = J.Mine()
+		check(not J.EncounterWon("Fresh Boss", T + 700) and J.won and J.won.name == "Fresh Boss",
+			"a fight won before its boss has a page is kept for a moment")
+		J.Kill({ npc = 90097, name = "Fresh Boss", rank = "elite", instance = "party", guid = "fb1" }, T + 705)
+		check(J.Store().enemies[90097].boss and J.Category(J.Store().enemies[90097]) == "dungeonboss" and J.won == nil,
+			"and the kill that makes the page marks it a boss")
+		J.EncounterWon("Late Boss", T + 800)
+		J.Kill({ npc = 90098, name = "Late Boss", rank = "elite", instance = "party", guid = "lb1" }, T + 800 + J.WON_FOR + 1)
+		check(not J.Store().enemies[90098].boss, "but not a kill long after the fight")
+		-- a page marked after its kill: the kept score is thrown away, not stale
+		J.Kill({ npc = 90099, name = "Marked Later", rank = "elite", instance = "party", guid = "ml1" }, T + 900)
+		local before = J.KeptScore()
+		check(J.EncounterWon("Marked Later") and J.kept == nil and J.KeptScore() == before + 4
+			and J.KeptScore() == J.Score() and not J.EncounterWon("Marked Later"),
+			"a boss marked after its kill moves the score by its 4 points, once")
+		for _, npc in ipairs({ 90097, 90098, 90099 }) do
+			J.Store().enemies[npc], c.kills[npc], c.first[npc] = nil, nil, nil
+		end
+		for id, by in pairs(c.earnedBy or {}) do
+			if by == 90097 or by == 90098 or by == 90099 then
+				c.earned[id], c.earnedBy[id] = nil, nil
+			end
+		end
+		J.won, J.kept = nil, nil
+	end
 	-- LAZY MATCHING (Josh 2026-09-27): every word found somewhere, loosely
 	do
 		local rag = { name = "Ragnaros", rank = "worldboss", kind = "Elemental", zone = "Molten Core", skull = true }
@@ -2327,6 +2527,21 @@ do
 	local skull = false
 	for _, a in ipairs(feat) do skull = skull or a.id == "feat:skull" end
 	check(skull and J.Store().enemies[900].skull, "a skull-level kill is Skull and Bones")
+	-- ONLY UNTIL A LEVEL IS READ (2026-10-17, audit): -1 is "ten or more
+	-- levels above you", so a level read later is the page's
+	do
+		J.Learn({ npc = 90096, name = "High One", level = -1 })
+		local m = J.Store().enemies[90096]
+		check(m.skull and m.lo == nil, "a level the client hides is a skull")
+		J.Learn({ npc = 90096, level = 35 })
+		check(m.skull == nil and m.lo == 35, "a level read puts the skull away")
+		J.Learn({ npc = 90096, level = -1 })
+		check(m.skull == nil and m.lo == 35, "and a skull after it does not hide the level again")
+		local old = { name = "Old Skull", skull = true, lo = 35, hi = 35 }
+		check(J.Match("lv 35", old) ~= nil and J.LoreLine(old):find("level 35", 1, true),
+			"a page from before keeps its level in the search and the lore line")
+		J.Store().enemies[90096] = nil
+	end
 
 	-- another character: its own count, and none of the other's (JUST THIS
 	-- CHARACTER, Josh 2026-09-29: "I'd like to keep this addon personal")
@@ -2380,6 +2595,55 @@ do
 			end
 		end
 		me.last, J.kept = hadLast, nil
+	end
+	-- AND THE POINTS (2026-10-17, audit): the unique kills' and masteries'
+	-- points J.Check keeps are the full count's too, over a long career of
+	-- kills of every kind, with pages made one, bosses marked and ranks read
+	-- late along the way. In a book of its own, put back after.
+	do
+		local saved, keptWas = BT.settings.expedition, J.kept
+		BT.settings.expedition = {}
+		local seed = 7
+		local function rand(n)
+			seed = (seed * 1103515245 + 12345) % 2147483648
+			return 1 + math.floor(seed / 2147483648 * n)
+		end
+		local ranks = { "normal", "normal", "normal", "elite", "rare", "rareelite", "worldboss", false }
+		local kinds = { "Beast", "Humanoid", "Undead", "Critter", "Not specified", false }
+		local zones = { "Elwynn Forest", "Westfall", "The Deadmines", "Molten Core", false }
+		local bad, fellBack = 0, 0
+		local realScore = J.Score
+		for k = 1, 1500 do
+			local npc = 95000 + rand(160)
+			local info = {
+				npc = npc, guid = "Creature-0-1-1-1-" .. npc .. "-" .. k,
+				name = rand(20) > 1 and ("Career " .. (npc % 140)) or nil,
+				kind = kinds[npc % 6 + 1] or nil, rank = (rand(10) > 2) and ranks[npc % 8 + 1] or nil,
+				zone = zones[npc % 5 + 1] or nil, level = rand(62) - 2, myLevel = 30,
+				instance = (npc % 10 == 0) and "party" or nil, boss = npc % 97 == 0,
+			}
+			J.Kill(info, T + 2000 + k)
+			if rand(100) == 1 then
+				J.MergeSame()
+			end
+			if rand(200) == 1 then
+				J.EncounterWon("Career " .. rand(140))
+			end
+			local used = false
+			J.Score = function(...) used = true return realScore(...) end
+			local kept, keptCount = J.KeptScore()
+			J.Score = realScore
+			if used then
+				fellBack = fellBack + 1
+			end
+			local full, fullCount = J.Score()
+			if kept ~= full or keptCount ~= fullCount then
+				bad = bad + 1
+			end
+		end
+		check(bad == 0, ("over 1,500 kills the kept score is the full one every time (%d wrong)"):format(bad))
+		check(fellBack < 50, ("and it is the kept one nearly every time, not the full count (%d)"):format(fellBack))
+		BT.settings.expedition, J.kept, J.won = saved, keptWas, nil
 	end
 	do
 		local book, me = J.Store(), J.Mine()
@@ -2652,6 +2916,103 @@ do
 		"the rested form of the XP line names the enemy too")
 	K.plates.nameplate1 = nil
 
+	-- A KILL IN ONE BLOW (2026-10-17, audit): an enemy that dies to its first
+	-- hit never had you on its threat. Your target, its tag not somebody
+	-- else's, with a spell or a swing of yours just before it fell, is yours;
+	-- nothing less is
+	do
+		local struck = {}
+		local wasKill = K.onKill
+		K.onKill = function(info, how) struck[#struck + 1] = info.guid:match("%-(%w+)$") .. ":" .. how end
+		local function rabbit(tag, over)
+			local u = enemy("Creature-0-1-2-3-721-" .. tag, "Rabbit", { combat = false })
+			u.threat = nil
+			for k, v in pairs(over or {}) do u[k] = v end
+			return u
+		end
+		K.castAt, K.swinging, K.swungAt = nil, nil, nil
+		local t0 = T + 100
+		-- your target, killed by one spell between two looks
+		units.target = rabbit("S1")
+		K.Scan(t0)
+		K.Cast(133, t0 + 0.1)
+		units.target.dead = true
+		K.Scan(t0 + 0.2)
+		check(table.concat(struck, ",") == "S1:struck",
+			"a critter on your target, killed by one spell, is yours: " .. table.concat(struck, ","))
+		-- by one swing: the auto-attack goes off as it dies, before the look
+		units.target = rabbit("S2")
+		K.Scan(t0 + 5)
+		K.Swing(true, t0 + 5.1)
+		K.Swing(false, t0 + 5.2)
+		units.target.dead = true
+		K.Scan(t0 + 5.3)
+		check(struck[2] == "S2:struck", "and so is one killed by one swing")
+		-- a critter that dies in view, not your target, with a spell of yours
+		units.target = nil
+		units.mouseover = rabbit("S3")
+		K.Scan(t0 + 10)
+		K.Cast(133, t0 + 10.1)
+		units.mouseover.dead = true
+		K.Scan(t0 + 10.2)
+		units.mouseover = nil
+		check(#struck == 2, "a critter you never targeted is not")
+		-- your target, dead with no spell or swing of yours
+		units.target = rabbit("S4")
+		K.Scan(t0 + 20)
+		units.target.dead = true
+		K.Scan(t0 + 20.2)
+		check(#struck == 2, "nor your target, dead with nothing of yours just before")
+		-- another player's kill: tagged before you hit it
+		units.target = rabbit("S5", { denied = true })
+		K.Scan(t0 + 30)
+		K.Cast(133, t0 + 30.1)
+		units.target.dead = true
+		K.Scan(t0 + 30.2)
+		check(#struck == 2, "nor another player's kill, whose tag is theirs")
+		check(K.misses[1] and K.misses[1].name == "Rabbit" and K.misses[1].why == "somebody else's tag",
+			"and the miss says why: " .. tostring(K.misses[1] and K.misses[1].why))
+		-- THE CORPSE'S TAG IS NOT ASKED (Josh 2026-10-18, the squirrel): untagged
+		-- while alive, it is yours, whatever its corpse says; what the corpse
+		-- said is kept with any miss
+		units.target = rabbit("S6")
+		K.Scan(t0 + 40)
+		K.Cast(133, t0 + 40.1)
+		units.target.dead, units.target.denied = true, true
+		K.Scan(t0 + 40.2)
+		check(struck[3] == "S6:struck", "a corpse saying another's tag is still yours when it was untagged alive")
+		-- THREE SECONDS, FOR WHAT FLIES: Wrath cast from 30 yards lands about
+		-- a second and a half after the cast ends
+		units.target = rabbit("S8")
+		K.Scan(t0 + 45)
+		K.Cast(5176, t0 + 45.1)
+		units.target.dead = true
+		K.Scan(t0 + 45.1 + 1.9)
+		check(struck[4] == "S8:struck", "a spell still flying when the cast ended is the blow")
+		-- a spell four seconds before it died is not the blow
+		units.target = rabbit("S7")
+		K.Scan(t0 + 50)
+		K.Cast(133, t0 + 50)
+		K.Scan(t0 + 50 + K.STRUCK)
+		units.target.dead = true
+		K.Scan(t0 + 50 + K.STRUCK + 1)
+		check(#struck == 4, "nor a death seconds after your last spell")
+		check(K.misses[1].why:find("no spell or swing", 1, true) and K.misses[1].corpseTag == false,
+			"and the miss says so: " .. tostring(K.misses[1].why))
+		-- a death not of your target is not kept as a miss
+		local kept = #K.misses
+		units.target = nil
+		units.mouseover = rabbit("S9")
+		K.Scan(t0 + 60)
+		units.mouseover.dead = true
+		K.Scan(t0 + 60.2)
+		units.mouseover = nil
+		check(#K.misses == kept, "somebody else's fight is not a miss of yours")
+
+		units.target = nil
+		K.onKill, K.castAt, K.swungAt = wasKill, nil, nil
+	end
+
 	-- WHICH LOOK (Josh 2026-10-03: "male/female icons to switch between
 	-- male/female models (if they exist)"): a man and a woman of one enemy,
 	-- learnt from the units met, each once, and kept on its page
@@ -2909,8 +3270,7 @@ do
 		check(f ~= nil, ("the badge's file is there: rank%d"):format(i))
 		if f then f:close() end
 	end
-	check(#L.QUOTES == #L.RANKS and L.QUOTES[1]:find("We have been watching you", 1, true),
-		"a line from Jorach for each rank, the first the settings page's")
+	check(L.QUOTES == nil, "no line from Jorach for each rank (Josh 2026-10-18)")
 	-- the book as the canvas had it
 	L.characters = 34172
 	BT.settings.tags = { { key = "tag3", label = "Healer", color = { 0.45, 0.75, 0.99 } } }
@@ -2953,8 +3313,16 @@ do
 	-- the commendations' words
 	local byId = {}
 	for _, a in ipairs(L.List(c)) do byId[a.id] = a end
-	check(byId["characters:150000"].text == "Record 150,000 characters" and byId["notes:1"].text == "Write a note on a character"
+	check(byId["characters:125000"].text == "Record 125,000 characters" and byId["notes:1"].text == "Write a note on a character"
 		and byId["tags:own"].title == "Code Name", "each says what it takes, in plain words")
+	-- UNDER THE BOOK'S SIZE (2026-10-17, audit): a book cut to its size at
+	-- login keeps every characters commendation it reached
+	local most = 0
+	for _, a in ipairs(L.List(c)) do
+		if a.group == "characters" then most = math.max(most, a.need) end
+	end
+	check(byId["characters:125000"].title == "Eyes Everywhere" and most < BT.SETTINGS.bookCap,
+		("the last characters commendation is under the default size limit (%d)"):format(most))
 end
 
 -- SEVERAL AT ONCE ARE ONE NOTICE (Josh 2026-10-05: "I worry about
@@ -2989,6 +3357,52 @@ do
 	check(fresh.DEV == false, "a packaged copy is not a copy to work on")
 	assert(load(src, "@Core/Init.lua"))("BeebMod", plain)
 	check(plain.DEV == true, "this folder, run as it is, is one")
+	-- THE CLIENT'S OWN NAME FOR IT (2026-10-17, audit): the version comes
+	-- from C_AddOns when there is no old global
+	local wasMeta, wasAddOns = _G.GetAddOnMetadata, _G.C_AddOns
+	_G.GetAddOnMetadata = nil
+	_G.C_AddOns = { GetAddOnMetadata = function(_, field) return field == "Version" and "9.9.9-beta.1" or nil end }
+	local versioned = {}
+	assert(load(src, "@Core/Init.lua"))("BeebMod", versioned)
+	_G.GetAddOnMetadata, _G.C_AddOns = wasMeta, wasAddOns
+	check(versioned.VERSION == "9.9.9-beta.1", "the version is read with C_AddOns: " .. tostring(versioned.VERSION))
+	check(select(2, src:gsub('GetAddOnMetadata%(ADDON, "Version"%) or "[^"]*"', "")) == 1,
+		"and the line the release script rewrites is there once")
+end
+
+-- WHAT WAS CAUGHT (2026-10-17, audit): the last check. Every error the addon
+-- wrote to its log here, except the ones a test makes on purpose, by exact
+-- message; one listed that nothing made any more fails too.
+do
+	-- a file holding both a setting's old name and its new one (test 9)
+	local ON_PURPOSE = {}
+	for _, msg in ipairs({
+		"Rename: settings.modules holds both bagspace and bags. Kept bags; bagspace is left as it was.",
+		"Rename: settings.modules holds both tips and tooltips. Kept tooltips; tips is left as it was.",
+		"Rename: settings.order holds both tips and tooltips. Kept tooltips; tips is left as it was.",
+		"Rename: settings.features holds both frames and unitframes. Kept unitframes; frames is left as it was.",
+		"Rename: settings holds both tips and tooltips. Kept tooltips; tips is left as it was.",
+		"Rename: BeebModDB holds both menuDump and gamemenuDump. Kept gamemenuDump; menuDump is left as it was.",
+	}) do
+		ON_PURPOSE[msg] = true
+	end
+	local unexpected, seen = {}, {}
+	for _, msg in ipairs(caught) do
+		if ON_PURPOSE[msg] then
+			seen[msg] = true
+		else
+			unexpected[#unexpected + 1] = msg
+		end
+	end
+	local stale = {}
+	for msg in pairs(ON_PURPOSE) do
+		if not seen[msg] then
+			stale[#stale + 1] = msg
+		end
+	end
+	check(#unexpected == 0, "the addon caught no error but those the tests make on purpose"
+		.. (#unexpected > 0 and (":\n     " .. table.concat(unexpected, "\n     ")) or ""))
+	check(#stale == 0, "and each made on purpose was made" .. (#stale > 0 and (": " .. table.concat(stale, " | ")) or ""))
 end
 
 print("")

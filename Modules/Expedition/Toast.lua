@@ -7,10 +7,13 @@
 --
 -- RANKS ONLY (Josh 2026-10-05: "I worry about achievements being too
 -- spammy"): a commendation, a mastery or a new page is said on the journal's
--- row in the dock (UI/Notice.lua), and the toast is kept for a new rank -
--- with the keeper's line for it on a strip under the art (`quote`, `by`).
+-- row in the dock (UI/Notice.lua), and the toast is kept for a new rank.
 -- Whether a toast is wanted, and whether it chimes, is the journal's to say
 -- (`sound`).
+-- NO KEEPER'S WORD UNDER IT (Josh 2026-10-18: "I think we should probably
+-- remove the quotes on the expedition and ledger completely. The RP is a bit
+-- too cheesy"). Hemet's or Jorach's line for the rank was on a strip under
+-- the art from 2026-10-05.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Expedition/Toast.lua")
 
@@ -135,24 +138,6 @@ function T.Build()
 	frame.text:SetPoint("TOP", frame.head, "BOTTOM", 0, -5)
 	frame.text:SetWidth(T.TEXT_W)
 	frame.text:SetWordWrap(false)
-	-- THE KEEPER'S WORD ON IT (Josh 2026-10-05, the canvas's rank toast): a
-	-- strip under the art, as wide as it, with what Hemet or Jorach says to
-	-- you at the rank you have just reached, and who said it
-	local W = BT.Widgets
-	frame.say = CreateFrame("Frame", nil, frame)
-	frame.say:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 14, 4)
-	frame.say:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", -14, 4)
-	frame.say:SetHeight(46)
-	W.Panel(frame.say, { 0.05, 0.05, 0.04, 0.94 }, { 0.48, 0.38, 0.20, 0.9 })
-	frame.say.quote = W.Label(frame.say, "", "small", 0.78, 0.82, 0.80)
-	frame.say.quote:SetPoint("TOPLEFT", 10, -7)
-	frame.say.quote:SetPoint("RIGHT", frame.say, "RIGHT", -10, 0)
-	frame.say.quote:SetJustifyH("LEFT")
-	frame.say.quote:SetWordWrap(true)
-	frame.say.by = W.Label(frame.say, "", "small", 0.50, 0.55, 0.53)
-	frame.say.by:SetPoint("BOTTOMRIGHT", -10, 6)
-	frame.say.by:SetJustifyH("RIGHT")
-	frame.say:Hide()
 	-- a click puts it away, and opens the journal on what it was about
 	frame:SetScript("OnClick", function(self)
 		local spec = self.spec
@@ -217,14 +202,6 @@ local function show(spec)
 	frame.head:SetText(spec.head or "")
 	T.Fit(frame.text, spec.text)
 	frame.points:SetText(spec.points and tostring(spec.points) or "")
-	frame.say:SetShown(spec.quote ~= nil)
-	if spec.quote then
-		frame.say.quote:SetText(spec.quote)
-		frame.say.by:SetText(spec.by and ("- " .. spec.by) or "")
-		-- two lines of words and the name under them, or one line and the name
-		local h = BT.Pill.Number(frame.say.quote.GetStringHeight and frame.say.quote:GetStringHeight(), 26)
-		frame.say:SetHeight(math.max(38, math.floor(h + 30)))
-	end
 	frame:SetAlpha(0)
 	frame:Show()
 	chime(spec)
@@ -241,7 +218,7 @@ function T.Next()
 	end
 end
 
--- spec = { head, text, points, icon, badge, onClick, quote, by, sound, book }
+-- spec = { head, text, points, icon, badge, onClick, sound, book }
 -- (`book` starts the chat line a full queue says it in: "Expedition",
 -- "Ledger")
 function T.Push(spec)

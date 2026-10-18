@@ -36,8 +36,14 @@ if (git status --porcelain) {
 }
 
 foreach ($suite in @("tests/run.lua", "tests/load.lua")) {
+    # Windows PowerShell turns each line a suite writes to stderr into an
+    # error record, and under "Stop" the first one would throw before the
+    # suite's own last lines could be shown (2026-10-17, audit)
+    $ErrorActionPreference = "Continue"
     $out = & lua $suite 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = "Stop"
+    if ($code -ne 0) {
         $out | Select-Object -Last 15 | ForEach-Object { Write-Host $_ }
         Fail "$suite is not green"
     }

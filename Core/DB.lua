@@ -58,6 +58,21 @@ local function touched(mine)
 	end
 end
 
+-- THE LAST ANSWER, KEPT (2026-10-17, audit). The Ledger's Find asks the same
+-- question again on every card click, tag and note, and each time searched
+-- every row of the book. The last answer to a question with a limit is kept
+-- until the book is another one, a row comes or goes, or a row in the answer
+-- changes. A sighting of anyone else does not count (DB.Note): every other
+-- write moves DB.rev without moving `quiet`, and the two no longer agree.
+local kept = { quiet = 0 }
+
+-- a sighting of an existing row: whether the kept answer can stand
+local function quietWrite(db, key)
+	if kept.db ~= db or not (kept.holds and kept.holds[key]) then
+		kept.quiet = kept.quiet + 1
+	end
+end
+
 -- The fields that no longer earn their place. Dropped from rows written by an
 -- older version, once, on the login after this one (Josh 2026-09-20).
 -- (Not the faction or the sex any more: both are kept again, see DB.Note.)
@@ -237,15 +252,22 @@ function DB.Merge(db, fromKey, toKey)
 	return to
 end
 
--- ADOPTING A BOOK (Josh 2026-09-19). A book is keyed by realm and faction, so
--- if either of those ever reads differently - a realm renamed between builds,
--- a faction the client had not answered yet at login - the addon binds a NEW
--- book and everything you collected looks gone. It is not gone: it is in the
--- same file under the old key. This moves it across, character by character,
--- rather than asking you to meet 1,900 people again.
+-- ADOPTING A BOOK (Josh 2026-09-19). A book is keyed by the realm (one book
+-- for both sides, "Realm|All", since 2026-09-30), so if the realm ever reads
+-- differently - renamed between builds, say - the addon binds a NEW book and
+-- everything you collected looks gone. It is not gone: it is in the same file
+-- under the old key. This moves it across, character by character, rather
+-- than asking you to meet 1,900 people again.
+--
+-- MOVED, NOT SHARED (2026-10-17, audit). Each row went into this book and
+-- stayed in the old one: one table in two books, which the old one could no
+-- longer pack, and a second adopt of the same book folded each row into
+-- itself, doubling what it had seen. A row now leaves the book it came from,
+-- and so do its sightings.
 function DB.Adopt(db, from)
 	db = db or BT.db
-	if not (db and type(from) == "table" and type(from.players) == "table") then
+	-- a book into itself would move every row out of the book it goes into
+	if not (db and type(from) == "table" and type(from.players) == "table") or from == db then
 		return 0, 0
 	end
 	db.players = db.players or {}
@@ -262,14 +284,16 @@ function DB.Adopt(db, from)
 		-- under its name alone, as every key now is (U.Key), and of this
 		-- book's realm, or it could not be packed again
 		local key = (P.Split(from, fromKey))
-		if DB.Get(db, key) then
-			absorb(db.players[key], p)
+		local here = DB.Get(db, key)
+		if here and here ~= p then
+			absorb(here, p)
 			folded = folded + 1
-		else
+		elseif not here then
 			p.realm = db.realm or p.realm
 			db.players[key] = p
 			added = added + 1
 		end
+		from.players[fromKey] = nil
 		local row = db.players[key]
 		if row.guid then
 			DB.Guids(db)[row.guid] = key
@@ -277,7 +301,15 @@ function DB.Adopt(db, from)
 	end
 	db.stats = db.stats or { sightings = 0 }
 	db.stats.sightings = (db.stats.sightings or 0) + ((from.stats and from.stats.sightings) or 0)
+	if from.stats then
+		from.stats.sightings = 0
+	end
 	touched()
+	-- whoever counts the book counts it again (the Ledger's ranks): the hook
+	-- the purge uses, for rows that came in rather than went
+	if added > 0 and DB.onRemoved then
+		pcall(DB.onRemoved, db)
+	end
 	return added, folded
 end
 
@@ -411,6 +443,8 @@ function DB.Note(db, name, realm, info, now)
 	now = now or U.Now()
 	info = info or {}
 	local guids = DB.Guids(db)
+	-- a row made or merged away: a kept search answer is out of date
+	local reshaped = false
 	-- the same character under a shorter name: file this sighting on the row
 	-- that already exists, and let the fuller name own it
 	local guid = info.guid
@@ -425,6 +459,7 @@ function DB.Note(db, name, realm, info, now)
 			elseif mineHasSurname and not theirsHasSurname then
 				db.players[key] = DB.Get(db, key) or {}
 				DB.Merge(db, known, key)
+				reshaped = true
 			else
 				key, short, rname = known, them.name, them.realm
 			end
@@ -445,6 +480,7 @@ function DB.Note(db, name, realm, info, now)
 		end
 		p = { name = short, realm = rname, first = now, seen = 0 }
 		db.players[key] = p
+		reshaped = true
 		-- one more character recorded: points in the Ledger (Modules/Ledger/Ranks.lua)
 		if DB.onNew then
 			DB.onNew(db, key)
@@ -528,6 +564,9 @@ function DB.Note(db, name, realm, info, now)
 		p.seen = (p.seen or 0) + 1
 		db.stats.sightings = (db.stats.sightings or 0) + 1
 	end
+	if not reshaped then
+		quietWrite(db, key)
+	end
 	touched()
 	return p
 end
@@ -539,8 +578,12 @@ function DB.SetGuild(p, guild, now)
 	now = now or U.Now()
 	if p.guild == guild then
 		p.guildAt = now
+		-- STILL UNGUILDED IS NOT STILL IN THE OLD GUILD (2026-10-17, audit):
+		-- the last row is the guild they left, and its time is when they were
+		-- last seen in it. Moving it on each blank /who made the tooltip say
+		-- they were in it "just now".
 		local h = p.guilds and p.guilds[#p.guilds]
-		if h then
+		if h and guild ~= "" then
 			h.last = now
 		end
 		return
@@ -613,9 +656,52 @@ local function lowGuild(g)
 	return l
 end
 
+local function signature(query)
+	return table.concat({ tostring(query.text), tostring(query.class), tostring(query.guild),
+		tostring(query.surname), tostring(query.tag), tostring(query.minLevel), tostring(query.maxLevel),
+		tostring(query.mineOnly and true or false), tostring(query.limit) }, "\1")
+end
+
+-- whether a should be shown before b: yours first, then the ones whose name
+-- the words begin, then the latest seen, then by name.
+-- THE NAME BEFORE THE GUILD (Josh 2026-10-18: "not sure how some of these
+-- show as results for "kitten""): Brit Magoo of Discord Kittens came before
+-- Khaleeri Kitten for being seen later
+local function before(am, ah, al, an, ak, b)
+	if am ~= b.mine then
+		return am
+	end
+	if ah ~= b.named then
+		return ah
+	end
+	if al ~= b.last then
+		return al > b.last
+	end
+	if an ~= b.name then
+		return an < b.name
+	end
+	return ak < b.key
+end
+
 function DB.Search(db, query)
 	db = db or BT.db
 	query = query or {}
+	local limit = query.limit
+	local sig = limit and signature(query)
+	if sig and kept.db == db and kept.sig == sig and DB.rev - kept.rev == kept.quiet - kept.quietAt then
+		local out = {}
+		for i, key in ipairs(kept.keys) do
+			local p = DB.Get(db, key)
+			if not p then
+				out = nil
+				break
+			end
+			out[i] = { key = key, p = p }
+		end
+		if out then
+			return out
+		end
+	end
 	local text = (type(query.text) == "string" and query.text ~= "") and query.text:lower() or nil
 	-- a prefix of EITHER half of the name: people remember a surname as
 	-- readily as a given name, and "bob" should find "Beeb Bob"
@@ -623,50 +709,125 @@ function DB.Search(db, query)
 	local surname = text and ("^%S+%s+" .. caseless(text))
 	local family = type(query.surname) == "string"
 		and ("^%S+%s+" .. caseless(query.surname:lower()) .. "$") or nil
-	local found = {}
-	for key, p in DB.Each(db) do
-		local ok = true
-		if query.mineOnly and not DB.IsMine(p) then
-			ok = false
+	-- THE BEST FEW, NOT EVERY MATCH SORTED (2026-10-17, audit): with a limit,
+	-- only that many are kept, in order, as the rows go by
+	local best = {}
+	local function offer(key, mine, named, last, name)
+		local n = #best
+		if limit then
+			if limit < 1 then
+				return
+			end
+			if n >= limit then
+				if not before(mine, named, last, name, key, best[n]) then
+					return
+				end
+				best[n] = nil
+				n = n - 1
+			end
 		end
-		local name = p.name or ""
-		if ok and text then
-			ok = name:find(given) ~= nil or name:find(surname) ~= nil
-				or (p.guild ~= nil and p.guild ~= "" and lowGuild(p.guild):find(text, 1, true) ~= nil)
-				or (p.note ~= nil and p.note:lower():find(text, 1, true) ~= nil)
+		local e = { key = key, mine = mine, named = named, last = last, name = name }
+		if not limit then
+			best[n + 1] = e
+			return
 		end
-		if ok and query.class and p.class ~= query.class then ok = false end
-		if ok and query.tag and not (p.tags and p.tags[query.tag]) then ok = false end
-		if ok and query.guild and p.guild ~= query.guild then ok = false end
-		if ok and family and not name:find(family) then ok = false end
-		if ok and query.minLevel and (p.level or 0) < query.minLevel then ok = false end
-		if ok and query.maxLevel and (p.level or 0) > query.maxLevel then ok = false end
-		if ok then
-			-- the key and what the order needs, not the row: a packed row is
-			-- a borrowed table the next one overwrites
-			found[#found + 1] = { key = key, mine = DB.IsMine(p), last = p.last or 0, name = name }
+		local i = n + 1
+		while i > 1 and before(mine, named, last, name, key, best[i - 1]) do
+			best[i] = best[i - 1]
+			i = i - 1
+		end
+		best[i] = e
+	end
+	-- A PACKED ROW IS READ, NOT UNPACKED (2026-10-17, audit). The name is its
+	-- key, and the class, level and guild are places in the book's lists
+	-- (P.ClassCode, P.GuildCode), so the guilds that match are worked out
+	-- once, and a row is looked up by its number. A packed row is never
+	-- yours: no note, tag or rating fits in the string.
+	local words, places, guildHit, anyGuild, wantClass, wantGuild
+	local function readWords()
+		words, places = P.Words(db)
+		if text then
+			guildHit = {}
+			for i, g in ipairs(words.guild) do
+				if g ~= "" and lowGuild(g):find(text, 1, true) then
+					guildHit[i + 1] = true
+				end
+			end
+			anyGuild = next(guildHit) ~= nil
+		end
+		wantClass = query.class and (places.class[query.class] or -1)
+		if query.guild == "" then
+			wantGuild = 1
+		elseif query.guild then
+			wantGuild = places.guild[query.guild] and places.guild[query.guild] + 1 or -1
 		end
 	end
-	table.sort(found, function(a, b)
-		if a.mine ~= b.mine then
-			return a.mine
+	local packedCan = not (query.mineOnly or query.tag)
+	for key, p in pairs(DB.Players(db)) do
+		if type(p) == "string" then
+			if packedCan then
+				if not words then
+					readWords()
+				end
+				local name = key
+				if key:find("@", 1, true) then
+					name = key:match("^(.*)@")
+				end
+				local ok, named = true, true
+				if text then
+					named = name:find(given) ~= nil or name:find(surname) ~= nil
+					ok = named or (anyGuild and guildHit[P.GuildCode(p)] == true)
+				end
+				if ok and wantClass and P.ClassCode(p) ~= wantClass then ok = false end
+				if ok and wantGuild and P.GuildCode(p) ~= wantGuild then ok = false end
+				if ok and family and not name:find(family) then ok = false end
+				if ok and query.minLevel and (P.Level(p) or 0) < query.minLevel then ok = false end
+				if ok and query.maxLevel and (P.Level(p) or 0) > query.maxLevel then ok = false end
+				if ok then
+					offer(key, false, named, P.Last(p) or 0, name)
+				end
+			end
+		else
+			local ok = true
+			if query.mineOnly and not DB.IsMine(p) then
+				ok = false
+			end
+			local name = p.name or ""
+			local named = true
+			if ok and text then
+				named = name:find(given) ~= nil or name:find(surname) ~= nil
+				ok = named
+					or (p.guild ~= nil and p.guild ~= "" and lowGuild(p.guild):find(text, 1, true) ~= nil)
+					or (p.note ~= nil and p.note:lower():find(text, 1, true) ~= nil)
+			end
+			if ok and query.class and p.class ~= query.class then ok = false end
+			if ok and query.tag and not (p.tags and p.tags[query.tag]) then ok = false end
+			if ok and query.guild and p.guild ~= query.guild then ok = false end
+			if ok and family and not name:find(family) then ok = false end
+			if ok and query.minLevel and (p.level or 0) < query.minLevel then ok = false end
+			if ok and query.maxLevel and (p.level or 0) > query.maxLevel then ok = false end
+			if ok then
+				offer(key, DB.IsMine(p), named, p.last or 0, name)
+			end
 		end
-		if a.last ~= b.last then
-			return a.last > b.last
-		end
-		return a.name < b.name
-	end)
-	if query.limit and #found > query.limit then
-		for i = #found, query.limit + 1, -1 do
-			found[i] = nil
-		end
+	end
+	if not limit then
+		table.sort(best, function(a, b)
+			return before(a.mine, a.named, a.last, a.name, a.key, b)
+		end)
 	end
 	-- only what is shown is unpacked
-	for _, r in ipairs(found) do
+	local keys, holds = {}, {}
+	for i, r in ipairs(best) do
 		r.p = DB.Get(db, r.key)
-		r.mine, r.last, r.name = nil, nil, nil
+		r.mine, r.named, r.last, r.name = nil, nil, nil, nil
+		keys[i], holds[r.key] = r.key, true
 	end
-	return found
+	if sig then
+		kept.db, kept.sig, kept.rev, kept.quietAt = db, sig, DB.rev, kept.quiet
+		kept.keys, kept.holds = keys, holds
+	end
+	return best
 end
 
 -- Two kinds of row are not characters, and both are cleared out here. Nothing

@@ -52,33 +52,10 @@ function L.RankBadge(n)
 	return L.BADGES[n]
 end
 
--- WHAT JORACH SAYS TO YOU, a line for each rank (the "Sister journals"
--- canvas, 2026-10-05). The first is the one on the Ledger's settings page.
--- IN HIS OWN VOICE (Josh 2026-10-05: "Lets do the same content updates for
--- Ravenholdt. Find a number of sources so you can learn how the NPC talks").
--- In 1.12 he is a showy host ("Welcome, welcome, welcome!"), and Fahrad's
--- letter says "Ravenholdt has taken an interest in you... We have been
--- watching." In Legion's Hall of Shadows he is a calm chairman who speaks as
--- "we": "We operate where others cannot", "You have my ear", "Your
--- reputation precedes you", "I must admit to a certain level of envy", "We
--- do not need the fame. We reap the rewards." Dry, polite, business-like;
--- he never cheers and never calls anyone a hero. The fifth rank is his
--- council's title: "Take your seat as the final Shadow".
-local function quoted(s)
-	return "\226\128\156" .. s .. "\226\128\157"
-end
-L.QUOTES = {
-	quoted("Welcome, welcome, welcome! We have been watching you. Now you watch everyone else."),
-	quoted("You see faces where others see a crowd. Clever. Keep your eyes open."),
-	quoted("People speak freely when they think no one is listening. Rather careless of them."),
-	quoted("A name, a guild, a level. Small things add up. You have my ear."),
-	quoted("Take your seat among the Shadows. We operate where others cannot."),
-	quoted("Your reputation precedes you. Do try to keep it a little quieter."),
-	quoted("You run people of your own now. Trust them, or at least trust them to get the job done."),
-	quoted("Your files are better kept than mine. I must admit to a certain level of envy."),
-	quoted("Kings ask me what happens in their own cities. Lately, I find myself asking you."),
-	quoted("Nothing on this realm escapes you now. We do not need the fame. We reap the rewards."),
-}
+-- NO WORD FROM JORACH (Josh 2026-10-18: "I think we should probably remove
+-- the quotes on the expedition and ledger completely. The RP is a bit too
+-- cheesy"). His line for each rank (2026-10-05) was on the settings page and
+-- in a new rank's toast.
 
 -- the rank `points` earn: its number, its title, the points it began at, and
 -- the next one's points and title (nil at the top), as BT.Expedition.Rank
@@ -156,10 +133,14 @@ L.GROUPS = {
 }
 
 -- { need, points, title }
+-- UNDER THE BOOK'S SIZE (2026-10-17, audit): the last was 150,000, the size
+-- the book is cut to at login (bookCap), so it was reached in a session,
+-- said, and gone again at the next login with its points. It is 125,000, a
+-- count a book at the size limit keeps.
 local CHARACTERS = {
 	{ 100, 5, "New Faces" }, { 1000, 5, "Familiar Faces" }, { 5000, 10, "Head Count" },
 	{ 10000, 15, "Persons of Interest" }, { 25000, 20, "Census Taker" }, { 50000, 25, "Nobody Slips By" },
-	{ 100000, 40, "Everyone's in the Book" }, { 150000, 50, "Eyes Everywhere" },
+	{ 100000, 40, "Everyone's in the Book" }, { 125000, 50, "Eyes Everywhere" },
 }
 local NOTES = {
 	{ 1, 5, "First Entry" }, { 5, 5, "Taking Notes" }, { 10, 10, "Fine Print" }, { 25, 10, "Paper Trail" },
@@ -227,8 +208,12 @@ end
 
 -- the realm's book, where the dates are kept; nothing while made-up notes
 -- are shown (Modules/Ledger/Demo.lua)
+-- NOR THE MADE-UP REALM (2026-10-17, audit): the census's made-up book
+-- (Modules/Census/Demo.lua) counted fifteen hundred characters, and a real
+-- book of sixty was dated "New Faces" and "Familiar Faces" for good, and
+-- could be toasted a rank it never reached
 function L.Book()
-	if N.demo or not N.Book then
+	if N.demo or (BT.db and BT.db.demo) or not N.Book then
 		return nil
 	end
 	return N.Book()

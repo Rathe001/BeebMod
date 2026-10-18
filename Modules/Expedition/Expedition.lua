@@ -44,11 +44,6 @@ local big = BT.ExpeditionWindow.Big
 -- Settings
 -- ---------------------------------------------------------------------------
 
--- the dock line's number: points (the settings canvas cut the choice)
-function M.Shows()
-	return "points"
-end
-
 local function on(key, default)
 	local v = BT.settings and BT.settings[key]
 	if v == nil then
@@ -81,12 +76,34 @@ local function openOn(npc)
 	end
 end
 
-function M.Kill(info, how)
-	if not BT.Enabled("expedition") then
-		return
+-- A NEW RANK, ONCE (2026-10-17, audit): measured against the highest rank
+-- this character has reached (J.RankUp), where it was the points just before
+-- the kill - so points that fell and climbed back toasted a rank again. The
+-- score is the one the kill's check kept (J.KeptScore), worked out once.
+local function rankCheck()
+	local points, _, st = J.KeptScore()
+	local rank, title = J.RankUp(points)
+	if rank then
+		M.RankToast(rank, title)
 	end
-	-- (from what the last kill's check kept, not the whole journal: J.KeptScore)
-	local rankBefore = J.Rank((J.KeptScore()))
+	return points, st
+end
+
+-- the dock's line and the journal drawn again: from the score just worked
+-- out, or the made-up journal's while it is shown (J.Saved)
+local function redraw(points, st)
+	if J.demo then
+		M.Update()
+	else
+		M.Update(points, st)
+	end
+	BT.ExpeditionWindow.Changed()
+end
+
+-- a kill, in your own journal (J.Saved): the notices for it, and the score
+local function record(info)
+	-- the rank the kill starts from, for a character with none kept yet
+	J.BestRank()
 	local new, news = J.Kill(info)
 	local s = M.session
 	if s then
@@ -116,17 +133,50 @@ function M.Kill(info, how)
 		end
 	end
 	-- a new rank last, once everything that earned it has been shown
-	-- (the score worked out once, and the dock's line drawn from it)
-	local points, _, st = J.KeptScore()
-	local rank, title = J.Rank(points)
-	if rank > rankBefore then
-		M.RankToast(rank, title)
+	return rankCheck()
+end
+
+function M.Kill(info, how)
+	if not BT.Enabled("expedition") then
+		return
 	end
-	M.Update(points, st)
-	BT.ExpeditionWindow.Changed()
+	redraw(J.Saved(record, info))
+end
+
+-- A BOSS FIGHT WON (ENCOUNTER_END) moves the boss's category and its points
+-- (J.EncounterWon). The rank and the dock's line were left as they were
+-- until the next kill, and a rank reached by the boss's points never
+-- toasted (2026-10-17, audit).
+function M.EncounterWon(name)
+	local points, st = J.Saved(function()
+		J.BestRank()
+		if J.EncounterWon(name) then
+			return rankCheck()
+		end
+	end)
+	if points then
+		redraw(points, st)
+	end
+	return points ~= nil
 end
 
 K.onKill = M.Kill
+
+-- FOR THE TESTING PAGE'S REPORT (Josh 2026-10-18, the squirrel that did not
+-- count): how each kill since the reload was counted, and why the last of
+-- your targets' deaths that did not count was left out (Kills.lua, K.Missed)
+function M.Status()
+	local s = K.stats
+	local line = ("kills since reload: %d seen dying, %d in one blow, %d by XP line, %d by loot"):format(
+		s.dead or 0, s.struck or 0, s.xp or 0, s.loot or 0)
+	local miss = K.misses[1]
+	if miss then
+		local tag = miss.corpseTag == true and "somebody else's" or (miss.corpseTag == false and "yours" or "not said")
+		line = line .. (" · last target not counted: %s, %s (corpse's tag %s)"):format(
+			tostring(miss.name or "unknown"), miss.why or "no reason kept", tag)
+	end
+	return line
+end
 -- a look the journal has is not asked for again (Kills.lua, learnLook)
 K.KnowsLook = J.HasLook
 
@@ -373,13 +423,10 @@ BT.Record("expeditionDump", function() return M.Dump() end, "expedition")
 function M.Lines(points, st)
 	local _, title = J.Rank(points)
 	local left = ("Expedition %s"):format(WORDS:format("· " .. title))
-	local right
-	if M.Shows() == "kills" then
-		right = ("%s %s"):format(big(st.total), WORDS:format("kills"))
-	else
-		-- a gain just made stands before the points a moment (UI/Notice.lua)
-		right = ("%s%s %s"):format(BT.Notice.GainText(M), big(points), WORDS:format("pts"))
-	end
+	-- the points (the settings canvas cut the choice of kills, and the code
+	-- for it went 2026-10-17, audit); a gain just made stands before them a
+	-- moment (UI/Notice.lua)
+	local right = ("%s%s %s"):format(BT.Notice.GainText(M), big(points), WORDS:format("pts"))
 	return left, right
 end
 
@@ -444,7 +491,8 @@ function M.Tip()
 		local me = UnitName and UnitName("player") or nil
 		t:Header({ name = "Nesingwary's Expedition", sub = me and ("%s's journal"):format(me) or nil,
 			pill = ("Rank %d / %d"):format(rank, #J.RANKS) })
-		t:Title(title, (st.uniques or 0) > 0 and ("%s points"):format(big(points)) or nil)
+		t:Title(title, (st.uniques or 0) > 0 and ("%s %s"):format(big(points), points == 1 and "point" or "points")
+			or nil)
 		if (st.uniques or 0) == 0 then
 			t:Note("No kills yet. Each unique kill is worth 1 point.")
 			if nextAt then
@@ -470,8 +518,8 @@ function M.Tip()
 				local ladder = J.Ladder(enemy)
 				if k.need then
 					local metal = ladder[k.tier + 1]
-					t:ListRow(("%s · %s"):format(name, metal.name), ("%d / %d"):format(k.have, k.need), nil, nil,
-						{ k.have / math.max(1, k.need), metal.color })
+					t:ListRow(("%s · %s"):format(name, metal.name), ("%s / %s"):format(big(k.have), big(k.need)), nil,
+						nil, { k.have / math.max(1, k.need), metal.color })
 				else
 					local metal = ladder[k.tier]
 					t:ListRow(("%s · %s"):format(name, metal.name), ("%s kills"):format(big(k.have)), nil, nil,
@@ -679,9 +727,11 @@ pcall(M.events.RegisterEvent, M.events, "PLAYER_ENTERING_WORLD")
 -- nameplate five times a second, and a plate that goes is heard on its own
 -- (NAME_PLATE_UNIT_REMOVED); these two only see a death between looks.
 local HEARD_UNITS = { "UNIT_HEALTH", "UNIT_FLAGS" }
+-- Your auto-attack going on and off (PLAYER_ENTER_COMBAT, PLAYER_LEAVE_COMBAT)
+-- is a swing, for a kill in one blow (Kills.lua, K.Struck).
 local HEARD = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
 	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "CHAT_MSG_COMBAT_XP_GAIN", "LOOT_READY", "QUEST_ACCEPTED",
-	"QUEST_LOG_UPDATE", "ENCOUNTER_END" }
+	"QUEST_LOG_UPDATE", "ENCOUNTER_END", "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT" }
 function M.Listen(on)
 	on = on and true or false
 	if M.listening == on then
@@ -701,7 +751,8 @@ function M.Listen(on)
 			pcall(ev.UnregisterEvent, ev, event)
 		end
 	end
-	-- your own casts, for Pick Pocket (Modules/Expedition/Kills.lua, K.Cast)
+	-- your own casts, for Pick Pocket and a kill in one blow
+	-- (Modules/Expedition/Kills.lua, K.Cast)
 	if on then
 		local ok = ev.RegisterUnitEvent and pcall(ev.RegisterUnitEvent, ev, "UNIT_SPELLCAST_SUCCEEDED", "player")
 		if not ok then
@@ -745,8 +796,10 @@ M.events:SetScript("OnEvent", function(_, event, a, b, c, d, e)
 		-- id, name, difficulty, group size, success: a boss beaten is a boss
 		-- (J.Category), its kill counted by its death as any other
 		if e == 1 or e == true then
-			J.EncounterWon(b)
+			M.EncounterWon(b)
 		end
+	elseif event == "PLAYER_ENTER_COMBAT" or event == "PLAYER_LEAVE_COMBAT" then
+		K.Swing(event == "PLAYER_ENTER_COMBAT")
 	end
 end)
 
@@ -822,7 +875,7 @@ function M:Parts()
 	local toastGet, toastSet = setting("expeditionToasts")
 	local soundGet, soundSet = setting("expeditionSound")
 	return {
-		{ label = "Rank toasts", blurb = "When you reach a new rank, with a word from Hemet",
+		{ label = "Rank toasts", blurb = "When you reach a new rank",
 			get = toastGet, set = toastSet, field = "expeditionToasts" },
 		{ label = "Sound", get = soundGet, set = soundSet, sub = true, field = "expeditionSound" },
 	}
@@ -851,7 +904,7 @@ function M:DockRow()
 end
 
 -- ---------------------------------------------------------------------------
--- Commands
+-- Notices and toasts
 -- ---------------------------------------------------------------------------
 
 -- A SAMPLE NOTICE (Josh 2026-09-28: "I'd actually prefer to use the
@@ -865,18 +918,17 @@ function M.SampleNotice()
 		kind = "mastery", points = 10 })
 end
 
--- a new rank's toast, with its badge and Hemet's word on it; a click opens
--- the Commendations page. Off with the Rank toasts switch.
+-- a new rank's toast, with its badge; a click opens the Commendations page.
+-- Off with the Rank toasts switch.
 function M.RankToast(rank, title)
 	if not on("expeditionToasts", true) then
 		return false
 	end
-	local feature = BT.Feature and BT.Feature("expedition")
 	return T.Push({
 		head = "Expedition rank", text = ("%s %s"):format(title, WORDS:format(("· rank %d of %d")
 			:format(rank, #J.RANKS))),
 		icon = T.RANK_ICON, badge = J.RankBadge(rank), book = "Expedition",
-		quote = J.QUOTES[rank], by = feature and feature.by, sound = on("expeditionSound", true),
+		sound = on("expeditionSound", true),
 		onClick = function() BT.ExpeditionWindow.Show(nil, "commendations") end,
 	})
 end
@@ -886,12 +938,3 @@ function M.SampleRankToast()
 	local rank, title = J.Rank((J.Score()))
 	return M.RankToast(rank, title)
 end
-
--- /bt expedition, and the old name still (Josh 2026-09-27): only the new one
--- is in /bt's list
-local function command()
-	BT.ExpeditionWindow.Toggle()
-end
-
-BT.Command("expedition", command, "open Expedition", "expedition")
-BT.Command("menagerie", command, nil, "expedition")

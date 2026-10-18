@@ -7,6 +7,9 @@
 -- The widget stub answers only REAL widget methods. A typo ("Setmovable")
 -- fails here instead of in the game.
 --   lua tests/load.lua
+-- first, before any addon file: string.format as the game's Lua 5.1 does it,
+-- and the client's secrets (tests/strict.lua)
+local Strict = dofile("tests/strict.lua")
 local ok = true
 -- every tab on the window's rail, top to bottom: General, the features under
 -- their two headings, Testing at the foot (the settings canvas, 2026-10-04)
@@ -49,10 +52,38 @@ end
 -- module works by walking the client's own frames - regions, children, object
 -- types - because the shape of that tree is the thing most likely to change
 -- between builds. The stub has to model that much or the walk is untested.
+-- WHAT A WIDGET OF EACH KIND CAN DO (2026-10-17, audit). The client's plain
+-- Frame has no SetText and no SetValue, and a stub that answered both on any
+-- frame passed a call that raises an error in game. Text is a FontString's, a
+-- Button's, an EditBox's and a tooltip's; a value is a StatusBar's and a
+-- Slider's. A widget made with its kind named (CreateFrame("Frame"),
+-- CreateTexture) is held to that; the stand-ins the stub hands back for the
+-- client's own frames ("child", "frame") answer as before.
+local TEXT_KINDS = { FontString = true, Button = true, CheckButton = true, EditBox = true, GameTooltip = true,
+	SimpleHTML = true }
+local VALUE_KINDS = { StatusBar = true, Slider = true }
+local TEXT_METHODS = { SetText = true, GetText = true, SetFormattedText = true }
+local VALUE_METHODS = { SetValue = true, GetValue = true, SetMinMaxValues = true, GetMinMaxValues = true }
+-- A FAKE TOOLTIP ANSWERS ITS METHODS, NOT EVERY KEY (2026-10-17, audit). The
+-- fakes here answered any key with a function, so `tip.isShopping` and
+-- `tip.bmShadow` read as true and a compare tooltip's code ran on every one.
+-- A name that starts with a capital is a method and gets one that does
+-- nothing; any other key is nil, as on the client's own tooltips.
+local FAKE_TIP = { __index = function(_, k)
+	if type(k) == "string" and k:match("^%u") then
+		return function() end
+	end
+end }
+-- every frame CreateFrame made, oldest first, for the step that fires every
+-- event each one registered
+local ALL_FRAMES = {}
+
 local function widget(kind, parent)
+	-- a kind named as the client names it is a kind to hold the widget to
+	local strictKind = type(kind) == "string" and kind:match("^%u") and kind or nil
 	local w = {
 		_shown = true, _scripts = {}, _parent = parent,
-		_kind = (kind == "Texture" or kind == "FontString") and kind or "Frame",
+		_kind = strictKind or "Frame",
 		_regions = {}, _children = {},
 	}
 	-- some fakes in these tests answer every key with a function, so ask what
@@ -61,6 +92,10 @@ local function widget(kind, parent)
 		parent._children[#parent._children + 1] = w
 	end
 	setmetatable(w, { __index = function(_, k)
+		if strictKind and ((TEXT_METHODS[k] and not TEXT_KINDS[strictKind])
+			or (VALUE_METHODS[k] and not VALUE_KINDS[strictKind])) then
+			return nil
+		end
 		if k == "Show" then return function(s) s._shown = true end end
 		if k == "Hide" then return function(s) s._shown = false end end
 		if k == "SetShown" then return function(s, v) s._shown = v and true or false end end
@@ -184,8 +219,11 @@ local function widget(kind, parent)
 			return function(s2, w2, h2) s2._width, s2._height = w2, h2 end
 		end
 		if k == "CreateTexture" then
-			return function(s2)
+			-- with the layer it was made on: an edge made under a picture is
+			-- covered by it
+			return function(s2, name, layer, inherits, sub)
 				local t = widget("Texture", nil)
+				t._layer, t._sub = layer, sub
 				s2._regions[#s2._regions + 1] = t
 				return t
 			end
@@ -217,6 +255,25 @@ local function widget(kind, parent)
 		-- the action bars are dressed with alpha and texture coordinates
 		-- rather than by hiding things, so both are state
 		if k == "SetAlpha" then return function(s2, a) s2._alpha = a end end
+		-- THE CLIENT'S SETTERS FOR A SECRET (2026-10-17, audit): a frame takes a
+		-- secret yes or no and picks the alpha or the colour itself. Without
+		-- them here, the addon took its plain fallback and the secret path never
+		-- ran. The stub picks by what the secret hides, as the client would.
+		if k == "SetAlphaFromBoolean" then
+			return function(s2, v, on, off)
+				s2._alphaFrom = v
+				s2._alpha = Strict.Reveal(v) and (on or 1) or (off or 0)
+			end
+		end
+		if k == "SetVertexColorFromBoolean" then
+			return function(s2, v, yes, no)
+				local c = Strict.Reveal(v) and yes or no
+				if type(c) == "table" and c.GetRGBA then
+					local r, g, b, a = c:GetRGBA()
+					s2._vertex = { r, g, b, a }
+				end
+			end
+		end
 		if k == "GetAlpha" then return function(s2) return s2._alpha or 1 end end
 		if k == "SetTexCoord" then
 			return function(s2, l, r, t, b) s2._texCoord = { l, r, t, b } end
@@ -273,7 +330,8 @@ local function widget(kind, parent)
 		if k == "GetStringWidth" then
 			-- colour codes take no room on screen
 			return function(s2)
-				if _G.secretMeasurements then
+				-- (secret text, set from a secret, measures as a secret)
+				if _G.secretMeasurements or Strict.IsSecret(s2._text) then
 					return _G.SECRET_WIDTH
 				end
 				local shown = tostring(s2._text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
@@ -301,7 +359,7 @@ local function widget(kind, parent)
 		if k == "SetText" then
 			return function(s2, v)
 				local most = s2._maxLetters
-				if most and most > 0 and type(v) == "string" then
+				if most and most > 0 and type(v) == "string" and not Strict.IsSecret(v) then
 					-- letters, not bytes: a byte from 128 to 191 carries on the letter before it
 					local n = 0
 					for i = 1, #v do
@@ -329,15 +387,42 @@ local function widget(kind, parent)
 		if k == "HookScript" then return function(s, name, fn) s._scripts[name] = fn end end
 		if k == "RegisterEvent" then
 			return function(s2, event)
+				-- the combat log is the client's own: asking for it raises
+				-- ADDON_ACTION_FORBIDDEN (2026-10-17, audit)
+				if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+					error("ADDON_ACTION_FORBIDDEN: BeebMod tried to register COMBAT_LOG_EVENT_UNFILTERED", 2)
+				end
 				s2._events = s2._events or {}
 				s2._events[event] = "all"
 			end
 		end
 		if k == "RegisterUnitEvent" then
-			return function(s2, event, unit)
+			return function(s2, event, unit, unit2)
 				s2._events = s2._events or {}
 				s2._events[event] = unit or "all"
+				-- (the client takes two units; the second is kept beside the first)
+				s2._eventUnits = s2._eventUnits or {}
+				s2._eventUnits[event] = { unit, unit2 }
 			end
+		end
+		-- and let go of: a frame switched off hears nothing, and the step that
+		-- fires every registered event must not fire one let go of
+		if k == "UnregisterEvent" then
+			return function(s2, event)
+				if s2._events then
+					s2._events[event] = nil
+				end
+			end
+		end
+		if k == "UnregisterAllEvents" then
+			return function(s2) s2._events = nil end
+		end
+		if k == "IsEventRegistered" then
+			return function(s2, event) return s2._events ~= nil and s2._events[event] ~= nil end
+		end
+		-- whether the mouse is over it is state a test sets (_mouseOver)
+		if k == "IsMouseOver" then
+			return function(s2) return s2._mouseOver == true end
 		end
 		if k == "GetScript" then return function(s, name) return s._scripts[name] end end
 		-- a secure button's attributes are state: which item it will use
@@ -385,7 +470,8 @@ local function scrolling(w)
 end
 
 _G.CreateFrame = function(kind, name, parent)
-	local w = widget("frame", parent)
+	local w = widget(type(kind) == "string" and kind or "frame", parent)
+	ALL_FRAMES[#ALL_FRAMES + 1] = w
 	if kind == "ScrollingMessageFrame" then
 		scrolling(w)
 	end
@@ -407,17 +493,70 @@ _G.Minimap = widget("frame")
 _G.GetCursorPosition = function() return 400, 300 end
 _G.UnitAffectingCombat = function() return false end
 _G.InCombatLockdown = function() return false end
-_G.C_Timer = { NewTicker = function() return { Cancel = function() end } end, After = function() end }
-_G.GameTooltip = widget("frame")
+-- TIMERS, KEPT FOR A STEP TO RUN (2026-10-17, audit). C_Timer.After dropped
+-- its callback and NewTicker never called back, so nothing a timer runs was
+-- ever run here. Every ticker is kept, not run, with its callback, so a step
+-- can run each one once (TIMERS.RunTickers). With TIMERS.keep on, After keeps
+-- its callbacks too, for TIMERS.RunAfters. With it off, After drops them as
+-- it always did, and the steps that swap C_Timer.After for their own still do.
+local TIMERS = { keep = false, afters = {}, tickers = {} }
+_G.C_Timer = {
+	NewTicker = function(delay, cb, n)
+		local h = { delay = delay, cb = cb, n = n }
+		h.Cancel = function(self) self.cancelled = true end
+		h.IsCancelled = function(self) return self.cancelled == true end
+		TIMERS.tickers[#TIMERS.tickers + 1] = h
+		return h
+	end,
+	After = function(delay, cb)
+		if TIMERS.keep then
+			TIMERS.afters[#TIMERS.afters + 1] = { delay = delay, cb = cb }
+		end
+	end,
+}
+-- the kept After callbacks, oldest first, and those they keep in turn, up to
+-- `rounds` deep; each runs under pcall, and what failed comes back as a list
+function TIMERS.RunAfters(rounds)
+	local failed = {}
+	for _ = 1, rounds or 3 do
+		local now = TIMERS.afters
+		if #now == 0 then
+			break
+		end
+		TIMERS.afters = {}
+		for _, t in ipairs(now) do
+			local good, err = pcall(t.cb)
+			if not good then
+				failed[#failed + 1] = tostring(err)
+			end
+		end
+	end
+	return failed
+end
+-- each ticker not cancelled, run once, as a list of what failed
+function TIMERS.RunTickers()
+	local failed, ran = {}, 0
+	for _, h in ipairs(TIMERS.tickers) do
+		if not h.cancelled and type(h.cb) == "function" then
+			ran = ran + 1
+			local good, err = pcall(h.cb, h)
+			if not good then
+				failed[#failed + 1] = tostring(err)
+			end
+		end
+	end
+	return failed, ran
+end
+_G.GameTooltip = widget("GameTooltip")
 -- the client's own health bar under the tooltip, which puts itself back
-_G.GameTooltipStatusBar = widget("frame")
+_G.GameTooltipStatusBar = widget("StatusBar")
 -- the other tooltips a player actually sees: the equip compare, an item link
 -- clicked in chat, and the compare on one of those
-_G.ShoppingTooltip1 = widget("frame")
-_G.ShoppingTooltip2 = widget("frame")
-_G.ItemRefTooltip = widget("frame")
-_G.ItemRefShoppingTooltip1 = widget("frame")
-_G.ItemRefShoppingTooltip2 = widget("frame")
+_G.ShoppingTooltip1 = widget("GameTooltip")
+_G.ShoppingTooltip2 = widget("GameTooltip")
+_G.ItemRefTooltip = widget("GameTooltip")
+_G.ItemRefShoppingTooltip1 = widget("GameTooltip")
+_G.ItemRefShoppingTooltip2 = widget("GameTooltip")
 _G.UISpecialFrames = {}
 _G.SlashCmdList = {}
 _G.tinsert = table.insert
@@ -473,13 +612,71 @@ _G.C_DamageMeter = {
 }
 -- SECRET VALUES (Josh 2026-09-19). Once execution is tainted, this client hands
 -- back measurements you are not allowed to use: they ARE numbers, and the
--- arithmetic on the next line throws. Headless Lua cannot make a number throw,
--- so the stub hands back a sentinel and issecretvalue knows it - a width that
--- comes out anywhere near the sentinel is a measurement that was used when the
--- addon should have counted characters instead.
-_G.SECRET_WIDTH = 1e6
+-- arithmetic on the next line throws. With secretMeasurements on, the stub's
+-- widths are SECRET_WIDTH.
+-- A SECRET THAT RAISES AN ERROR (2026-10-17, audit): this was the plain number
+-- 1e6, so a sum on it never failed here. It is now tests/strict.lua's trap: a
+-- sum, a comparison, a `..` or a tostring of it raises an error as the
+-- client's does, type() says "number" and issecretvalue says yes.
+_G.SECRET_WIDTH = Strict.Secret(1e6)
 _G.secretMeasurements = false
-_G.issecretvalue = function(v) return _G.secretMeasurements and v == _G.SECRET_WIDTH end
+_G.issecretvalue = Strict.IsSecret
+-- a test's own look at what a secret hides, and its own test for one
+local reveal, isSecret = Strict.Reveal, Strict.IsSecret
+-- THE UNIT VALUES THIS CLIENT ALWAYS KEEPS SECRET (the unit probe, 2026-09-23):
+-- health, power, their percents and what is missing, heals on the way,
+-- absorbs, range and combo points, for every unit, out of combat too; only
+-- your own maximum health and power are plain. These are the stubs' answers
+-- unless a step sets its own.
+local SECRET_UNIT = {}
+function SECRET_UNIT.Install()
+	local plainMax = 100
+	_G.UnitHealth = function() return Strict.Secret(80) end
+	_G.UnitHealthMax = function(u) if u == "player" then return plainMax end return Strict.Secret(100) end
+	_G.UnitPower = function(_, kind) return Strict.Secret(kind == 4 and 3 or 60) end
+	_G.UnitPowerMax = function(u, kind) if u == "player" then return kind == 4 and 5 or plainMax end return Strict.Secret(100) end
+	_G.UnitHealthPercent = function() return Strict.Secret(80) end
+	_G.UnitHealthMissing = function() return Strict.Secret(20) end
+	_G.UnitPowerPercent = function() return Strict.Secret(60) end
+	_G.UnitGetIncomingHeals = function() return Strict.Secret(0) end
+	_G.UnitGetTotalAbsorbs = function() return Strict.Secret(0) end
+	_G.UnitGetTotalHealAbsorbs = function() return Strict.Secret(0) end
+	_G.UnitInRange = function() return Strict.Secret(true), true end
+	_G.GetComboPoints = function() return Strict.Secret(2) end
+end
+SECRET_UNIT.NAMES = { "UnitHealth", "UnitHealthMax", "UnitPower", "UnitPowerMax", "UnitHealthPercent",
+	"UnitHealthMissing", "UnitPowerPercent", "UnitGetIncomingHeals", "UnitGetTotalAbsorbs",
+	"UnitGetTotalHealAbsorbs", "UnitInRange", "GetComboPoints" }
+-- what the stubs answered before, to put back after a step that installs them
+function SECRET_UNIT.Save()
+	local was = {}
+	for _, n in ipairs(SECRET_UNIT.NAMES) do
+		was[n] = _G[n]
+	end
+	return was
+end
+function SECRET_UNIT.Restore(was)
+	for _, n in ipairs(SECRET_UNIT.NAMES) do
+		_G[n] = was[n]
+	end
+end
+SECRET_UNIT.Install()
+-- AURAS ARE REFUSED IN A FIGHT (the unit probe, 2026-09-23): out of one they
+-- read, and here there are none; in one, every aura call raises the error the
+-- client raises for a tainted addon. A step that wants auras sets its own.
+do
+	local function refusedInFight()
+		if _G.InCombatLockdown() then
+			error("Auras cannot be accessed when secret while tainted by 'BeebMod'", 2)
+		end
+	end
+	_G.C_UnitAuras = {
+		GetAuraDataByIndex = function() refusedInFight() return nil end,
+		GetAuraDataByAuraInstanceID = function() refusedInFight() return nil end,
+		GetUnitAuraInstanceIDs = function() refusedInFight() return {} end,
+		GetUnitAuras = function() refusedInFight() return {} end,
+	}
+end
 -- the lists the client holds for its own reasons
 _G.C_FriendList = {
 	GetNumWhoResults = function() return 1 end,
@@ -512,6 +709,48 @@ _G.print = print
 _G.SEARCH = "Search"
 -- the client's own word for a level, which its tooltip line starts with
 _G.LEVEL = "Level"
+
+-- THE STUBS REFUSE WHAT THE CLIENT REFUSES (2026-10-17, audit), checked once
+-- here, so a stub loosened by mistake fails before any step leans on it
+do
+	local frame, bar, text = _G.CreateFrame("Frame"), _G.CreateFrame("StatusBar"), _G.CreateFrame("Button")
+	local tip = setmetatable({}, FAKE_TIP)
+	local refused = {
+		["a plain Frame has no SetText"] = frame.SetText == nil and frame.SetFormattedText == nil,
+		["nor a SetValue"] = frame.SetValue == nil and frame.SetMinMaxValues == nil,
+		["a StatusBar has SetValue, a Button SetText"] = bar.SetValue ~= nil and text.SetText ~= nil,
+		["a fake tooltip's field is nil, its method a function"] = tip.isShopping == nil and tip.bmShadow == nil
+			and type(tip.SetOwner) == "function",
+		["a secret refuses a sum, a comparison, a .. and tostring"] = not pcall(function() return _G.SECRET_WIDTH + 1 end)
+			and not pcall(function() return _G.SECRET_WIDTH < 1 end) and not pcall(function() return "x" .. _G.SECRET_WIDTH end)
+			and not pcall(tostring, _G.SECRET_WIDTH),
+		["and is a number to type() and a secret to issecretvalue"] = type(_G.SECRET_WIDTH) == "number"
+			and _G.issecretvalue(_G.SECRET_WIDTH) and not _G.issecretvalue(5),
+		["string.format writes one as a secret, and refuses %s of a nil"] = isSecret(("%d"):format(_G.SECRET_WIDTH))
+			and reveal(("%d"):format(_G.SECRET_WIDTH)) == "1000000" and not pcall(string.format, "%s", nil),
+		["UnitHealth and the rest answer secrets, your own maximum health plainly"] = isSecret(_G.UnitHealth("target"))
+			and isSecret(_G.UnitHealthMax("target")) and _G.UnitHealthMax("player") == 100,
+	}
+	local wasLock = _G.InCombatLockdown
+	_G.InCombatLockdown = function() return true end
+	refused["an aura call in a fight raises an error"] = not pcall(_G.C_UnitAuras.GetAuraDataByIndex, "player", 1)
+	_G.InCombatLockdown = wasLock
+	refused["and out of one it reads"] = pcall(_G.C_UnitAuras.GetAuraDataByIndex, "player", 1)
+	refused["the combat log is not an addon's to register"] = not pcall(frame.RegisterEvent, frame,
+		"COMBAT_LOG_EVENT_UNFILTERED")
+	local bad = {}
+	for what, held in pairs(refused) do
+		if not held then
+			bad[#bad + 1] = what
+		end
+	end
+	table.sort(bad)
+	if #bad > 0 then
+		fail("the stubs let through what the client refuses: " .. table.concat(bad, "; "))
+	else
+		print("ok   the stubs refuse what the client refuses")
+	end
+end
 
 -- read the TOC so the test loads exactly what the client loads, in order
 local files = {}
@@ -602,6 +841,70 @@ local function inSettings(key)
 	local page = BT.Window.TabFor(key)
 	return BT.Feature(page) ~= nil and page ~= "dock"
 end
+
+-- EVERY ERROR THE ADDON CATCHES IS LOOKED AT (2026-10-17, audit). A module's
+-- hooks, a login step and a tooltip's parts run under pcall, and an error in
+-- one goes to a log (BT.Err, BT.Boot.failed, BT.Demo.failed) while the step
+-- that caused it goes on green. Each one is kept here with the step it came
+-- from, whatever a step then does to the logs, and the run fails at the end on
+-- any that is not one the tests make on purpose (CAUGHT_ON_PURPOSE, below).
+local caught, stepName = {}, "loading the files"
+local function catch(where, msg)
+	caught[#caught + 1] = { step = stepName, where = where, msg = tostring(msg) }
+end
+local function wrapErr()
+	local logErr = BT.Err
+	for _, msg in ipairs(BT.moduleErrors or {}) do
+		catch("BT.Err", msg)
+	end
+	BT.Err = function(msg)
+		catch("BT.Err", msg)
+		return logErr(msg)
+	end
+end
+-- the logs that are not BT.Err's, read after every step: a list is read from
+-- where it was last read to, and a new list (BT.Demo.failed is made afresh
+-- each time) from its start
+local readTo = setmetatable({}, { __mode = "k" })
+local function sweepLogs()
+	for _, l in ipairs({
+		{ "BT.Boot.failed", BT.Boot and BT.Boot.failed },
+		{ "BT.Demo.failed", BT.Demo and BT.Demo.failed },
+	}) do
+		local t = l[2]
+		if type(t) == "table" then
+			for i = (readTo[t] or 0) + 1, #t do
+				catch(l[1], t[i])
+			end
+			readTo[t] = #t
+		end
+	end
+	-- and the events the client refused to register (Core/Blocked.lua)
+	for _, l in ipairs({
+		{ "BT.Boot.refused", BT.Boot and BT.Boot.refused },
+		{ "BT.Collect.refused", BT.Collect and BT.Collect.refused },
+	}) do
+		local t = l[2]
+		if type(t) == "table" then
+			readTo[t] = readTo[t] or {}
+			for event, why in pairs(t) do
+				if readTo[t][event] ~= why then
+					readTo[t][event] = why
+					catch(l[1], event .. ": " .. tostring(why))
+				end
+			end
+		end
+	end
+end
+-- a step's own look: what was caught since a mark, as one line
+local function caughtSince(mark)
+	local out = {}
+	for i = mark + 1, #caught do
+		out[#out + 1] = caught[i].msg
+	end
+	return table.concat(out, " | ")
+end
+
 for _, f in ipairs(files) do
 	local chunk, err = loadfile(f)
 	if not chunk then
@@ -613,14 +916,29 @@ for _, f in ipairs(files) do
 		else
 			fail(f .. ": " .. tostring(ferr))
 		end
+		if f == "Core/Init.lua" and BT.Err then
+			wrapErr()
+		end
 	end
+end
+if not BT.Err then
+	fail("Core/Init.lua made no BT.Err to watch")
 end
 
 -- PLAYER_LOGIN, near enough: build the database, start collecting, then use it
 if ok then
+	stepName = "login"
 	_G.BeebModDB = nil
 	BT.Bind("Whitemane", "Alliance")
 	BT.Collect.Start()
+	-- THE MADE-UP DATA'S SWITCH (Josh 2026-10-18: "I actually never use the
+	-- slash commands..."): what /bt demo on and /bt demo off did, as a click
+	-- on the Testing page's switch
+	local function demoSwitch(on)
+		local sw = BT.Window.BuildPanel("testing").body.demoRow.switch
+		sw:SetOn(not on)
+		sw:GetScript("OnClick")(sw)
+	end
 	local steps = {
 		-- THE SHAPE IS NOT A SETTING (Josh 2026-09-22): a one-pixel border and
 		-- a three-pixel radius, whatever an older version saved. Checked here,
@@ -643,6 +961,18 @@ if ok then
 			BT.Window.Build()
 			assert(BT.Window.Frame() ~= nil, "now it exists")
 			assert(not BT.Window.IsShown(), "and it is not on screen")
+			-- "1 CHARACTER", NOT "1 CHARACTERS" (2026-10-17, audit)
+			local hadCount = BT.DB.Count
+			BT.DB.Count = function() return 1 end
+			BT.Window.UpdateSubtitle()
+			local said = BT.Window.Frame().subtitle:GetText()
+			assert(said:find(" 1 character$"), "one character, said so: " .. said)
+			BT.DB.Count = function() return 1500 end
+			BT.Window.UpdateSubtitle()
+			said = BT.Window.Frame().subtitle:GetText()
+			assert(said:find(" 1,500 characters$"), "and more, with their thousands marked: " .. said)
+			BT.DB.Count = hadCount
+			BT.Window.UpdateSubtitle()
 		end },
 		{ "a unit sighting, and who they are looking at", function()
 			BT.Collect.FromUnitAndTarget("target")
@@ -693,7 +1023,7 @@ if ok then
 				NumLines = function() return #lines end,
 				GetName = function() return "TagTip" end,
 				GetWidth = function() return 220 end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 8 do
 				_G["TagTipTextLeft" .. i] = _G.CreateFrame("FontString")
 				_G["TagTipTextRight" .. i] = _G.CreateFrame("FontString")
@@ -760,7 +1090,7 @@ if ok then
 				NumLines = function() return #lines end,
 				GetName = function() return nil end,
 				GetWidth = function() return _G.SECRET_WIDTH end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 8 do
 				_G["SecretTipTextLeft" .. i] = _G.CreateFrame("FontString")
 				_G["SecretTipTextRight" .. i] = _G.CreateFrame("FontString")
@@ -791,7 +1121,7 @@ if ok then
 					right[#lines] = tostring(r)
 				end,
 				NumLines = function() return #lines end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 12 do
 				_G["NoteTipTextLeft" .. i] = _G.CreateFrame("FontString")
 				_G["NoteTipTextRight" .. i] = _G.CreateFrame("FontString")
@@ -938,7 +1268,7 @@ if ok then
 			assert(BT.Notes.Get("Beeb Bob").rating == 4 and rating.items[4].isSelected(), "rated 4")
 			local again = menu()
 			hooks.MENU_UNIT_PLAYER(owner, again, { unit = "target" })
-			assert(again.items[2]:Find("Rating · 4 / 5"), "and the entry says so next time")
+			assert(again.items[2]:Find("Rating · 4/5"), "and the entry says so next time")
 			rating.items[6].onSelect()
 			assert(BT.Notes.Get("Beeb Bob").rating == nil, "No rating takes it off")
 
@@ -993,7 +1323,7 @@ if ok then
 			BT.SetEnabled("ledger", true)
 			-- a mistake in building it costs the entry, not the menu
 			local broken = menu()
-			broken.CreateButton = function() error("no buttons today") end
+			broken.CreateButton = function() error("no buttons today", 0) end
 			hooks.MENU_UNIT_PLAYER(owner, broken, { unit = "target" })
 			_G.Menu = wasMenu
 		end },
@@ -1212,6 +1542,12 @@ if ok then
 			assert(N.MAX_NOTE == 140, "140 characters")
 			assert(N.Length("Café") == 4, "counted in letters, not bytes")
 			assert(N.Clip("Cafés", 4) == "Café", "and cut between letters")
+			-- AND "||" IS ONE (2026-10-17, audit): a typed "|" comes back as
+			-- two, and is never cut in half
+			assert(N.Length("a||b") == 3, "an escaped pipe is one letter")
+			assert(N.Clip(string.rep("a", 139) .. "||z", 140) == string.rep("a", 139) .. "||",
+				"a cut keeps both halves of it")
+			assert(N.Clip("ab||", 2) == "ab", "or neither")
 			local long = string.rep("word ", 60)
 			N.SetNote("Trilly Lightbolt", long)
 			assert(N.Length(N.Get("Trilly Lightbolt").note) <= 140, "a note written longer is cut to the limit")
@@ -1287,6 +1623,20 @@ if ok then
 			local card = BT.Find.Cards()[1]
 			assert(card and card.key == "Beeb Lighthammer", "the card holds the match")
 			assert(card.edit == nil, "and carries no button: the row itself is the editor")
+			-- THE GUILD, WHEN IT IS WHY THEY ARE HERE (Josh 2026-10-18, on
+			-- "kitten"): found by Discord Kittens, the card says so; found by
+			-- name, it does not
+			BT.DB.Note(BT.db, "Brit Magoo", nil, { guid = "Player-70-0000FFFE", class = "MAGE", level = 20,
+				guild = "Discord Kittens" })
+			BT.Find.Search("kitten")
+			local byGuild = BT.Find.Cards()[1]
+			assert(byGuild.key == "Brit Magoo" and byGuild.level:GetText():find("<Discord Kittens>", 1, true),
+				"a guild match shows the guild: " .. tostring(byGuild.level:GetText()))
+			BT.Find.Search("brit")
+			assert(BT.Find.Cards()[1].key == "Brit Magoo" and not BT.Find.Cards()[1].level:GetText():find("<", 1, true),
+				"a name match does not")
+			BT.Find.Search("lighthammer")
+			card = BT.Find.Cards()[1]
 
 			-- closed, it shows only the tags they carry
 			local closedHeight = card:GetHeight()
@@ -1326,6 +1676,52 @@ if ok then
 			assert(card.note:GetText() == '"held the cave pull on his own"',
 				"shown as a quotation rather than behind a label")
 			assert(not card.noteMark:IsShown(), "the gold bar is gone")
+		end },
+		{ "someone found through the census shows the Ledger's own row", function()
+			-- THE LEDGER'S OWN ROW (2026-10-17, audit): noted from a chat
+			-- name, then filed in a guild by the census; found by the guild,
+			-- the card drew the census's row, and leaving its empty note box
+			-- saved "" over the note
+			local N, key = BT.Notes, "Chatty Namedonly"
+			N.SetNote(key, "owes me three gold", { name = key })
+			assert(N.Get(key) and N.Get(key).guild == nil, "the Ledger's row has no guild")
+			BT.DB.Note(BT.db, key, nil, { class = "WARRIOR", guild = "Nightwatchers Club" })
+			BT.Find.Select(nil)
+			BT.Find.Search("nightwatchers")
+			local results = BT.Find.Results()
+			assert(#results == 1 and results[1].key == key and results[1].p == N.Get(key),
+				"found by the census's guild, drawn from the Ledger's row")
+			local card = BT.Find.Cards()[1]
+			assert(card.note:GetText() == '"owes me three gold"', "the closed card shows the note: "
+				.. tostring(card.note:GetText()))
+			card:GetScript("OnClick")(card)
+			local box = BT.Find.CardNoteBox(card)
+			box.GetText = nil -- the test before this one answered for it
+			assert(box:IsShown() and box:GetText() == "owes me three gold", "the open card's box holds the note: "
+				.. tostring(box:GetText()))
+			box:GetScript("OnEditFocusGained")(box)
+			box:GetScript("OnEditFocusLost")(box)
+			assert(N.Get(key) and N.Get(key).note == "owes me three gold", "leaving the box keeps the note")
+			-- AS IT WOULD BE KEPT (2026-10-17, audit): a space at the end is
+			-- not a new note, and does not take your name and today's date
+			N.Get(key).noted, N.Get(key).notedBy = 1000, "Beeb Magus"
+			box:SetText("owes me three gold  ")
+			box:GetScript("OnEnterPressed")(box)
+			assert(N.Get(key).noted == 1000 and N.Get(key).notedBy == "Beeb Magus",
+				"a trailing space is not a change")
+			-- a tag clicked on the card is drawn on it
+			local troll
+			for _, pill in ipairs(card.pills) do
+				if pill.tagKey == "troll" then troll = pill end
+			end
+			troll:GetScript("OnClick")(troll)
+			assert(N.Get(key).tags.troll and BT.Find.Results()[1].p.tags.troll and troll.bg:IsShown(),
+				"a tag clicked is lit on the card")
+			troll:GetScript("OnClick")(troll)
+			N.SetNote(key, "")
+			assert(N.Get(key) == nil, "and the row goes when it holds nothing")
+			BT.Find.Select(nil)
+			BT.Find.Search("")
 		end },
 		{ "the window keeps up on its own", function()
 			-- the Ledger's search is the Find tab of its window (2026-10-04)
@@ -1457,10 +1853,10 @@ if ok then
 			BT.Window.Show()
 			BT.Window.Refresh()
 			assert(fp.enable:IsOn() and fp.enableWord:GetText() == "On", "opened again and refreshed, it says on")
-			-- THE JOURNALS: a line in their keeper's voice, the name under it
+			-- THE JOURNALS: no keeper's line ("The RP is a bit too cheesy I think")
 			BT.Window.SetView("ledger")
 			local lp = BT.Window.Panel("ledger")
-			assert(lp.quote and lp.quote.by:GetText() == "- Lord Jorach Ravenholdt, Alterac Mountains", "the Ledger's keeper's line")
+			assert(lp.quote == nil and BT.Feature("ledger").quote == nil, "no keeper's line on the Ledger's page")
 			local lfields, buttons = {}, {}
 			for _, r in ipairs(lp.rows) do
 				if r.spec and r.spec.field then
@@ -1476,12 +1872,27 @@ if ok then
 			assert(lfields.census and lfields.tooltip and lfields.ledgerGroups and lfields.ledgerDuels,
 				"its parts: recording everyone you see, notes on tooltips, groups, duels")
 			assert(#buttons == 2, "and two ways in: Charts and Find people")
+			-- THE CHARTS ARE THE CENSUS'S (2026-10-17, audit): with it off,
+			-- Charts is dimmed and its button off; Find people is not
+			local charts, find
+			for _, r in ipairs(buttons) do
+				if r.spec.label == "Charts" then charts = r else find = r end
+			end
+			local censusWas = BT.Switched("census")
+			BT.SetEnabled("census", false)
+			BT.Window.SyncPage()
+			assert(charts._alpha < 1 and charts.go:IsEnabled() == false,
+				"without the census, Charts is dimmed and cannot be pressed")
+			assert(find._alpha == 1 and find.go:IsEnabled(), "and Find people still can")
+			BT.SetEnabled("census", true)
+			BT.Window.SyncPage()
+			assert(charts._alpha == 1 and charts.go:IsEnabled(), "with it on, Charts is back")
+			BT.SetEnabled("census", censusWas)
+			BT.Window.SyncPage()
 			BT.Window.SetView("expedition")
 			local ep = BT.Window.Panel("expedition")
-			assert(ep.quote and ep.quote.by:GetText() == "- Hemet Nesingwary, Stranglethorn", "the Expedition's keeper's line")
-			-- the card's line is the first rank's, so the two never drift apart
-			assert(BT.Feature("expedition").quote == BT.Expedition.QUOTES[1], "the card says what Hemet says to a Greenhorn")
-			assert(BT.Feature("ledger").quote == BT.LedgerRanks.QUOTES[1], "and the Ledger's what Jorach says to a Fledgling")
+			assert(ep.quote == nil and BT.Feature("expedition").quote == nil, "nor on the Expedition's")
+			assert(BT.Expedition.QUOTES == nil and BT.LedgerRanks.QUOTES == nil, "and no line for each rank")
 			-- EIGHT BUTTONS AT 92 IN A COLUMN 570 WIDE hung the last one off the
 			-- window; the rail has to hold every tab above Testing at its foot
 			local fits, reach, room = BT.Window.RailFits()
@@ -1576,6 +1987,13 @@ if ok then
 			assert(line.frame:IsShown() and line.text:GetText():find("Fine Print", 1, true),
 				"and the Ledger's its commendation, its row back with the Dock: " .. tostring(line.text:GetText()))
 			assert(BT.Notice.Saying(exp) and exp.noticeClick == nil, "with nothing to open for a made-up one")
+			-- THE BAR PARTS ITS PIECES AS THE ROW DOES (2026-10-17, audit): by
+			-- the middle dot, not by two spaces
+			local bar = BT.Notice.Bar({ colour = { 1, 1, 1 }, book = "Ledger" },
+				{ name = "Fine Print", kind = "commendation", points = 10 })
+			local barSaid = bar.text:GetText():gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+			assert(barSaid == "Fine Print · Ledger commendation · +10", "the bar's words: " .. barSaid)
+			bar:Hide()
 			-- A NOTICE STILL LIGHTS THE LINE (2026-10-05, audit): a slim line
 			-- has no band, so a wash of its colour while the notice is said
 			assert(exp.frame.beebsFlash and exp.frame.beebsFlash:IsShown(), "a notice lights the slim line")
@@ -1585,18 +2003,17 @@ if ok then
 			_G.C_Timer.After = hadAfter
 			assert(not BT.Notice.Saying(exp) and exp.text:GetText():find("Expedition", 1, true)
 				and exp.eta:GetText():find("pts", 1, true), "and the line goes back: " .. tostring(exp.text:GetText()))
-			-- RANK TOASTS: each journal's rank, as if just reached, with its
-			-- keeper's word under it
+			-- RANK TOASTS: each journal's rank, as if just reached, with no
+			-- keeper's word under it (Josh 2026-10-18)
 			assert(tbody.rankToastButton, "a button shows the rank toasts")
 			click(tbody.rankToastButton)
 			local toastFrame = BT.ExpeditionToast.Frame()
 			assert(toastFrame and toastFrame:IsShown() and toastFrame.spec
-				and toastFrame.spec.head == "Expedition rank" and toastFrame.say:IsShown()
-				and toastFrame.say.quote:GetText() == BT.Expedition.QUOTES[BT.Expedition.Rank((BT.Expedition.Score()))],
-				"and the Expedition's toast is up, with Hemet's line for the rank")
+				and toastFrame.spec.head == "Expedition rank" and toastFrame.say == nil and toastFrame.spec.quote == nil,
+				"and the Expedition's toast is up, with no keeper's line")
 			local queued = BT.ExpeditionToast.queue[1]
-			assert(queued and queued.head == "Ledger rank" and queued.by == "Lord Jorach Ravenholdt, Alterac Mountains",
-				"and the Ledger's after it, with Jorach's")
+			assert(queued and queued.head == "Ledger rank" and queued.quote == nil and queued.by == nil,
+				"and the Ledger's after it, with none either")
 			-- THE WHOLE NAME (Josh 2026-09-28): the milestone above, the name
 			-- below, made smaller to fit, and on two lines past the smallest
 			local TT = BT.ExpeditionToast
@@ -1753,6 +2170,16 @@ if ok then
 				assert(a:IsShown() and a.heads[1].text:GetText() == "ENTRIES" and a.rail.rows[2].label:GetText() == "Entries"
 					and a.strip.rungs[10].name:GetText() == "Eye of Ravenholdt", "the commendations, under the ten ranks")
 				assert(a.tally:GetText():find("^%d+ of 32 earned$"), "thirty-two of them: " .. tostring(a.tally:GetText()))
+				-- one point is "1 point" (2026-10-17, audit)
+				local realScore = L.Score
+				L.Score = function()
+					local t, k, c = realScore()
+					return t, k, c, 1, 0
+				end
+				BT.CensusWindow.Show("comm")
+				L.Score = realScore
+				assert(a.heads[1].count:GetText() == "1 point", "the entries' tally: " .. tostring(a.heads[1].count:GetText()))
+				BT.CensusWindow.Show("comm")
 				cw.rank:GetScript("OnClick")(cw.rank)
 				assert(BT.CensusWindow.Tab() == "comm", "the rank box opens them")
 				-- the Ledger's line in the dock: your rank and points, a click the window
@@ -1773,8 +2200,17 @@ if ok then
 			-- at the end with what was counted
 			local wasSlice = BT.Stats.JOB_SLICE
 			BT.Stats.JOB_SLICE = 1
+			-- COUNTED ON OPENING (2026-10-17, audit): the window's own count
+			-- waits ten seconds after opening, not two
+			local wasTime, clock = _G.GetTime, 2
+			_G.GetTime = function() return clock end
+			BT.CensusWindow.drawnTime = 0
+			assert(BT.CensusWindow.Tick() == false and not (BT.CensusWindow.Counter()
+				and BT.CensusWindow.Counter():GetScript("OnUpdate")), "two seconds after opening, no second count")
+			clock = 11
 			assert(BT.CensusWindow.Tick() == true and refreshed == 0,
 				"someone new in the book: the counting begins, nothing drawn yet")
+			_G.GetTime = wasTime
 			local counter, frames = BT.CensusWindow.Counter(), 0
 			while counter:GetScript("OnUpdate") and frames < 10000 do
 				counter:GetScript("OnUpdate")(counter)
@@ -1787,6 +2223,13 @@ if ok then
 			BT.DB.Note(BT.db, "Seen Again", "Whitemane", { class = "MAGE" }, os.time())
 			BT.CensusWindow.drawnTime = nil
 			assert(BT.CensusWindow.Tick() == true and counter:GetScript("OnUpdate"), "another count begins")
+			-- ONE COUNT AT A TIME (2026-10-17, audit): a tick while it counts
+			-- leaves it to finish
+			local going = counter:GetScript("OnUpdate")
+			BT.DB.Note(BT.db, "Seen Thrice", "Whitemane", { class = "MAGE" }, os.time())
+			BT.CensusWindow.drawnTime = nil
+			assert(BT.CensusWindow.Tick() == false and counter:GetScript("OnUpdate") == going,
+				"a count still going is not begun again")
 			local cw = BT.CensusWindow.Frame()
 			cw:Hide()
 			cw:GetScript("OnHide")(cw)
@@ -1841,6 +2284,14 @@ if ok then
 			view.rows[1]:GetScript("OnClick")(view.rows[1])
 			view.rows[1]:GetScript("OnClick")(view.rows[1])
 			assert(view.pick == nil, "clicking the picked bar again clears it too")
+			-- A TAG SINCE DELETED IS NO FILTER (2026-10-17, audit): it stayed
+			-- as a chip named by its key over an empty chart
+			local gone = BT.AddTag("Soon Gone")
+			view.pick = { mode = "tag", key = gone.key }
+			assert(BT.Census.Filter(view).pick, "a pick on a tag that exists is kept")
+			BT.RemoveTag(gone.key)
+			assert(BT.Census.Filter(view).pick == nil and view.pick == nil and #BT.Census.Chips(view) == 0,
+				"one on a tag deleted since is let go")
 			view.seenButtons.today:GetScript("OnClick")(view.seenButtons.today)
 			assert(view.seen == "today" and view.census.seen == "today", "seen today narrows the charts")
 			assert(BT.Census.Filter(view).seen == "today", "and the window's own counting with them")
@@ -1918,6 +2369,20 @@ if ok then
 				"a click on Race while it counts leaves the count running")
 			assert(view.mode == "race" and view.modeButtons.race.pressed and not view.modeButtons.class.pressed,
 				"and the chart picked is the one it will draw")
+			-- ONE COUNT AT A TIME (2026-10-17, audit): the window's recount
+			-- waits for this one too, and closing the window stops it
+			BT.DB.Note(BT.db, "Seen Midcount", "Whitemane", { class = "MAGE" }, os.time())
+			BT.CensusWindow.drawnTime = nil
+			local own = BT.CensusWindow.Counter()
+			assert(BT.CensusWindow.Tick() == false and not (own and own:GetScript("OnUpdate")),
+				"a tick while the charts count begins no second count")
+			local shut = BT.CensusWindow.Frame()
+			shut:Hide()
+			shut:GetScript("OnHide")(shut)
+			assert(BT.Census.Runner():GetScript("OnUpdate") == nil and not view.counting,
+				"closing the window stops the charts' count")
+			BT.CensusWindow.Show("charts")
+			assert(view.counting and BT.Census.Runner():GetScript("OnUpdate"), "and opening it counts afresh")
 			local runner, turns = BT.Census.Runner(), 0
 			while runner:GetScript("OnUpdate") and turns < 10000 do
 				runner:GetScript("OnUpdate")(runner)
@@ -2107,11 +2572,11 @@ if ok then
 			-- a feature that is off shows its switch above its dimmed rows
 			local hadExp = BT.FeatureOn("expedition")
 			BT.SetFeature("expedition", true)
-			Win.Search("hemet")
-			assert(row("Rank toasts") and not row("Nesingwary's Expedition"), "on, the part alone")
+			Win.Search("click its line")
+			assert(row("Journal") and not row("Nesingwary's Expedition"), "on, the part alone")
 			BT.SetFeature("expedition", false)
-			Win.Search("hemet")
-			assert(row("Nesingwary's Expedition") and row("Rank toasts")._alpha < 1,
+			Win.Search("click its line")
+			assert(row("Nesingwary's Expedition") and row("Journal")._alpha < 1,
 				"off, the feature's switch above the dimmed part")
 			BT.SetFeature("expedition", hadExp)
 			-- the line every feature's switch shares finds nothing on its own
@@ -2634,7 +3099,7 @@ if ok then
 				NumLines = function() return #lines end,
 				GetName = function() return "LateTip" end,
 				GetWidth = function() return 220 end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 8 do
 				_G["LateTipTextLeft" .. i] = _G.CreateFrame("FontString")
 				_G["LateTipTextRight" .. i] = _G.CreateFrame("FontString")
@@ -2661,7 +3126,7 @@ if ok then
 			local keepDb, keepScope, keepBoot = BT.db, BT.scope, BT.boot
 			local said, realPrint = {}, _G.print
 			_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
-			BT.bakedTaken, BT.foldedOnLoad = 2592, 14
+			BT.slimmedOnLoad, BT.foldedOnLoad = 2592, 14
 			BT.boot = BT.boot or {}
 			BT.boot.boundCount, BT.boot.total, BT.boot.type = 0, 800, "table"
 			-- the core's login, which runs the census's after it (Core/Boot.lua)
@@ -2672,17 +3137,19 @@ if ok then
 			local ranCensus = false
 			local world = BT.Collect.World
 			BT.Collect.World = function(...) ranCensus = true return world(...) end
-			pcall(handler)
+			-- (a login, as the client sends it: initial, not a reload)
+			local ran, why = pcall(handler, nil, "PLAYER_ENTERING_WORLD", true, false)
 			BT.Collect.World = world
-			assert(ranCensus, "the census's share of the loading screen ran after the core's")
 			_G.print = realPrint
+			assert(ran, "the login runs without an error: " .. tostring(why))
+			assert(ranCensus, "the census's share of the loading screen ran after the core's")
 			assert(#said == 0, "nothing was printed at login: " .. table.concat(said, " | "))
 			-- but the facts survived for the command that reports them
-			assert(BT.bakedTaken == 2592 and BT.foldedOnLoad == 14,
+			assert(BT.slimmedOnLoad == 2592 and BT.foldedOnLoad == 14,
 				"and What loaded can still say what happened")
 			-- the login path binds a book; put back the one the tests use
 			BT.db, BT.scope, BT.boot = keepDb, keepScope, keepBoot
-			BT.bakedTaken, BT.foldedOnLoad = nil, nil
+			BT.slimmedOnLoad, BT.foldedOnLoad = nil, nil
 		end },
 		{ "undressing gives back every change, not only the first", function()
 			-- EVERY KIND OF CHANGE KEPT ON ITS OWN (Josh 2026-09-30, review)
@@ -2760,6 +3227,14 @@ if ok then
 			assert(events.UNIT_QUEST_LOG_CHANGED == "player",
 				"but the per-unit one is filtered to you: "
 					.. tostring(events.UNIT_QUEST_LOG_CHANGED))
+			-- A QUEST PICKED TO FOLLOW ON THE MAP (2026-10-17, audit) moves the
+			-- band and the dot now, through the same queue as the rest
+			assert(events.SUPER_TRACKING_CHANGED == "all", "it hears a quest picked to follow")
+			local wasQueue, queued = mod.Queue, 0
+			mod.Queue = function() queued = queued + 1 end
+			mod.events:GetScript("OnEvent")(mod.events, "SUPER_TRACKING_CHANGED")
+			mod.Queue = wasQueue
+			assert(queued == 1, "and the list is drawn again for it")
 		end },
 		{ "the guild roster is walked once a minute, not once an event", function()
 			local walked = 0
@@ -2798,6 +3273,9 @@ if ok then
 				if i == 1 then return "Dun Morogh", 0, nil, true, nil, nil, nil, nil end
 				return "A Favor for Evershine", 8, nil, false, nil, nil, nil, 1234
 			end
+			-- the log changed, as QUEST_LOG_UPDATE says (the tooltip reads it
+			-- once until it does)
+			BT.GetModule("tooltips").ForgetQuests()
 
 			-- the tooltip as the client leaves it, quest lines and all
 			local lines = {
@@ -2817,7 +3295,7 @@ if ok then
 				NumLines = function() return #lines end,
 				GetName = function() return "MobTip" end,
 				GetWidth = function() return 220 end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 10 do
 				local fs = _G.CreateFrame("FontString")
 				fs.GetText = function() return lines[i] end
@@ -2942,7 +3420,7 @@ if ok then
 						lines[#lines + 1] = " "
 					end
 				end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 8 do
 				local fs = _G.CreateFrame("FontString")
 				fs.GetText = function() return lines[i] end
@@ -2981,7 +3459,7 @@ if ok then
 			local tip = setmetatable({
 				NumLines = function() return #lines end,
 				GetName = function() return "BlankTip" end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 4 do
 				local fs = _G.CreateFrame("FontString")
 				fs.GetText = function() return lines[i] end
@@ -3301,6 +3779,17 @@ if ok then
 			clock = 570
 			assert(mod.TickClocks() and clockRow.text._text == "0:55 left" and clockRow.text._textColor[1] > 0.8,
 				"it counts down on its own, and turns red under a minute: " .. tostring(clockRow.text._text))
+			-- SCROLLED OUT OF SIGHT, IT GOES ON TICKING (2026-10-17, audit): a
+			-- row the list scrolled past is hidden, and the ticker kept running
+			-- only for rows in sight
+			clockRow:Hide()
+			clock = 572
+			assert(mod.TickClocks() and clockRow.text._text == "0:55 left",
+				"scrolled away, the clock keeps its ticker and its row is not written")
+			clockRow:Show()
+			mod.TickClocks()
+			assert(clockRow.text._text == "0:53 left", "scrolled back, it reads the time now: " .. tostring(clockRow.text._text))
+			clock = 570
 			-- THE CLOCK STOPS WITH THE LIST (Josh 2026-09-30, review): switched
 			-- off, nothing goes on writing to a list nobody can see
 			assert(mod.clockTicker, "a running clock has its ticker")
@@ -3398,6 +3887,15 @@ if ok then
 			-- touches textures and fonts only - never a point, a size or an
 			-- attribute - so nothing here can taint a button or break it in
 			-- combat.
+			local hadHook = _G.hooksecurefunc
+			_G.hooksecurefunc = function(obj, name, fn)
+				local orig = obj[name]
+				obj[name] = function(...)
+					local r = orig(...)
+					fn(...)
+					return r
+				end
+			end
 			local made = {}
 			for i = 1, 3 do
 				local b = _G.CreateFrame("CheckButton", "ActionButton" .. i, _G.UIParent)
@@ -3405,6 +3903,17 @@ if ok then
 				b.NormalTexture = b:CreateTexture(nil, "OVERLAY")
 				b.HotKey = b:CreateFontString(nil, "OVERLAY")
 				b.Name = b:CreateFontString(nil, "OVERLAY")
+				b.Count = b:CreateFontString(nil, "OVERLAY")
+				b.HotKey:SetTextColor(0.6, 0.6, 0.6)
+				b.Count:SetTextColor(1, 1, 1)
+				-- the green edge the client puts on an equipped item, hidden
+				-- until it does
+				b.Border = b:CreateTexture(nil, "OVERLAY")
+				b.Border.GetVertexColor = function(self)
+					local c = self._vertex or { 1, 1, 1, 1 }
+					return c[1], c[2], c[3], c[4]
+				end
+				b.Border:Hide()
 				_G["ActionButton" .. i] = b
 				made[i] = b
 			end
@@ -3435,6 +3944,27 @@ if ok then
 				"and sits inside our rim rather than over it")
 			assert(b.Name._alpha == 0, "macro names are off by default")
 			assert(b.HotKey._alpha == 1, "hotkeys are not")
+			assert(b.HotKey._textColor[1] == 0.55, "the hotkey in our quieter colour")
+
+			-- THE GREEN EDGE ON AN EQUIPPED ITEM (2026-10-17, audit): the
+			-- client's bevelled edge stays see-through, and a ring of ours in
+			-- its colour shows while the client shows it
+			local function equippedRing()
+				for _, t in ipairs({ b:GetRegions() }) do
+					if t._color and t._color[1] == 0 and t._color[2] == 1 and t._color[3] == 0 then
+						return t
+					end
+				end
+			end
+			assert(not equippedRing(), "no ring on an action that is not worn")
+			b.Border:SetVertexColor(0, 1.0, 0, 0.5)
+			b.Border:Show()
+			local ring = equippedRing()
+			assert(b.Border._alpha == 0 and ring and ring:IsShown() and ring._color[4] == 1,
+				"a trinket on the bar: the client's edge see-through, our green ring on")
+			b.Border:Hide()
+			assert(not ring:IsShown(), "and off again when the action is not worn")
+			b.Border:Show()
 
 			-- nothing that would taint a secure frame
 			assert(b._width == nil and b._height == nil, "it never resized the button")
@@ -3444,6 +3974,18 @@ if ok then
 			mod:OnDisable()
 			assert(b.NormalTexture._alpha == 1, "the gilt border comes back")
 			assert(b.icon._texCoord[1] == 0, "and the icon is whole again")
+			assert(b.Border._alpha == 1 and not ring:IsShown(), "the client's green edge, not ours")
+			assert(b.HotKey._textColor[1] == 0.6 and b.Count._textColor[1] == 1,
+				"and the hotkey and count in their own colours (2026-10-17, audit)")
+			-- a picture put back with the part of the file it showed, on any Lua
+			local pic = b:CreateTexture()
+			mod.RestoreTexture(pic, { file = "Interface\\Buttons\\UI-Quickslot2", coords = { 0.1, 0.1, 0.1, 0.9, 0.9, 0.1, 0.9, 0.9 } })
+			assert(pic._texture and pic._texCoord and pic._texCoord[1] == 0.1, "a file and its corners come back")
+			-- the hooks stay on the edge: the client showing it again, with the
+			-- module off, leaves ours down
+			b.Border:Show()
+			assert(not ring:IsShown(), "switched off, the client showing its edge brings no ring of ours")
+			_G.hooksecurefunc = hadHook
 			for i = 1, 3 do
 				_G["ActionButton" .. i] = nil
 			end
@@ -3519,6 +4061,25 @@ if ok then
 			lit:GetScript("OnUpdate")(lit)
 			assert(lit.wash._shown == false, "and off when it leaves")
 			assert(menu._strata == "FULLSCREEN_DIALOG", "above anything of ours in the middle of the screen")
+			-- IN WORDS, NOT THE ERROR (2026-10-17, audit): a button that will
+			-- not be redrawn is said plainly, and the error goes to the log
+			local wasDressButton, wasPrint, said = mod.DressButton, BT.Util.Print, {}
+			local wasFailed = mod.failed
+			mod.failed = nil
+			mod.DressButton = function() error("GameMenu.lua:999: attempt to index a nil value", 0) end
+			BT.Util.Print = function(text) said[#said + 1] = text end
+			mod.DressNow(menu)
+			mod.DressButton, BT.Util.Print = wasDressButton, wasPrint
+			local logged = false
+			for _, e in ipairs(BT.moduleErrors or {}) do
+				if e:find("gamemenu: ", 1, true) and e:find("attempt to index", 1, true) then
+					logged = true
+				end
+			end
+			assert(#said == 1 and said[1]:find("^Game menu: ") and not said[1]:find("attempt", 1, true),
+				"one plain line in chat: " .. tostring(said[1]))
+			assert(logged, "and the error in the log What loaded prints")
+			mod.failed = wasFailed
 			-- switched off: the game's own art back
 			BT.SetEnabled("gamemenu", false)
 			mod:OnDisable()
@@ -3610,13 +4171,19 @@ if ok then
 			assert(mm.Echo(), "a zoom straight after the layout is its own echo")
 			now = now + 1
 			assert(not mm.Echo(), "a zoom a second later is the wheel")
+			-- NOT THE ZOOM (2026-10-17, audit): a wheel step changes nothing
+			-- the layout owns, so the zoom event is not heard at all
+			local heard = mm.Watch()
+			assert(not (heard._events or {}).MINIMAP_UPDATE_ZOOM, "the zoom event is not registered")
 			-- THE BLACK MAP (Josh 2026-09-28): a width a fraction off is not a
 			-- new size, and the zoom steps to redraw at most once a second
 			local map = _G.Minimap
 			local steps = 0
 			local hadGet, hadSet = map.GetZoom, map.SetZoom
+			local quiet = true
 			map.GetZoom = function() return 2 end
-			map.SetZoom = function() steps = steps + 1 end
+			-- (2026-10-17, audit) each step already counts as the map's echo
+			map.SetZoom = function() steps = steps + 1; quiet = quiet and mm.Echo() end
 			local section = mm.Build()
 			section:SetWidth(208)
 			mm.Fit()
@@ -3633,6 +4200,7 @@ if ok then
 			assert(steps == was + 2, "but not again within the second")
 			now = now + 1.5
 			assert(mm.Redraw() and steps == was + 4, "and a second later it may")
+			assert(quiet, "and each step was heard as the layout's own")
 			map.GetZoom, map.SetZoom = hadGet, hadSet
 			_G.GetTime = wasTime
 			-- the resource display ignores settings that are not nameplates'
@@ -3665,6 +4233,32 @@ if ok then
 			assert(R.ClassToken("WARRIOR") == "WARRIOR", "a token is kept")
 			assert(R.ClassToken("Mage") == "MAGE", "words become the token")
 			assert(R.ClassToken("Gnome") == nil and R.ClassToken(1234) == nil, "and anything else is left out")
+		end },
+		{ "an offline friend and a letter's sender are listed, not seen", function()
+			-- (2026-10-17, audit: both were "seen just now" every minute)
+			local R, DB = BT.Rosters, BT.DB
+			local wasCollecting, wasFresh = BT.Collecting, BT.Collect.Fresh
+			local wasFriend = _G.C_FriendList.GetFriendInfoByIndex
+			BT.Collecting = function() return true end
+			BT.Collect.Fresh = function() return true end
+			local friend = { name = "Oswin Fairbough", className = "Druid", area = "Darnassus", level = 12, connected = false }
+			_G.C_FriendList.GetFriendInfoByIndex = function() return friend end
+			DB.Note(BT.db, "Oswin Fairbough", nil, { zone = "Ashenvale" }, 1000)
+			local p = DB.Get(BT.db, "Oswin Fairbough")
+			local seen = p.seen
+			R.Friends()
+			assert(p.last == 1000 and p.seen == seen, "an offline friend keeps the last sighting: " .. tostring(p.last))
+			assert(p.zone == "Ashenvale" and p.level == 12, "and their old zone, though the list's level is taken")
+			friend.connected = true
+			R.Friends()
+			assert(p.last > 1000 and p.seen == seen + 1 and p.zone == "Darnassus", "an online friend is seen, where they are")
+			DB.Note(BT.db, "Gorsan Quakehammer", nil, {}, 1000)
+			local g = DB.Get(BT.db, "Gorsan Quakehammer")
+			seen = g.seen
+			R.Mail()
+			assert(g.last == 1000 and g.seen == seen, "a letter in the inbox is not a sighting of its sender")
+			BT.Collecting, BT.Collect.Fresh = wasCollecting, wasFresh
+			_G.C_FriendList.GetFriendInfoByIndex = wasFriend
 		end },
 		{ "a loading screen is not a login", function()
 			-- (the audit: every zone-in re-ran the whole login - two walks of
@@ -3858,7 +4452,7 @@ if ok then
 				NumLines = function() return #lines end,
 				GetName = function() return "DupTip" end,
 				GetWidth = function() return 220 end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 8 do
 				local fs = _G.CreateFrame("FontString")
 				fs.GetText = function() return lines[i] end
@@ -4032,9 +4626,12 @@ if ok then
 		{ "the unit probe writes down what the client says, and never a secret", function()
 			-- WHAT THIS CLIENT WILL TELL A UNIT FRAME (Josh 2026-09-23)
 			BeebModDB.unitProbe = nil
-			local wasHealth = _G.UnitHealth
+			local wasHealth, wasThreat = _G.UnitHealth, _G.UnitDetailedThreatSituation
 			_G.secretMeasurements = true
 			_G.UnitHealth = function() return _G.SECRET_WIDTH end
+			-- COUNTED AS THEY CAME (2026-10-17, audit): a nil first is still
+			-- followed by the rest
+			_G.UnitDetailedThreatSituation = function() return nil, 2, 55 end
 			-- its record, as the Testing page's Record button runs it
 			local probe
 			for _, r in ipairs(BT.Records()) do
@@ -4044,20 +4641,22 @@ if ok then
 			assert(probe.run() > 20, "and says how many lines it wrote")
 			local runs = BeebModDB.unitProbe
 			assert(runs and #runs == 1 and #runs[1].lines > 20, "a run of lines: " .. tostring(runs and #runs[1].lines))
-			local sawSecret, sawInventory = false, false
+			local sawSecret, sawInventory, sawNil = false, false, false
 			for _, line in ipairs(runs[1].lines) do
-				assert(type(line) == "string" and not line:find(tostring(_G.SECRET_WIDTH), 1, true),
+				assert(type(line) == "string" and not line:find(tostring(reveal(_G.SECRET_WIDTH)), 1, true),
 					"no secret is ever written out: " .. tostring(line))
 				if line:find("UnitHealth(player) = SECRET(number)", 1, true) then sawSecret = true end
 				if line:find("^globals %(") then sawInventory = true end
+				if line:find("UnitDetailedThreatSituation(player,player) = nil, 2, 55", 1, true) then sawNil = true end
 				-- a part that throws is written down as a line, not raised: the
 				-- probe must still say it failed here rather than in the game
 				assert(not line:find("failed: ", 1, true), "no part of the probe failed: " .. line)
 			end
 			assert(sawSecret, "a secret is named as one")
 			assert(sawInventory, "and the inventory is taken out of combat")
+			assert(sawNil, "every answer of a call is written, a nil among them")
 			_G.secretMeasurements = false
-			_G.UnitHealth = wasHealth
+			_G.UnitHealth, _G.UnitDetailedThreatSituation = wasHealth, wasThreat
 			BT.ClearRecords()
 			assert(BeebModDB.unitProbe == nil, "and Clear takes it out")
 		end },
@@ -4065,12 +4664,14 @@ if ok then
 			-- STYLE A IN THE CORNERS (Josh 2026-09-23)
 			local mod, F = BT.GetModule("unitframes"), BT.UnitFrames
 			assert(mod and F, "the module and the unit button are loaded")
-			BT.moduleErrors = nil
+			-- (what was caught from here on, not the log wiped: a wiped log
+			-- still remembers each message, and would not write one again)
+			local mark = #caught
 			_G.PlayerFrame = _G.CreateFrame("Button", nil, _G.UIParent)
 			_G.TargetFrame = _G.CreateFrame("Button", nil, _G.UIParent)
 			BT.SetEnabled("unitframes", false)
 			BT.SetEnabled("unitframes", true)
-			assert(BT.moduleErrors == nil, "no module error: " .. table.concat(BT.moduleErrors or {}, " | "))
+			assert(#caught == mark, "no module error: " .. caughtSince(mark))
 
 			-- THE COLUMN BESIDE THE TARGET: its target level with it, the focus
 			-- under that, the two as tall as the target
@@ -4182,8 +4783,12 @@ if ok then
 			_G.CheckInteractDistance = function() askedNear = true return true end
 			answers = { [75] = false, [2973] = false, [2974] = false }
 			F.Paint(target, F.Source("target"))
-			assert(target._alpha == F.FAR_ALPHA and not askedNear and asked[1] == 75,
-				"past Auto Shot's reach a hunter's target is faded, Auto Shot asked first: " .. tostring(target._alpha))
+			local askedShot = false
+			for _, id in ipairs(asked) do
+				askedShot = askedShot or id == 75
+			end
+			assert(target._alpha == F.FAR_ALPHA and not askedNear and askedShot,
+				"past Auto Shot's reach a hunter's target is faded, Auto Shot asked: " .. tostring(target._alpha))
 			answers = { [75] = true, [2973] = false, [2974] = false }
 			F.Paint(target, F.Source("target"))
 			assert(target._alpha == 1, "within it, it is not")
@@ -4237,6 +4842,42 @@ if ok then
 			_G.CheckInteractDistance = function() return false end
 			mod.Tick()
 			assert(target._alpha == F.FAR_ALPHA, "a saved light fade is not read: " .. tostring(target._alpha))
+			-- THE TARGET'S TARGET TOO (2026-10-17, audit): a paint fades it, and
+			-- the tick skipped it, so its fade moved only when its unit did
+			do
+				local tot = mod.singles.targettarget
+				local totShown = tot._shown
+				tot:Show()
+				tot:SetAlpha(1)
+				mod.Tick()
+				assert(tot._alpha == F.FAR_ALPHA, "the target's target fades with the tick: " .. tostring(tot._alpha))
+				tot:SetAlpha(1)
+				tot._shown = totShown
+			end
+			-- TOO HIGH TO SAY IS RED (2026-10-17, audit): on the target frame as on
+			-- its plate, where it was white
+			do
+				local hadLevel = _G.UnitLevel
+				_G.UnitLevel = function(u) if u == "target" then return -1 end return 30 end
+				F.Paint(target, F.Source("target"))
+				assert(tostring(target.name._text):find("|cffff4a3d??", 1, true)
+					and F.LevelTag(F.Source("target")) == "|cffff4a3d??|r",
+					"a skull's level in the plate's red: " .. tostring(target.name._text))
+				_G.UnitLevel = hadLevel
+				F.Paint(target, F.Source("target"))
+			end
+			-- YOUR LEVEL COLOURS THEIRS (2026-10-17, audit): your level-up paints
+			-- the frames again; another's level is its own frame's to hear
+			do
+				local hadQueue, queued = mod.QueuePaint, 0
+				mod.QueuePaint = function() queued = queued + 1 end
+				local fireUF = mod.events:GetScript("OnEvent")
+				fireUF(mod.events, "UNIT_LEVEL", "player")
+				fireUF(mod.events, "UNIT_LEVEL", "party1")
+				assert(mod.events._events.UNIT_LEVEL == "player" and queued == 1,
+					"your level-up repaints the frames: " .. queued)
+				mod.QueuePaint = hadQueue
+			end
 			BT.settings.unitframes.fade = hadFade
 			_G.C_Spell, _G.CheckInteractDistance, _G.UnitInParty, _G.UnitClass = wasSpell, wasNear, wasParty, wasClass
 			F.Paint(target, F.Source("target"))
@@ -4437,6 +5078,15 @@ if ok then
 				assert(BeebModDB.castDump and BeebModDB.castDump.lines[1]:find('name="Fireball"', 1, true)
 					and BeebModDB.castDump.lines[1]:find("icon=135812", 1, true),
 					"what the game gave, kept for the next reload: " .. tostring(BeebModDB.castDump and BeebModDB.castDump.lines[1]))
+				-- A WORKING COPY'S RECORD (2026-10-17, audit): a released copy has no
+				-- Record button, so it writes none
+				do
+					local hadDev = BT.DEV
+					BT.DEV, F.castNotes, BeebModDB.castDump = false, {}, nil
+					F.PaintCast(t, F.Source("target"))
+					assert(BeebModDB.castDump == nil and next(F.castNotes), "a released copy keeps the cast record out of the saved file")
+					BT.DEV = hadDev
+				end
 				assert(t.cast.rim._alpha == 0, "a cast the game does not call important has no rim")
 				-- A CAST TO STOP (the same day: "highlights high priority casts that
 				-- should be interrupted"): the game's own word, by the spell's number
@@ -4675,6 +5325,22 @@ if ok then
 			assert(raidHolder.ghost._shown == false, "and the outline goes")
 			mod.PlaceHolder("raid")
 			assert(raidHolder._points.TOPLEFT.x == 300 and raidHolder._points.TOPLEFT.y == -80, "it comes back there")
+			-- IN THE HOLDER'S OWN UNITS (2026-10-17, audit): at a Size of 120% a
+			-- block let go with its top 700 pixels up a 768-tall screen is 68
+			-- pixels under the top, which is 57 of its own units - not the 185
+			-- it jumped down to
+			do
+				local hadTop, hadScale = _G.UIParent.GetTop, raidHolder.GetEffectiveScale
+				_G.UIParent.GetTop = function() return 768 end
+				raidHolder.GetEffectiveScale = function() return 1.2 end
+				cell:GetScript("OnDragStart")(cell)
+				raidHolder._left, raidHolder._top = 250, 700 / 1.2
+				cell:GetScript("OnDragStop")(cell)
+				local scaled = BT.settings.unitframes.pos.raid
+				assert(scaled.x == 250 and scaled.y == -57, "a scaled block is saved in its own units: " .. tostring(scaled.y))
+				assert(math.abs(768 + scaled.y * 1.2 - 700) < 1, "so it stays where it was let go")
+				_G.UIParent.GetTop, raidHolder.GetEffectiveScale = hadTop, hadScale
+			end
 			mod.ResetPlaces()
 			assert(BT.settings.unitframes.pos == nil, "reset forgets it")
 			assert(raidHolder._points.TOPLEFT.x == 24, "and puts the raid back where it started")
@@ -4731,6 +5397,10 @@ if ok then
 			assert(mod.SetScale(1.23) == 1.25, "to the nearest step")
 			assert(mod.singles.target._scale == 1.25 and mod.headers[1]._scale == 1.25, "on the frames and the blocks alike")
 			assert(mod.SetScale(3) == mod.SCALE_MAX, "and no larger than it goes")
+			-- AS SMALL AS THE SIZE GOES (2026-10-17, audit): 70%, where the frames
+			-- stopped at 80% while the dock and the buffs went on down
+			assert(math.abs(mod.SetScale(0.7) - 0.7) < 1e-9 and math.abs(mod.singles.target._scale - 0.7) < 1e-9,
+				"the frames follow the Size down to 70%: " .. tostring(mod.singles.target._scale))
 			mod.SetScale(1)
 			-- YOUR CAST BAR, from your own cast, plainly
 			local wasInfo2, wasTime = _G.UnitCastingInfo, _G.GetTime
@@ -4764,7 +5434,7 @@ if ok then
 			local note = BT.Widgets.Note(_G.UIParent, string.rep("word ", 40))
 			assert(note:Measure() >= 24, "a long note measures more than one line: " .. note:Measure())
 			assert(BT.Window.TabFor("unitframes") == "unitframes", "the Unit frames feature's own page")
-			assert(BT.moduleErrors == nil, "and no module error: " .. table.concat(BT.moduleErrors or {}, " | "))
+			assert(#caught == mark, "and no module error: " .. caughtSince(mark))
 		end },
 		{ "a raid marker shows on the frames, a secret one drawn by the client", function()
 			-- (Josh 2026-09-27: "Target markers don't seem to be showing on these
@@ -4841,36 +5511,144 @@ if ok then
 			BT.Window.SetView("settings")
 			assert(BT.Settings.Appearance().type == nil, "no font picker on General")
 		end },
-		{ "the first login asks which features: five cards, a switch each", function()
+		{ "the first login asks which features: a list, a switch each, and the one you click in pictures", function()
 			-- WHICH FEATURES DO YOU WANT? (Josh 2026-09-27: "On startup we should
-			-- ask users which modules they want to enable")
+			-- ask users which modules they want to enable"), as a list and a
+			-- slideshow since 2026-10-18 ("For the start screen, I like option C")
 			local Wl = BT.Welcome
+			local ART = "Interface\\AddOns\\BeebMod\\Art\\Features\\"
 			local wasFeatures, wasAsked = {}, BT.settings.featuresAsked
 			for k, v in pairs(BT.settings.features or {}) do wasFeatures[k] = v end
 			BT.settings.featuresAsked = nil
+			Wl.selected = nil
 			assert(Wl.ShouldAsk(), "not asked yet: asked")
 			local f = Wl.Show()
-			assert(#f.cards == 5 and f:IsShown(), "five cards")
+			local d = f.detail
+			assert(#f.rows == 5 and f:IsShown(), "a row for each feature")
 			-- UNDER THE RAIL'S HEADINGS (the settings canvas, 2026-10-04)
 			assert(#f.heads == 2 and f.heads[1]:GetText() == "INTERFACE" and f.heads[2]:GetText() == "JOURNALS",
 				"under two headings")
 			for i, feat in ipairs(BT.FEATURES) do
-				assert(f.cards[i].key == feat.key and f.cards[i].switch:IsOn(),
-					"every card starts as its feature is: " .. feat.key)
-				assert(f.cards[i].picture and f.cards[i].line:GetText() == feat.line, "with its picture and its line")
-				assert(feat.art and f.cards[i].picture.name._shown == false, "the screenshot, not the stand-in: " .. feat.key)
+				local row, about = f.rows[i], Wl.ABOUT[feat.key]
+				assert(row.key == feat.key and row.switch:IsOn(), "every row starts as its feature is: " .. feat.key)
+				assert(about and row.title:GetText() == feat.title and row.tag:GetText() == about.tag,
+					"with its name and a few words on it: " .. feat.key)
+				-- no "Off:" line ("It is self explainatory what will happen if
+				-- you turn off a module")
+				assert(about.line and #about.adds == 6 and about.off == nil,
+					"a line and six things it adds: " .. feat.key)
+				-- ONLY FILES THAT ARE THERE: the client cannot say whether one is
+				assert(#about.slides >= 1, "at least one picture: " .. feat.key)
+				for _, slide in ipairs(about.slides) do
+					-- a TGA, or a BLP (dock2, 2026-10-18)
+					local base = slide.file:gsub("^Interface\\AddOns\\BeebMod\\", ""):gsub("\\", "/")
+					local path = base .. ".tga"
+					local file = io.open(path, "rb")
+					if not file then
+						path = base .. ".blp"
+						file = io.open(path, "rb")
+					end
+					assert(file and slide.caption ~= "", "each picture is in the folder, with a caption: " .. path)
+					file:close()
+				end
 			end
-			-- a journal's line in its keeper's voice, the name under it
-			assert(f.cards[4].by and f.cards[4].by:GetText() == "- Lord Jorach Ravenholdt, Alterac Mountains"
-				and f.cards[5].by:GetText() == "- Hemet Nesingwary, Stranglethorn", "each journal's keeper named")
-			assert(f.cards[4].picture.art2 and f.cards[4].picture.art2._texture == BT.Feature("ledger").art2,
-				"the Ledger's card shows the Census's picture and the Ledger's side by side")
-			-- the unit frames off by their switch, the Expedition by a click on its card
-			f.cards[2].switch:GetScript("OnClick")(f.cards[2].switch)
-			f.cards[5]:GetScript("OnClick")(f.cards[5])
-			assert(Wl.picks.unitframes == false and Wl.picks.expedition == false, "a switch, or the card, picks")
+			-- NO KEEPERS' WORDS (Josh 2026-10-18: "still uses the ledger and
+			-- expedition quotes"): not one line on it is theirs
+			local function texts(fr, out)
+				for _, r in ipairs(rawget(fr, "_regions") or {}) do
+					if type(rawget(r, "_text")) == "string" then out[#out + 1] = r._text end
+				end
+				for _, c in ipairs(rawget(fr, "_children") or {}) do texts(c, out) end
+				return out
+			end
+			for _, t in ipairs(texts(f, {})) do
+				assert(not t:find("Ravenholdt, Alterac", 1, true) and not t:find("Nesingwary, Stranglethorn", 1, true),
+					"no keeper's line or name: " .. t)
+			end
+			-- the first shown: the Dock, with its picture and what it does
+			assert(Wl.selected == "dock" and d.title:GetText() == "Dock" and d.state:GetText() == "On"
+				and d.line:GetText() == Wl.ABOUT.dock.line and d.off == nil, "the Dock, shown first")
+			local adds = d.adds.items
+			assert(adds[6].text:GetText() == Wl.ABOUT.dock.adds[6]
+				and adds[2].text._points.TOPLEFT.x > adds[1].text._points.TOPLEFT.x
+				and adds[3].text._points.TOPLEFT.y < adds[1].text._points.TOPLEFT.y, "its six, two to a row")
+			assert(d.pic.art._texture == ART .. "dock1" and math.abs(d.pic.art._texCoord[2] - 455 / 512) < 1e-9,
+				"its picture: the left 455 of the 512")
+			assert(d.caption:GetText() == "The dock beside the game", "its caption under it")
+			-- THE EDGE OVER THE PICTURE (2026-10-17, audit): drawn above the art,
+			-- in the feature's colour
+			assert(d.pic.rim[1]._layer == "OVERLAY" and d.pic.rim[1]._color[1] == BT.Feature("dock").color[1],
+				"the picture's rim is on top of it, in its colour")
+			-- FOUR PICTURES (Josh's screenshots, 2026-10-18): the arrows and a dot each
+			assert(d.prev._shown and d.next._shown and d.dots[4]._shown and #Wl.ABOUT.dock.slides == 4,
+				"four pictures: the arrows and four dots")
+			assert(f.count:GetText() == "5 of 5 on", "how many are on")
+			-- A CLICK ON A ROW SHOWS IT; its switch is what picks it
+			local panels = BT.Pill.Panels()
+			assert(panels[f.rows[1]].edgeColour[1] == BT.Feature("dock").color[1]
+				and panels[f.rows[2]].edgeColour == BT.Widgets.HAIR, "the row shown wears its colour, the rest the quiet rim")
+			f.rows[4]:GetScript("OnClick")(f.rows[4])
+			assert(Wl.selected == "ledger" and d.title:GetText() == "Ravenholdt Ledger" and Wl.picks.ledger == true,
+				"a click on a row shows it, and leaves its switch alone")
+			assert(d.pic.art._texture == ART .. "ledger1" and d.caption:GetText() == "Your realm in charts",
+				"the Ledger's first picture is its charts")
+			assert(panels[f.rows[4]].edgeColour[1] == BT.Feature("ledger").color[1]
+				and panels[f.rows[1]].edgeColour == BT.Widgets.HAIR, "and the colour moves with it")
+			f.rows[2].switch:GetScript("OnClick")(f.rows[2].switch)
+			assert(Wl.picks.unitframes == false and Wl.selected == "ledger" and f.count:GetText() == "4 of 5 on",
+				"a switch picks, the Ledger stays shown, and the count follows")
+			-- A FEATURE THAT IS OFF: its picture faded and grey, its square grey
+			f.rows[2]:GetScript("OnClick")(f.rows[2])
+			assert(d.state:GetText() == "Off" and d.pic.art._alpha < 1 and d.pic.art._grey == true,
+				"Off: its picture faded and grey")
+			assert(f.rows[2].square._color[1] ~= BT.Feature("unitframes").color[1], "and its square grey")
+			f.rows[2].switch:GetScript("OnClick")(f.rows[2].switch)
+			assert(d.state:GetText() == "On" and d.pic.art._alpha == 1 and d.pic.art._grey == false,
+				"on again: the picture as it is")
+			-- THE SLIDESHOW: Unit frames' four, through the arrows and the dots
+			local slides = Wl.ABOUT.unitframes.slides
+			assert(d.dots[1]._width > d.dots[2]._width and d.dots[1].bar._color[1] == BT.Feature("unitframes").color[1],
+				"the current dot wider, in the feature's colour")
+			d.next:GetScript("OnClick")(d.next)
+			assert(Wl.SlideIndex("unitframes") == 2 and d.caption:GetText() == slides[2].caption
+				and d.pic.art._texture == ART .. "unitframes2" and d.dots[2]._width > d.dots[1]._width,
+				"the next arrow: the second")
+			for _ = 1, 3 do
+				d.next:GetScript("OnClick")(d.next)
+			end
+			assert(Wl.SlideIndex("unitframes") == 1 and d.caption:GetText() == slides[1].caption,
+				"and round to the first")
+			d.prev:GetScript("OnClick")(d.prev)
+			assert(Wl.SlideIndex("unitframes") == 4, "the arrow back, round to the last")
+			d.dots[1]:GetScript("OnClick")(d.dots[1])
+			assert(Wl.SlideIndex("unitframes") == 1 and d.pic.art._texture == ART .. "unitframes1",
+				"a dot goes to its picture")
+			-- each feature keeps its place
+			d.dots[2]:GetScript("OnClick")(d.dots[2])
+			f.rows[1]:GetScript("OnClick")(f.rows[1])
+			assert(d.caption:GetText() == "The dock beside the game", "the Dock, on its first picture")
+			f.rows[2]:GetScript("OnClick")(f.rows[2])
+			assert(d.caption:GetText() == slides[2].caption, "back on Unit frames, on the picture it was on")
+			-- ONE PICTURE: no arrows and no dots, and the caption stays
+			Wl.ABOUT.unitframes.slides = { slides[1] }
+			Wl.Paint()
+			assert(d.prev._shown == false and d.next._shown == false and d.dots[1]._shown == false
+				and d.dots[2]._shown == false and d.caption:GetText() == slides[1].caption,
+				"one picture: no arrows or dots, and its caption")
+			Wl.ABOUT.unitframes.slides = slides
+			Wl.Paint()
+			-- the unit frames off by their switch, the Expedition too, then Start
+			f.rows[2].switch:GetScript("OnClick")(f.rows[2].switch)
+			f.rows[5].switch:GetScript("OnClick")(f.rows[5].switch)
+			assert(Wl.picks.unitframes == false and Wl.picks.expedition == false and f.count:GetText() == "3 of 5 on",
+				"two switched off")
+			local said, realPrint = {}, _G.print
+			_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
 			f.start:GetScript("OnClick")(f.start)
+			_G.print = realPrint
 			assert(not f:IsShown() and not Wl.ShouldAsk(), "Start closes it, and it is not asked again")
+			assert(said[#said] and said[#said]:find("Enable or disable modules in the settings panel.", 1, true),
+				"and says where to change it: " .. tostring(said[#said]))
 			assert(not BT.FeatureOn("unitframes") and not BT.Enabled("unitframes") and not BT.Enabled("buffs")
 				and not BT.Enabled("resourcedisplay"), "the unit frames are off, every part of them")
 			assert(BT.Switched("unitframes") and BT.Switched("buffs"),
@@ -4884,20 +5662,34 @@ if ok then
 					assert(tab:IsShown() and tab.off, "a feature that is off keeps its name on the rail, dimmed: " .. tab.key)
 				end
 			end
-			-- None, then All
+			-- opened again, its switches say what is on now; All off, then All on
 			Wl.Show()
-			f.none:GetScript("OnClick")(f.none)
-			for _, card in ipairs(f.cards) do
-				assert(not card.switch:IsOn(), "None: " .. card.key)
+			assert(not f.rows[2].switch:IsOn() and f.rows[1].switch:IsOn() and f.count:GetText() == "3 of 5 on",
+				"opened again: the switches as the features are")
+			f.allOff:GetScript("OnClick")(f.allOff)
+			for _, row in ipairs(f.rows) do
+				assert(not row.switch:IsOn(), "All off: " .. row.key)
 			end
-			f.all:GetScript("OnClick")(f.all)
+			assert(f.count:GetText() == "0 of 5 on", "none on")
+			f.allOn:GetScript("OnClick")(f.allOn)
+			assert(f.count:GetText() == "5 of 5 on", "All on: every one")
 			f.start:GetScript("OnClick")(f.start)
 			for _, feat in ipairs(BT.FEATURES) do
-				assert(BT.FeatureOn(feat.key), "All: " .. feat.key)
+				assert(BT.FeatureOn(feat.key), "All on: " .. feat.key)
 			end
 			assert(BT.Enabled("unitframes") and BT.Enabled("buffs") and BT.Enabled("census") and BT.Enabled("expedition"),
 				"and what was in them is back")
+			-- ESCAPE PUTS IT OFF to the next login, rather than choosing for you
+			BT.settings.featuresAsked = nil
+			Wl.Show()
+			local listed = false
+			for _, name in ipairs(UISpecialFrames) do
+				if name == "BeebModWelcome" then listed = true end
+			end
+			f:Hide()
+			assert(listed and Wl.ShouldAsk(), "Escape closes it, and the next login asks again")
 			-- back as it was, for the tests that follow
+			Wl.selected, Wl.slideAt.unitframes = nil, nil
 			for _, feat in ipairs(BT.FEATURES) do
 				BT.SetFeature(feat.key, wasFeatures[feat.key] ~= false)
 			end
@@ -4911,7 +5703,7 @@ if ok then
 			local realCount = BT.DB.Stats(BT.db).total
 			local realLedger, realStore = BeebModDB.ledger, BT.settings.expedition
 			assert(not D.IsOn(), "off to start")
-			SlashCmdList.BEEBSTOOLKIT("demo on")
+			demoSwitch(true)
 			assert(D.IsOn() and not D.failed, "on, every feature's part without an error: "
 				.. table.concat(D.failed or {}, "; "))
 			assert(BT.db ~= realDb and BT.db.demo and BT.DB.Stats(BT.db).total == BT.CensusDemo.size,
@@ -4940,6 +5732,11 @@ if ok then
 			for npc, n in pairs(J.Mine().kills) do tiers[J.Mastery(n, s.enemies[npc])] = true end
 			assert(tiers[0] and tiers[1] and tiers[2] and tiers[3] and tiers[4], "at every mastery")
 			assert(next(J.Mine().earned), "with commendations earned")
+			-- NOT THE PARTY (Josh 2026-10-18: "when I load the fake data, it auto
+			-- enables the group debug view for unit frames"): that is the Made-up
+			-- people row's alone
+			local uf = BT.GetModule("unitframes")
+			assert(not (uf and uf.previewing), "the made-up data draws no made-up party: " .. tostring(uf and uf.previewing))
 			-- a loading screen binds your book again (as BT.Bind would), and the
 			-- made-up one goes back in after it
 			BT.db = realDb
@@ -4951,10 +5748,152 @@ if ok then
 			for _, book in pairs(BeebModDB.realms) do
 				assert(not book.demo, "the made-up book is not among the saved ones")
 			end
-			SlashCmdList.BEEBSTOOLKIT("demo off")
+			-- REAL KILLS GO IN YOUR JOURNAL (2026-10-17, audit): a kill made
+			-- while the made-up journal is shown is written to yours, and none
+			-- of the made-up one goes with it
+			local em = BT.GetModule("expedition")
+			local wasOn = BT.Enabled("expedition")
+			if not wasOn then
+				BT.SetEnabled("expedition", true)
+			end
+			local realC = J.Saved(J.Mine)
+			local hadKills, hadRecent, hadLast, hadBest = 0, #realC.recent, realC.last, realC.bestRank
+			for _ in pairs(realC.kills) do hadKills = hadKills + 1 end
+			local hadPages, had6 = 0, realC.kills[6]
+			for _ in pairs(realStore.enemies) do hadPages = hadPages + 1 end
+			local hadEarned = {}
+			for id in pairs(realC.earned) do hadEarned[id] = true end
+			local toasts, notices, gain, gainToken = BT.settings.expeditionToasts, em.notices, em.gain, em.gainToken
+			local session = em.session and { kills = em.session.kills, new = em.session.new, last = em.session.last }
+			BT.settings.expeditionToasts = false
+			em.Kill({ npc = 259901, name = "Demo Witness", kind = "Beast", rank = "normal", level = 5,
+				zone = "Elwynn Forest", myLevel = 5, guid = "Creature-0-1-2-3-259901-Z" }, "dead")
+			local nowKills = 0
+			for _ in pairs(realC.kills) do nowKills = nowKills + 1 end
+			local nowPages = 0
+			for _ in pairs(realStore.enemies) do nowPages = nowPages + 1 end
+			assert(J.demo == s and J.Store() == s and realC.kills[259901] == 1 and realStore.enemies[259901]
+				and J.Mine().kills[259901] == nil and s.enemies[259901] == nil,
+				"a kill made while the made-up journal is shown goes in yours, and the made-up one stays on screen")
+			assert(nowKills == hadKills + 1 and nowPages == hadPages + 1 and realC.kills[6] == had6,
+				"and nothing of the made-up journal goes in yours with it")
+			demoSwitch(false)
 			assert(not D.IsOn() and BT.db == realDb and BT.DB.Stats(BT.db).total == realCount,
 				"off, your own census is back as it was")
 			assert(N.demo == nil and J.demo == nil and not J.Store().demo, "and your ledger and journal")
+			assert(J.Mine() == realC and J.Mine().kills[259901] == 1, "and the kill is in your journal once it is off")
+			realC.kills[259901], realC.first[259901], realStore.enemies[259901] = nil, nil, nil
+			for i = #realC.recent, hadRecent + 1, -1 do table.remove(realC.recent, i) end
+			for id in pairs(realC.earned) do
+				if not hadEarned[id] then
+					realC.earned[id] = nil
+					if realC.earnedBy then realC.earnedBy[id] = nil end
+				end
+			end
+			realC.last, realC.bestRank, J.kept = hadLast, hadBest, nil
+			if session then
+				em.session.kills, em.session.new, em.session.last = session.kills, session.new, session.last
+			end
+			BT.settings.expeditionToasts, em.notices, em.gain, em.gainToken = toasts, notices, gain, gainToken
+			if not wasOn then
+				BT.SetEnabled("expedition", false)
+			end
+			-- a feature that cannot make its part up says so in chat, as /bt
+			-- demo did
+			D.Register("boom", { on = function() error("no data today", 0) end })
+			local said, realPrint = {}, _G.print
+			_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
+			local ran, why = pcall(demoSwitch, true)
+			_G.print = realPrint
+			demoSwitch(false)
+			table.remove(D.parts)
+			assert(ran, why)
+			assert(table.concat(said, " | "):find("Made-up data failed for boom: no data today", 1, true),
+				"a part that fails is named in chat: " .. table.concat(said, " | "))
+		end },
+		{ "the made-up realm is not your book: nothing goes into it, and none of it into yours", function()
+			-- (2026-10-17, audit): characters seen went into the made-up book,
+			-- a late book took the made-up realm in for good, every zone-in
+			-- bound everything again, and the Ledger dated commendations
+			-- from the made-up count
+			local DB, L, N = BT.DB, BT.LedgerRanks, BT.Notes
+			local line = BT.GetModule("ledgerline")
+			BT.SetEnabled("ledger", true)
+			BT.SetEnabled("ledgerline", true)
+			local realDb, key, scope = BT.db, BT.scope.key, BT.scope
+			local realCount = DB.Count(realDb)
+			assert(BeebModDB.realms[key] == realDb and BT.Collecting(), "your own book, collecting")
+			local book = L.Book()
+			local wasEarned = book.earned and book.earned["characters:1000"]
+			if realCount < 1000 and book.earned then
+				book.earned["characters:1000"] = nil
+			end
+			local gains, said = {}, {}
+			local wasGain, wasSay, wasToast = BT.Notice.Gain, BT.Notice.Say, line.RankToast
+			BT.Notice.Gain = function(_, n) gains[#gains + 1] = n end
+			BT.Notice.Say = function(_, it) said[#said + 1] = it.name end
+			line.RankToast = function(r) said[#said + 1] = "rank " .. tostring(r) end
+			local wasRealm, wasFaction = _G.GetRealmName, _G.UnitFactionGroup
+			_G.GetRealmName = function() return scope.realm end
+			_G.UnitFactionGroup = function() return scope.faction end
+			local realBind = BT.Bind
+			local part
+			for _, pt in ipairs(BT.Demo.parts) do
+				if pt.key == "census" then part = pt end
+			end
+			-- run, then put everything back whatever happened, so a failure
+			-- here is this test's alone
+			local ran, why = pcall(function()
+				demoSwitch(true)
+				local fake = BT.db
+				assert(fake.demo and BT.CensusDemo.Real() == realDb, "the made-up realm stands in for yours")
+				assert(not BT.Collecting(), "nobody seen is written into it")
+				-- a book that lands late is not given the made-up realm
+				local late = { players = { ["Late Arrival"] = { name = "Late Arrival", first = 1, last = 2, seen = 1 } },
+					stats = { sightings = 1 } }
+				BeebModDB.realms[key] = late
+				assert(BT.AcceptLateBook() == false and BT.db == fake and DB.Count(late) == 1,
+					"a late book waits while the made-up realm is shown, and takes none of it")
+				BeebModDB.realms[key] = realDb
+				-- a zone-in binds nothing again, and the Ledger says nothing for it
+				local binds = 0
+				BT.Bind = function(...) binds = binds + 1 return realBind(...) end
+				local ok, err = pcall(BT.Boot.handlers.PLAYER_ENTERING_WORLD, nil, "PLAYER_ENTERING_WORLD", false, false)
+				BT.Bind = realBind
+				assert(ok, err)
+				assert(binds == 0 and BT.db == fake and BT.CensusDemo.Real() == realDb,
+					"a zone-in with the made-up realm shown is a quiet one, and keeps it on screen")
+				assert(L.countedFor == fake and #gains == 0, "its count is not a gain: " .. table.concat(gains, ","))
+				-- the census's made-up realm alone, with your own notes: nothing dated
+				demoSwitch(false)
+				part.on()
+				assert(BT.db == fake and N.demo == nil and L.Book() == nil, "no dates are kept while it is shown")
+				line.Changed()
+				part.off()
+				assert(BT.db == realDb, "off, your book is back")
+				-- off, the real book is counted again, and that is not a gain either
+				line.Changed()
+				assert(L.countedFor == realDb and L.characters == realCount, "the real book counted again: "
+					.. tostring(L.characters) .. " of " .. realCount)
+				assert(#gains == 0, "and nothing said as a gain: " .. table.concat(gains, ","))
+				if realCount < 1000 then
+					assert(not (book.earned and book.earned["characters:1000"])
+						and not table.concat(said, ","):find("Familiar Faces", 1, true),
+						"a book of " .. realCount .. " is not Familiar Faces: " .. table.concat(said, ","))
+				end
+				assert(DB.Count(realDb) == realCount, "and none of the made-up realm is in it")
+			end)
+			if BT.Demo.IsOn() then
+				demoSwitch(false)
+			end
+			part.off()
+			BT.Bind, BeebModDB.realms[key] = realBind, realDb
+			if realCount < 1000 and book.earned then
+				book.earned["characters:1000"] = wasEarned
+			end
+			BT.Notice.Gain, BT.Notice.Say, line.RankToast = wasGain, wasSay, wasToast
+			_G.GetRealmName, _G.UnitFactionGroup = wasRealm, wasFaction
+			assert(ran, why)
 		end },
 		{ "the census is not shared: what was heard is gone, and the switches with it", function()
 			-- THE CENSUS UNSHARED (Josh 2026-09-26: "kill the whole census
@@ -5039,8 +5978,19 @@ if ok then
 				"along the top of the health")
 			assert(rejuv.unit == "party2", "and follow the cell's member")
 			-- Over-time bars, on the Testing page, says where they got to,
-			-- without falling over
-			T.Report()
+			-- without falling over, in words (2026-10-17, audit: "hot Renew ·
+			-- ids 139", "buttons redrawn")
+			do
+				local said, hadPrint = {}, BT.Util.Print
+				BT.Util.Print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
+				local okR, errR = pcall(T.Report)
+				BT.Util.Print = hadPrint
+				local text = table.concat(said, "\n")
+				assert(okR, "the report runs: " .. tostring(errR))
+				assert(text:find("Rejuvenation lane · spell IDs 774", 1, true) and text:find("buttons dressed", 1, true)
+					and not text:find("hot ", 1, true) and not text:find("ids ", 1, true)
+					and not text:find("redrawn", 1, true), "the report in words: " .. text)
+			end
 
 
 			-- its button: a bar the client runs down, from full to empty, and
@@ -5166,14 +6116,35 @@ if ok then
 
 			-- YOUR TARGET'S, ON ITS PLATE (Josh 2026-10-03: "Remove the DoT bar
 			-- from the personal resource display - the nameplates version
-			-- deprecates that"): with the plates on, the target frame has no
-			-- lanes of damage, and nothing goes over the resource display
+			-- deprecates that"): with the plates on, the target frame's lanes
+			-- of damage are out of sight while its plate carries them, and
+			-- nothing goes over the resource display
+			-- WHEN THE PLATE CARRIES THEM (2026-10-17, audit): the frame used
+			-- to lose its lanes whenever the module was on, so a target with no
+			-- plate of ours - the game's enemy plates off, out of plate range,
+			-- past the twentieth token - showed no timer anywhere
 			BT.SetEnabled("nameplates", true)
-			assert(target.bmAuras.timers.dot == nil, "off the target frame, on its plate")
+			local tstack = target.bmAuras.timers.dot
+			assert(tstack ~= nil and (tstack._alpha or 1) == 1, "kept on the target frame, in sight while no plate of ours is your target's")
+			do
+				local np = BT.GetModule("nameplates")
+				local skin = np.skins.nameplate1
+				local hadNP = _G.C_NamePlate
+				local tplate = realCF("Frame", nil, _G.UIParent)
+				_G.C_NamePlate = { GetNamePlateForUnit = function(unit) if unit == "target" then return tplate end end }
+				assert(skin and skin.bmAuras.timers.dot, "the plate's own lanes are made")
+				skin.bmPlate = tplate
+				skin:Show()
+				assert(T.PaintTargetDots() and tstack._alpha == 0, "out of sight while your target's plate wears ours")
+				skin:Hide()
+				assert(not T.PaintTargetDots() and tstack._alpha == 1, "and back when the plate goes")
+				skin.bmPlate = nil
+				_G.C_NamePlate = hadNP
+			end
 			assert(T.KINDS.resourcedisplay == nil and T.OnResourceDisplay == nil and T.Display == nil,
 				"and no lanes over your own bars")
 			BT.SetEnabled("nameplates", false)
-			assert(target.bmAuras.timers.dot ~= nil, "the plates switched off, back over the target frame")
+			assert(target.bmAuras.timers.dot == tstack and tstack._alpha == 1, "the plates switched off, in sight over the target frame")
 			BT.SetEnabled("nameplates", hadPlates)
 			-- a raid cell: the one lane, one container
 			local raid = F.Build(_G.UIParent, "raid", nil, true)
@@ -5181,6 +6152,27 @@ if ok then
 			local lanes = 0
 			for _ in pairs(raid.bmAuras.timers) do lanes = lanes + 1 end
 			assert(lanes == 1, "one container a raid cell, not two")
+			-- A MAIN TANK'S LANE (2026-10-17, audit): the tank column had none,
+			-- though its raid cell did
+			local tank = F.Build(_G.UIParent, "tank", nil, true)
+			F.Auras.Attach(tank, "tank")
+			local tankLane = tank.bmAuras and tank.bmAuras.timers["hot:Rejuvenation"]
+			assert(tankLane and tankLane._points.TOPLEFT.rel == tank.health, "a main tank wears your heal's lane")
+			-- NONE KNOWN, NONE MADE (2026-10-17, audit): a rogue below 14 knows
+			-- neither of its damage spells, and every rebuild made a container
+			-- for each frame and threw it away
+			do
+				_G.UnitClass = function() return "Rogue", "ROGUE" end
+				T.Rebuild()
+				local before = #made
+				T.Rebuild()
+				T.Rebuild()
+				assert(#made == before and target.bmAuras.timers.dot == nil,
+					"no container made for damage you do not know yet: " .. (#made - before))
+				_G.UnitClass = function() return "Druid", "DRUID" end
+				T.Rebuild()
+				assert(target.bmAuras.timers.dot ~= nil, "and the stack is back for a class that knows its spells")
+			end
 
 			-- the made-up party shows them, the last one nearly out
 			local fake = F.Build(_G.UIParent, "party", nil, false)
@@ -5188,6 +6180,12 @@ if ok then
 				and fake.bmFakeTimers[1].cover and not fake.bmFakeTimers[1].count,
 				"a made-up friend wears your heal, nearly out, flashing red and with no number")
 			assert(T.Show(fake, "boss") == 4, "and a made-up boss your damage, four lanes at most")
+			-- THE MADE-UP TARGET BY ITS REACTION (2026-10-17, audit): the hostile
+			-- Defias Blackguard wore your heal
+			local fakeTarget = F.Build(_G.UIParent, "target", nil, false)
+			assert(T.Show(fakeTarget, "target", { reaction = "hostile" }) == 4 and fakeTarget.bmFakeTimers[1].icon,
+				"a made-up enemy target wears your damage")
+			assert(T.Show(fakeTarget, "target", { reaction = "friendly" }) == 1, "a made-up friend your heal")
 
 			-- a spell the book had not got yet is looked for again, not
 			-- remembered as missing (the first try in game had no bar at all)
@@ -5306,11 +6304,16 @@ if ok then
 			assert(po.sortMethod == 5 and po.sortDirection == 1, "permanent: by name, A to Z reading left to right")
 			assert(po.candidateFilters.includeSpellIDs[1784], "stealth is known to be permanent from the start")
 			assert(buffs.timed.unit == "player" and buffs.timed.enabled and buffs.perm.enabled, "yours, and on")
+			-- THE DEBUFFS' ROW IS ONE (2026-10-17, audit): the client will not
+			-- filter your debuffs by spell, so there is no permanent container
+			-- on that row, and its one container has no duration cap
+			assert(debuffs.perm == nil and debuffs.timed.groups.debuffs.opts.candidateFilters == nil,
+				"the debuffs in one container, permanent ones too")
 			-- and off with the tray: a hidden container still reads your auras
 			Bf.SetShown(false)
-			assert(buffs.timed.enabled == false and debuffs.perm.enabled == false, "the tray put away stops reading")
+			assert(buffs.timed.enabled == false and debuffs.timed.enabled == false, "the tray put away stops reading")
 			Bf.SetShown(true)
-			assert(buffs.timed.enabled and debuffs.perm.enabled, "and reads again when it is back")
+			assert(buffs.timed.enabled and debuffs.timed.enabled, "and reads again when it is back")
 			assert(debuffs.timedPin._points.TOPRIGHT.y < buffs.timedPin._points.TOPRIGHT.y, "the debuffs under the buffs")
 			assert(buffs.surface._points.TOPLEFT.rel == buffs.timed,
 				"the tray hangs off the row, so it grows and shrinks with it unmeasured")
@@ -5338,9 +6341,11 @@ if ok then
 				assert(#read == 1 and read[1].slot == 16 and read[1].left == 3600 and read[1].icon == 136086,
 					"Rockbiter on the main hand, an hour left, its own picture")
 				Bf.Update()
+				-- (an hour is "60 m", as the client writes an aura's: 2026-10-17, audit)
 				assert(Bf.enchants[1]._shown ~= false and Bf.enchants[1].icon._texture == 136086
-					and Bf.enchants[1].words._text == "1 h",
-					"in the tray, with the enchant's picture: " .. tostring(Bf.enchants[1].icon._texture))
+					and Bf.enchants[1].words._text == "60 m",
+					"in the tray, with the enchant's picture: " .. tostring(Bf.enchants[1].icon._texture)
+						.. " " .. tostring(Bf.enchants[1].words._text))
 				-- and the old call, where a client answers 1 for yes
 				_G.C_Item = hadItem and setmetatable({ GetWeaponEnchantInfo = false }, { __index = hadItem }) or nil
 				_G.GetWeaponEnchantInfo = function() return 1, 600000, 0, 29, nil end
@@ -5353,6 +6358,30 @@ if ok then
 			-- no debuffs, out of a fight: that row's tray is put away
 			assert(debuffs.surface._shown == false and buffs.surface._shown ~= false,
 				"an empty row has no tray; a full one does")
+			-- A DEBUFF WITH NO DURATION (2026-10-17, audit): drawn with the
+			-- rest, and no gap left for it
+			do
+				local hadGet = _G.C_UnitAuras.GetAuraDataByIndex
+				_G.C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)
+					if filter == "HARMFUL" then
+						if i == 1 then return { duration = 0, spellId = 26013 } end
+						if i == 2 then return { duration = 30, spellId = 772 } end
+						return nil
+					end
+					return hadGet(unit, i, filter)
+				end
+				Bf.Update()
+				assert(debuffs.permCount == 0 and debuffs.timedCount == 2 and debuffs.timedPin._points.TOPRIGHT.x == 0
+					and debuffs.surface._shown ~= false, "a permanent debuff counts with the timed one, from the edge")
+				_G.C_UnitAuras.GetAuraDataByIndex = hadGet
+				Bf.Update()
+			end
+			-- THE CLIENT'S OWN BANDS (2026-10-17, audit): seconds up to 90,
+			-- minutes up to 90, cut down, as the client writes an aura's time
+			local tw = Bf.TimeWords
+			assert(tw(59.5) == "59 s" and tw(80) == "80 s" and tw(90.5) == "90 s" and tw(91) == "1 m"
+				and tw(3570) == "59 m" and tw(5400) == "90 m" and tw(5401) == "1 h" and tw(-2) == "0 s",
+				"an enchant's time as the client writes an aura's: " .. tw(59.5) .. ", " .. tw(80) .. ", " .. tw(3570))
 			-- a new permanent spell tells the container, while it is live
 			local told
 			buffs.perm.SetAuraGroupCandidateFilters = function(_, key, cf) told = { key = key, cf = cf } end
@@ -5418,6 +6447,28 @@ if ok then
 			bm.Stow()
 			assert(not _G.BuffFrame.bmStowed and _G.BuffFrame:GetParent() == _G.UIParent, "and back where it was")
 			_G.BuffFrame = nil
+			-- A TRAY THAT FAILS, SAID PLAINLY (2026-10-17, audit): the error goes
+			-- to the log What loaded prints, not raw into chat
+			do
+				local hadShown, hadPrint, hadFailed, hadLive = Bf.SetShown, BT.Util.Print, bm.failed, bm.live
+				local hadErrors, hadCounts = BT.moduleErrors, BT.errorCounts
+				BT.moduleErrors, BT.errorCounts = nil, nil
+				local said = {}
+				Bf.SetShown = function() error("boom at Buffs.lua:1", 0) end
+				BT.Util.Print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
+				bm.failed = nil
+				bm:OnEnable()
+				BT.Util.Print, Bf.SetShown = hadPrint, hadShown
+				assert(said[1] == "Buffs: BeebMod couldn't make the buff tray, so the game's own buffs stay.",
+					"said in words: " .. tostring(said[1]))
+				local logged = false
+				for _, e in ipairs(BT.moduleErrors or {}) do
+					if e:find("buffs: ", 1, true) and e:find("boom", 1, true) then logged = true end
+				end
+				assert(logged, "and the error itself is kept for What loaded")
+				bm.failed, bm.live = hadFailed, hadLive
+				BT.moduleErrors, BT.errorCounts = hadErrors, hadCounts
+			end
 			_G.GetWeaponEnchantInfo, _G.C_UnitAuras = wasEnchant, wasAuras
 			_G.AuraContainerSortMethod, _G.AuraContainerSortDirection = nil, nil
 
@@ -5428,6 +6479,15 @@ if ok then
 			_G.InCombatLockdown = function() return false end
 			A.Flush()
 			assert(set.debuffs.unit == "party3", "and follows when it is over")
+			-- THE LAST WORD WINS (2026-10-17, audit): a cell moved to another
+			-- member and back in one fight keeps the one it shows
+			_G.InCombatLockdown = function() return true end
+			F.Bind(cell, "party4")
+			F.Bind(cell, "party3")
+			_G.InCombatLockdown = function() return false end
+			A.Flush()
+			assert(set.debuffs.unit == "party3" and set.unit == "party3",
+				"away and back in a fight, its rows stay on its member: " .. tostring(set.debuffs.unit))
 
 			-- a new target: the same token, somebody else, and the holder bounced
 			set.host:Hide()
@@ -5757,6 +6817,20 @@ if ok then
 			assert(N.IsMine(p) and not N.Noted(p), "kept as yours, though nothing is written on them")
 			-- somebody else's duel is theirs
 			assert(D.Heard("Some One has defeated Other Guy in a duel") == nil, "a duel you are not in is not counted")
+			-- YOUR WHOLE NAME FIRST (2026-10-17, audit): two given names alike
+			-- cannot say which of them is you
+			assert(D.Heard("Beeb has defeated Beeb in a duel", 5300) == nil and p.duelsWon == 2 and p.duelsLost == 1,
+				"a line of two given names alike is not counted")
+			local other = U.Key("Beeb Thornwild")
+			local q, qWon = D.Heard("Beeb Thornwild has defeated Beeb in a duel", 5400)
+			assert(q and qWon == false and N.Get(other) == q and q.duelsLost == 1,
+				"a whole name that is not yours is the other player, and your given name is you")
+			N.People()[other] = nil
+			-- NOT INTO THE MADE-UP NOTES (2026-10-17, audit)
+			N.demo = {}
+			assert(D.Heard("Beeb Bob has defeated Hanz Cout in a duel", 5500) == nil and next(N.demo) == nil
+				and p.duelsWon == 2, "a duel while the made-up notes are shown is not counted")
+			N.demo = nil
 			-- its switch, on the Ledger's page
 			BT.settings.ledgerDuels = false
 			assert(D.Heard("Beeb Bob has defeated Hanz Cout in a duel") == nil and p.duelsWon == 2, "switched off, nothing is counted")
@@ -5836,6 +6910,9 @@ if ok then
 				_G["ChatFrame" .. i .. "EditBoxLeft"] = box:CreateTexture()
 			end
 			_G.ChatFrameMenuButton = _G.CreateFrame("Button", nil, _G.UIParent)
+			-- where the client put it, to be put back (2026-10-17, audit)
+			_G.ChatFrameMenuButton.GetNumPoints = function() return 1 end
+			_G.ChatFrameMenuButton.GetPoint = function() return "BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", 5, 7 end
 			_G.GeneralDockManager = _G.CreateFrame("Frame", "GeneralDockManager", _G.UIParent)
 			_G.GeneralDockManager:CreateTexture()
 
@@ -5876,6 +6953,11 @@ if ok then
 			mod.StyleAll(true)
 			assert(asked[_G.ChatFrame1] == 0.6,
 				"and switching the module off hands the player's value back")
+			-- THE MENU BUTTON BACK WHERE IT WAS (2026-10-17, audit): the bare
+			-- unpack threw here, where Lua has no global one
+			local back = _G.ChatFrameMenuButton._points and _G.ChatFrameMenuButton._points.BOTTOMLEFT
+			assert(back and back.rel == _G.UIParent and back.x == 5 and back.y == 7
+				and _G.ChatFrameMenuButton._alpha == 1, "and puts the menu button back where the client had it")
 			mod.StyleAll()
 
 			-- THE SIDE BUTTONS: the wheel scrolls and the tab has the menu
@@ -6328,7 +7410,15 @@ if ok then
 			reader.select:GetScript("OnClick")(reader.select)
 			assert(not R.selecting and reader.msgs:IsShown() and not reader.scroll:IsShown(),
 				"pressed again, it brings the chat back")
+			-- ITS TIMER IS COUNTED (2026-10-17, audit), with the file's other CPU
+			local wasTimer, wasOn = _G.C_Timer, BT.Cpu.on
+			_G.C_Timer = { After = function(_, fn) fn() end }
+			BT.Cpu.on = true
+			BT.Cpu.stats["Modules/Chat/Reader timer"] = nil
 			R.SetSelecting(true)
+			BT.Cpu.on, _G.C_Timer = wasOn, wasTimer
+			assert(BT.Cpu.stats["Modules/Chat/Reader timer"], "the scroll to the newest line is the reader's timer")
+			BT.Cpu.stats["Modules/Chat/Reader timer"] = nil
 			R.Toggle(rev)
 			assert(not R.Frame():IsShown() and R.source == nil, "the mark again closes it")
 			assert(not R.selecting, "and it opens on the chat next time")
@@ -6670,6 +7760,86 @@ if ok then
 
 			_G.MicroButtonAndBagsBar, _G.MicroButtonPortrait = nil, nil
 		end },
+		{ "the micro menu's own buttons, laid out once a frame and never in a fight", function()
+			-- THE MENU SAYS WHAT IS IN IT (2026-10-17, audit): this build has
+			-- no MICRO_BUTTONS, and buttons the names did not know came into
+			-- the dock in the client's art
+			local mod = BT.GetModule("micro")
+			BT.SetEnabled("micro", true)
+			local hadList = _G.MICRO_BUTTONS
+			_G.MICRO_BUTTONS = nil
+			local container = _G.CreateFrame("Frame", "MicroMenuContainer", _G.UIParent)
+			local menu = _G.CreateFrame("Frame", "MicroMenu", container)
+			menu:SetSize(330, 40)
+			menu.SetScale = function(self, v) self._scale = v end
+			menu.GetScale = function(self) return self._scale or 0.7 end
+			menu.Layout = function() end
+			_G.MicroMenu, _G.MicroMenuContainer = menu, container
+			local function micro(name, index)
+				local b = _G.CreateFrame("Button", name, menu)
+				local face = b:CreateTexture()
+				b.GetNormalTexture = function() return face end
+				b.FlashBorder = b:CreateTexture()
+				b.layoutIndex = index
+				return b
+			end
+			-- added out of order, as the client's list may be
+			local housing = micro("OddHousingMicroButton", 3)
+			local legacy = micro("LegacyMicroButton", 2)
+			local character = micro("FirstMicroButton", 1)
+			local list = mod.Buttons()
+			assert(list[1] == character and list[2] == legacy and list[3] == housing,
+				"the buttons in the client's menu, in its order: " .. tostring(list[1] and list[1]:GetName()))
+			mod.StyleAll()
+			assert(housing:GetNormalTexture()._texCoord and housing:GetNormalTexture()._texCoord[1] > 0
+				and housing.FlashBorder._alpha == 0, "a button no name described is dressed like the rest")
+
+			-- ONCE A FRAME (2026-10-17, audit): the client asks on every quest
+			-- update, several times over
+			local wasAfter, wasFill = _G.C_Timer.After, mod.Fill
+			local later, fills = {}, 0
+			_G.C_Timer.After = function(_, fn) later[#later + 1] = fn end
+			mod.Fill = function(...) fills = fills + 1 return wasFill(...) end
+			for _ = 1, 5 do
+				mod.Again()
+			end
+			assert(#later == 1 and fills == 0, "five asks in a frame, one layout waiting: " .. #later)
+			later[1]()
+			assert(fills == 1, "and it runs once, a frame on")
+			mod.Fill = wasFill
+			_G.C_Timer.After = wasAfter
+
+			-- ALREADY THERE, LEFT ALONE: laid out once, the next ask moves nothing
+			mod.Section():Show()
+			mod.Fill()
+			assert(menu:GetParent() == mod.Section(), "the menu is in the line")
+			local moved = 0
+			local realScale, realClear = menu.SetScale, menu.ClearAllPoints
+			menu.SetScale = function(self, v) moved = moved + 1 return realScale(self, v) end
+			menu.ClearAllPoints = function(self) moved = moved + 1 return realClear(self) end
+			mod.Fill()
+			assert(moved == 0, "where it already is, it is not moved or scaled again: " .. moved)
+
+			-- NEVER IN A FIGHT: nothing moves; the end of the fight does it
+			local wasCombat = _G.InCombatLockdown
+			_G.InCombatLockdown = function() return true end
+			menu:SetParent(container)
+			mod.Fill()
+			assert(menu:GetParent() == container and moved == 0 and mod.waiting,
+				"in a fight the menu is left where the client put it")
+			_G.InCombatLockdown = wasCombat
+			mod.Watch():GetScript("OnEvent")(mod.events, "PLAYER_REGEN_ENABLED")
+			assert(menu:GetParent() == mod.Section() and not mod.waiting, "and taken back when the fight ends")
+
+			menu.SetScale, menu.ClearAllPoints = realScale, realClear
+			mod.Release()
+			for _, b in ipairs({ housing, legacy, character }) do
+				b:Hide()
+				_G[b:GetName()] = nil
+			end
+			_G.MicroMenu, _G.MicroMenuContainer, _G.MICRO_BUTTONS = nil, nil, hadList
+			mod.Fill()
+		end },
 		{ "switching a module on sets it up once", function()
 			-- ONE PASS (Josh 2026-09-24): OnEnable and then OnBind was every
 			-- module's whole setup twice
@@ -6839,6 +8009,24 @@ if ok then
 				end
 			end
 			assert(found, "a ring in the item's own quality colour")
+			-- PLACED ONCE, PAINTED WHEN IT CHANGES (2026-10-17, audit): the
+			-- client paints a slot's quality in three calls every refresh
+			local P = BT.Pill
+			local realPlace, realPaint = P.PlaceRing, P.PaintRing
+			local placedN, paintedN = 0, 0
+			P.PlaceRing = function(...) placedN = placedN + 1 return realPlace(...) end
+			P.PaintRing = function(...) paintedN = paintedN + 1 return realPaint(...) end
+			for _ = 1, 3 do
+				slot.IconBorder:SetShown(true)
+				slot.IconBorder:SetTexture("Interface\\Common\\WhiteIconFrame")
+				slot.IconBorder:SetVertexColor(0.12, 1, 0)
+			end
+			assert(placedN == 0 and paintedN == 0,
+				"the same green three refreshes running: nothing placed or painted again: " .. placedN .. "/" .. paintedN)
+			slot.IconBorder:SetVertexColor(0, 0.44, 0.87)
+			assert(placedN == 0 and paintedN == 1 and found._color[3] == 0.87,
+				"a new colour is painted once, on the ring where it was")
+			P.PlaceRing, P.PaintRing = realPlace, realPaint
 			slot.IconBorder:Hide()
 			assert(not found:IsShown(), "and none for an item with no quality border")
 			-- a second update leaves a dressed slot alone
@@ -7051,6 +8239,13 @@ if ok then
 			slot.IconBorder:SetVertexColor(0.12, 1, 0)
 			slot.IconBorder:Show()
 			assert(slot.IconBorder._alpha == 1, "switched off, the game's quality glow stays: " .. tostring(slot.IconBorder._alpha))
+			-- THE HANDLE GOES TOO (2026-10-17, audit): no strip of ours left
+			-- over the client's title taking its clicks
+			local handleNow = win.beebsHandle
+			assert(handleNow and not handleNow:IsShown(), "switched off, the drag handle is down")
+			BT.SetEnabled("bagwindow", true)
+			assert(handleNow:IsShown(), "and on again, it is back")
+			BT.SetEnabled("bagwindow", false)
 			_G.ContainerFrameCombinedBags = nil
 			_G.hooksecurefunc = hadHook
 		end },
@@ -7134,6 +8329,280 @@ if ok then
 			BT.SetEnabled("bagwindow", true)
 			_G.ContainerFrameCombinedBags, _G.GamepadBagBar = nil, nil
 			_G.hooksecurefunc, _G.AnchorUtil = hadHook, hadGrid
+		end },
+		{ "the bags open in a fight: the B key, the dock's cell, a bag slot and the keyring", function()
+			-- B IN A FIGHT (Josh 2026-10-18: "Hotkey 'B' definitely needs to
+			-- still work in combat though"; of the dock, "it would be nice if
+			-- it did"). The client as the forever branch has it: B is
+			-- OPENALLBAGS, which runs ToggleAllBags (Bindings_Camelot.xml), and
+			-- with the bags combined that makes the window's slots from a pool
+			-- of plain buttons, shows it and places it
+			-- (ContainerFrame_GenerateFrame). None of those frames is
+			-- protected. Here a window refuses an addon's call in a fight only
+			-- if it says it is protected, and tells Core/Blocked.lua as the
+			-- client would; one bag window is made protected, as a secure frame
+			-- of another addon's anchored to it would make it, to see it left
+			-- where the game put it.
+			local mod, space = BT.GetModule("bagwindow"), BT.GetModule("bags")
+			local S = mod.BagSlots
+			local mark = #caught
+			local blockedBefore = BT.blockedLog and #BT.blockedLog or 0
+			local had = { hook = _G.hooksecurefunc, lock = _G.InCombatLockdown, all = _G.ToggleAllBags,
+				bag = _G.ToggleBag, anchors = _G.UpdateContainerFrameAnchors, keyring = _G.KEYRING_CONTAINER,
+				keyRing = _G.ToggleKeyRing, on = BT.Enabled("bagwindow"), hooked = mod.anchorsHooked }
+			-- the client's hooksecurefunc: after the original, on a global or on a table's method
+			_G.hooksecurefunc = function(obj, name, fn)
+				if type(obj) == "string" then
+					obj, name, fn = _G, obj, name
+				end
+				local orig = obj[name]
+				obj[name] = function(...)
+					local r = orig(...)
+					fn(...)
+					return r
+				end
+			end
+			local fighting = false
+			_G.InCombatLockdown = function() return fighting end
+			local refused, tell = {}, true
+			local function refuse(what)
+				refused[#refused + 1] = what
+				if tell then
+					for _, f in ipairs(ALL_FRAMES) do
+						local onEvent = f._events and f._events.ADDON_ACTION_BLOCKED and f._scripts.OnEvent
+						if onEvent then
+							onEvent(f, "ADDON_ACTION_BLOCKED", "BeebMod", what)
+						end
+					end
+				end
+			end
+			-- what a protected frame refuses an addon in a fight: the calls the
+			-- client's API documentation marks IsProtectedFunction
+			-- (SimpleFrameAPIDocumentation, SimpleScriptRegionAPIDocumentation
+			-- and SimpleScriptRegionResizingAPIDocumentation). The client's own
+			-- calls are kept in `game`, to go round the check.
+			local GUARDED = { "SetPoint", "ClearAllPoints", "SetAllPoints", "SetParent", "Show", "Hide", "SetShown",
+				"SetScale", "Raise", "SetFrameLevel", "SetFrameStrata", "SetClampedToScreen", "StartMoving",
+				"StopMovingOrSizing", "EnableMouse", "SetSize", "SetWidth", "SetHeight" }
+			local function window(name, id, protected)
+				local w = _G.CreateFrame("Frame", name, _G.UIParent)
+				w.game = {}
+				for _, m in ipairs(GUARDED) do
+					local real = w[m]
+					if type(real) == "function" then
+						w.game[m] = real
+						w[m] = function(self, ...)
+							if protected and fighting then
+								refuse(name .. ":" .. m .. "()")
+								return
+							end
+							return real(self, ...)
+						end
+					end
+				end
+				w.IsProtected = function() return protected, protected end
+				w.GetID = function() return id end
+				-- the client's HookScript: after what was there, not instead of it
+				w.HookScript = function(self, script, fn)
+					local before = self._scripts[script]
+					self._scripts[script] = function(...)
+						if before then
+							before(...)
+						end
+						fn(...)
+					end
+				end
+				w.UpdateItemLayout, w.Update = function() end, function() end
+				w.Items, w.pool = {}, {}
+				w.game.Hide(w)
+				return w
+			end
+			local bags = window("ContainerFrameCombinedBags", 0, false)
+			local guarded = window("ContainerFrame2", 1, true)
+			local keys = window("ContainerFrame7", -2, false)
+			-- a slot from the window's pool: a plain button, its bag set
+			-- through an attribute (ContainerFrameItemButtonMixin:SetBagID)
+			local function slotOf(w, bag, i)
+				local b = w.pool[i]
+				if not b then
+					b = _G.CreateFrame("Button", nil, w)
+					b.icon, b.IconBorder = b:CreateTexture(), b:CreateTexture()
+					b.IconBorder.GetVertexColor = function() return 1, 1, 1, 1 end
+					w.pool[i] = b
+				end
+				b:SetAttribute("bagid", bag)
+				b.bagID = bag
+				b:Show()
+				return b
+			end
+			-- UpdateContainerFrameAnchors: every window up, at the bottom right
+			_G.UpdateContainerFrameAnchors = function()
+				for _, w in ipairs({ bags, guarded, keys }) do
+					if w:IsShown() then
+						w.game.SetScale(w, 1)
+						w.game.ClearAllPoints(w)
+						w.game.SetPoint(w, "BOTTOMRIGHT", _G.UIParent, "BOTTOMRIGHT", -40, 90)
+					end
+				end
+			end
+			-- ContainerFrame_GenerateFrame, as far as anything of ours is reached from it
+			local function generate(w, bag, n)
+				w.Items = {}
+				for i = 1, n do
+					w.Items[i] = slotOf(w, bag, i)
+				end
+				w.game.Show(w)
+				w.game.Raise(w)
+				local onShow = w:GetScript("OnShow")
+				if onShow then
+					onShow(w)
+				end
+				w:UpdateItemLayout()
+				w:Update()
+				_G.UpdateContainerFrameAnchors()
+			end
+			local function toggle(w, bag, n)
+				if w:IsShown() then
+					w.game.Hide(w)
+				else
+					generate(w, bag, n)
+				end
+			end
+			local asked = {}
+			_G.KEYRING_CONTAINER = -2
+			_G.ToggleAllBags = function()
+				asked[#asked + 1] = "all"
+				toggle(bags, 0, 4)
+			end
+			-- with the bags combined a bag's own toggle is the backpack's
+			-- (ToggleBag_Combined); the keyring has a window of its own
+			_G.ToggleBag = function(id)
+				asked[#asked + 1] = "bag " .. id
+				if id == _G.KEYRING_CONTAINER then
+					toggle(keys, id, 2)
+				else
+					toggle(bags, 0, 4)
+				end
+			end
+			local function pressB()
+				-- the binding: <Binding name="OPENALLBAGS">ToggleAllBags();</Binding>
+				_G.ToggleAllBags()
+			end
+			-- the timers the hooks set, then the pass they ask for on the next frame (M.Soon)
+			local failed = {}
+			local function nextFrame()
+				for _, e in ipairs(TIMERS.RunAfters()) do
+					failed[#failed + 1] = e
+				end
+				mod.StyleAll()
+			end
+			local function dressed(w)
+				local b = w.Items[1]
+				return b ~= nil and b.icon._texCoord ~= nil and b.icon._texCoord[1] > 0
+			end
+
+			-- the checks, and after them everything put back whether or not
+			-- they held: a fight left on would fail the steps after this one
+			local good, err = pcall(function()
+				-- the stand-in refuses what the client would: a protected window moved in a fight
+				tell, fighting = false, true
+				guarded:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+				assert(#refused == 1 and refused[1] == "ContainerFrame2:SetPoint()" and guarded._points == nil,
+					"a protected window refuses to be moved in a fight: " .. table.concat(refused, ", "))
+				refused, tell, fighting = {}, true, false
+
+				-- the login: windows dressed, watched and hooked out of a fight
+				BT.EnsureBound()
+				BT.settings.bagwindow = BT.settings.bagwindow or {}
+				BT.settings.bagwindow.places = {
+					ContainerFrameCombinedBags = { x = 400, y = -200 },
+					ContainerFrame2 = { x = 120, y = -150 },
+				}
+				mod.anchorsHooked = nil
+				BT.SetEnabled("bagwindow", true)
+				mod.StyleAll()
+				assert(bags.beebsHandle and guarded.beebsHandle and mod.anchorsHooked, "the windows are watched before the fight")
+				TIMERS.keep = true
+				fighting = true
+
+				-- B, in the fight
+				pressB()
+				nextFrame()
+				assert(bags:IsShown(), "B opens the bags in a fight")
+				assert(dressed(bags), "and the slots the client made on that open are dressed in the fight")
+				assert(S.frame:IsShown() and S.frame:GetParent() == bags, "the bag slots stand in the backpack")
+				local at = bags._points and bags._points.TOPLEFT
+				assert(at and at.rel == _G.UIParent and at.x == 400 and at.y == -200,
+					"and the window is put back where you left it, in the fight too")
+				pressB()
+				assert(not bags:IsShown(), "B again closes them")
+
+				-- the dock's cell, in the fight
+				local cell = space.Build()
+				cell:GetScript("OnClick")(cell)
+				nextFrame()
+				assert(bags:IsShown() and dressed(bags), "the dock's cell opens them in a fight as well")
+
+				-- a bag slot: the game's ToggleBag, which with the bags combined
+				-- closes the backpack, as the game's own bag slot does
+				local first = S.frame.buttons[1]
+				first:GetScript("OnClick")(first, "LeftButton")
+				assert(asked[#asked] == "bag 1" and not bags:IsShown(), "a bag slot's click is the game's ToggleBag in a fight")
+				first:GetScript("OnClick")(first, "LeftButton")
+				nextFrame()
+				assert(bags:IsShown() and S.frame:IsShown(), "and opens the backpack again")
+
+				-- the keyring: this client has no ToggleKeyRing, so ToggleBag(KEYRING_CONTAINER)
+				_G.ToggleKeyRing = nil
+				S.frame.key:GetScript("OnClick")(S.frame.key, "LeftButton")
+				nextFrame()
+				assert(asked[#asked] == "bag -2" and keys:IsShown() and dressed(keys),
+					"the keyring opens its own window in a fight: " .. table.concat(asked, ", "))
+
+				-- a window the client has made protected: shown by the client in
+				-- the fight, it stays where the game put it, and its title does not drag it
+				generate(guarded, 1, 2)
+				nextFrame()
+				local gp = guarded._points or {}
+				assert(guarded:IsShown() and gp.BOTTOMRIGHT and gp.TOPLEFT == nil and #refused == 0,
+					"a protected window is left where the game put it in a fight: " .. table.concat(refused, ", "))
+				local h = guarded.beebsHandle
+				h:GetScript("OnMouseDown")(h)
+				h:GetScript("OnDragStart")(h)
+				h:GetScript("OnDragStop")(h)
+				local kept = BT.settings.bagwindow.places.ContainerFrame2
+				assert(#refused == 0 and kept.x == 120 and kept.y == -150,
+					"and its title does not drag it in the fight: " .. table.concat(refused, ", "))
+				fighting = false
+				_G.UpdateContainerFrameAnchors()
+				assert(guarded._points.TOPLEFT and guarded._points.TOPLEFT.x == 120,
+					"after the fight, the next time the game lays them out, it goes back")
+
+				assert(#failed == 0, "nothing the timers ran failed: " .. table.concat(failed, " | "))
+				assert(#refused == 0, "nothing was refused: " .. table.concat(refused, ", "))
+				assert((BT.blockedLog and #BT.blockedLog or 0) == blockedBefore,
+					"nothing was reported blocked: " .. table.concat(BT.blockedLog or {}, " | "))
+				assert(#caught == mark, "and no error was caught: " .. caughtSince(mark))
+			end)
+
+			fighting = false
+			for _, w in ipairs({ bags, guarded, keys }) do
+				w.game.Hide(w)
+			end
+			_G.ContainerFrameCombinedBags, _G.ContainerFrame2, _G.ContainerFrame7 = nil, nil, nil
+			if BT.settings and BT.settings.bagwindow then
+				BT.settings.bagwindow.places = nil
+			end
+			_G.hooksecurefunc, _G.InCombatLockdown, _G.ToggleAllBags, _G.ToggleBag = had.hook, had.lock, had.all, had.bag
+			_G.UpdateContainerFrameAnchors, _G.KEYRING_CONTAINER = had.anchors, had.keyring
+			_G.ToggleKeyRing = had.keyRing
+			mod.anchorsHooked = had.hooked
+			mod.StyleAll()
+			BT.SetEnabled("bagwindow", had.on)
+			if not good then
+				error(err, 0)
+			end
+			assert(not S.frame:IsShown(), "with the windows gone the row of bag slots goes too")
 		end },
 		{ "a tooltip in the default spot is moved clear of the dock", function()
 			-- THE CORNER IS OURS (Josh 2026-09-24): the client's default spot
@@ -7291,6 +8760,18 @@ if ok then
 			assert(dressedNow == 0 and later, "nothing done to it while the client builds it")
 			later()
 			assert(dressedNow == 1, "dressed on the next frame")
+			-- ONCE A MENU, NOT TWICE (2026-10-17, audit): its look built and the
+			-- menu opened in the same frame, it is dressed once
+			local queued = {}
+			_G.C_Timer.After = function(_, fn) queued[#queued + 1] = fn end
+			M.DressSoon(menu)
+			M.AfterOpen()
+			assert(#queued == 1, "built and opened, one dress waiting: " .. #queued)
+			queued[1]()
+			assert(dressedNow == 2, "and dressed once")
+			M.AfterOpen()
+			assert(#queued == 2, "opened again later, it is dressed again")
+			queued[2]()
 			_G.Menu, _G.C_Timer.After, M.DressMenu = wasMenu, wasAfter, wasDress
 
 			-- A MENU NOTHING MAY BE MADE ON: the compositor's metatable, whose
@@ -7683,15 +9164,14 @@ if ok then
 			-- (Josh 2026-09-24) every tab on the rail, opened: a page that throws
 			-- as it builds is caught here, not in the game
 			BT.Window.Build()
-			local before = #(BT.moduleErrors or {})
+			local mark = #caught
 			for _, t in ipairs(BT.Window.Tabs()) do
 				if t.key and t:IsShown() then
 					BT.Window.SetView(t.key)
 					assert(BT.Window.Panel(t.key), t.key .. " builds a page")
 				end
 			end
-			assert(#(BT.moduleErrors or {}) == before, "and no page errors: "
-				.. table.concat(BT.moduleErrors or {}, " | "))
+			assert(#caught == mark, "and no page errors: " .. caughtSince(mark))
 
 			-- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "an
 			-- opinionated solution, not fully customizable"): an answer saved
@@ -7723,12 +9203,6 @@ if ok then
 			chat.HookMessages(line, true)
 			BT.SetEnabled("chat", chatWasOn)
 			BT.settings.chat.timestamps = nil
-			-- the micro menu: every button
-			local micro = BT.GetModule("micro")
-			BT.settings.micro = { hidden = { StoreMicroButton = true } }
-			local shop = _G.CreateFrame("Button", "StoreMicroButton", _G.UIParent)
-			assert(not micro.Hidden(shop), "every button shows, whatever was saved")
-			BT.settings.micro = nil
 			-- the damage meter: both its additions
 			local dm = BT.GetModule("damagemeter")
 			assert(dm.Opt == nil and dm.SetOpt == nil, "both on: there is no switch to read")
@@ -8078,6 +9552,47 @@ if ok then
 			meterRow.GetElementData = function() return { totalAmount = 900, amountPerSecond = 15 } end
 			meterRow.StatusBar.Value:SetText("900")
 			assert(meterRow.StatusBar.Value._text == "900 (15.0)", "the client's own rate when it has one")
+			-- WHERE THE CLIENT SAYS THE RATE OR KEEPS IT OUT (2026-10-17,
+			-- audit): DPS and HPS show it as the number, Compact and Complete
+			-- numbers bracket it themselves, Interrupts, Dispels and Deaths
+			-- have none to show
+			local hadTypes, hadNumbers = Enum.DamageMeterType, Enum.DamageMeterNumbers
+			Enum.DamageMeterType = { DamageDone = 1, HealingDone = 2, Dps = 3, Hps = 4, Interrupts = 7,
+				Dispels = 8, Deaths = 10 }
+			Enum.DamageMeterNumbers = { Minimal = 0, Compact = 1, Complete = 2 }
+			local function wrote(text)
+				meterRow.StatusBar.Value:SetText(text)
+				return meterRow.StatusBar.Value._text
+			end
+			meterRow.GetElementData = function()
+				return { totalAmount = 900, amountPerSecond = 15, showsValuePerSecondAsPrimary = true }
+			end
+			assert(wrote("15") == "15", "the DPS type's number is the rate already")
+			meterRow.GetElementData = function() return { totalAmount = 900, amountPerSecond = 15 } end
+			for _, kind in ipairs({ "Dps", "Hps", "Interrupts", "Dispels", "Deaths" }) do
+				win.damageMeterType = Enum.DamageMeterType[kind]
+				assert(wrote("3") == "3", "no rate added on the " .. kind .. " type")
+			end
+			win.damageMeterType = Enum.DamageMeterType.DamageDone
+			meterRow.numberDisplayType = Enum.DamageMeterNumbers.Compact
+			assert(wrote("900 (15)") == "900 (15)", "a Compact number has its rate in brackets already")
+			meterRow.numberDisplayType = nil
+			win.numberDisplayType = Enum.DamageMeterNumbers.Complete
+			assert(wrote("900 (15) 50%") == "900 (15) 50%", "and so has a Complete one")
+			win.numberDisplayType = Enum.DamageMeterNumbers.Minimal
+			assert(wrote("900") == "900 (15.0)", "a Minimal number of damage done has the rate after it")
+			win.damageMeterType, win.numberDisplayType = nil, nil
+			Enum.DamageMeterType, Enum.DamageMeterNumbers = hadTypes, hadNumbers
+			-- THE CLIENT'S OWN CLOCK (2026-10-17, audit): while its timer says
+			-- something, the clock here waits
+			win.SessionTimer = win:CreateFontString()
+			win.SessionTimer:SetText("[1:12] ")
+			mod.Tick(win)
+			assert(not win.beebsClock:IsShown(), "the client's timer shows the fight's length, so no second clock")
+			win.SessionTimer:SetText("")
+			mod.Tick(win)
+			assert(win.beebsClock:IsShown() and win.beebsClock._text == "1:12", "and with it blank, the clock")
+			win.SessionTimer = nil
 			local src = BT.Pill.Panels()[win.MinimizeContainer.SourceWindow]
 			assert(src and src.fill:IsShown(), "the breakdown wears a surface of its own")
 			BT.SetEnabled("damagemeter", false)
@@ -8212,7 +9727,7 @@ if ok then
 			assert(hidden and show and max == 5 and cur == _G.SECRET_WIDTH, "a secret count is kept, not zeroed")
 			mod.Pips(cur, max, show)
 			assert(pips.squares[1]._value == _G.SECRET_WIDTH, "and the bars are given it")
-			assert(not mod.Said():find(tostring(_G.SECRET_WIDTH), 1, true), "and it is never printed")
+			assert(not mod.Said():find(tostring(reveal(_G.SECRET_WIDTH)), 1, true), "and it is never printed")
 			_G.secretMeasurements = false
 			_G.GetComboPoints = wasGCP
 			_G.UnitPower = function(_, kind) return kind == 4 and 3 or 50 end
@@ -8343,31 +9858,208 @@ if ok then
 				"to the left of them")
 			assert(icon.span._points.TOPLEFT.rel == prd.HealthBarsContainer
 				and icon.span._points.BOTTOMRIGHT.rel == prd.PowerBar, "level with the health and power bars")
-			local ACCENT = BT.Widgets.ACCENT
-			assert(icon.lit and icon._alpha == 1 and icon.icon._vertex[1] == ACCENT[1], "lit in the accent while Auto Shot reaches")
-			-- too close: Raptor Strike reaches, Auto Shot does not
+			-- AN ICON FOR HOW NEAR (Josh 2026-10-18: "a green crosshairs icon
+			-- if in ranged range, and a new melee icon if in melee range. For
+			-- the deadzone, we could use a new cancel or no action icon. If out
+			-- of ranged range, we could still use the red crosshair icon")
+			local C = mod.REACH_COLOURS
+			local function shown()
+				icon:GetScript("OnUpdate")(icon, 1)
+				local v = icon.icon._vertex
+				local colour = v[1] == mod.REACH_GREEN[1] and v[2] == mod.REACH_GREEN[2] and "green"
+					or v[1] == mod.REACH_RED[1] and v[2] == mod.REACH_RED[2] and "red"
+					or (v[1] == mod.REACH_GREY[1] and icon._alpha == mod.REACH_DIM and "dim") or "?"
+				local file = icon.icon._texture
+				local what = file == mod.REACH_ICON and "crosshair" or file == mod.REACH_ICONS.melee and "swords"
+					or file == mod.REACH_ICONS.close and "no" or tostring(file)
+				return colour .. " " .. what
+			end
+			for _, key in ipairs({ "melee", "close" }) do
+				local art = io.open(mod.REACH_ICONS[key]:gsub("^Interface\\AddOns\\BeebMod\\", ""):gsub("\\", "/") .. ".tga", "rb")
+				assert(art, "the icon's art is in the folder: " .. mod.REACH_ICONS[key])
+				art:close()
+			end
+			assert(icon.band == "ranged" and icon._alpha == 1 and shown() == "green crosshair",
+				"a green crosshair while Auto Shot reaches: " .. shown())
 			answers = { [75] = false, [2973] = true }
-			icon:GetScript("OnUpdate")(icon, 1)
-			assert(not icon.lit and icon._alpha == mod.REACH_DIM and icon.icon._vertex[1] == mod.REACH_GREY[1],
-				"dim when the target is too close for Auto Shot, whatever else reaches")
-			answers = { [75] = true }
-			icon:GetScript("OnUpdate")(icon, 1)
-			assert(icon.lit, "lit again in reach")
-			-- a druid's main attack is her form's: Claw, Maul, or Wrath out of
-			-- form; for a friend, Healing Touch
+			assert(shown() == "green swords", "green swords in melee, where Raptor Strike reaches")
+			-- THE DEAD ZONE, in a fight: just out of melee, nothing reaches,
+			-- and a moment ago it was in melee
+			local wasFighting, wasNear = _G.InCombatLockdown, _G.CheckInteractDistance
+			_G.InCombatLockdown = function() return true end
+			_G.CheckInteractDistance = function() error("the 28-yard check is refused in a fight") end
+			answers = { [75] = false, [2973] = false, [2974] = false }
+			assert(shown() == "red no" and icon._alpha == 1, "the red no-action sign just out of melee: " .. shown())
+			assert(shown() == "red no", "and while it stays there")
+			-- a moment is all it is good for
+			BT.Reach.last.target.at = BT.Reach.last.target.at - BT.Reach.KEEP - 1
+			assert(shown() == "red crosshair", "a long while after, it is out of reach")
+			-- and a new target is measured afresh
+			answers = { [75] = false, [2973] = true }
+			shown()
+			BT.Reach.watch:GetScript("OnEvent")(BT.Reach.watch, "PLAYER_TARGET_CHANGED")
+			answers = { [75] = false, [2973] = false, [2974] = false }
+			assert(shown() == "red crosshair", "a new target out of every reach is not taken for the old one")
+			-- out of a fight, the 28-yard check says which end
+			_G.InCombatLockdown = function() return false end
+			local near = true
+			_G.CheckInteractDistance = function(_, n) return n == BT.Reach.NEAR and near end
+			assert(shown() == "red no", "out of a fight, within 28 yards and past every ranged reach: the dead zone")
+			near = false
+			assert(shown() == "red crosshair", "and past them, out of reach")
+			-- NOT THE DUEL'S 7 YARDS (Josh 2026-10-18: "There is still a range
+			-- where we're showing the red crosshairs, even though I am in the
+			-- deadzone"): the follow distance, 28, inside every ranged attack's
+			-- 30 or more
+			assert(BT.Reach.NEAR == 4, "the 28-yard check, not the duel's")
+			assert(mod.ReachSaid():find("red crosshair, out of reach, by", 1, true),
+				"What loaded names the spell that said out of reach: " .. mod.ReachSaid())
+			_G.InCombatLockdown, _G.CheckInteractDistance = wasFighting, wasNear
+			-- a target the game is not drawing is dim, not red
+			local wasVisible = _G.UnitIsVisible
+			_G.UnitIsVisible = function() return false end
+			assert(shown():find("^dim"), "dim when the target is nowhere to be seen")
+			_G.UnitIsVisible = wasVisible
+			-- a warrior: Heroic Strike in melee, Throw or Shoot further off
 			local R = BT.Reach
+			_G.UnitClass = function() return "Warrior", "WARRIOR" end
+			answers = { [78] = false, [2764] = true }
+			assert(shown() == "green crosshair", "a warrior in Throw's reach: the green crosshair")
+			answers = { [78] = true, [2764] = false }
+			assert(shown() == "green swords", "and the swords with Heroic Strike's")
+			-- THE LONGEST REACH DECIDES ("some talents increase range"): a mage
+			-- whose Fireball reaches where Frostbolt does not
+			_G.UnitClass = function() return "Mage", "MAGE" end
+			answers = { [116] = false, [133] = true, [6603] = false }
+			assert(shown() == "green crosshair" and icon.spell == 133, "a mage in Fireball's reach alone")
+			-- with no Attack button, a mage has no melee to ask: the Attack spell
+			-- never answers on this client, so it is not asked
+			answers = { [116] = true, [133] = true, [6603] = true }
+			assert(shown() == "green crosshair", "a mage beside the target, with no Attack button: the crosshair")
+			answers = { [116] = false, [133] = false, [6603] = true }
+			assert(shown() == "red crosshair", "and past every spell's reach, the red one")
+			-- THE ATTACK BUTTON FIRST (Josh 2026-10-18: a paladin in melee kept
+			-- the crosshair): the client gave the spell no answer, so the bar
+			-- button with Attack on it is asked, as the bars ask it
+			local wasInfo, wasActionRange = _G.GetActionInfo, _G.IsActionInRange
+			_G.GetActionInfo = function(slot) if slot == 12 then return "spell", 6603 end end
+			local buttonSays = true
+			_G.IsActionInRange = function(slot) if slot == 12 then return buttonSays end end
+			BT.Reach.watch:GetScript("OnEvent")(BT.Reach.watch, "ACTIONBAR_SLOT_CHANGED")
+			_G.UnitClass = function() return "Paladin", "PALADIN" end
+			answers = { [20271] = true }
+			assert(R.AttackSlot() == 12 and shown() == "green swords" and icon.spell == R.ATTACK,
+				"a paladin in melee: the Attack button says so, the swords show")
+			buttonSays = false
+			assert(shown() == "green crosshair", "and a step back, Judgement's reach: the crosshair")
+			_G.GetActionInfo, _G.IsActionInRange = wasInfo, wasActionRange
+			BT.Reach.watch:GetScript("OnEvent")(BT.Reach.watch, "ACTIONBAR_SLOT_CHANGED")
+			-- HOLY STRIKE (Josh 2026-10-18: "Classic paladin does have Holy
+			-- Strike as a melee skill"): by its first rank's number, or by the
+			-- name an enemy's Holy Strike has, whatever rank you know
+			assert(R.AttackSlot() == nil, "no Attack button now")
+			answers = { [679] = true, [20271] = true }
+			assert(shown() == "green swords" and icon.spell == 679, "a paladin in Holy Strike's reach: the swords")
+			local hadName = _G.C_Spell.GetSpellName
+			_G.C_Spell.GetSpellName = function(id) return id == 13953 and "Holy Strike" or nil end
+			answers = { ["Holy Strike"] = true, [20271] = true }
+			assert(shown() == "green swords" and icon.spell == 13953, "and found by its name")
+			answers = { ["Holy Strike"] = false, [20271] = true }
+			assert(shown() == "green crosshair", "a step back, Judgement's reach: the crosshair")
+			_G.C_Spell.GetSpellName = hadName
+			-- WITHOUT ATTACK ON THE BARS, ONLY YOUR OWN ABILITIES ("use "Attack"
+			-- spell only if it is on the bars, otherwise fallback to the other
+			-- skills"): the Attack spell (its range is "self only") and other
+			-- classes' abilities are not asked
+			local asked = {}
+			_G.C_Spell.IsSpellInRange = function(id) asked[id] = true return answers[id] end
+			answers = { [6603] = true, [78] = true, [20271] = true }
+			assert(shown() == "green crosshair" and not asked[6603] and not asked[78],
+				"a paladin with no Attack button and no Holy Strike: the crosshair, and nothing else asked")
+			_G.C_Spell.IsSpellInRange = function(id) return answers[id] end
+			-- the Attack button, where there is one, before Holy Strike
+			_G.GetActionInfo = function(slot) if slot == 1 then return "spell", 6603 end end
+			buttonSays = false
+			_G.IsActionInRange = function(slot) if slot == 1 then return buttonSays end end
+			BT.Reach.watch:GetScript("OnEvent")(BT.Reach.watch, "ACTIONBAR_SLOT_CHANGED")
+			answers = { [679] = true, [20271] = true }
+			assert(shown() == "green crosshair", "the Attack button says no: it decides, whatever Holy Strike says")
+			-- the Record says what each answered
+			mod.Dump()
+			local dump = BeebModDB.resourcedisplayDump
+			local reachLine = nil
+			for _, l in ipairs(type(dump) == "table" and (dump.lines or dump) or {}) do
+				if type(l) == "string" and l:find("reach:", 1, true) then reachLine = l end
+			end
+			assert(reachLine and reachLine:find("679=true", 1, true) and reachLine:find("Attack button 1=", 1, true)
+				and reachLine:find("old global=false", 1, true) and reachLine:find("says ranged", 1, true),
+				"the Record writes every answer: " .. tostring(reachLine))
+			-- THE CLIENT'S OWN NAMES ("Is there maybe some other flag on the
+			-- API that holds that "in range" value?"): this client's bars ask
+			-- C_ActionBar, which finds Attack's slot and takes the unit; the
+			-- globals may not be there at all
+			do
+				local hadBar, hadInfo, hadOld = _G.C_ActionBar, _G.GetActionInfo, _G.IsActionInRange
+				local barSays, askedOf = true, nil
+				_G.GetActionInfo, _G.IsActionInRange = nil, nil
+				_G.C_ActionBar = {
+					FindSpellActionButtons = function(id) return id == 6603 and { 7 } or {} end,
+					IsActionInRange = function(slot, unit) askedOf = unit if slot == 7 then return barSays end end,
+				}
+				BT.Reach.watch:GetScript("OnEvent")(BT.Reach.watch, "ACTIONBAR_SLOT_CHANGED")
+				answers = { [20271] = true }
+				assert(R.AttackSlot() == 7 and shown() == "green swords" and askedOf == "target",
+					"the bars' own Attack slot and their own question: the swords")
+				barSays = false
+				assert(shown() == "green crosshair", "a step back: the crosshair")
+				_G.C_ActionBar, _G.GetActionInfo, _G.IsActionInRange = hadBar, hadInfo, hadOld
+				BT.Reach.watch:GetScript("OnEvent")(BT.Reach.watch, "ACTIONBAR_SLOT_CHANGED")
+			end
+			-- A HUNTER WITH ATTACK ON A BAR keeps the dead zone (Josh 2026-10-18:
+			-- "The dead zone is actually a large part of hunter's gameplay"):
+			-- the button says when it is melee, Auto Shot when it is in reach,
+			-- and between the two is the no-action sign
+			_G.UnitClass = function() return "Hunter", "HUNTER" end
+			local hadNear = _G.CheckInteractDistance
+			_G.CheckInteractDistance = function(_, n) return n == BT.Reach.NEAR end
+			buttonSays = true
+			answers = { [75] = false }
+			assert(shown() == "green swords", "a hunter in melee, by the Attack button")
+			buttonSays = false
+			assert(shown() == "red no", "a step back: too close to shoot, too far to hit")
+			answers = { [75] = true }
+			assert(shown() == "green crosshair", "further back, Auto Shot reaches")
+			_G.CheckInteractDistance = hadNear
+			_G.GetActionInfo, _G.IsActionInRange = wasInfo, wasActionRange
+			BT.Reach.watch:GetScript("OnEvent")(BT.Reach.watch, "ACTIONBAR_SLOT_CHANGED")
+			_G.UnitClass = function() return "Mage", "MAGE" end
+			-- and a mage has no dead zone: out of reach is out of reach
+			_G.CheckInteractDistance = function() return true end
+			answers = { [116] = false, [133] = false, [6603] = false }
+			assert(shown() == "red crosshair", "a mage has no dead zone")
+			_G.CheckInteractDistance = wasNear
+			-- a friend: the green crosshair in reach of a heal, red past it
 			local wasPowerType, wasAssist = _G.UnitPowerType, _G.UnitCanAssist
+			_G.UnitCanAssist = function() return true end
+			answers = { [1459] = true }
+			assert(shown() == "green crosshair", "a friend in reach of your help")
+			answers = { [1459] = false }
+			assert(shown() == "red crosshair", "and past it")
+			_G.UnitCanAssist = wasAssist
+			-- a druid's melee is her form's: Claw, Maul, or the auto attack out
+			-- of form; for a friend, Healing Touch
 			_G.UnitClass = function() return "Druid", "DRUID" end
 			_G.UnitPowerType = function() return 3 end
-			local cat = R.List("target")
+			local cat = R.Lists("target")
 			_G.UnitPowerType = function() return 1 end
-			local bear = R.List("target")
+			local bear = R.Lists("target")
 			_G.UnitPowerType = function() return 0 end
-			local caster = R.List("target")
+			local caster = R.Lists("target")
 			_G.UnitCanAssist = function() return true end
-			local friend = R.List("target")
-			assert(cat[1] == 1082 and cat[2] == 5176 and bear[1] == 6807 and caster[1] == 5176 and friend[1] == 5185,
-				"a druid asks Claw in cat form, Maul in bear form, Wrath out of form, Healing Touch of a friend")
+			local friend = R.Lists("target")
+			assert(cat.melee[1] == 1082 and cat.ranged[1] == 5176 and bear.melee[1] == 6807 and #caster.melee == 0
+				and caster.ranged[1] == 5176 and friend.help[1] == 5185,
+				"a druid asks Claw in cat form, Maul in bear form, Wrath further off, Healing Touch of a friend")
 			_G.UnitClass = function() return "Hunter", "HUNTER" end
 			_G.UnitPowerType, _G.UnitCanAssist = wasPowerType, wasAssist
 			-- no target: dim, and nothing asked
@@ -8376,8 +10068,9 @@ if ok then
 			assert(mod.PaintReach() == false and icon._alpha == mod.REACH_DIM, "dim without a target")
 			_G.UnitExists = wasExists
 			_G.C_Spell.IsSpellInRange = function(id) return answers[id] end
-			assert(mod.Status():find("target icon lit, by Auto Shot", 1, true),
-				"What loaded says what it asked and what it was told: " .. mod.Status())
+			answers = { [75] = true, [2973] = false }
+			assert(mod.Status():find("target icon green crosshair, in ranged reach, by Auto Shot", 1, true),
+				"What loaded says what it was told, and by which spell: " .. mod.Status())
 			-- the display goes, and the icon with it
 			BT.SetEnabled("resourcedisplay", false)
 			assert(not icon:IsShown() and icon:GetParent() == _G.UIParent, "switched off, the icon goes")
@@ -8473,7 +10166,7 @@ if ok then
 			-- so one of them being odd has to be survivable.
 			local odd = _G.CreateFrame("Frame", "OddTooltip", _G.UIParent)
 			odd.GetObjectType = function() return "GameTooltip" end
-			odd.NumLines = function() error("not that kind of tooltip") end
+			odd.NumLines = function() error("not that kind of tooltip", 0) end
 			walk[#walk + 1] = odd
 			mod.SweepTooltips()
 			local show = odd:GetScript("OnShow")
@@ -8950,32 +10643,38 @@ if ok then
 			assert(mod.ItemLines(tip, nil) == 0, "no account, no restyle")
 			_G.Enum.TooltipDataLineType = hadKinds
 		end },
-		{ "an item tooltip written again, in option C's shape", function()
-			-- (Josh 2026-10-17: option C of the item tooltip canvas, "Yes, build
-			-- option C. Make sure we use this for the "equipped" compairson
-			-- tooltip as well")
+		{ "an item tooltip written as a spell's card is", function()
+			-- (Josh 2026-10-18: the item tooltips "don't match the spell
+			-- tooltips. Might need to rework these so they match spell
+			-- tooltips", then "Option 1 for the item tooltips. Instead of "Item
+			-- Level" we can just use "ilvl""), and the Equipped one beside it
+			-- the same way (Josh 2026-10-17: "Make sure we use this for the
+			-- "equipped" compairson tooltip as well")
 			local mod = BT.GetModule("tooltips")
 			BT.SetEnabled("tooltips", true)
 			local T = BT.UnitTip
 			local keep = { kinds = _G.Enum.TooltipDataLineType, item = _G.C_Item, shop = _G.ShoppingTooltip1 }
 			_G.Enum.TooltipDataLineType = { None = 0, ItemName = 1, ItemBinding = 2, EquipSlot = 3, FlavorText = 4,
-				SellPrice = 5, ItemSpellTriggerOnEquip = 6, NestedBlock = 9 }
+				SellPrice = 5, ItemSpellTriggerOnEquip = 6, ItemLevel = 8, NestedBlock = 9 }
 			local LT = _G.Enum.TooltipDataLineType
 			_G.C_Item = { GetItemIconByID = function(id) return id == 12784 and 135562 or nil end }
 			local function makeTip(name)
 				local tip = _G.CreateFrame("Frame")
-				local t = { lines = {}, rights = {}, offsets = {} }
+				local t = { lines = {}, rights = {}, offsets = {}, colours = {} }
 				tip.GetName = function() return name end
 				tip.ClearLines = function()
-					t.lines, t.rights, t.offsets = {}, {}, {}
+					t.lines, t.rights, t.offsets, t.colours = {}, {}, {}, {}
 				end
-				tip.AddLine = function(_, text, _, _, _, _, offset)
+				tip.AddLine = function(_, text, r, g, b, _, offset)
 					t.lines[#t.lines + 1] = tostring(text)
 					t.offsets[#t.lines] = offset
+					t.colours[#t.lines] = { r, g, b }
 				end
-				tip.AddDoubleLine = function(_, l, r)
+				tip.AddDoubleLine = function(_, l, right, r, g, b, _, _, _, _, offset)
 					t.lines[#t.lines + 1] = tostring(l)
-					t.rights[#t.lines] = r
+					t.rights[#t.lines] = right
+					t.offsets[#t.lines] = offset
+					t.colours[#t.lines] = { r, g, b }
 				end
 				tip.NumLines = function() return #t.lines end
 				for i = 1, 30 do
@@ -8990,20 +10689,39 @@ if ok then
 				local gold = { r = 1, g = 0.82, b = 0 }
 				return { id = 12784, lines = {
 					{ type = LT.ItemName, leftText = "Arcanite Reaper", leftColor = epic, lineIndex = 1 },
-					{ type = LT.ItemBinding, leftText = "Binds when equipped", lineIndex = 2 },
-					{ type = LT.EquipSlot, leftText = "Two-Hand", rightText = "Axe", lineIndex = 3 },
-					{ type = LT.None, leftText = "153 - 256 Damage", rightText = "Speed 3.80", lineIndex = 4 },
-					{ type = LT.None, leftText = "(53.8 damage per second)", lineIndex = 5 },
-					{ type = LT.None, leftText = "+13 Stamina", lineIndex = 6 },
-					{ type = LT.None, leftText = "Durability 61 / 120", lineIndex = 7 },
-					{ type = LT.None, leftText = "Requires Level 58", lineIndex = 8 },
-					{ type = LT.ItemSpellTriggerOnEquip, leftText = "Equip: +62 Attack Power.", leftColor = green, lineIndex = 9 },
-					{ type = LT.FlavorText, leftText = '"Sample flavor text"', leftColor = gold, lineIndex = 10 },
-					{ type = LT.None, leftText = "<Made by Lorelei>", leftColor = green, lineIndex = 11 },
-					{ type = LT.SellPrice, leftText = "Sell Price:", price = 64218, lineIndex = 12 },
-					{ type = LT.None, leftText = "Press F6 to submit an issue for this Item", lineIndex = 13 },
+					{ type = LT.ItemLevel, leftText = "Item Level 63", lineIndex = 2 },
+					{ type = LT.ItemBinding, leftText = "Binds when equipped", lineIndex = 3 },
+					{ type = LT.EquipSlot, leftText = "Two-Hand", rightText = "Axe", lineIndex = 4 },
+					{ type = LT.None, leftText = "153 - 256 Damage", rightText = "Speed 3.80", lineIndex = 5 },
+					{ type = LT.None, leftText = "(53.8 damage per second)", lineIndex = 6 },
+					{ type = LT.None, leftText = "+13 Stamina", lineIndex = 7 },
+					{ type = LT.None, leftText = "Durability 61 / 120", lineIndex = 8 },
+					{ type = LT.None, leftText = "Requires Level 58", lineIndex = 9 },
+					{ type = LT.ItemSpellTriggerOnEquip, leftText = "Equip: +62 Attack Power.", leftColor = green, lineIndex = 10 },
+					{ type = LT.FlavorText, leftText = '"Sample flavor text"', leftColor = gold, lineIndex = 11 },
+					{ type = LT.None, leftText = "<Made by Lorelei>", leftColor = green, lineIndex = 12 },
+					{ type = LT.SellPrice, leftText = "Sell Price:", price = 64218, lineIndex = 13 },
+					{ type = LT.None, leftText = "Press F6 to submit an issue for this Item", lineIndex = 14 },
 					{ type = LT.None, leftText = "Not shown, consumed by the client" },
 				} }
+			end
+			-- the two figures and the cells as they are drawn
+			local function figs(tip)
+				local b, out = mod.ItemBits(tip), {}
+				for i = 1, 2 do
+					local g = b.figs[i]
+					out[i] = (g.num._shown ~= false and g.num._text) and (g.num._text .. " " .. g.label._text) or "-"
+				end
+				return out[1] .. " | " .. out[2]
+			end
+			local function cells(tip)
+				local out = {}
+				for _, c in ipairs(mod.ItemBits(tip).cellText) do
+					if c._shown ~= false then
+						out[#out + 1] = c._text
+					end
+				end
+				return table.concat(out, " · ")
 			end
 			local tip, t = makeTip("RebuiltTip")
 			-- cleared as GameTooltip is: its clearing strips it back (M.DressPlain)
@@ -9018,53 +10736,58 @@ if ok then
 			local spine = mod.Skins()[tip].accent
 			assert(spine._shown ~= false and spine._color[1] == 0.64 and spine._color[3] == 0.93,
 				"the spine in the item's quality, after the rebuild cleared it")
-			local function at(words)
-				for i, text in ipairs(t.lines) do
+			local function at(lines, words)
+				for i, text in ipairs(lines) do
 					if text == words then
 						return i
 					end
 				end
 			end
+			local all = table.concat(t.lines, " | ")
+			-- THE HEADER AS A SPELL'S: the name, then its kind and slot with no
+			-- level in them, both beside the icon, room kept at their right
 			assert(t.lines[1] == "Arcanite Reaper" and t.lines[2] == "Axe · Two-Hand",
-				"the name, then what it is: " .. table.concat(t.lines, " | "))
-			assert(t.offsets[1] == mod.ITEM.ICON + mod.ITEM.ICON_GAP and t.offsets[2] == t.offsets[1],
-				"both beside the icon")
+				"the name, then what it is: " .. all)
+			-- HOW IT BINDS, AS A TAG UNDER WHAT IT IS (Josh 2026-10-18: ""Soulbound",
+			-- "BoE" and "BoP" should be moved out of the grid somehow, and placed
+			-- as a tag under the item type"): a third line, and a taller icon
+			assert(t.offsets[1] == mod.ITEM.ICON_TALL + mod.ITEM.ICON_GAP and t.offsets[2] == t.offsets[1]
+				and t.offsets[3] == t.offsets[1] and t.lines[3] == T.TAG_BLANK, "three lines beside the tall icon: " .. all)
+			do
+				local pool, used = T.TagPool(tip)
+				assert(used == 1 and pool[1].text._text == "BoE" and pool[1].bg._points.LEFT.rel == _G.RebuiltTipTextLeft3,
+					"BoE, as players write it, a tag on the third line")
+				assert(mod.ItemBits(tip).icon._width == mod.ITEM.ICON_TALL, "and the icon as tall as the three")
+			end
+			assert(t.rights[1] == T.TAG_BLANK and t.rights[2] == T.TAG_BLANK, "with room at their right for the figures")
 			local b = mod.ItemBits(tip)
 			assert(b.icon._texture == 135562 and b.icon._shown ~= false, "the item's own icon")
-			local pool, used = T.TagPool(tip)
-			assert(used == 1 and pool[1].text._text == "BoE" and pool[1].tag[2] == "bound",
-				"the binding as BoE, outlined (Josh: \"can we shorted 'binds when equipped' to just BoE\")")
-			local bindLine = nil
-			for i, r in pairs(t.rights) do
-				if r == "Requires Level 58" then
-					bindLine = i
-				end
+			-- THE TWO FIGURES, drawn as a spell's: DPS in red beside the name, the
+			-- item level beside the line under it, "ILVL" in capitals as its neighbours ("Let's go with ILVL")
+			assert(figs(tip) == "53.8 DPS | 63 ILVL", "a weapon's DPS and its level: " .. figs(tip))
+			assert(b.figs[1].num._textColor[1] == mod.FIGURE_INK.dps[1]
+				and b.figs[2].num._textColor[1] == mod.FIGURE_INK.level[1], "DPS in red, the level in grey")
+			assert(b.figs[1].label._points.RIGHT.rel == _G.RebuiltTipTextRight1
+				and b.figs[2].label._points.RIGHT.rel == _G.RebuiltTipTextRight2
+				and b.figs[2].num._points.BOTTOMRIGHT.rel == b.figs[2].label, "right-aligned, each label after its number")
+			-- THE FACTS IN THE SPELL CARD'S CELLS, their numbers bright, wherever
+			-- in the words they are; BoE as players write it (Josh 2026-10-17)
+			assert(t.lines[5] == T.TAG_BLANK and cells(tip)
+				== "|cffe8edeb153–256|r damage · |cffe8edeb3.80|r speed · requires level |cffe8edeb58|r",
+				"a weapon's facts in cells, its binding not among them: " .. cells(tip))
+			-- NO HEADINGS, no tiles
+			for _, word in ipairs({ "DAMAGE", "STATS", "EQUIP", "ARMOR", "USE", "ENCHANT" }) do
+				assert(not at(t.lines, word), "no " .. word .. " heading: " .. all)
 			end
-			assert(bindLine and t.lines[bindLine] == T.TAG_BLANK, "the level it asks for beside it")
-			local damage, stats, equip = at("DAMAGE"), at("STATS"), at("EQUIP")
-			assert(damage and stats and equip and damage < stats and stats < equip,
-				"Damage, Stats and Equip, in that order: " .. table.concat(t.lines, " | "))
-			local said = {}
-			for _, tl in ipairs(b.tiles) do
-				if tl.bg._shown ~= false then
-					said[#said + 1] = tl.value._text .. " " .. tl.label._text
-				end
-			end
-			assert(table.concat(said, ", ") == "53.8 DPS, 153–256 A HIT, 3.80 SPEED",
-				"the damage as three tiles: " .. table.concat(said, ", "))
-			-- (Josh 2026-10-17: "The dps box should be red")
-			assert(b.tiles[1].bg._color[1] == mod.TILE_TINTS.dps[1] and b.tiles[1].bg._color[4] == mod.ITEM.TILE_TINT
-				and b.tiles[2].bg._color[1] == 1 and b.tiles[2].bg._color[4] < 0.1, "DPS faintly red, the rest the plain wash")
-			-- (Josh 2026-10-17: "Line height issues on the damage numbers")
-			local first = b.tiles[1]
-			assert(first.bg._height == mod.TileHeight() and first.label._points.TOPLEFT.rel == first.value,
-				"each tile as tall as its number and label, the label hung under the number")
-			assert(mod.TileHeight() >= BT.Fonts.Size(mod.ITEM.TILE_VALUE) + BT.Fonts.Size(mod.ITEM.TILE_LABEL)
-				+ 2 * mod.ITEM.TILE_PAD, "with room round both at the sizes they are drawn")
-			local _, tileSize = _G["RebuiltTipTextLeft" .. (at("DAMAGE") + 1)]:GetFont()
-			assert(tileSize == mod.TileHeight(), "and the line kept for them that tall: " .. tostring(tileSize))
-			assert(at("+13 Stamina") and at("+62 Attack Power."), "a stat, and the effect without its \"Equip:\"")
-			assert(_G["RebuiltTipTextLeft" .. at('"Sample flavor text"')]:GetFont() == T.QUOTE_FACE, "the flavour in italics")
+			assert(b.tiles == nil, "no tiles")
+			-- the stat in the body's ink, then the effect whole, "Equip:" and all,
+			-- in the game's green
+			local stamina, equip = at(t.lines, "+13 Stamina"), at(t.lines, "Equip: +62 Attack Power.")
+			assert(stamina and equip and stamina > 4 and stamina < equip, "the stat, then the effect, under the cells: " .. all)
+			assert(t.colours[stamina][1] == T.INK[1] and t.colours[stamina][2] == T.INK[2], "the stat in the body's ink")
+			assert(t.colours[equip][1] == 0.12 and t.colours[equip][2] == 1, "the effect in green")
+			assert(_G["RebuiltTipTextLeft" .. at(t.lines, '"Sample flavor text"')]:GetFont() == T.QUOTE_FACE,
+				"the flavour in italics")
 			local foot = nil
 			for i, r in pairs(t.rights) do
 				if r == mod.Coins(64218) then
@@ -9073,17 +10796,18 @@ if ok then
 			end
 			-- THE FOOT AS OPTION A HAD IT (Josh 2026-10-17: "I actually prefer
 			-- the durability and vendor price of option A")
-			assert(foot and t.lines[foot] == T.TAG_BLANK, "the price in coins, on the right of the foot")
+			assert(foot and t.lines[foot] == T.TAG_BLANK and foot > equip, "the price in coins, on the right of the foot")
 			assert(b.barBg._shown ~= false and b.barBg._width == mod.ITEM.BAR_W and b.bar._width < b.barBg._width
 				and b.barBg._points.LEFT.rel == _G["RebuiltTipTextLeft" .. foot],
 				"a short bar of how worn, at the start of that line")
 			-- (Josh 2026-10-17: "Durability has text overlap issues")
 			assert(b.worn._text == "61/120" and b.worn._shown ~= false and b.worn._points.LEFT.rel == b.barBg
 				and b.worn._points.LEFT.relPoint == "RIGHT", "and how worn in numbers, after the bar's end")
-			assert(at("Made by Lorelei"), "who made it")
+			assert(at(t.lines, "Made by Lorelei"), "who made it")
 			assert(t.lines[#t.lines]:find("F6", 1, true), "and the client's own footnote last")
-			assert(not table.concat(t.lines, " | "):find("consumed", 1, true), "nothing the client did not show")
-			assert(tip._minWidth and tip._minWidth >= mod.ITEM.MIN_W, "as wide as the tiles need")
+			assert(not all:find("consumed", 1, true) and not all:find("Item Level", 1, true)
+				and not all:find("63", 1, true), "nothing the client did not show, and the level said once")
+			assert(tip._minWidth and tip._minWidth >= mod.ITEM.MIN_W, "as wide as a spell's card")
 
 			-- THE EQUIPPED ONE BESIDE IT, the same way, with no price
 			local shop, st = makeTip("ShoppingTooltip1")
@@ -9100,7 +10824,8 @@ if ok then
 			end
 			assert(T.ItemTip(shop), "a comparison tooltip is one we write")
 			mod.ComposeItem(shop, reaper())
-			assert(st.lines[1] == "Arcanite Reaper", "written the same way")
+			assert(st.lines[1] == "Arcanite Reaper" and st.lines[2] == "Axe · Two-Hand" and figs(shop) == "53.8 DPS | 63 ILVL"
+				and cells(shop) == cells(tip), "written the same way: " .. figs(shop) .. " | " .. cells(shop))
 			local shopFoot = nil
 			for i, r in pairs(st.rights) do
 				if r == " " then
@@ -9112,7 +10837,7 @@ if ok then
 			assert(shop.CompareHeader._shown, "and its \"Equipped\" label still over it")
 			-- WHAT SWAPPING WOULD CHANGE (Josh 2026-10-17, choosing "Fold the
 			-- Equipped tooltip's "If you replace this item..." lines into the
-			-- card"): the client's lines after the card, set as a heading of it
+			-- card"): the client's lines after the card, set as a small heading
 			-- over a rule, the changes at the rows' size in their own colours
 			local function append(text)
 				shop:AddLine(text)
@@ -9125,7 +10850,7 @@ if ok then
 			local head = mod.FoldDelta(shop)
 			local headFs = _G["ShoppingTooltip1TextLeft" .. tostring(head)]
 			assert(head == #st.lines - 2 and headFs._text == "IF REPLACED" and headFs._textColor[1] < 0.6,
-				"a heading of the card's: " .. tostring(head) .. " " .. tostring(headFs and headFs._text))
+				"a small heading: " .. tostring(head) .. " " .. tostring(headFs and headFs._text))
 			local _, rowSize = _G["ShoppingTooltip1TextLeft" .. (head + 1)]:GetFont()
 			local _, gapSize = _G["ShoppingTooltip1TextLeft" .. (head - 1)]:GetFont()
 			assert(rowSize == BT.Fonts.Size(mod.ITEM.ROW) and gapSize == mod.ITEM.SPACER
@@ -9133,6 +10858,7 @@ if ok then
 				"the changes at the rows' size, as the client coloured them")
 			local rule = mod.ItemBits(shop).deltaRule
 			assert(rule and rule._shown ~= false and rule._points.BOTTOMLEFT.rel == headFs, "over a rule")
+			assert(cells(shop) == cells(tip) and figs(shop) == "53.8 DPS | 63 ILVL", "the card's own above it as it was")
 			assert(mod.FoldDelta(tip) == nil, "a tooltip with no changes is left alone")
 			-- (Josh 2026-10-17: "The compare tooltip is broken. Looks like the
 			-- content is under the background?"): the client's tab is looked
@@ -9140,27 +10866,26 @@ if ok then
 			mod.RestyleTab(shop)
 			local sb = mod.ItemBits(shop)
 			assert(sb.holder.beebsSkin == nil and sb.holder.beebsTab == nil and sb.icon._shown ~= false,
-				"the tiles' frame is not taken for the tab and given a surface over the words")
+				"the cells' frame is not taken for the tab and given a surface over the words")
 			for _, child in ipairs(shop._children) do
 				assert(child == shop.CompareHeader or child.beebsSkin == nil,
 					"nor any other frame of ours on it")
 			end
-			local _, shopTags = T.TagPool(shop)
-			local _, mainTags = T.TagPool(tip)
-			assert(shopTags == 1 and mainTags == 1, "each with its own tags")
 			-- the main one gone leaves the comparison's as they were
 			T.TipGone(tip)
-			local _, still = T.TagPool(shop)
-			assert(still == 1 and mod.ItemBits(shop).icon._shown ~= false, "the comparison's tags and icon stay")
+			assert(cells(tip) == "" and figs(tip) == "- | -", "the main one's cells and figures go with it")
+			assert(cells(shop) ~= "" and figs(shop) == "53.8 DPS | 63 ILVL" and mod.ItemBits(shop).icon._shown ~= false,
+				"the comparison's cells, figures and icon stay")
 
 			_G.Enum.TooltipDataLineType, _G.C_Item, _G.ShoppingTooltip1 = keep.kinds, keep.item, keep.shop
 			T.HideTags()
 			T.RestoreFonts()
 		end },
-		{ "items of other shapes written again: no slot, a wand, a set", function()
+		{ "items of other shapes written again: armour, no slot, a potion, a wand, a set", function()
 			-- (Josh 2026-10-17: ""use" tag has overlap with the icon. Crafting
 			-- reagents as well ... Should probably make sure the others work as
-			-- well")
+			-- well"); in the spell card's look since Josh 2026-10-18 ("Option 1
+			-- for the item tooltips")
 			local mod = BT.GetModule("tooltips")
 			BT.SetEnabled("tooltips", true)
 			local T = BT.UnitTip
@@ -9173,25 +10898,29 @@ if ok then
 				GetItemInfoInstant = function(id)
 					if id == 1251 then
 						return id, "Consumable", "Bandage"
+					elseif id == 118 then
+						return id, "Consumable", "Potion"
 					elseif id == 2840 then
 						return id, "Trade Goods", "Trade Goods"
 					end
 				end,
 			}
 			local tip = _G.CreateFrame("Frame")
-			local t = { lines = {}, rights = {}, offsets = {} }
+			local t = { lines = {}, rights = {}, offsets = {}, colours = {} }
 			tip.GetName = function() return "ShapeTip" end
 			tip.ClearLines = function()
-				t.lines, t.rights, t.offsets = {}, {}, {}
+				t.lines, t.rights, t.offsets, t.colours = {}, {}, {}, {}
 			end
-			tip.AddLine = function(_, text, _, _, _, _, offset)
+			tip.AddLine = function(_, text, r, g, b, _, offset)
 				t.lines[#t.lines + 1] = tostring(text)
 				t.offsets[#t.lines] = offset
+				t.colours[#t.lines] = { r, g, b }
 			end
-			tip.AddDoubleLine = function(_, l, r, _, _, _, _, _, _, _, offset)
+			tip.AddDoubleLine = function(_, l, right, r, g, b, _, _, _, _, offset)
 				t.lines[#t.lines + 1] = tostring(l)
-				t.rights[#t.lines] = r
+				t.rights[#t.lines] = right
 				t.offsets[#t.lines] = offset
+				t.colours[#t.lines] = { r, g, b }
 			end
 			tip.NumLines = function() return #t.lines end
 			for i = 1, 30 do
@@ -9199,12 +10928,92 @@ if ok then
 				_G["ShapeTipTextRight" .. i] = _G.CreateFrame("FontString")
 			end
 			local beside = mod.ITEM.ICON + mod.ITEM.ICON_GAP
+			-- beside the icon grown for a row of tags (M.ItemTags, Josh 2026-10-18)
+			local besideTall = mod.ITEM.ICON_TALL + mod.ITEM.ICON_GAP
 			local white, green = { r = 1, g = 1, b = 1 }, { r = 0.12, g = 1, b = 0 }
+			local b = mod.ItemBits(tip)
+			local fig = b.figs[1]
 			local function all()
 				return table.concat(t.lines, " | ")
 			end
+			local function at(words)
+				for i, text in ipairs(t.lines) do
+					if text == words then
+						return i
+					end
+				end
+			end
+			local function figs()
+				local out = {}
+				for i = 1, 2 do
+					local g = b.figs[i]
+					out[i] = (g.num._shown ~= false and g.num._text) and (g.num._text .. " " .. g.label._text) or "-"
+				end
+				return out[1] .. " | " .. out[2]
+			end
+			local function cells()
+				local out = {}
+				for _, c in ipairs(b.cellText) do
+					if c._shown ~= false then
+						out[#out + 1] = c._text
+					end
+				end
+				return table.concat(out, " · ")
+			end
 
-			-- a bandage: what it is beside the icon, what using it does under both
+			-- ARMOUR: its armor where a weapon has its DPS, in the body's ink,
+			-- and its level; "soulbound" as a word in a cell (Josh 2026-10-17:
+			-- "Soulbound stays a word")
+			local pants = { id = 3471, lines = {
+				{ type = LT.ItemName, leftText = "Copper Chain Pants", leftColor = green, lineIndex = 1 },
+				{ type = LT.ItemLevel, leftText = "Item Level 10", lineIndex = 2 },
+				{ type = LT.ItemBinding, leftText = "Soulbound", lineIndex = 3 },
+				{ type = LT.EquipSlot, leftText = "Legs", rightText = "Mail", lineIndex = 4 },
+				{ type = LT.None, leftText = "94 Armor", lineIndex = 5 },
+				{ type = LT.None, leftText = "+1 Stamina", lineIndex = 6 },
+				{ type = LT.None, leftText = "Durability 50 / 50", lineIndex = 7 },
+				{ type = LT.None, leftText = "Requires Level 4", leftColor = white, lineIndex = 8 },
+				{ type = LT.None, leftText = "<Made by Lorky Armwrench>", leftColor = green, lineIndex = 9 },
+				{ type = LT.SellPrice, leftText = "Sell Price:", price = 67, lineIndex = 10 },
+			} }
+			mod.ComposeItem(tip, pants)
+			assert(t.lines[2] == "Mail · Legs" and t.offsets[2] == besideTall, "its kind and slot beside the icon: " .. all())
+			assert(figs() == "94 ARMOR | 10 ILVL" and fig.num._textColor[1] == T.INK[1] and fig.num._textColor[3] == T.INK[3],
+				"armour's armor in the body's ink, and its level: " .. figs())
+			assert(cells() == "requires level |cffe8edeb4|r", "what it asks, in a cell: " .. cells())
+			do
+				local pool, used = T.TagPool(tip)
+				assert(used == 1 and pool[1].text._text == "SOULBOUND", "and Soulbound a tag, a word in capitals")
+			end
+			assert(at("+1 Stamina") and at("Made by Lorky Armwrench") and not at("ARMOR") and not at("94 Armor"),
+				"its stat a line, its armor said once: " .. all())
+			assert(b.worn._text == "50/50" and b.worn._shown ~= false, "how worn, after the bar")
+			-- a level you have not reached: all of it in the client's red, as a
+			-- spell's cost you cannot pay
+			pants.lines[8].leftColor = { r = 1, g = 0.125, b = 0.125 }
+			mod.ComposeItem(tip, pants)
+			assert(cells() == "|cffff2020requires level 4|r", "a level not reached in red: " .. cells())
+
+			-- NO GRID WHERE THERE ARE NO FACTS (Josh 2026-10-18: "This will allow
+			-- us to remove the grid on non equipment items"): an apple's binding
+			-- and how many you may carry are its tags, and it has no cells
+			mod.ComposeItem(tip, { id = 4537, lines = {
+				{ type = LT.ItemName, leftText = "Bobbing Apple", leftColor = white, lineIndex = 1 },
+				{ type = LT.ItemBinding, leftText = "Soulbound", lineIndex = 2 },
+				{ type = LT.None, leftText = "Unique (5)", lineIndex = 3 },
+				{ type = LT.ItemSpellTriggerOnUse, leftText = "Use: Restores 2% of your health per second for 24 sec.  Must remain seated while eating.",
+					leftColor = green, lineIndex = 4 },
+				{ type = LT.FlavorText, leftText = '"Crisp, delicious and hopefully worm-free"', lineIndex = 5 },
+			} })
+			do
+				local pool, used = T.TagPool(tip)
+				assert(used == 2 and pool[1].text._text == "SOULBOUND" and pool[2].text._text == "UNIQUE (5)",
+					"its binding and its limit as tags")
+			end
+			assert(cells() == "" and t.offsets[3] == besideTall and not at("Unique (5)"),
+				"no cells, and the limit not said again: " .. cells() .. " / " .. all())
+
+			-- a bandage: what it is beside the icon, what it does in a cell
 			mod.ComposeItem(tip, { id = 1251, lines = {
 				{ type = LT.ItemName, leftText = "Linen Bandage", leftColor = white, lineIndex = 1 },
 				{ type = LT.ItemSpellTriggerOnUse, leftText = "Use: Heals 66 damage over 6 sec.", leftColor = green,
@@ -9212,33 +11021,59 @@ if ok then
 				{ type = LT.None, leftText = "Requires First Aid (1)", lineIndex = 3 },
 				{ type = LT.SellPrice, leftText = "Sell Price:", price = 10, lineIndex = 4 },
 			} })
-			assert(t.lines[2] == "Consumable · Bandage" and t.offsets[2] == beside,
-				"its kind on the second line beside the icon: " .. all())
-			local use = nil
-			for i, text in ipairs(t.lines) do
-				if text == "USE" then
-					use = i
-				end
-			end
-			assert(use and use > 2 and t.offsets[use] == nil and t.lines[use + 1] == "Heals 66 damage over 6 sec.",
-				"and what using it does under both: " .. all())
+			-- the subclass alone, as a weapon's says "Axe"
+			assert(t.lines[2] == "Bandage" and t.offsets[2] == beside, "its kind on the second line beside the icon: " .. all())
 			-- (Josh 2026-10-17, choosing "Give potions, food and bandages the
-			-- spell figures"): 66 over 6 sec, at the right of its name in green
-			local fig = mod.ItemBits(tip).figs[1]
-			assert(t.rights[1] == T.TAG_BLANK and fig.num._text == "11.0" and fig.label._text == "HPS"
-				and fig.num._textColor[2] == mod.FIGURE_INK.hps[2], "what it heals a second: " .. tostring(fig.num._text))
-			-- a potion, at once: the middle of what it does; a drink, mana a second
+			-- spell figures"): 66 over 6 sec, at the right of its name in green;
+			-- no level, so nothing beside the line under it
+			assert(t.rights[1] == T.TAG_BLANK and figs() == "11.0 HPS | -" and fig.num._textColor[2] == mod.FIGURE_INK.hps[2],
+				"what it heals a second: " .. figs())
+			assert(cells() == "|cffe8edeb66|r health over 6 sec", "what it does, in a cell: " .. cells())
+			-- its Use line says no more than the cell, so it goes, as a spell's
+			-- description does; what it asks stays a line, under the icon
+			local asks = at("Requires First Aid (1)")
+			assert(not all():find("Heals 66", 1, true) and not at("USE") and asks and t.offsets[asks] == nil,
+				"the Use line said already, no heading, what it asks kept: " .. all())
+
+			-- A POTION, as option 1 drew it: its figure from its Use line, its
+			-- amount and cooldown in cells, no level, and the Use line gone
+			mod.ComposeItem(tip, { id = 118, lines = {
+				{ type = LT.ItemName, leftText = "Minor Healing Potion", leftColor = white, lineIndex = 1 },
+				{ type = LT.ItemSpellTriggerOnUse, leftText = "Use: Restores 70 to 90 health. (2 Min Cooldown)",
+					leftColor = green, lineIndex = 2 },
+				{ type = LT.SellPrice, leftText = "Sell Price:", price = 5, lineIndex = 3 },
+			} })
+			assert(t.lines[2] == "Potion" and figs() == "80 HEALING | -", "a potion's figure and no level: " .. figs())
+			assert(cells() == "|cffe8edeb70–90|r health · |cffe8edeb2|r min cooldown", "its amount and cooldown: " .. cells())
+			assert(not all():find("Restores", 1, true) and not all():find("Cooldown", 1, true),
+				"its Use line said in the cells: " .. all())
+			assert(t.rights[#t.lines] == mod.Coins(5) and t.lines[#t.lines] == " ", "and its price at the foot")
+			-- a potion's thousands, and a drink, whose Use line says more: kept
+			-- whole and in green, its mana a second at the right
 			for _, case in ipairs({
-				{ "Use: Restores 140 to 180 health.", "160", "HEALING" },
-				{ "Use: Restores 151 mana over 18 sec. Must remain seated while drinking.", "8.4", "MPS" },
+				{ "Use: Restores 1050 to 1750 health. (2 Min Cooldown)", "1,400 HEALING | -",
+					"|cffe8edeb1,050–1,750|r health · |cffe8edeb2|r min cooldown", false },
+				{ "Use: Restores 140 to 180 health.", "160 HEALING | -", "|cffe8edeb140–180|r health", false },
+				{ "Use: Restores 151 mana over 18 sec. Must remain seated while drinking.", "8.4 MPS | -",
+					"|cffe8edeb151|r mana over 18 sec", true },
 			}) do
 				mod.ComposeItem(tip, { id = 1251, lines = {
 					{ type = LT.ItemName, leftText = "Something To Use", leftColor = white, lineIndex = 1 },
 					{ type = LT.ItemSpellTriggerOnUse, leftText = case[1], leftColor = green, lineIndex = 2 },
 				} })
-				assert(fig.num._text == case[2] and fig.label._text == case[3],
-					case[1] .. " -> " .. tostring(fig.num._text) .. " " .. tostring(fig.label._text))
+				local line = at(case[1])
+				assert(figs() == case[2] and cells() == case[3] and (line ~= nil) == case[4],
+					case[1] .. " -> " .. figs() .. " | " .. cells() .. " | " .. all())
+				assert(not line or t.colours[line][2] == 1, "a Use line kept is green")
 			end
+			-- a Use line that says more keeps its words, its cooldown in a cell
+			mod.ComposeItem(tip, { id = 1251, lines = {
+				{ type = LT.ItemName, leftText = "Something To Use", leftColor = white, lineIndex = 1 },
+				{ type = LT.ItemSpellTriggerOnUse, leftText = "Use: Restores 375 to 625 mana. Lasts 1 hour. (5 Min Cooldown)",
+					leftColor = green, lineIndex = 2 },
+			} })
+			assert(at("Use: Restores 375 to 625 mana. Lasts 1 hour.") and cells():find("|cffe8edeb5|r min cooldown", 1, true),
+				"the cooldown said once, in its cell: " .. all() .. " | " .. cells())
 
 			-- a bar of copper, whose class and subclass are one word: said once
 			mod.ComposeItem(tip, { id = 2840, lines = {
@@ -9246,7 +11081,8 @@ if ok then
 				{ type = LT.None, leftText = "Crafting Reagent", leftColor = { r = 0.4, g = 0.73, b = 1 }, lineIndex = 2 },
 			} })
 			assert(t.lines[2] == "Trade Goods" and t.offsets[2] == beside, "a class said once: " .. all())
-			assert(t.lines[4] == "Crafting Reagent" and t.offsets[4] == nil, "and the client's own line under the icon")
+			assert(t.lines[4] == "Crafting Reagent" and t.offsets[4] == nil and figs() == "- | -" and cells() == "",
+				"and the client's own line under the icon, no figures, no cells")
 
 			-- a thing the client says nothing of: the line is kept, empty
 			mod.ComposeItem(tip, { id = 9999, lines = {
@@ -9254,25 +11090,26 @@ if ok then
 				{ type = LT.None, leftText = "Something", lineIndex = 2 },
 				{ type = LT.ItemLevel, leftText = "Item Level 12", lineIndex = 3 },
 			} })
-			assert(t.lines[2] == "ilvl 12" and t.offsets[2] == beside, "or its level, where the client says one: " .. all())
+			assert(t.lines[2] == " " and t.offsets[2] == beside and figs() == "- | 12 ILVL",
+				"or its level beside it, where the client says one: " .. all() .. " | " .. figs())
 			mod.ComposeItem(tip, { id = 9999, lines = {
 				{ type = LT.ItemName, leftText = "Odd Thing", leftColor = white, lineIndex = 1 },
 				{ type = LT.None, leftText = "Something", lineIndex = 2 },
 			} })
-			assert(t.lines[2] == " " and t.offsets[2] == beside, "or an empty line beside the icon: " .. all())
+			assert(t.lines[2] == " " and t.offsets[2] == beside and t.rights[1] == nil and figs() == "- | -",
+				"or an empty line beside the icon, and no room for figures: " .. all())
 
-			-- a wand: the tile keeps the numbers, its label names the school
+			-- a wand: its DPS, and the school in its damage's cell
 			mod.ComposeItem(tip, { id = 5240, lines = {
 				{ type = LT.ItemName, leftText = "Torchlight Wand", leftColor = green, lineIndex = 1 },
 				{ type = LT.EquipSlot, leftText = "Ranged", rightText = "Wand", lineIndex = 2 },
 				{ type = LT.None, leftText = "17 - 32 Fire Damage", rightText = "Speed 1.50", lineIndex = 3 },
 				{ type = LT.None, leftText = "(16.3 damage per second)", lineIndex = 4 },
 			} })
-			local hit = mod.ItemBits(tip).tiles[2]
-			assert(hit.value._text == "17–32" and hit.label._text == "FIRE, A HIT",
-				"a wand's hit: " .. tostring(hit.value._text) .. " / " .. tostring(hit.label._text))
+			assert(figs() == "16.3 DPS | -" and cells() == "|cffe8edeb17–32|r fire damage · |cffe8edeb1.50|r speed",
+				"a wand's: " .. figs() .. " | " .. cells())
 
-			-- a set: its bonuses stay with its name, not under an Enchant heading
+			-- a set: its bonuses stay with its name, as lines of the client's
 			local item = mod.ReadItem({ lines = {
 				{ type = LT.ItemName, leftText = "Cadaverous Belt", lineIndex = 1 },
 				{ type = LT.None, leftText = "Cadaverous Garb (1/5)", lineIndex = 2 },
@@ -9383,7 +11220,24 @@ if ok then
 			-- two rows here: the top of each, the lines between their cells (two,
 			-- then none), the bottom and both sides
 			assert(shownLines == 2 + 2 + 3, "lines round and between the cells: " .. shownLines)
-			assert(b.tiles[1] == nil or b.tiles[1].bg._shown == false, "and no tiles")
+			-- ONE SCREEN PIXEL, NOT ONE UNIT (Josh 2026-10-18: "Can we make sure
+			-- the border is a uniform 1px on all cells?"): with a pixel worth
+			-- 0.8 of a unit, every line is 0.8 thick
+			do
+				local hadPixel = _G.PixelUtil
+				_G.PixelUtil = { GetNearestPixelSize = function(units) return units * 0.8 end }
+				mod.ComposeSpell(tip, fireball, "spell")
+				local thick, n = true, 0
+				for _, l in ipairs(b.cellLines) do
+					if l._shown ~= false then
+						n = n + 1
+						thick = thick and (math.abs(l._width - 0.8) < 1e-9 or math.abs(l._height - 0.8) < 1e-9)
+					end
+				end
+				_G.PixelUtil = hadPixel
+				mod.ComposeSpell(tip, fireball, "spell")
+				assert(n == 7 and thick, "every line round and between the cells is one pixel thick")
+			end
 			-- ("Let's go with your recommendation for hidin the paragraph
 			-- descriptions"): one sentence that says no more than the facts
 			assert(t.lines[6] == "Requires a staff" and not all:find("Hurls a fiery ball", 1, true),
@@ -9416,6 +11270,26 @@ if ok then
 			} }, "spell")
 			assert(said() == "1.7 DPS | 1.20 PER MANA | |cffe8edeb30|r damage over 18 sec · |cffe8edeb25|r mana · instant"
 				and not table.concat(t.lines, " | "):find("word of darkness", 1, true), "30 over 18 sec: " .. said())
+
+			-- an enemy's ability, from the Expedition's enemy page: its DPS by
+			-- its cooldown ("yes, use the cooldown for enemy abilities").
+			-- Stitches's Aura of Rot, 38 every 3 sec, is 12.7, not 25.3; a
+			-- Fireball's 64.5 every 8 sec is 8.1, not 25.8
+			local hadOwner = tip.GetOwner
+			tip.GetOwner = function() return { beebEnemyAbility = true } end
+			mod.ComposeSpell(tip, { id = 3106, lines = {
+				{ type = LT.SpellName, leftText = "Aura of Rot", leftColor = white, lineIndex = 1 },
+				{ type = LT.None, leftText = "Melee Range", lineIndex = 2 },
+				{ type = LT.None, leftText = "Instant", rightText = "3 sec cooldown", lineIndex = 3 },
+				{ type = LT.SpellDescription, leftText = "Inflicts 36 to 40 Nature damage to nearby enemies.",
+					leftColor = gold, wrapText = true, lineIndex = 4 },
+			} }, "spell")
+			assert(figs():find("^12%.7 DPS"), "38 every 3 sec: " .. said())
+			mod.ComposeSpell(tip, fireball, "spell")
+			assert(figs() == "8.1 DPS | 2.15 PER MANA", "64.5 every 8 sec: " .. figs())
+			tip.GetOwner = hadOwner
+			mod.ComposeSpell(tip, fireball, "spell")
+			assert(figs() == "25.8 DPS | 2.15 PER MANA", "yours, as fast as you can cast it: " .. figs())
 
 			-- a heal: HPS, green
 			mod.ComposeSpell(tip, { id = 2050, lines = {
@@ -9599,22 +11473,15 @@ if ok then
 				assert(mod.SaysNoMore(case[1], after) == case[2], case[1] .. " -> " .. tostring(not case[2]))
 			end
 
-			-- ("The spell stat lines "Instant" goes out of the box"): a value
-			-- wider than its tile is set smaller until it fits, and the next
-			-- one that fits is at its own size again (an item's tiles)
-			local c = mod.Card(tip)
-			c.header("Wide", { 1, 1, 1 }, nil, "")
-			c.tiles({ { "1,234–1,456", "A hit" }, { "12", "Speed" } })
-			c.finish(mod.ITEM.MIN_W, 0)
-			local _, wideSize = b.tiles[1].value:GetFont()
-			local _, fullSize = b.tiles[2].value:GetFont()
-			assert(wideSize < fullSize, "a wide value set smaller to fit: " .. tostring(wideSize) .. " / " .. tostring(fullSize))
-			c = mod.Card(tip)
-			c.header("Narrow", { 1, 1, 1 }, nil, "")
-			c.tiles({ { "12", "A hit" } })
-			c.finish(mod.ITEM.MIN_W, 0)
-			local _, again = b.tiles[1].value:GetFont()
-			assert(again == fullSize, "and back to its size for the next one")
+			-- THE FACTS' CELLS, a spell's and an item's written alike (Josh
+			-- 2026-10-18, option 1 for the items): the number bright wherever
+			-- it is in the words, a warning all in its colour, small letters
+			-- where asked, a word players write as they write it
+			local items = mod.FactCells({ { text = "Requires Level 58", lower = true }, { text = "+11 damage" },
+				{ text = "60 Mana", rgb = { 1, 0.125, 0.125 }, lower = true }, { text = "BoE" } })
+			assert(items[1][1] == "requires level |cffe8edeb58|r" and items[1][2] == "requires level 58"
+				and items[2][1] == "|cffe8edeb+11|r damage" and items[3][1] == "|cffff202060 mana|r" and items[4][1] == "BoE",
+				"the cells' words: " .. items[1][1] .. " / " .. items[2][1] .. " / " .. items[3][1] .. " / " .. items[4][1])
 			-- what each kind of spell does, read off its words
 			for _, case in ipairs({
 				{ "Draws on the soul of the party member to shield them, absorbing 47 damage. Lasts 30 sec.", "Absorb", "47" },
@@ -9684,6 +11551,26 @@ if ok then
 				"and recorded as they came, newest first")
 			BeebModDB.tooltipsDump = nil
 
+			-- damage on a hit: its amount in the facts, and no figures (Josh
+			-- 2026-10-18: "I'm not sure the 'per mana' makes sense here though,
+			-- since it is a buff"). After a spell with figures, none of theirs
+			-- is left at the right, and the name and rank keep no room there.
+			local thorns = { id = 467, lines = {
+				{ type = LT.SpellName, leftText = "Thorns", rightText = "Rank 1", leftColor = white, lineIndex = 1 },
+				{ type = LT.None, leftText = "35 Mana", rightText = "30 yd range", lineIndex = 2 },
+				{ type = LT.None, leftText = "Instant", lineIndex = 3 },
+				{ type = LT.SpellDescription, leftText = "Thorns sprout from the friendly target causing 3 Nature damage to attackers when hit.  Lasts 10 min.",
+					leftColor = gold, wrapText = true, lineIndex = 4 },
+			} }
+			mod.ComposeSpell(tip, fireball, "spell")
+			assert(figs() ~= "- | -", "Fireball's figures first")
+			mod.ComposeSpell(tip, thorns, "spell")
+			all = table.concat(t.lines, " | ")
+			assert(figs() == "- | -" and t.rights[1] == nil and t.rights[2] == nil and t.lines[2] == "Rank 1 · 30 yd"
+				and cells() == "|cffe8edeb3|r damage · |cffe8edeb35|r mana · instant"
+				and all:find("Thorns sprout from the friendly target", 1, true),
+				"Thorns: no figures, nothing kept at the right, its 3 damage in the facts: " .. figs() .. " / " .. all)
+
 			-- a linked item or spell is one we write, with room for its close button
 			local wasRef = _G.ItemRefTooltip
 			local ref = _G.CreateFrame("Frame")
@@ -9699,6 +11586,533 @@ if ok then
 
 			_G.Enum.TooltipDataLineType, _G.C_Spell, _G.DebuffTypeColor = keep.kinds, keep.spell, keep.debuff
 			_G.UnitDamage = hadDamage0
+			T.HideTags()
+			T.RestoreFonts()
+		end },
+		{ "a spell's sums read its words the way they mean them", function()
+			-- (2026-10-17, audit) Renew's "of", a finishing move's "6-11", a
+			-- bleed's ticks, a totem's minute, "every 1 sec. Lasts 15 sec.",
+			-- Thorns and a totem at their own pace, and thousands marked
+			local mod = BT.GetModule("tooltips")
+			local keep = _G.Enum.TooltipDataLineType
+			_G.Enum.TooltipDataLineType = { None = 0, SpellName = 13, SpellDescription = 34 }
+			local LT = _G.Enum.TooltipDataLineType
+			local function read(name, cost, cast, desc)
+				local s = mod.ReadSpell({ lines = {
+					{ type = LT.SpellName, leftText = name, rightText = "Rank 1", leftColor = { r = 1, g = 1, b = 1 }, lineIndex = 1 },
+					{ type = LT.None, leftText = cost, rightText = "30 yd range", lineIndex = 2 },
+					{ type = LT.None, leftText = cast, lineIndex = 3 },
+					{ type = LT.SpellDescription, leftText = desc, leftColor = { r = 1, g = 0.82, b = 0 }, wrapText = true,
+						lineIndex = 4 },
+				} }, "spell")
+				local f1, f2 = s.figs and s.figs[1], s.figs and s.figs[2]
+				return (f1 and (f1[1] .. " " .. f1[2]) or "-") .. " | " .. (f2 and (f2[1] .. " " .. f2[2]) or "-")
+					.. " | " .. s.facts[1].text, s
+			end
+			for _, case in ipairs({
+				-- Renew's first rank heals "of" its amount: HPS, said as healing
+				{ "Renew", "30 Mana", "Instant", "Heals the target of 45 damage over 15 sec.",
+					"3.0 HPS | 1.50 per mana | 45 healing over 15 sec" },
+				-- a finishing move's range is its middle, not its top, and the 5 of
+				-- "2.5" is not a number of its own
+				{ "Eviscerate", "35 Energy", "Instant", "Finishing move that causes damage per combo point:\n   1 point  : 6-11 damage\n   2 points: 12-16 damage",
+					"2.4 DPS | 0.24 per energy | 8.5 damage" },
+				{ "Ferocious Bite", "35 Energy", "Instant", "Finishing move that causes damage per combo point and converts each extra point of energy into 2.5 additional damage.\n   1 point  : 14-30 damage",
+					"6.3 DPS | 0.63 per energy | 22 damage" },
+				-- a bleed is no faster than it ticks, however soon the energy is back
+				{ "Garrote", "50 Energy", "Instant", "Garrote the enemy, silencing them for 3 sec and causing 144 damage over 18 sec. Must be stealthed and behind the target.",
+					"8.0 DPS | 2.88 per energy | 144 damage over 18 sec" },
+				{ "Rip", "30 Energy", "Instant", "Finishing move that causes damage over time.  Damage increases per combo point:\n   1 point  : 42 damage over 12 sec",
+					"3.5 DPS | 1.40 per energy | 42 damage over 12 sec" },
+				-- a totem's minute is how long, not how much: 6 every 2 seconds of it
+				{ "Healing Stream Totem", "40 Mana", "Instant", "Summons a Healing Stream Totem with 5 health at the feet of the caster for 1 min that heals group members within 20 yards for 6 every 2 seconds.",
+					"3.0 HPS | 4.50 per mana | 180 healing over 1 min" },
+				-- every second for as long as it lasts, however it says how long
+				{ "Drain Life", "55 Mana", "Channeled", "Transfers 10 health every 1 sec from the target to the caster.  Lasts 5 sec.",
+					"10.0 DPS | 0.91 per mana | 50 damage over 5 sec" },
+				{ "Hellfire", "645 Mana", "Channeled", "Ignites the area surrounds you, causing 83 Fire damage to all nearby enemies every 1 sec.  Lasts 15 sec.  Each 1 sec. you take 83 Fire damage.",
+					"83.0 DPS | 1.93 per mana | 1,245 damage over 15 sec" },
+				{ "Hurricane", "880 Mana", "Channeled", "Creates a violent storm in the target area causing 72 Nature damage to enemies every 1 sec, and reducing the attack speed of enemies by 20%.  Lasts 10 sec.",
+					"72.0 DPS | 0.82 per mana | 720 damage over 10 sec" },
+				{ "Volley", "350 Mana", "Channeled", "Continuously fires a volley of ammo at the target area, causing 40 Arcane damage to enemy targets within 8 yards every 1 second for 6 sec.",
+					"40.0 DPS | 0.69 per mana | 240 damage over 6 sec" },
+				-- damage when you are hit: no rate at all (Josh 2026-10-18: "I'm
+				-- not sure the 'per mana' makes sense here though, since it is a
+				-- buff"); and a totem at its own pace, one attack of many: the same
+				{ "Thorns", "35 Mana", "Instant", "Thorns sprout from the friendly target causing 3 Nature damage to attackers when hit.  Lasts 10 min.",
+					"- | - | 3 damage" },
+				{ "Searing Totem", "25 Mana", "Instant", "Summons a Searing Totem with 5 health at your feet for 30 sec. that repeatedly attacks an enemy within 20 yards for 9 to 11 Fire damage.",
+					"- | - | 10 damage" },
+				-- "every second", as the Classic database words Drain Life
+				{ "Drain Life", "55 Mana", "Channeled", "Transfers 10 health every second from the target to the caster.  Lasts 5 sec.",
+					"10.0 DPS | 0.91 per mana | 50 damage over 5 sec" },
+				-- a comma is not an amount; the damage on a block is on a hit
+				{ "Blessing of Sanctuary", "60 Mana", "Instant", "Places a Blessing on the friendly target, reducing damage dealt from all sources by up to 10 for 10 min.  In addition, when the target blocks a melee attack the attacker will take 14 Holy damage.",
+					"- | - | 14 damage" },
+				-- thousands marked
+				{ "Greater Heal", "300 Mana", "3 sec cast", "Heal your target for 1,234 to 1,456.",
+					"448 HPS | 4.48 per mana | 1,345 healing" },
+			}) do
+				local said = read(case[1], case[2], case[3], case[4])
+				assert(said == case[5], case[1] .. ": " .. said)
+			end
+			assert(mod.SpellAmount("converts each extra point of energy into 2.5 additional damage.") == nil,
+				"no amount in the middle of a decimal")
+			-- the facts say Renew heals, so its description can go
+			local _, renew = read("Renew", "30 Mana", "Instant", "Heals the target of 45 damage over 15 sec.")
+			assert(renew.rows[1].hidden, "Renew's description goes: the facts say it heals")
+			-- a Healthstone's life, and a potion's thousands
+			local stone = mod.UseFigures({ effects = { { head = "Use", text = "Instantly restores 100 life." } } })
+			local potion = mod.UseFigures({ effects = { { head = "Use", text = "Restores 1050 to 1750 health. (2 Min Cooldown)" } } })
+			assert(stone and stone[1][1] == "100" and stone[1][2] == "Healing" and potion and potion[1][1] == "1,400",
+				"a Healthstone heals, and a potion's 1,400: " .. tostring(stone and stone[1][1]) .. " / " .. tostring(potion and potion[1][1]))
+			assert(mod.Middle(1400) == "1,400" and mod.Middle(28.5) == "28.5" and mod.Figure(1234.4) == "1,234"
+				and mod.Figure(25.25) == "25.3", "whole numbers with their thousands marked, halves rounded up")
+			_G.Enum.TooltipDataLineType = keep
+		end },
+		{ "damage on a hit has no rate, and other spells keep theirs", function()
+			-- ON A HIT, NO RATE AT ALL (Josh 2026-10-18: "I'm not sure the 'per
+			-- mana' makes sense here though, since it is a buff"): Thorns does its
+			-- 3 on each of many hits, so it has no DPS and no per mana, and keeps
+			-- its "3 damage". The wordings are the Classic database's
+			-- (wowhead.com/classic), and Josh's where his differ.
+			local mod = BT.GetModule("tooltips")
+			local keep = { kinds = _G.Enum.TooltipDataLineType, damage = _G.UnitDamage }
+			_G.Enum.TooltipDataLineType = { None = 0, SpellName = 13, SpellDescription = 34 }
+			local LT = _G.Enum.TooltipDataLineType
+			_G.UnitDamage = function() return 38, 49 end
+			-- as the card reads it: its two figures and its first fact
+			local function read(cost, cast, desc, kind)
+				local lines = { { type = LT.SpellName, leftText = "A spell", rightText = kind == "aura" and "Magic" or "Rank 1",
+					leftColor = { r = 1, g = 1, b = 1 } } }
+				if cost then
+					lines[#lines + 1] = { type = LT.None, leftText = cost, rightText = "30 yd range" }
+				end
+				if cast then
+					lines[#lines + 1] = { type = LT.None, leftText = cast }
+				end
+				lines[#lines + 1] = { type = LT.SpellDescription, leftText = desc, leftColor = { r = 1, g = 0.82, b = 0 },
+					wrapText = true }
+				if kind == "aura" then
+					lines[#lines + 1] = { type = LT.None, leftText = "10 min remaining" }
+				end
+				for i, line in ipairs(lines) do
+					line.lineIndex = i
+				end
+				local s = mod.ReadSpell({ lines = lines }, kind or "spell")
+				local f1, f2 = s.figs and s.figs[1], s.figs and s.figs[2]
+				return (f1 and (f1[1] .. " " .. f1[2]) or "-") .. " | " .. (f2 and (f2[1] .. " " .. f2[2]) or "-")
+					.. " | " .. s.facts[1].text
+			end
+			for _, case in ipairs({
+				-- damage to whoever strikes the target, every rank
+				{ "Thorns 1", "35 Mana", "Instant", "Thorns sprout from the friendly target causing 3 Nature damage to attackers when hit.  Lasts 10 min.",
+					"- | - | 3 damage" },
+				{ "Thorns 2", "60 Mana", "Instant", "Thorns sprout from the friendly target causing 6 Nature damage to attackers when hit.  Lasts 10 min.",
+					"- | - | 6 damage" },
+				{ "Lightning Shield", "45 Mana", "Instant", "The caster is surrounded by 3 balls of lightning.  When a spell, melee or ranged attack hits the caster, the attacker will be struck for 13 Nature damage.  This expends one lightning ball.  Only one ball will fire every few seconds.  Lasts 10 min.",
+					"- | - | 13 damage" },
+				{ "Lightning Shield, Josh's", "45 Mana", "Instant", "Surrounds the caster with 3 balls of lightning. When a spell, melee or ranged attack hits the caster, the attacker will be struck by a lightning ball for 13 Nature damage. Expends one lightning ball per attack. Only one ball can be fired every few seconds. Lasts 10 min.",
+					"- | - | 13 damage" },
+				-- an aura costs nothing, and had a DPS by the global cooldown
+				{ "Retribution Aura", nil, "Instant", "Causes 5 Holy damage to any creature that strikes a party member within 30 yards.  Players may only have one Aura on them per Paladin at any one time.",
+					"- | - | 5 damage" },
+				{ "Retribution Aura, Josh's", nil, "Instant", "Causes 5 Holy damage to any enemy that strikes a party member who is within 30 yards.",
+					"- | - | 5 damage" },
+				{ "Fire Shield", "60 Mana", "Instant", "Surrounds the target in a shield of fire.  Every strike against the target causes 5 Fire damage to the attacker.  Lasts 3 min.  The caster cannot cast Fire Shield on himself.",
+					"- | - | 5 damage" },
+				{ "Fire Shield, Josh's", "60 Mana", "Instant", "Surrounds a friendly target with a shield of fire, causing 2 Fire damage to attackers. Lasts 30 min.",
+					"- | - | 2 damage" },
+				{ "Shadowguard", "50 Mana", "Instant", "The caster is surrounded by shadows.  When a spell, melee or ranged attack hits the caster, the attacker will be struck for 20 Shadow damage.  Attackers can only be damaged once every few seconds.  This damage causes no threat.  3 charges.  Lasts 10 min.",
+					"- | - | 20 damage" },
+				{ "Touch of Weakness", "25 Mana", "Instant", "The next melee attack against the caster will cause 8 Shadow damage and reduce the damage caused by the attacker by 2 for 2 min.",
+					"- | - | 8 damage" },
+				-- damage on a block
+				{ "Holy Shield", "150 Mana", "Instant", "Increases chance to block by 30% for 10 sec, and deals 65 Holy damage for each attack blocked while active.  Damage caused by Holy Shield causes 20% additional threat. Each block expends a charge. 4 charges.",
+					"- | - | 65 damage" },
+				-- damage on each swing of your own weapon
+				{ "Seal of Righteousness 1", "20 Mana", "Instant", "Fills the Paladin with holy spirit for 30 sec, granting each melee attack an additional 3 to 9 Holy damage.  Slower weapons cause more Holy damage per swing.  Only one Seal can be active on the Paladin at any one time.",
+					"- | - | 6 damage" },
+				{ "Seal of Righteousness 2", "40 Mana", "Instant", "Fills the Paladin with holy spirit for 30 sec, granting each melee attack an additional 4 to 13 Holy damage.  Slower weapons cause more Holy damage per swing.  Only one Seal can be active on the Paladin at any one time.\n\nUnleashing this Seal's energy will cause 36 to 39 Holy damage to an enemy.",
+					"- | - | 8.5 damage" },
+				-- an amount after "additional" is not read, so it says none
+				{ "Seal of Righteousness, Josh's", "20 Mana", "Instant", "Fills the Paladin with holy spirit for 30 sec, granting each melee attack 15 additional Holy damage.",
+					"- | - | 20 Mana" },
+				{ "Flametongue Weapon 1", "30 Mana", "Instant", "Imbue the Shaman's weapon with fire.  Each hit causes 6 to 18 additional Fire damage, based on the speed of the weapon.  Slower weapons cause more fire damage per swing.  Lasts for 5 minutes.",
+					"- | - | 12 damage" },
+				{ "Flametongue Weapon 2", "55 Mana", "Instant", "Imbue the Shaman's weapon with fire.  Each hit causes 9 to 26 additional Fire damage, based on the speed of the weapon.  Slower weapons cause more fire damage per swing.  Lasts for 5 minutes.",
+					"- | - | 17.5 damage" },
+				{ "Flametongue Weapon, Josh's", "30 Mana", "Instant", "Imbue the Shaman's weapon with fire, increasing total spell damage by 6. Each hit causes 6 to 20 additional Fire damage, based on the speed of the weapon. Lasts 5 minutes.",
+					"- | - | 13 damage" },
+				{ "Frostbrand Weapon", "60 Mana", "Instant", "Imbue the Shaman's weapon with frost.  Each hit has a chance of causing 48 additional Frost damage and slowing the target's movement speed by 25% for 8 sec.  Lasts for 5 minutes.",
+					"- | - | 60 Mana" },
+				-- and the buffs they leave
+				{ "Thorns, the buff", nil, nil, "Causes 3 Nature damage to attackers.", "- | - | 3 damage", "aura" },
+				{ "Retribution Aura, the buff", nil, nil, "Does 5 Holy damage to anyone who strikes you.", "- | - | 5 damage", "aura" },
+				{ "Holy Shield, the buff", nil, nil, "Block chance increased by 30%.  65 Holy damage dealt to attacker when blocked.", "- | - | 65 damage", "aura" },
+
+				-- OTHER SPELLS KEEP THEIRS: a hit of your own, a heal, an absorb
+				-- ("absorbing 48" for 45 mana is a real figure), a heal or damage
+				-- over time, a channel, and a totem at its own pace (no DPS)
+				{ "Moonfire", "25 Mana", "Instant", "Burns the enemy for 9 to 12 Arcane damage and then an additional 12 Arcane damage over 9 sec.",
+					"7.0 DPS | 0.42 per mana | 10.5 damage" },
+				{ "Rejuvenation", "25 Mana", "Instant", "Heals the target for 32 over 12 sec.",
+					"2.7 HPS | 1.28 per mana | 32 healing over 12 sec" },
+				{ "Renew", "30 Mana", "Instant", "Heals the target of 45 damage over 15 sec.",
+					"3.0 HPS | 1.50 per mana | 45 healing over 15 sec" },
+				{ "Power Word: Shield", "45 Mana", "Instant", "Draws on the soul of the party member to shield them, absorbing 48 damage.  Lasts 30 sec.  While the shield holds, spellcasting will not be interrupted by damage.  Once shielded, the target cannot be shielded again for 15 sec.",
+					"32.0 HPS | 1.07 per mana | 48 absorb" },
+				{ "Shadow Word: Pain", "25 Mana", "Instant", "A word of darkness that causes 30 Shadow damage over 18 sec.",
+					"1.7 DPS | 1.20 per mana | 30 damage over 18 sec" },
+				{ "Frostbolt", "25 Mana", "1.5 sec cast", "Launches a bolt of frost at the enemy, causing 18 to 20 Frost damage and slowing movement speed by 40% for 5 sec.",
+					"12.7 DPS | 0.76 per mana | 19 damage" },
+				{ "Immolate", "25 Mana", "2 sec cast", "Burns the enemy for 11 Fire damage and then an additional 20 Fire damage over 15 sec.",
+					"5.5 DPS | 0.44 per mana | 11 damage" },
+				{ "Drain Life", "55 Mana", "Channeled", "Transfers 10 health every 1 sec from the target to the caster.  Lasts 5 sec.",
+					"10.0 DPS | 0.91 per mana | 50 damage over 5 sec" },
+				{ "Hellfire", "645 Mana", "Channeled", "Ignites the area surrounding the caster, causing 87 Fire damage to himself and 87 Fire damage to all nearby enemies every 1 sec.  Lasts 15 sec.",
+					"87.0 DPS | 2.02 per mana | 1,305 damage over 15 sec" },
+				{ "Searing Totem", "25 Mana", "Instant", "Summons a Searing Totem with 5 health at your feet for 30 sec that repeatedly attacks an enemy within 20 yards for 9 to 11 Fire damage.",
+					"- | - | 10 damage" },
+				-- words close to the ones above, on a hit of your own: a hammer
+				-- that strikes, "cannot be blocked", "must follow a block"
+				{ "Hammer of Wrath", "295 Mana", "1 sec cast", "Hurls a hammer that strikes an enemy for 316 to 348 Holy damage.  Only usable on enemies that have 20% or less health.",
+					"221 DPS | 1.13 per mana | 332 damage" },
+				{ "Overpower", "5 Rage", "Instant", "Instantly overpower the enemy, causing weapon damage plus 5.  Only useable after the target dodges.  The Overpower cannot be blocked, dodged or parried.",
+					"32.3 DPS | 9.70 per rage | 48.5 damage with your weapon" },
+				{ "Revenge", "5 Rage", "Instant", "Instantly counterattack an enemy for 12 to 14 damage and a high amount of threat.   Revenge must follow a block, dodge or parry.",
+					"8.7 DPS | 2.60 per rage | 13 damage" },
+			}) do
+				local said = read(case[2], case[3], case[4], case[6])
+				assert(said == case[5], case[1] .. ": " .. said)
+			end
+			_G.Enum.TooltipDataLineType, _G.UnitDamage = keep.kinds, keep.damage
+		end },
+		{ "a card keeps its level, other addons' lines, and its spine through its own clear", function()
+			-- (2026-10-17, audit)
+			local mod = BT.GetModule("tooltips")
+			BT.SetEnabled("tooltips", true)
+			local T = BT.UnitTip
+			local keep = { kinds = _G.Enum.TooltipDataLineType, item = _G.C_Item, util = _G.TooltipUtil, info = _G.GetItemInfo }
+			_G.Enum.TooltipDataLineType = { None = 0, ItemName = 1, ItemBinding = 2, EquipSlot = 3, SpellName = 13,
+				SpellDescription = 34 }
+			local LT = _G.Enum.TooltipDataLineType
+			_G.C_Item = {}
+			local function makeTip(name)
+				local tip = _G.CreateFrame("Frame")
+				local t = { lines = {}, rights = {}, colours = {} }
+				tip.GetName = function() return name end
+				tip.ClearLines = function()
+					t.lines, t.rights, t.colours = {}, {}, {}
+				end
+				tip.AddLine = function(_, text, r, g, b)
+					t.lines[#t.lines + 1] = tostring(text)
+					t.colours[#t.lines] = { r, g, b }
+				end
+				tip.AddDoubleLine = function(_, l, right, r, g, b)
+					t.lines[#t.lines + 1] = tostring(l)
+					t.rights[#t.lines] = right
+					t.colours[#t.lines] = { r, g, b }
+				end
+				tip.NumLines = function() return #t.lines end
+				for i = 1, 30 do
+					_G[name .. "TextLeft" .. i] = _G.CreateFrame("FontString")
+					_G[name .. "TextRight" .. i] = _G.CreateFrame("FontString")
+				end
+				return tip, t
+			end
+			-- the tooltip as the client leaves it for us: its own lines, then an
+			-- auction price another addon added, then the beta's footnote
+			local function drawn(name, t, lines)
+				t.lines = {}
+				for i, line in ipairs(lines) do
+					t.lines[i] = line[1]
+					local fs = _G[name .. "TextLeft" .. i]
+					fs:SetText(line[1])
+					fs:SetTextColor(line.rgb and line.rgb[1] or 1, line.rgb and line.rgb[2] or 1, line.rgb and line.rgb[3] or 1)
+					local right = _G[name .. "TextRight" .. i]
+					right:SetText(line[2])
+					right:SetShown(line[2] ~= nil)
+				end
+			end
+			local function at(t, words)
+				for i, text in ipairs(t.lines) do
+					if text == words then
+						return i
+					end
+				end
+			end
+			local plate = { id = 2, lines = {
+				{ type = LT.ItemName, leftText = "Lionheart Breastplate", leftColor = { r = 0.12, g = 1, b = 0 }, lineIndex = 1 },
+				{ type = LT.EquipSlot, leftText = "Chest", rightText = "Plate", lineIndex = 2 },
+				{ type = LT.None, leftText = "500 Armor", lineIndex = 3 },
+			} }
+			-- THE COMPARISON CARD HAS NO GetItem: its level is asked of the
+			-- client's TooltipUtil, before the rebuild clears it
+			local shop, st = makeTip("AuditShopTip")
+			shop.isShopping = true
+			_G.TooltipUtil = setmetatable({ GetDisplayedItem = function(tip)
+				if tip == shop and st.lines[1] == "Lionheart Breastplate" then
+					return "Lionheart Breastplate", "item:2", 2
+				end
+			end }, { __index = keep.util })
+			_G.GetItemInfo = function(l)
+				return "x", l, 2, l == "item:2" and 63 or 5, 1, "x", "x", 1, l == "item:2" and "INVTYPE_CHEST" or ""
+			end
+			drawn("AuditShopTip", st, { { "Lionheart Breastplate" }, { "Chest", "Plate" }, { "500 Armor" },
+				{ "Auction: 12g", "each", rgb = { 0.5, 0.8, 1 } }, { "Sell Price: 4 68" },
+				{ "Press F6 to submit an issue for this Item" } })
+			assert(shop.GetItem == nil, "a comparison tooltip has no GetItem")
+			mod.ComposeItem(shop, plate)
+			-- its level as the figure beside the line under its name ("Instead
+			-- of "Item Level" we can just use "ilvl""), its armor beside the name
+			local sf = mod.ItemBits(shop).figs
+			assert(st.lines[2] == "Plate · Chest" and sf[2].num._text == "63" and sf[2].label._text == "ILVL"
+				and sf[2].num._shown ~= false and sf[1].num._text == "500" and sf[1].label._text == "ARMOR",
+				"its level beside its kind and slot: " .. table.concat(st.lines, " | ") .. " / " .. tostring(sf[2].num._text))
+			-- ANOTHER ADDON'S LINE COMES ALONG, in its own colours
+			local price = at(st, "Auction: 12g")
+			assert(price and st.rights[price] == "each" and st.colours[price][1] == 0.5 and st.colours[price][3] == 1,
+				"another addon's line kept, as it had it: " .. table.concat(st.lines, " | "))
+			assert(st.lines[#st.lines]:find("F6", 1, true) and price < #st.lines, "and a footnote among them stays last")
+			-- NOT THE PRICE TWICE (Josh's screenshots, 2026-10-18): the client's
+			-- own "Sell Price:" line, added after its data, is not carried
+			for _, l in ipairs(st.lines) do
+				assert(not tostring(l):find("Sell Price", 1, true), "the client's sell price line is not carried: " .. table.concat(st.lines, " | "))
+			end
+			-- and on a spell: after what it does
+			local spellTip, sp = makeTip("AuditSpellTip")
+			drawn("AuditSpellTip", sp, { { "Frostbolt", "Rank 1" }, { "25 Mana", "30 yd range" }, { "1.5 sec cast" },
+				{ "Launches a bolt of frost at the enemy, causing 18 to 20 Frost damage. Slows movement by 40%." },
+				{ "Cast count: 12", rgb = { 1, 0.5, 0 } } })
+			mod.ComposeSpell(spellTip, { id = 116, lines = {
+				{ type = LT.SpellName, leftText = "Frostbolt", rightText = "Rank 1", leftColor = { r = 1, g = 1, b = 1 }, lineIndex = 1 },
+				{ type = LT.None, leftText = "25 Mana", rightText = "30 yd range", lineIndex = 2 },
+				{ type = LT.None, leftText = "1.5 sec cast", lineIndex = 3 },
+				{ type = LT.SpellDescription, leftText = "Launches a bolt of frost at the enemy, causing 18 to 20 Frost damage. Slows movement by 40%.",
+					leftColor = { r = 1, g = 0.82, b = 0 }, wrapText = true, lineIndex = 4 },
+			} }, "spell")
+			local count, desc = at(sp, "Cast count: 12"), nil
+			for i, text in ipairs(sp.lines) do
+				if text:find("bolt of frost", 1, true) then
+					desc = i
+				end
+			end
+			assert(count and desc and count > desc and sp.colours[count][2] == 0.5,
+				"another addon's line under the spell's own: " .. table.concat(sp.lines, " | "))
+
+			-- THE REBUILD'S OWN CLEAR IS NOT THE CLIENT'S: the plain pass the
+			-- client's clear sets off is not run for the clear in the middle of
+			-- writing the card
+			local hook = _G.GameTooltip:GetScript("OnTooltipCleared")
+			assert(hook, "something listens for GameTooltip's clear")
+			local tip, t = makeTip("AuditClearTip")
+			local clear = tip.ClearLines
+			tip.ClearLines = function(self)
+				clear(self)
+				hook(self)
+			end
+			local plains, dressPlain = 0, mod.DressPlain
+			mod.DressPlain = function(...)
+				plains = plains + 1
+				return dressPlain(...)
+			end
+			mod.ComposeItem(tip, plate)
+			assert(plains == 0 and t.lines[1] == "Lionheart Breastplate", "the card's own clear sets off no plain pass: " .. plains)
+			local spine = mod.Skins()[tip].accent
+			assert(spine._shown ~= false and spine._color[1] == 0.12 and spine._color[2] == 1,
+				"and the spine is in the item's quality")
+			tip:ClearLines()
+			assert(plains == 1 and spine._shown == false, "the client's clear still strips it back")
+			mod.DressPlain = dressPlain
+			-- one edge painted for a plain pass, not two
+			local paints, paint = 0, BT.Pill.PaintSurface
+			BT.Pill.PaintSurface = function(...)
+				paints = paints + 1
+				return paint(...)
+			end
+			mod.DressPlain(tip)
+			BT.Pill.PaintSurface = paint
+			assert(paints == 1, "the plain pass paints the edge once: " .. paints)
+			-- and the unit tooltip's put-away waits for the tooltip to go
+			local worn = mod.Skins()[_G.GameTooltip]
+			assert(worn, "GameTooltip is dressed")
+			local rare = { 1, { 1, 1, 1 }, rank = "rare" }
+			worn.wantEdge = rare
+			mod.ClearLines({ ClearLines = function() mod.UnitTooltipHidden() end })
+			assert(worn.wantEdge == rare, "a rebuild's clear is not the tooltip going")
+			mod.UnitTooltipHidden()
+			assert(worn.wantEdge == nil, "the tooltip going is")
+
+			-- THE LOG READ ONCE, again when it changes, and not for a player
+			local was = { player = _G.UnitIsPlayer, count = _G.GetNumQuestLogEntries, title = _G.GetQuestLogTitle,
+				all = BT.Quests.All }
+			_G.UnitIsPlayer = function() return false end
+			_G.C_QuestLog = nil
+			_G.GetNumQuestLogEntries = function() return 1 end
+			_G.GetQuestLogTitle = function() return "Wolves Near Goldshire", 5, nil, false, nil, nil, nil, 77 end
+			local reads = 0
+			BT.Quests.All = function(...)
+				reads = reads + 1
+				return was.all(...)
+			end
+			local watch = mod.questWatch
+			assert(watch and watch._events and watch._events.QUEST_LOG_UPDATE, "the log's changes are listened for")
+			watch:GetScript("OnEvent")(watch, "QUEST_LOG_UPDATE")
+			local lines = {}
+			local mob = _G.CreateFrame("Frame")
+			mob.AddLine = function(_, text) lines[#lines + 1] = tostring(text) end
+			mob.AddDoubleLine = function(_, l) lines[#lines + 1] = tostring(l) end
+			mob.ClearLines = function() lines = {} end
+			mob.NumLines = function() return #lines end
+			mob.GetName = function() return "AuditMobTip" end
+			for i = 1, 12 do
+				local fs = _G.CreateFrame("FontString")
+				fs.GetText = function() return lines[i] end
+				_G["AuditMobTipTextLeft" .. i] = fs
+				_G["AuditMobTipTextRight" .. i] = _G.CreateFrame("FontString")
+			end
+			local function hover()
+				lines = { "Young Wolf", "Level 5", "Wolves Near Goldshire", "- 2/8 Young Wolf slain" }
+				mod.Compose(mob, "target")
+				return table.concat(lines, " | ")
+			end
+			assert(hover():find("Young Wolf slain", 1, true) and hover():find("Young Wolf slain", 1, true) and reads == 1,
+				"the quest's row on both, the log read once: " .. reads)
+			watch:GetScript("OnEvent")(watch, "QUEST_LOG_UPDATE")
+			hover()
+			assert(reads == 2, "and again when it changes: " .. reads)
+			_G.UnitIsPlayer = function() return true end
+			hover()
+			assert(reads == 2, "a player's tooltip reads no quest log")
+			_G.UnitIsPlayer, _G.GetNumQuestLogEntries, _G.GetQuestLogTitle = was.player, was.count, was.title
+			BT.Quests.All = was.all
+			watch:GetScript("OnEvent")(watch, "QUEST_LOG_UPDATE")
+
+			_G.Enum.TooltipDataLineType, _G.C_Item, _G.TooltipUtil, _G.GetItemInfo = keep.kinds, keep.item, keep.util, keep.info
+			T.HideTags()
+			T.RestoreFonts()
+		end },
+		{ "the audit's small things on the item and unit tooltips", function()
+			-- (2026-10-17, audit)
+			local mod = BT.GetModule("tooltips")
+			BT.SetEnabled("tooltips", true)
+			local T = BT.UnitTip
+			-- THE CHAT LINK'S WINDOW, CLEARED FOR A QUEST: no card's width and
+			-- no item's spine; a card's own clear leaves both for the card
+			local ref = _G.ItemRefTooltip
+			local cleared = ref:GetScript("OnTooltipCleared")
+			assert(cleared, "the chat link's window is listened to when it clears")
+			mod.Dress(ref)
+			local rs = mod.Skins()[ref]
+			rs.accent:Show()
+			ref:SetMinimumWidth(240)
+			mod.ClearLines({ ClearLines = function() cleared(ref) end })
+			assert(ref._minWidth == 240 and rs.accent._shown ~= false, "a card's own clear leaves them")
+			cleared(ref)
+			assert(ref._minWidth == 0 and rs.accent._shown == false, "the client's clear lets the width go and the spine")
+
+			-- THE "EQUIPPED" HEADER IS FURNITURE, not a tab with a surface of ours
+			local shop = _G.CreateFrame("Frame")
+			shop.GetName = function() return "AuditCompareTip" end
+			shop.CompareHeader = _G.CreateFrame("Frame", nil, shop)
+			shop.CompareHeader:CreateTexture()
+			shop.CompareHeader:CreateFontString():SetText("Equipped")
+			mod.RestyleTab(shop)
+			assert(shop.CompareHeader.beebsTab == nil and shop.CompareHeader.beebsSkin == nil,
+				"the comparison's header is left to the furniture")
+
+			-- BoP ON A TOOLTIP RESTYLED WHERE IT IS, as on a card
+			local keep = _G.Enum.TooltipDataLineType
+			_G.Enum.TooltipDataLineType = { None = 0, ItemName = 1, ItemBinding = 2 }
+			local place = _G.CreateFrame("Frame")
+			place.GetName = function() return "AuditPlaceTip" end
+			for i = 1, 3 do
+				_G["AuditPlaceTipTextLeft" .. i] = _G.CreateFrame("FontString")
+				_G["AuditPlaceTipTextRight" .. i] = _G.CreateFrame("FontString")
+			end
+			mod.ItemLines(place, { lines = {
+				{ type = 1, leftText = "Pattern: Something", lineIndex = 1 },
+				{ type = 2, leftText = "Binds when picked up", lineIndex = 2 },
+			} })
+			local pool, used = T.TagPool(place)
+			assert(used == 1 and pool[1].text._text == "BoP", "BoP, not BINDS WHEN PICKED UP: " .. tostring(pool[1].text._text))
+			T.HideTags(place)
+
+			-- THE CLIENT'S SENTENCES WITH THEIR COLOURS AND DECIMALS
+			local maker = mod.Shape("AUDIT_NO_SUCH_STRING", "|cff00ff00<Made by %s>|r")
+			assert(("<Made by Lorelei>"):match(maker) == "Lorelei", "a green sentence matches its words: " .. maker)
+			local dps = mod.Shape("AUDIT_NO_SUCH_STRING", "(%.1f damage per second)")
+			assert(("(53.8 damage per second)"):match(dps) == "53.8", "and a decimal is a number: " .. dps)
+			local made = mod.ReadItem({ lines = {
+				{ type = 1, leftText = "Bolt of Cloth", lineIndex = 1 },
+				{ type = 0, leftText = "|cff00ff00<Made by Lorelei>|r", leftColor = { r = 0.12, g = 1, b = 0 }, lineIndex = 2 },
+			} })
+			assert(made.maker == "Lorelei" and #made.effects == 0, "a green maker line is who made it, not an enchant")
+			_G.Enum.TooltipDataLineType = keep
+
+			-- A LINE PUT BACK FOLLOWS ITS FONT OBJECT AGAIN, as it is now
+			local object = _G.CreateFont("AuditTipFont")
+			object:SetFont("Fonts/ARIALN.TTF", 13, "")
+			local fs = _G.CreateFrame("FontString")
+			fs.GetFontObject = function() return object end
+			_G.AuditFontTipTextLeft2 = fs
+			local fontTip = { GetName = function() return "AuditFontTip" end }
+			T.SizeLine(fontTip, 2, 9)
+			object:SetFont("Fonts/ARIALN.TTF", 15, "")
+			T.RestoreFonts(fontTip)
+			local _, size = fs:GetFont()
+			assert(fs._fontObject == object and size == 15, "on its font object, at that font's size now: " .. tostring(size))
+
+			-- AN UNREADABLE RANK KEEPS THIS UNIT'S LAST EDGE, NOT ANOTHER'S
+			local was = { player = _G.UnitIsPlayer, guid = _G.UnitGUID, class = _G.UnitClassification,
+				secret = _G.issecretvalue, title = _G.GetQuestLogTitle, count = _G.GetNumQuestLogEntries }
+			_G.UnitIsPlayer = function() return false end
+			local lines = {}
+			local mob = _G.CreateFrame("Frame")
+			mob.AddLine = function(_, text) lines[#lines + 1] = tostring(text) end
+			mob.AddDoubleLine = function(_, l) lines[#lines + 1] = tostring(l) end
+			mob.ClearLines = function() lines = {} end
+			mob.NumLines = function() return #lines end
+			mob.GetName = function() return "AuditEdgeTip" end
+			for i = 1, 12 do
+				local line = _G.CreateFrame("FontString")
+				line.GetText = function() return lines[i] end
+				_G["AuditEdgeTipTextLeft" .. i] = line
+				_G["AuditEdgeTipTextRight" .. i] = _G.CreateFrame("FontString")
+			end
+			local function hover(guid, class, said)
+				_G.UnitGUID = function() return guid end
+				_G.UnitClassification = class
+				lines = said or { "Mottled Boar", "Level 3" }
+				mod.Compose(mob, "target")
+				local edge = mod.Skins()[mob] and mod.Skins()[mob].wantEdge
+				return edge and edge.rank or "plain"
+			end
+			local unreadable = function() error("refused") end
+			assert(hover("Creature-0-1-1-1-111-0", function() return "rare" end) == "rare", "a rare's edge")
+			assert(hover("Creature-0-1-1-1-222-0", unreadable) == "plain", "an unreadable one of another unit is plain")
+			assert(hover("Creature-0-1-1-1-111-0", function() return "rare" end) == "rare"
+				and hover("Creature-0-1-1-1-111-0", unreadable) == "rare", "the same unit keeps its edge")
+
+			-- A LINE OR A CLASS THE CLIENT KEEPS SECRET is never compared
+			_G.issecretvalue = function(v) return v == "Kept From You" or v == "WARRIOR" end
+			_G.C_QuestLog = nil
+			_G.GetNumQuestLogEntries = function() return 1 end
+			_G.GetQuestLogTitle = function() return "Kept From You", 5, nil, false, nil, nil, nil, 78 end
+			mod.ForgetQuests()
+			hover("Creature-0-1-1-1-333-0", function() return "normal" end, { "Mottled Boar", "Level 3", "Kept From You" })
+			assert(not table.concat(lines, " | "):find("Kept From You", 1, true), "a secret line is not copied in, nor taken for a quest")
+			local hadClass = _G.UnitClass
+			_G.UnitIsPlayer = function() return true end
+			_G.UnitClass = function() return "Warrior", "WARRIOR" end
+			hover("Player-4372-0002BFB1", function() return "normal" end, { "Beeb", "Level 60" })
+			local spine = mod.Skins()[mob].accent._color
+			assert(spine[1] == 0.9 and spine[2] == 0.9, "a secret class is no colour's key: " .. table.concat(spine, ","))
+			_G.UnitClass = hadClass
+			_G.UnitIsPlayer, _G.UnitGUID, _G.UnitClassification = was.player, was.guid, was.class
+			_G.issecretvalue, _G.GetQuestLogTitle, _G.GetNumQuestLogEntries = was.secret, was.title, was.count
+			mod.ForgetQuests()
 			T.HideTags()
 			T.RestoreFonts()
 		end },
@@ -9935,6 +12349,16 @@ if ok then
 			for _, r in ipairs(dockPage.dockClock or {}) do
 				assert(not r.grip, "the clock, in the header, is not dragged")
 			end
+			-- PUT AWAY MID-DRAG (2026-10-17, audit): Escape while a row is held
+			-- lets it go, takes the line away and moves nothing in the dock
+			local before = pageKeys()
+			head:GetScript("OnDragStart")(head)
+			head:GetScript("OnUpdate")(head)
+			assert(dockPage.drop:IsShown() and head:GetScript("OnHide"), "held, with the line up")
+			head:GetScript("OnHide")(head)
+			assert(not head.dragging and head:GetScript("OnUpdate") == nil and not dockPage.drop:IsShown(),
+				"hidden, the drag lets go and the line goes")
+			assert(pageKeys() == before, "and nothing moved: " .. pageKeys())
 
 			-- A DROP IS NAMED BY A NEIGHBOUR: the rail shows some modules, and a
 			-- counted position would land among the ones it does not show
@@ -10073,14 +12497,22 @@ if ok then
 			assert(math.abs(mod.rested._width - room / 5) < 0.01 and mod.rested._shown ~= false,
 				"and rested is a paler stretch ahead of it: " .. tostring(mod.rested._width))
 
+			-- what the gains booked to the pace add up to
+			local function booked()
+				local n = 0
+				for _, g in ipairs(mod.PaceList()) do
+					n = n + (g.xp or 0)
+				end
+				return n
+			end
 			-- a session: 1500 into this level, then a level-up carrying 500 over
 			mod.Reset()
 			cur = 2500
 			mod.Gain()
 			level, cur, max = 9, 500, 5000
 			mod.Gain()
-			assert(mod.session.gained == 1500 + 1500 + 500,
-				"a level gained is the rest of the old one plus the new: " .. tostring(mod.session.gained))
+			assert(booked() == 1500 + 1500 + 500,
+				"a level gained is the rest of the old one plus the new: " .. tostring(booked()))
 			assert(mod.Rate() == nil, "and no pace from two gains in one moment")
 
 			-- A LEVEL READ HALF NEW (Josh 2026-09-30, review): the new level's
@@ -10092,25 +12524,37 @@ if ok then
 			mod.Gain()
 			level = 10
 			mod.Gain()
-			assert(mod.session.gained == 100 + 200,
-				"the bar first: the rest of the level and what is on the next, once: " .. tostring(mod.session.gained))
+			assert(booked() == 100 + 200,
+				"the bar first: the rest of the level and what is on the next, once: " .. tostring(booked()))
 			-- and the new level over the old bar, and then the bar
 			level = 11
 			mod.Gain()
 			cur, max = 50, 6000
 			mod.Gain()
-			assert(mod.session.gained == 300 + 5300 + 50,
-				"the level first: counted when the bar comes: " .. tostring(mod.session.gained))
+			assert(booked() == 300 + 5300 + 50 and mod.level == 11,
+				"the level first: counted when the bar comes: " .. tostring(booked()))
 			-- SWITCHED OFF A WHILE (Josh 2026-09-30, review): what the bar
 			-- moved meanwhile is not one gain
-			local before = mod.session.gained
+			local before = booked()
 			BT.SetEnabled("xp", false)
 			cur = cur + 3000
 			BT.SetEnabled("xp", true)
 			cur = cur + 100
 			mod.Gain()
-			assert(mod.session.gained == before + 100,
-				"only what came after it was switched on: " .. tostring(mod.session.gained - before))
+			assert(booked() == before + 100,
+				"only what came after it was switched on: " .. tostring(booked() - before))
+			-- THE NEW MAX WITH THE OLD BAR (2026-10-17, audit): 13 at 500 of
+			-- 11,000, then 14 at 500 of 12,000, then the bar. Once 10,550, and 14.
+			mod.Reset()
+			level, cur, max = 13, 500, 11000
+			mod.Start(true, false)
+			level, max = 14, 12000
+			mod.Gain()
+			assert(booked() == 0, "the new level and max over the old bar wait for the bar: " .. tostring(booked()))
+			cur = 50
+			mod.Gain()
+			assert(booked() == 10500 + 50 and mod.level == 14,
+				"then the rest of 13 and what is on 14, once: " .. tostring(booked()) .. " at " .. tostring(mod.level))
 
 			-- THE PACE WHILE YOU PLAY (Josh 2026-09-28): an hour in town before
 			-- the first kill is not levelling, and neither is the time since
@@ -10137,9 +12581,9 @@ if ok then
 			assert(math.abs(mod.Rate() - 1000 * 3600 / (540 + mod.BREAK)) < 0.01,
 				"a long gap counts as a short one: " .. tostring(mod.Rate()))
 			-- a login keeps the pace; the session starts again
-			local pace = mod.Rate()
+			local pace, lastSession = mod.Rate(), mod.session
 			mod.Start(true, false)
-			assert(mod.session.gained == 0 and math.abs(mod.Rate() - pace) < 0.01, "a new login keeps the pace")
+			assert(mod.session ~= lastSession and math.abs(mod.Rate() - pace) < 0.01, "a new login keeps the pace")
 			-- only the last hour of it
 			max = 1000000
 			mod.Gain()
@@ -10194,6 +12638,13 @@ if ok then
 			-- A RANGE'S TOP LEVEL IS THE ONE YOU LEAVE IT AT, but the cap's
 			assert(not D.Takes({ lo = 13, hi = 18 }, 18) and D.Takes({ lo = 13, hi = 18 }, 17)
 				and D.Takes({ lo = 58, hi = 60 }, 60), "18 is past 13-18; 60 is still in 58-60")
+			-- THE DEADMINES IS 17-26 (2026-10-17, audit): at 17-24, levels 24
+			-- and 25 never saw it
+			for _, at in ipairs({ 17, 24, 25 }) do
+				assert(names(D.For(at, "Alliance", 9)):find("The Deadmines", 1, true),
+					"The Deadmines at " .. at .. ": " .. names(D.For(at, "Alliance", 9)))
+			end
+			assert(not names(D.For(26, "Alliance", 9)):find("The Deadmines", 1, true), "and not at 26, the level you leave it at")
 			-- NEXT, WHEN NONE IS YET (Josh 2026-10-04: "I am level 10 so I think I
 			-- should see 1 dungeon showing up right?")
 			assert(names(D.Next(10, "Alliance")) == "The Hall of Thanes" and names(D.Next(10, "Horde")) == "Ragefire Chasm",
@@ -10321,7 +12772,7 @@ if ok then
 			section:GetScript("OnMouseUp")(section, "LeftButton")
 			assert(mod.Rate() ~= nil, "a left-click resets nothing")
 			section:GetScript("OnMouseUp")(section, "RightButton")
-			assert(mod.Rate() == nil and mod.session.gained == 0 and #mod.PaceList() == 0,
+			assert(mod.Rate() == nil and #mod.PaceList() == 0,
 				"a right-click starts the pace and the session again")
 			-- NO XP RATE IN THE TOOLTIP (Josh 2026-10-04: "remove all of this
 			-- redundant or unneeded info to save space"): the dock's line says
@@ -10335,16 +12786,16 @@ if ok then
 			mod.Start(false, true)
 			assert(mod.session == session, "a /reload keeps the session")
 			mod.Start(true, false)
-			assert(mod.session ~= session and mod.session.gained == 0, "a new login starts a fresh one")
+			assert(mod.session ~= session, "a new login starts a fresh one")
 
 			-- at the cap the line goes
 			level = 60
 			mod.Update()
 			assert(not section:IsShown(), "at the level cap there is no bar")
 			-- a new session, as a right-click on the line asks for one
-			mod.session.gained = 500
+			session = mod.session
 			mod.Reset()
-			assert(mod.session.gained == 0 and mod.Rate() == nil, "a reset starts a new session, and a new pace")
+			assert(mod.session ~= session and mod.Rate() == nil, "a reset starts a new session, and a new pace")
 
 			_G.UnitLevel, _G.UnitXP, _G.UnitXPMax = realLevel, nil, nil
 			_G.GetXPExhaustion, _G.GetMaxPlayerLevel = nil, nil
@@ -10372,22 +12823,24 @@ if ok then
 			mod.Update()
 			assert(section:IsShown(), "gear on, and the line is there")
 			local d = mod.Read()
-			assert(d.pct == 80 and d.worst.name == "Main Hand" and d.worst.pct == 40,
+			assert(d.pct == 80 and d.worst.name == "Main hand" and d.worst.pct == 40,
 				"all of it together, and the most worn piece: " .. tostring(d.pct))
-			local left, right = mod.Lines(d)
-			assert(left:find("80%", 1, true) and left:find("|cffe6ebe8", 1, true), "plain at 80%: " .. left)
-			assert(right:find("Main Hand", 1, true) and right:find("|cfff2c75a", 1, true),
-				"the worst beside it, amber below half: " .. right)
+			-- SENTENCE CASE (2026-10-17, audit): the hover's rows say "Main hand"
+			mod.Tip()
+			assert(BT.Tip.Says("Main hand") and not BT.Tip.Says("Main Hand"),
+				"the worn piece's row in sentence case: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
 			-- THE CELL IS COLOURED BY ITS NUMBER (Josh 2026-09-24): the average
 			-- is 80%, so it is plain, however worn the main hand is
 			assert(mod.Cell(d).state == nil, "80% overall is plain: " .. tostring(mod.Cell(d).state))
 			worn[16] = { 0, 50 }
 			assert(mod.Cell().state == "alert", "but a broken piece still turns it red")
-			local _, broke = mod.Lines()
-			assert(broke:find("|cfff26659", 1, true), "red when it breaks")
-			worn = { [1] = { 50, 50 } }
-			local _, whole = mod.Lines()
-			assert(whole == "", "and nothing beside it when nothing is worn")
+			-- AND SAYS SO (Josh 2026-10-18, after trying thirds: "I didnt
+			-- realize my boots were red... 'Repair now' makes sense now")
+			mod.Tip()
+			assert(BT.Tip.Says("REPAIR NOW") and BT.Tip.Says("broken"),
+				"a broken piece says Repair now: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
 
 			BT.SetEnabled("durability", false)
 			assert(figure._alpha == 1, "switched off, the figure comes back")
@@ -10553,6 +13006,15 @@ if ok then
 			local name, count = mod.Best(r)
 			assert(name == "Small Pocket Watch" and count == 1, "the best find by its name: " .. tostring(name))
 			assert(select(2, mod.Worth(r)) == 120, "and priced the same way")
+			-- COMMAS FROM 1,000 (2026-10-17, audit)
+			local hadPicks, hadWatch, hadSession = r.picks, r.items[5374], mod.session.picks
+			r.picks, r.items[5374], mod.session.picks = 1234, 1500, 2345
+			mod.Tip()
+			assert(BT.Tip.Says("1,234") and BT.Tip.Says("Small Pocket Watch ×1,500")
+				and BT.Tip.Says("This session, from 2,345 pockets."),
+				"the counts with commas: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
+			r.picks, r.items[5374], mod.session.picks = hadPicks, hadWatch, hadSession
 			names[5374] = nil
 			assert(mod.Best(r) == nil and asked[1] == 5374, "an item not loaded yet has no name, and is asked for")
 			_G.GetItemInfo, _G.C_Item = global, hadC
@@ -10645,11 +13107,29 @@ if ok then
 			-- the map's own row along the bottom leaves them alone
 			assert(BT.MapButtons.Claims(a), "the line claims them from the Minimap module")
 
+			-- THE ADDON COMPARTMENT, IN THE LINE (Josh 2026-10-18): first, while
+			-- the client shows it (an addon in it), and no place while it hides it
+			local compartment = _G.CreateFrame("Button", "AddonCompartmentFrame", _G.MinimapCluster or _G.UIParent)
+			compartment:SetSize(23, 22)
+			compartment.GetObjectType = function() return "DropdownButton" end
+			compartment.SetScale = function(self, v) self._scale = v end
+			compartment.GetScale = function(self) return self._scale or 1 end
+			compartment:Hide()
+			_G.AddonCompartmentFrame = compartment
+			assert(mod.Layout() == 3, "hidden by the client, with no addon in it, it takes no place")
+			compartment:Show()
+			assert(mod.Layout() == 4 and mod.list[1] == compartment and compartment._parent == section,
+				"shown, it is first in the line")
+			assert(BT.MapButtons.Claims(compartment), "and the map's own row leaves it alone")
+			assert(mod.Status():find("the addon compartment", 1, true), "What loaded names it: " .. mod.Status())
+
 			-- off: every button goes back where it was, ring and all
 			BT.SetEnabled("buttons", false)
 			assert(a._parent == map and (a._scale or 1) == 1 and a.ring._alpha == 1,
 				"switched off, each button is given back as it was")
 			assert(not section:IsShown(), "and the line goes")
+			assert(compartment._parent == (_G.MinimapCluster or _G.UIParent), "and the compartment goes back to the client")
+			_G.AddonCompartmentFrame = nil
 			-- the fakes leave the minimap before the line comes back on, so it
 			-- finds nothing and stays out of the dock tests that follow
 			for i = #map._children, 1, -1 do
@@ -10660,6 +13140,24 @@ if ok then
 			end
 			BT.SetEnabled("buttons", true)
 			assert(not section:IsShown(), "with the buttons gone, no line")
+			-- ONE LAYOUT FOR A RUN OF ADDONS (2026-10-17, audit)
+			local wasAfter, wasLayout = _G.C_Timer.After, mod.Layout
+			local later, laid = {}, 0
+			_G.C_Timer.After = function(delay, fn) later[#later + 1] = { delay, fn } end
+			mod.Layout = function() laid = laid + 1 end
+			local onEvent = mod.events:GetScript("OnEvent")
+			for _ = 1, 6 do
+				onEvent(mod.events, "ADDON_LOADED")
+			end
+			onEvent(mod.events, "PLAYER_ENTERING_WORLD")
+			assert(#later == 2 and later[1][1] == 0.5 and later[2][1] == 2,
+				"six addons loading, one layout waiting, and the login's own: " .. #later)
+			later[1][2]()
+			onEvent(mod.events, "ADDON_LOADED")
+			assert(laid == 1 and #later == 3, "once it has run, the next addon asks again")
+			later[2][2]()
+			later[3][2]()
+			_G.C_Timer.After, mod.Layout = wasAfter, wasLayout
 		end },
 		{ "enemy nameplates wear ours, and the game's comes back when the enemy goes", function()
 			local F, T = BT.UnitFrames, BT.UnitFrames.Timers
@@ -10737,6 +13235,7 @@ if ok then
 			end
 			local plates = { nameplate1 = plate(true), nameplate2 = plate(), nameplate3 = plate(), nameplate21 = plate() }
 			local wasPlates, wasAttack, wasHook = _G.C_NamePlate, _G.UnitCanAttack, _G.hooksecurefunc
+			local wasFriend = _G.UnitIsFriend
 			-- the client's: our function after its own
 			_G.hooksecurefunc = function(obj, name, fn)
 				local orig = obj[name]
@@ -10747,7 +13246,9 @@ if ok then
 				end
 			end
 			_G.C_NamePlate = { GetNamePlateForUnit = function(token) return plates[token] end }
-			-- the second is a friend
+			-- the second is a friend, by the game's word (UnitIsFriend), and the
+			-- only one you cannot attack
+			_G.UnitIsFriend = function(_, unit) return unit == "nameplate2" end
 			_G.UnitCanAttack = function(_, unit) return unit ~= "nameplate2" end
 			BT.SetEnabled("nameplates", true)
 			assert(mod.MakeAll() == mod.PLATES, "a frame for each of the first plates, made before any fight")
@@ -10776,6 +13277,142 @@ if ok then
 			-- client puts its frame back to full as the enemy goes into a fight
 			uf:SetAlpha(1)
 			assert(uf._alpha == 0, "the game setting its plate back to full does not bring it back")
+			-- THE SKULL MOVES ON (2026-10-17, audit): only the unit frames heard a
+			-- mark move, so mid-pull the next enemy's plate had none
+			do
+				local hadIndex, hadIcon = _G.GetRaidTargetIndex, _G.SetRaidTargetIconTexture
+				local painted = 0
+				local hadPaint = F.Paint
+				F.Paint = function(...) painted = painted + 1 return hadPaint(...) end
+				_G.SetRaidTargetIconTexture = function() end
+				_G.GetRaidTargetIndex = function(unit) return unit == "nameplate1" and 8 or nil end
+				fire(mod.events, "RAID_TARGET_UPDATE")
+				assert(s.marker._shown ~= false, "the skull on the plate it was put on")
+				_G.GetRaidTargetIndex = function() return nil end
+				fire(mod.events, "RAID_TARGET_UPDATE")
+				F.Paint = hadPaint
+				assert(s.marker._shown == false and painted == 0, "and off it when it moves on, the mark alone painted")
+				_G.GetRaidTargetIndex, _G.SetRaidTargetIconTexture = hadIndex, hadIcon
+			end
+			-- FRIEND OR ENEMY, AGAIN (2026-10-17, audit): the client restyles its
+			-- own plate when a unit's faction changes, and ours followed only when
+			-- the plate was added
+			do
+				local hadAttack, hadFriend, hadAdded = _G.UnitCanAttack, _G.UnitIsFriend, mod.Added
+				local added = 0
+				mod.Added = function(...) added = added + 1 return hadAdded(...) end
+				fire(mod.events, "UNIT_FLAGS", "nameplate1")
+				fire(mod.events, "UNIT_FLAGS", "raid3")
+				assert(added == 0, "nothing changed, nothing dressed again")
+				-- a duel ends: the enemy is a friend again
+				_G.UnitIsFriend = function(_, unit) return unit == "nameplate2" or unit == "nameplate1" end
+				_G.UnitCanAttack = function(_, unit) return unit ~= "nameplate2" and unit ~= "nameplate1" end
+				fire(mod.events, "UNIT_FACTION", "nameplate1")
+				local fr = mod.friends.nameplate1
+				assert(added == 1 and not s._shown and fr and fr._shown and fr._parent == plates.nameplate1,
+					"a friend's name on the plate now, the enemy's frame off it")
+				-- and your own flag changes everyone's
+				_G.UnitCanAttack, _G.UnitIsFriend = hadAttack, hadFriend
+				fire(mod.events, "UNIT_FACTION", "player")
+				assert(s._shown and fr._shown == false and s._parent == plates.nameplate1, "an enemy's frame again")
+				mod.Added = hadAdded
+			end
+			-- FRIEND OR ENEMY AS THE GAME DECIDES (Josh 2026-10-18: "I feel like
+			-- we should use UnitIsFriend if that's what the game uses"). The
+			-- client's plate asks UnitIsFriend("player", unit), and a unit that
+			-- is neither friend nor enemy gets the enemy's plate.
+			do
+				local hadAttack, hadFriend, hadPlayer, hadParty = _G.UnitCanAttack, _G.UnitIsFriend, _G.UnitIsPlayer,
+					_G.UnitInParty
+				local friendly, attackable, inParty = { nameplate2 = true }, { nameplate1 = true }, {}
+				local asked
+				_G.UnitIsFriend = function(a, b2)
+					asked = tostring(a) .. "," .. tostring(b2)
+					return friendly[b2] == true
+				end
+				_G.UnitCanAttack = function(_, unit) return attackable[unit] == true end
+				_G.UnitIsPlayer = function() return false end
+				_G.UnitInParty = function(unit) return inParty[unit] == true end
+				local fr = mod.Friend("nameplate1")
+				local function enemyFrame()
+					return mod.Added("nameplate1") and s._shown and s._parent == plates.nameplate1 and fr._shown == false
+				end
+				local function friendName()
+					return mod.Added("nameplate1") and fr._shown and fr._parent == plates.nameplate1 and not s._shown
+				end
+				-- a neutral boar, in yellow, that you can attack
+				assert(mod.IsFriend("nameplate1") == false and asked == "player,nameplate1",
+					"a neutral enemy is no friend, the player asked first as the client asks: " .. tostring(asked))
+				assert(enemyFrame(), "and wears an enemy's frame")
+				-- a neutral NPC you cannot attack: a friend's name before, the game's
+				-- enemy plate now
+				attackable.nameplate1 = nil
+				assert(mod.IsFriend("nameplate1") == false and enemyFrame(),
+					"a neutral NPC you cannot attack still wears an enemy's frame")
+				-- a player of the other faction who is not flagged for PvP
+				_G.UnitIsPlayer = function(unit) return unit == "nameplate1" end
+				assert(mod.IsFriend("nameplate1") == false and enemyFrame(),
+					"an enemy player you cannot attack yet wears an enemy's frame")
+				-- a duel: your opponent is a friend until it starts, and UNIT_FACTION
+				-- says when it starts and when it ends
+				friendly.nameplate1 = true
+				assert(friendName(), "a player of your side before the duel has a friend's name")
+				friendly.nameplate1, attackable.nameplate1 = nil, true
+				fire(mod.events, "UNIT_FACTION", "nameplate1")
+				assert(s._shown and fr._shown == false and mod.side.nameplate1 == false,
+					"the duel starts: an enemy's frame, as the game's plate turns")
+				friendly.nameplate1, attackable.nameplate1 = true, nil
+				fire(mod.events, "UNIT_FACTION", "nameplate1")
+				assert(fr._shown and not s._shown and mod.side.nameplate1 == true, "the duel ends: a friend's name again")
+				-- a party member you can attack is an enemy, as the client says of
+				-- one from the other faction out of an instance, a duel partner too
+				inParty.nameplate1, attackable.nameplate1 = true, true
+				fire(mod.events, "UNIT_FLAGS", "nameplate1")
+				assert(mod.IsFriend("nameplate1") == false and s._shown and fr._shown == false,
+					"a friend in your party whom you can attack wears an enemy's frame")
+				attackable.nameplate1 = nil
+				fire(mod.events, "UNIT_FLAGS", "nameplate1")
+				assert(mod.IsFriend("nameplate1") == true and fr._shown and not s._shown,
+					"and a friend's name once the duel is over")
+				-- no answer from the game: whether you can attack them decides
+				_G.UnitIsFriend = function() return Strict.Secret(true) end
+				attackable.nameplate1 = true
+				assert(mod.IsFriend("nameplate1") == false, "a hidden answer: one you can attack is an enemy")
+				attackable.nameplate1 = nil
+				assert(mod.IsFriend("nameplate1") == true, "and one you cannot is a friend")
+				_G.UnitIsFriend = nil
+				assert(mod.IsFriend("nameplate1") == true, "the same with no such call")
+				_G.UnitCanAttack, _G.UnitIsFriend, _G.UnitIsPlayer, _G.UnitInParty = hadAttack, hadFriend, hadPlayer, hadParty
+				fire(mod.events, "UNIT_FACTION", "player")
+				assert(s._shown and fr._shown == false and mod.side.nameplate1 == false, "an enemy's frame again after")
+			end
+			-- ONE PAINT (2026-10-17, audit): a skin that was hidden is painted by
+			-- its own OnShow, so the plate is painted once, not twice
+			do
+				local painted = 0
+				local hadPaint = F.Paint
+				F.Paint = function(...) painted = painted + 1 return hadPaint(...) end
+				mod.Added("nameplate1")
+				assert(painted == 1, "a skin already up is painted once: " .. painted)
+				s:Hide()
+				painted = 0
+				mod.Added("nameplate1")
+				assert(painted == 0 and s._shown, "a hidden one is left to its OnShow: " .. painted)
+				s:GetScript("OnShow")(s)
+				assert(painted == 1, "which paints it")
+				F.Paint = hadPaint
+			end
+			-- YOUR LEVEL COLOURS THEIRS (2026-10-17, audit): an enemy's level tab
+			-- as well as a friend's level
+			do
+				local hadLevel = _G.UnitLevel
+				_G.UnitLevel = function(unit) return unit == "player" and 20 or 18 end
+				s.levelText:SetText("old")
+				fire(mod.events, "UNIT_LEVEL", "player")
+				assert(s.levelText._text == F.LevelTag(F.Source("nameplate1")) and s.levelText._text:find("18", 1, true),
+					"your level-up colours the enemy's level again: " .. tostring(s.levelText._text))
+				_G.UnitLevel = hadLevel
+			end
 			-- A FRIEND'S PLATE IS ITS NAME (Josh 2026-10-04: "Can we add friendly
 			-- nameplates as well? They should look distinct and more simple")
 			do
@@ -11204,6 +13841,9 @@ if ok then
 						and text:find("NamePlateHorizontalScale", 1, true) and not text:find("fov", 1, true),
 						"every nameplate setting, with its default: " .. text)
 					assert(text:find(("plates: %d of 40 in use"):format(n), 1, true), "and how many plates: " .. text)
+					-- each plate's side as the plates take it (M.IsFriend)
+					assert(text:find("nameplate2 [^/]*friend=true") and text:find("nameplate1 [^/]*friend=false"),
+						"the friend's side and the enemy's, the game's word: " .. text)
 					_G.ConsoleGetAllCommands, _G.C_CVar = hadAll, hadCVar
 				end
 				-- PLATES FOR PETS (the same day: "can we add nameplates for player
@@ -11239,6 +13879,23 @@ if ok then
 			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate21")
 			assert(mod.skins.nameplate21 == nil and (plates.nameplate21.UnitFrame._alpha or 1) == 1,
 				"and one past the first twenty keeps the game's")
+			-- ALL FORTY (2026-10-17, audit): a friend past the first twenty is
+			-- dressed by a sweep too, and given back by one
+			do
+				local hadAttack, hadFriend = _G.UnitCanAttack, _G.UnitIsFriend
+				_G.UnitIsFriend = function(_, unit) return unit == "nameplate2" or unit == "nameplate21" end
+				_G.UnitCanAttack = function(_, unit) return unit ~= "nameplate2" and unit ~= "nameplate21" end
+				mod.Sweep()
+				local f21 = mod.friends.nameplate21
+				assert(f21 and f21._shown and f21._parent == plates.nameplate21 and plates.nameplate21.UnitFrame._alpha == 0,
+					"a friend on the twenty-first plate gets their name from a sweep")
+				BT.SetEnabled("nameplates", false)
+				assert(f21._shown == false and plates.nameplate21.UnitFrame._alpha == 1,
+					"and the module off gives the game's frame back")
+				BT.SetEnabled("nameplates", true)
+				_G.UnitCanAttack, _G.UnitIsFriend = hadAttack, hadFriend
+				mod.Sweep()
+			end
 
 			-- THE OTHERS STEP BACK while you have a target
 			assert(F.PlateDim() == mod.DIM, "the others are dimmed")
@@ -11265,7 +13922,22 @@ if ok then
 			assert(uf._alpha == 1 and not s._shown, "switched off, the game's plate is back")
 			assert(F.PlateDim() == nil, "and nothing is dimmed")
 			BT.SetEnabled("nameplates", true)
+			-- PAUSED AS THE MODULE IS (2026-10-17, audit): switched on in a fight,
+			-- the client will not have the lanes read yet, and they read again
+			-- when it ends
+			do
+				local hadLock = _G.InCombatLockdown
+				BT.SetEnabled("nameplates", false)
+				assert(s.bmAuras.paused, "switched off, the plates' lanes stop reading")
+				_G.InCombatLockdown = function() return true end
+				BT.SetEnabled("nameplates", true)
+				assert(s.bmAuras.paused, "switched on in a fight: still put away")
+				_G.InCombatLockdown = hadLock
+				fire(mod.events, "PLAYER_REGEN_ENABLED")
+				assert(not s.bmAuras.paused, "and reading again once it is over")
+			end
 			_G.C_NamePlate, _G.UnitCanAttack, _G.hooksecurefunc = wasPlates, wasAttack, wasHook
+			_G.UnitIsFriend = wasFriend
 			mod.Sweep()
 		end },
 		{ "the client's own experience and reputation bars go while ours are up", function()
@@ -11417,6 +14089,63 @@ if ok then
 			mod.Gain()
 			assert(mod.session.factions.Undercity.gained == 4800, "switching away and back keeps the pace")
 
+			-- EVERY FACTION THAT MOVED, BOTH WAYS (2026-10-17, audit): the
+			-- client's list read on each change, losses and all, the watched
+			-- faction or not; one under a folded header read by its id
+			local hadRep = _G.C_Reputation
+			local list = {
+				{ name = "Horde", isHeader = true, factionID = 1 },
+				{ name = "Undercity", currentStanding = 9000, factionID = 68 },
+				{ name = "Steamwheedle Cartel", isHeader = true, isHeaderWithRep = true, currentStanding = 3000,
+					factionID = 169 },
+				{ name = "Booty Bay", currentStanding = 5000, factionID = 21 },
+				{ name = "Bloodsail Buccaneers", currentStanding = 200, factionID = 87 },
+			}
+			local byID = {}
+			for _, d in ipairs(list) do byID[d.factionID] = d end
+			local shownList = list
+			_G.C_Reputation = {
+				GetNumFactions = function() return #shownList end,
+				GetFactionDataByIndex = function(i) return shownList[i] end,
+				GetFactionDataByID = function(id) return byID[id] end,
+			}
+			mod.Gain()
+			local fs = mod.session.factions
+			assert(fs["Booty Bay"] and fs["Booty Bay"].gained == 0 and fs.Horde == nil
+				and fs["Steamwheedle Cartel"],
+				"each faction is seen at what it has, and a bare header is not one")
+			-- watching Undercity: -25 with Booty Bay for a pirate, then +25 for a quest
+			list[4].currentStanding = 4975
+			list[5].currentStanding = 225
+			mod.Gain()
+			list[4].currentStanding = 5000
+			mod.Gain()
+			assert(fs["Booty Bay"].gained == 0 and fs["Bloodsail Buccaneers"].gained == 25,
+				"a loss and a gain are counted with their signs: " .. tostring(fs["Booty Bay"].gained))
+			list[4].currentStanding = 4900
+			mod.Gain()
+			mod.Tip()
+			local tipSaid = table.concat(BT.Tip.Texts(), " | ")
+			assert(tipSaid:find("-100", 1, true) and tipSaid:find("+25", 1, true),
+				"the hover lists a faction that lost, with its sign: " .. tipSaid)
+			BT.Tip.Hide()
+			-- folded away under its header, a faction is still read
+			shownList = { list[1], list[2] }
+			list[5].currentStanding = 250
+			mod.Gain()
+			assert(fs["Bloodsail Buccaneers"].gained == 50, "under a folded header, read by its id")
+			shownList = list
+			-- WHAT EACH FACTION SAYS NOW: switched off, a quest, and on again,
+			-- and the quest is not this session's
+			BT.SetEnabled("rep", false)
+			list[4].currentStanding = 5400
+			BT.SetEnabled("rep", true)
+			mod.Gain()
+			assert(fs["Booty Bay"].gained == -100, "what moved while it was off is not counted: "
+				.. tostring(fs["Booty Bay"].gained))
+			_G.C_Reputation = hadRep
+			section:SetWidth(212)
+
 			-- exalted: a full bar, and nothing after it
 			watched = { name = "Undercity", reaction = 8, low = 42000, high = 42999, value = 42999 }
 			mod.Update()
@@ -11543,12 +14272,22 @@ if ok then
 				"Civilian, no rank yet, and the points: " .. left .. " | " .. right)
 			assert(not mod.insignia:IsShown() and mod.shield.field._vertex[1] > mod.shield.field._vertex[3],
 				"a red shield with swords, for the Horde")
-			-- the game writes a new rank and more points: read as it writes
-			info.CurrentRankField:SetText("Grunt")
+			-- the game writes a new rank and more points: read as it writes.
+			-- THE LABEL IS NUMBER AND TITLE (2026-10-17, audit): a ranked
+			-- label is PVP_RANK_NUMBER_AND_TITLE:format(rank, title); these
+			-- English words are a stand-in, the shape is the game's
+			info.CurrentRankField:SetText("Rank 2: Grunt")
 			info.CurrentRankProgressField:SetText("Rank Points: |cnHIGHLIGHT_FONT_COLOR:1,125 / 1,500|r")
 			left, right = mod.Lines(mod.Read())
-			assert(left:find("Grunt", 1, true) and not left:find("/14", 1, true) and right:find("1,125 / 1,500", 1, true),
-				"Grunt is rank 2, with 1,125 of 1,500: " .. left .. " | " .. right)
+			assert(left:find("Grunt", 1, true) and not left:find("Rank 2", 1, true) and not left:find("/14", 1, true)
+				and right:find("1,125 / 1,500", 1, true),
+				"Grunt is rank 2, with 1,125 of 1,500, named without the label's number: " .. left .. " | " .. right)
+			-- a label with no number: the longest rank name inside it
+			assert(mod.NumberOf("First Sergeant") == 5 and mod.NumberOf("Master Sergeant") == 4
+				and mod.NumberOf("Knight-Champion") == 9 and mod.NumberOf("High Warlord") == 14
+				and mod.NumberOf("Sergeant") == 3 and mod.NumberOf("Rank 12: Warlord") == 12
+				and mod.NumberOf("Civilian") == 0,
+				"each rank found by its number, or by the longest name in the label")
 			assert(mod.insignia:IsShown() and mod.insignia._texture == "Interface\\PvPRankBadges\\PvPRank02",
 				"with the game's insignia for rank 2")
 			local roomNow = section:GetWidth() - BT.Dock.SLIM.left - BT.Dock.LINE_ICON_W - BT.Dock.LINE_ICON_GAP - BT.Dock.SLIM.right
@@ -11572,7 +14311,50 @@ if ok then
 			left = mod.Lines(mod.Read())
 			assert(left:find("Sergeant", 1, true) and BT.settings.pvp[meKey] and BT.settings.pvp[me] == nil,
 				"one under the bare name is moved across and read: " .. left)
+
+			-- THE CLIENT'S OWN CALL FIRST (2026-10-17, audit): the tab's
+			-- numbers come from C_MajorFactions, rank points being faction
+			-- 2800; read there, the tab is never asked to write itself
+			local hadFactions, hadSecret = _G.C_MajorFactions, _G.issecretvalue
+			local askedFor = {}
+			local level = 6
+			_G.C_MajorFactions = { GetMajorFactionProgressionInfo = function(id)
+				askedFor[#askedFor + 1] = id
+				return { renownLevel = level, renownReputationEarned = 1125, renownLevelThreshold = 1500,
+					maxLevel = 14, previousWeekProgressiveMaxLevel = 0, currentWeekProgressiveMaxLevel = 0, weekNumber = 1 }
+			end }
+			_G.UnitFactionGroup = function() return "Alliance", "Alliance" end
+			_G.CharacterFrame, _G.PVPRankFrame = sheet, pvpTab
+			info.CurrentRankField:SetText("Civilian")
+			BT.settings.pvp = nil
+			mod.askedAt, updates = nil, 0
+			mod.Update()
+			assert(updates == 0 and askedFor[1] == 2800, "the call is read for faction 2800, and the tab is not asked")
+			left, right = mod.Lines(mod.Read())
+			assert(left:find("Knight", 1, true) and not left:find("Civilian", 1, true) and right:find("1,125 / 1,500", 1, true),
+				"rank 6 is Knight, from the call and not the label: " .. left .. " | " .. right)
+			assert(mod.insignia:IsShown() and mod.insignia._texture == "Interface\\PvPRankBadges\\PvPRank06",
+				"with the game's insignia for rank 6")
+			mod.Tip()
+			said = table.concat(BT.Tip.Texts(), " | ")
+			assert(said:lower():find("rank 6 / 14", 1, true) and said:find("Next rank: Knight-Lieutenant", 1, true),
+				"the hover: rank 6 of 14 and the next rank: " .. said)
+			BT.Tip.Hide()
+			-- a secret from the call is no reading: the label is read instead
+			_G.issecretvalue = function(v) return v == 6 end
+			info.CurrentRankField:SetText("Rank 3: Sergeant")
+			mod.Update()
+			assert(mod.Read().number == 3, "a secret rank from the call, so the label's: " .. tostring(mod.Read().number))
+			_G.issecretvalue = hadSecret
+			-- Civilian from the call
+			level = 0
+			mod.Update()
+			left = mod.Lines(mod.Read())
+			assert(left:find("Civilian", 1, true) and not mod.insignia:IsShown(), "rank 0 is Civilian: " .. left)
+			_G.C_MajorFactions = hadFactions
+
 			_G.hooksecurefunc, _G.C_Timer.After, _G.CharacterFrame = hadHook, hadAfter, hadSheet
+			_G.PVPRankFrame = nil
 			_G.UnitFactionGroup = saved.UnitFactionGroup
 			BT.settings.pvp = nil
 			mod.watching = nil
@@ -11646,10 +14428,19 @@ if ok then
 			mod.Tip()
 			assert(BT.Tip.Says("Earned") and BT.Tip.Says("Spent") and not BT.Tip.Says("Net per hour"),
 				"the hover has both, and no rate before a minute has passed: " .. table.concat(BT.Tip.Texts(), " | "))
+			-- YOUR WHOLE NAME (2026-10-17, audit): UnitName says only "Beeb"
+			assert(BT.Tip.Says("Beeb Bob"), "the header names you in full: " .. table.concat(BT.Tip.Texts(), " | "))
 			BT.Tip.Hide()
 
 			-- half an hour later: 2g net is 4g an hour
 			clock = clock + 1800
+			-- ONE RULE FOR A RATE (2026-10-17, audit): the sessions' S.SETTLE
+			local settle = BT.Session.SETTLE
+			BT.Session.SETTLE = 3600
+			mod.Tip()
+			assert(not BT.Tip.Says("Net per hour"), "no rate before the sessions' settle time")
+			BT.Tip.Hide()
+			BT.Session.SETTLE = settle
 			mod.Tip()
 			assert(BT.Tip.Says("Net per hour"), "the net an hour, once there is time to say")
 			local net
@@ -11717,20 +14508,17 @@ if ok then
 			local said = table.concat(BT.Tip.Texts(), " | ")
 			assert(said:find("2 bags", 1, true) and said:find("free of 32", 1, true),
 				"the hover counts the bags whose room it gives: " .. said)
+			-- SPECIAL BAGS, NOT REAGENT BAGS (2026-10-17, audit): the row takes
+			-- in herb bags, quivers and soul bags as well as the reagent bag
+			assert(said:find("Special bags", 1, true) and said:find("26 free of 28", 1, true)
+				and not said:find("Reagent bags", 1, true), "the other bags' row: " .. said)
 			BT.Tip.Hide()
-			local bl, br = space.Lines(b)
-			assert(bl:find("28", 1, true) and bl:find("/32", 1, true) and bl:find("Bags", 1, true),
-				"the bags line: " .. bl)
-			assert(bl:find("|cfff2c75a", 1, true), "amber at four free")
-			assert(br:find("Reagents", 1, true) and br:find("/28", 1, true), "and reagents beside it: " .. br)
-			bags[0].free = 0
-			local full = space.Lines()
-			assert(full:find("|cfff26659", 1, true), "red when there is no room at all")
 			bags[2], bags[5] = nil, nil
-			local _, none = space.Lines()
-			assert(none == "", "and no reagents half when there is no reagent space")
+			space.Tip(space.Build())
+			said = table.concat(BT.Tip.Texts(), " | ")
+			assert(not said:find("Special bags", 1, true), "and no row when there are none: " .. said)
+			BT.Tip.Hide()
 			bags[2], bags[5] = { slots = 12, free = 10, family = 32 }, nil
-			bags[0].free = 4
 			space.Update()
 			local bagChip = space.Build()
 			assert(bagChip.wanted and bagChip.spec.text:find("28", 1, true)
@@ -11786,6 +14574,30 @@ if ok then
 			list = space.ReagentCells()
 			assert(#list == 1 and list[1].key == 6265 and list[1].state == "alert",
 				"a warlock's shards show even at nothing, in red")
+
+			-- ONLY FOR SPELLS YOU KNOW (Josh 2026-10-18): a druid at level 10
+			-- knows no Rebirth and no Gift of the Wild, so the hover lists none
+			as("DRUID")
+			carried = {}
+			local learnt = {}
+			local hadPlayer, hadKnown = _G.IsPlayerSpell, _G.IsSpellKnown
+			_G.IsPlayerSpell = function(id) return learnt[id] == true end
+			_G.IsSpellKnown = nil
+			assert(#space.Reagents() == 0, "a druid who knows no Rebirth is listed no seeds")
+			learnt[20484] = true
+			carried = { [17021] = 4 }
+			local names = {}
+			for _, r in ipairs(space.Reagents()) do
+				names[#names + 1] = r.id .. "=" .. r.count
+			end
+			assert(table.concat(names, ",") == "17034=0,17021=4",
+				"Rebirth 1 lists Maple Seed, and berries you carry are listed too: " .. table.concat(names, ","))
+			for _, id in ipairs(space.CLASS_REAGENTS.DRUID) do
+				assert(id ~= 22147, "and no seed this client does not have")
+			end
+			_G.IsPlayerSpell = nil
+			assert(#space.Reagents() == 7, "a client that cannot say lists them all")
+			_G.IsPlayerSpell, _G.IsSpellKnown = hadPlayer, hadKnown
 
 			as("HUNTER")
 			_G.GetInventoryItemCount = function(_, slot) return slot == 0 and 1400 or 0 end
@@ -11875,6 +14687,13 @@ if ok then
 			assert(not parts.fps.state and parts.world.state == "alert", "the three states kept for the hover")
 			assert(mod.FpsState(40) == "warn" and mod.MsState(150) == "warn" and mod.MsState(20) == nil,
 				"amber is worth noticing, plain is fine")
+			-- LATENCY THAT FEELS LATE (2026-10-17, audit): the note's number is
+			-- where amber starts
+			assert(mod.MsState(mod.LATE) == "warn" and mod.MsState(mod.LATE - 1) == nil, "amber from M.LATE")
+			mod.Tip(chips.all)
+			assert(BT.Tip.Says(("Above about %d ms, casts and swings feel late."):format(mod.LATE))
+				and not BT.Tip.Says("150 ms"), "the hover's note says the same: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
 
 			-- the grid: two columns of the three (Josh 2026-09-29), after the
 			-- other cells - beside the last row's when it has one, else a row
@@ -11986,6 +14805,66 @@ if ok then
 			_G.IsShiftKeyDown, _G.GetTime = wasShift, wasTime
 			BT.settings.dockPos = nil
 		end },
+		{ "the Testing page's report says why your target's death did not count", function()
+			-- (Josh 2026-10-18, the squirrel): Modules/Expedition/Kills.lua, K.Missed
+			local K = BT.ExpeditionKills
+			local was = K.misses
+			K.misses = { { guid = "Creature-0-1-2-3-721-Q", name = "Squirrel",
+				why = "no spell or swing of yours in the 3 seconds before", corpseTag = false } }
+			local status = BT.GetModule("expedition").Status()
+			assert(status:find("last target not counted: Squirrel, no spell or swing of yours in the 3 seconds before (corpse's tag yours)", 1, true),
+				"the report names the miss: " .. status)
+			K.misses = {}
+			assert(not BT.GetModule("expedition").Status():find("not counted", 1, true), "and says nothing of one when there is none")
+			K.misses = was
+		end },
+		{ "with the Dock off, the journals' lines stay under the header", function()
+			-- (Josh 2026-10-18: "I disabled everything except the ledger and
+			-- expedition ... but ledger and expedition are not showing up")
+			BT.SetEnabled("expedition", true)
+			BT.SetEnabled("ledgerline", true)
+			local exp, led = BT.GetModule("expedition"), BT.GetModule("ledgerline")
+			local hadExp, hadLed, hadDock = BT.settings.expeditionLine, BT.settings.ledgerLine, BT.FeatureOn("dock")
+			BT.settings.expeditionLine, BT.settings.ledgerLine = true, true
+			BT.SetFeature("dock", true)
+			BT.Dock.Relayout()
+			assert(exp.Build():IsShown() and led.Build():IsShown(), "both lines up with the Dock on")
+			-- the Dock's own lines that are up
+			local own = {}
+			for _, key in ipairs({ "xp", "rep", "pvp", "tracker", "minimap" }) do
+				local m = BT.GetModule(key)
+				local f = m and (m.Build and m.Build() or m.Frame and m.Frame())
+				if f and f:IsShown() then
+					own[#own + 1] = f
+				end
+			end
+			assert(#own > 0, "and some of the Dock's own")
+			BT.SetFeature("dock", false)
+			BT.Dock.Relayout()
+			assert(exp.frame:IsShown() and led.frame:IsShown(), "the journals' lines stay with the Dock off")
+			for _, f in ipairs(own) do
+				assert(not f:IsShown(), "and the Dock's own lines go")
+			end
+			assert(BT.Dock.Frame()._height > BT.Dock.Header()._height, "so the dock is taller than its header")
+			-- on the Dock's page, their rows are not dimmed with the Dock
+			BT.Window.Show("dock")
+			local W = BT.Window
+			local panel = W.Panel("dock")
+			local bright, dim = 0, 0
+			for _, r in ipairs(panel and panel.rows or {}) do
+				if r.spec and (r.spec.field == "expeditionLine" or r.spec.field == "ledgerLine") then
+					assert(r._alpha == nil or r._alpha == 1, "a journal's row stays bright: " .. tostring(r._alpha))
+					bright = bright + 1
+				elseif r._alpha and r._alpha < 1 then
+					dim = dim + 1
+				end
+			end
+			assert(bright == 2 and dim > 0, ("the journals' two rows bright, the Dock's dimmed (%d, %d)"):format(bright, dim))
+			BT.Window.Hide()
+			BT.SetFeature("dock", hadDock)
+			BT.settings.expeditionLine, BT.settings.ledgerLine = hadExp, hadLed
+			BT.Dock.Relayout()
+		end },
 		{ "a journal's line switched off while the Dock is off stays off", function()
 			-- (2026-10-05, audit): the Dock put both lines away, the lines were
 			-- switched off on its page, and the Dock brought them back
@@ -12037,6 +14916,56 @@ if ok then
 			assert(ok, err)
 			assert(book.earned["notes:1"] and table.concat(said, ","):find("First Entry", 1, true),
 				"and said on the line, not dated quietly: " .. table.concat(said, ","))
+		end },
+		{ "a login counts the book without saying its characters as a gain", function()
+			-- THE BOOK COUNTED IS NOT A GAIN (2026-10-17, audit): the line was
+			-- drawn before the count, and the count was said as "+405"
+			local L, line = BT.LedgerRanks, BT.GetModule("ledgerline")
+			BT.SetEnabled("ledger", true)
+			BT.SetEnabled("ledgerline", true)
+			local book = L.Book()
+			local wasRank, wasPer = book.rank, L.PER_CHARACTERS
+			L.PER_CHARACTERS = 1 -- every character a point, so the count shows
+			local gains = {}
+			local wasGain, wasToast = BT.Notice.Gain, line.RankToast
+			BT.Notice.Gain = function(_, n) gains[#gains + 1] = n end
+			line.RankToast = function() end
+			-- as a /reload leaves it: nothing counted yet
+			L.characters, L.countedFor = 0, nil
+			local ok, err = pcall(BT.Boot.handlers.PLAYER_ENTERING_WORLD, nil, "PLAYER_ENTERING_WORLD", false, false)
+			assert(ok, err)
+			assert(L.countedFor == BT.db and L.characters == BT.DB.Count(BT.db) and L.characters > 0,
+				"the book is counted at the loading screen")
+			assert(#gains == 0, "and its characters are not said as a gain: " .. table.concat(gains, ","))
+			-- one more later on is
+			BT.DB.Note(BT.db, "Gained Later", nil, { class = "MAGE" })
+			line.Changed()
+			assert(#gains == 1 and gains[1] == 1, "a character recorded later is: " .. table.concat(gains, ","))
+			BT.Notice.Gain, line.RankToast = wasGain, wasToast
+			L.PER_CHARACTERS, book.rank = wasPer, wasRank
+			L.countedFor = nil -- counted again, at the usual rate, at the next look
+		end },
+		{ "the Ledger's tooltip puts its numbers in rows, and leaves out what is zero", function()
+			-- (2026-10-17, audit): three numbers in one sentence, and "+0 notes"
+			local L, line = BT.LedgerRanks, BT.GetModule("ledgerline")
+			line.Build()
+			local wasScore, wasSession = L.Score, line.session
+			L.Score = function() return 0, 0, { characters = 0, notes = 0, tags = 0 } end
+			line.Tip()
+			assert(BT.Tip.Says("Nothing in the book yet.") and BT.Tip.Says("A note") and BT.Tip.Says("2 points")
+				and BT.Tip.Says("A tag") and BT.Tip.Says("1 point") and BT.Tip.Says("100 characters recorded"),
+				"an empty book: what each thing is worth, a row each: " .. table.concat(BT.Tip.Texts(), " | "))
+			L.Score = wasScore
+			local _, _, c = L.Score()
+			-- a session that added one tag and nothing else
+			line.session = { db = BT.db, characters = L.characters or 0, notes = c.notes, tags = c.tags - 1 }
+			line.Tip()
+			local said = table.concat(BT.Tip.Texts(), " | ")
+			if (L.Score()) > 0 then
+				assert(BT.Tip.Says("THIS SESSION") and BT.Tip.Says("tag") and not said:find("+0", 1, true),
+					"only the tag it added: " .. said)
+			end
+			line.session = wasSession
 		end },
 		{ "the character sheet: item level on every slot", function()
 			local mod = BT.GetModule("charsheet")
@@ -12376,6 +15305,65 @@ if ok then
 			BT.settings.charsheet.folded = nil
 			_G.hooksecurefunc = hadHook
 
+			-- A STATS REFRESH MOVES NOTHING OUTSIDE ITS LIST (2026-10-17,
+			-- audit): your stats and your pet's are dressed row by row, and
+			-- the window is not laid out again; the titles list still is
+			local realLayout, realPages = mod.Layout, mod.LayoutPages
+			local laid = 0
+			mod.Layout = function() laid = laid + 1 return true end
+			mod.LayoutPages = function() laid = laid + 1 return true end
+			local petStats = _G.CreateFrame("Frame", "CharacterStatsPanePetScrollBox", frame)
+			_G.CharacterStatsPanePetScrollBox = petStats
+			petStats.ScrollBox = _G.CreateFrame("Frame", nil, petStats)
+			petStats.ScrollBox.ScrollTarget = _G.CreateFrame("Frame", nil, petStats.ScrollBox)
+			health.Label:SetTextColor(1, 1, 1)
+			mod.laidAt = -1e9
+			mod.ListUpdated(stats.ScrollBox)
+			mod.laidAt = -1e9
+			mod.ListUpdated(petStats.ScrollBox)
+			assert(laid == 0, "a stats refresh lays nothing out: " .. laid)
+			assert(health.Label._textColor[1] < 0.6, "and its rows are still dressed")
+			local titles = _G.CreateFrame("Frame", nil, frame)
+			titles.ScrollTarget = _G.CreateFrame("Frame", nil, titles)
+			mod.laidAt = -1e9
+			mod.ListUpdated(titles)
+			assert(laid == 1, "the titles list still lays the window out")
+			mod.Layout, mod.LayoutPages = realLayout, realPages
+			_G.CharacterStatsPanePetScrollBox = nil
+
+			-- ONCE A ROW, NOT ON EVERY FRAME OF A SCROLL (2026-10-17, audit):
+			-- what the game leaves alone is set the first time; the name, which
+			-- the game anchors again as it fills a row, every time
+			local repBar = row.Content.ReputationBar
+			repBar:ClearAllPoints()
+			row.Content.Name:ClearAllPoints()
+			mod.CompactRow(row)
+			assert(repBar._points == nil, "a row seen before is not laid out again")
+			assert(row.Content.Name._points and row.Content.Name._points.LEFT.y == mod.ROW_TEXT_Y,
+				"but its name is put back where ours goes")
+			faction.Name:SetText("Horde")
+			mod.CompactRow(faction)
+			assert(faction.Name._text == "HORDE", "and a header's new words are in capitals")
+
+			-- EVERY SIDE TAB THERE IS (2026-10-17, audit): since build 70291 a
+			-- fourth, the pet's, beside the other three at their size and step
+			local sideTabs = _G.CreateFrame("Frame", "PaperDollSidebarTabs", frame)
+			_G.PaperDollSidebarTabs = sideTabs
+			local sidebarTab = {}
+			for n = 1, 4 do
+				sidebarTab[n] = _G.CreateFrame("CheckButton", "PaperDollSidebarTab" .. n, sideTabs)
+				sidebarTab[n]:SetSize(42, 42)
+				_G["PaperDollSidebarTab" .. n] = sidebarTab[n]
+			end
+			mod.Layout()
+			local t4 = sidebarTab[4]
+			assert(t4._width == 24 and t4._height == 24 and t4._points.LEFT and t4._points.LEFT.x == 81,
+				"the pet's tab 24 across, one step past the third: " .. tostring(t4._width))
+			for n = 1, 4 do
+				_G["PaperDollSidebarTab" .. n] = nil
+			end
+			_G.PaperDollSidebarTabs = nil
+
 			-- A RESISTANCE IS A SWATCH: the spell icon off, the element's colour on
 			local resist = _G.CreateFrame("Frame", nil, stats.ScrollBox.ScrollTarget)
 			resist:SetHeight(23)
@@ -12414,6 +15402,20 @@ if ok then
 				"and every size: the game's own layout again")
 			assert(row._height == 30 and view.GetElementExtent() == 30, "the rows the game's height again")
 			assert(well._vertex[1] == 1, "the track its own colour again")
+			-- THE WINDOW'S OWN SIZE IS THE GAME'S TO GIVE BACK (2026-10-17,
+			-- audit): where the game can size it, it is asked to, not handed
+			-- the size first seen at login
+			BT.SetEnabled("charsheet", true)
+			assert(frame._width == 452, "on again, ours")
+			local sizedByGame = 0
+			frame.UpdateSize = function(self)
+				sizedByGame = sizedByGame + 1
+				self:SetSize(640, 424)
+			end
+			BT.SetEnabled("charsheet", false)
+			assert(sizedByGame == 1 and frame._width == 640 and frame._height == 424,
+				"off, the game sizes its window: " .. tostring(frame._width))
+			frame.UpdateSize = nil
 			BT.SetEnabled("charsheet", true)
 			assert(banner._alpha == 0, "and on takes it off again")
 			mod.StayDown(glow)
@@ -12636,13 +15638,20 @@ if ok then
 			local rows = {}
 			BT.Tip.Show = function(_, spec)
 				spec.build(setmetatable({ Row = function(_, l, v) rows[#rows + 1] = tostring(l) .. "=" .. tostring(v) end },
-					{ __index = function() return function() end end }))
+					FAKE_TIP))
 			end
 			mod.Tip()
-			BT.Tip.Show = wasShow
 			assert(#rows >= 3 and not table.concat(rows, ","):find("empty", 1, true),
 				"and the off hand is not listed as empty: " .. table.concat(rows, ","))
+			-- SENTENCE CASE (2026-10-17, audit): the empty hands' rows
 			twoHand = false
+			worn[16] = nil
+			rows = {}
+			mod.Tip()
+			BT.Tip.Show = wasShow
+			local said = table.concat(rows, ",")
+			assert(said:find("Main hand=empty", 1, true) and said:find("Off hand=empty", 1, true),
+				"empty hands, named in sentence case: " .. said)
 			_G.C_Timer.After = realAfter
 			worn = {}
 			_G.GetAverageItemLevel = nil
@@ -12768,6 +15777,35 @@ if ok then
 			assert(mod.Still(), "a secret one, with the sheet closed, has nothing new to read")
 			_G.CharacterFrame:Show()
 			assert(not mod.Still(), "and with the sheet open it is read from the sheet")
+			-- THE SHEET'S FIGURE (2026-10-17, audit): read while it is open,
+			-- kept when it closes, and a secret row left alone
+			local sheetText = "160%"
+			local row = {
+				IsShown = function() return true end,
+				Label = { GetText = function() return "Movement Speed:" end },
+				Value = { GetText = function() return sheetText end },
+			}
+			local wasPane, wasSecret = _G.CharacterStatsPaneScrollBox, _G.issecretvalue
+			_G.CharacterStatsPaneScrollBox = { ScrollBox = { ScrollTarget = { GetChildren = function() return row end } } }
+			mod.sheetValue = nil
+			assert(mod.Percent() == 160, "the sheet's figure while it is open: " .. tostring(mod.Percent()))
+			mod.Tip()
+			assert(BT.Tip.Says("From your character sheet.") and not BT.Tip.Says("last open"),
+				"open, the note says where the figure is from: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
+			_G.CharacterFrame:Hide()
+			sheetText = "100%"
+			assert(mod.Percent() == 160, "closed, the last figure stands")
+			mod.Tip()
+			assert(BT.Tip.Says("From your character sheet when it was last open."),
+				"and the note says it is the last one: " .. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
+			_G.CharacterFrame:Show()
+			_G.issecretvalue = function(v) return v == sheetText end
+			assert(mod.Percent() == 160, "a secret row is not read, and the last figure stands")
+			_G.issecretvalue = wasSecret
+			assert(mod.Percent() == 100, "a plain one is read")
+			_G.CharacterStatsPaneScrollBox, mod.sheetValue = wasPane, nil
 			mod.secret = nil
 			_G.CharacterFrame = wasSheet
 			_G.GetUnitSpeed, _G.BASE_MOVEMENT_SPEED = nil, nil
@@ -12986,6 +16024,22 @@ if ok then
 				"the caption row says where you are: " .. tostring(mod.zoneText._text))
 			assert(mod.zoneText._textColor[2] == 1.0,
 				"coloured by who holds the ground, as the client does it")
+			-- C_PvP'S (2026-10-17, audit): this client has the call only in
+			-- C_PvP, and that one is asked first
+			local hadPvP = _G.C_PvP
+			_G.C_PvP = { GetZonePVPInfo = function() return "hostile", false, "Horde" end }
+			mod.Caption()
+			local hc = mod.zoneText._textColor
+			assert(hc[1] == 1.0 and hc[2] == 0.1, "a hostile zone from C_PvP is red")
+			_G.C_PvP.GetZonePVPInfo = function() return "sanctuary" end
+			mod.Caption()
+			assert(mod.zoneText._textColor[3] == 0.94, "a sanctuary is blue")
+			-- the client's own caption has no colour for a combat zone: gold
+			_G.C_PvP.GetZonePVPInfo = function() return "combat" end
+			mod.Caption()
+			hc = mod.zoneText._textColor
+			assert(hc[1] == 1.0 and hc[2] == 0.82 and hc[3] == 0.0, "a combat zone is gold, as the client writes it")
+			_G.C_PvP = hadPvP
 			local zoneAt = (mod.zoneText._points or {}).LEFT
 			local coordAt = (mod.coordText._points or {}).RIGHT
 			assert(zoneAt and coordAt, "the zone name on the left, the coordinates on the right")
@@ -13129,7 +16183,10 @@ if ok then
 			assert(caption._parent ~= mod.Build() and caption._parent ~= map,
 				"the client's own coordinates are put away: the caption row draws them")
 			assert(plainIcon._parent == map, "and a plain icon goes on the map")
-			assert(plainIcon._width == 18, "sized as an icon")
+			-- SCALED, NOT SIZED (2026-10-17, audit): the stub's frames measure
+			-- 200 across, and all of it comes down to the slot's 18
+			assert(plainIcon._width == nil and math.abs((plainIcon._scale or 1) * 200 - 18) < 0.01,
+				"scaled down to an icon, its own size kept: " .. tostring(plainIcon._scale))
 			assert(numbered._parent == map,
 				"something with a picture on it is an icon, whatever is written across it")
 
@@ -13452,6 +16509,52 @@ if ok then
 				"and it goes back too, because we remembered moving it")
 			_G.MinimapCluster.GetChildren = nil
 
+			-- NO DEAD PATCH OVER THE WORLD (2026-10-17, audit): the empty
+			-- cluster at the top-right lets clicks through while the map is in
+			-- the dock, and takes the mouse again when it goes home
+			local cl = _G.MinimapCluster
+			cl._mouse = true
+			cl.EnableMouse = function(self, on) self._mouse = on and true or false end
+			cl.IsMouseEnabled = function(self) return self._mouse end
+			_G.GetMinimapShape = nil
+			BT.SetEnabled("minimap", true)
+			mod.Apply()
+			assert(cl._mouse == false, "the empty cluster lets clicks through to the world")
+			-- SQUARE, SAID TO THE OTHERS: the pin libraries ask this global
+			assert(type(_G.GetMinimapShape) == "function" and _G.GetMinimapShape() == "SQUARE",
+				"the map says it is square")
+			mod:OnDisable()
+			assert(cl._mouse == true, "and off, the cluster takes the mouse as it did")
+			assert(_G.GetMinimapShape == nil, "and the shape is nobody's again")
+			-- another addon's answer is its own
+			local theirs = function() return "CORNER-TOPRIGHT" end
+			_G.GetMinimapShape = theirs
+			mod.Apply()
+			assert(_G.GetMinimapShape == theirs, "another addon's shape is not written over")
+			mod:OnDisable()
+			assert(_G.GetMinimapShape == theirs, "nor taken away")
+			_G.GetMinimapShape = nil
+			-- THE CLIENT'S OWN MASK: its UpdateMinimapConfig, where it has one
+			local configured = 0
+			cl.UpdateMinimapConfig = function()
+				configured = configured + 1
+				map:SetMaskTexture("ui-hud-minimap-frame-generic-mask")
+			end
+			mod.Apply()
+			mod:OnDisable()
+			assert(configured == 1 and map._mask == "ui-hud-minimap-frame-generic-mask",
+				"off, the client sets its own mask: " .. tostring(map._mask))
+			cl.UpdateMinimapConfig = nil
+			-- NOTHING RECORDED, NOTHING TO GIVE BACK: switched off when it is
+			-- already stopped, it shows nothing the client had hidden
+			local clock = _G.CreateFrame("Frame", "TimeManagerClockButton", _G.UIParent)
+			_G.TimeManagerClockButton = clock
+			clock:Hide()
+			mod:OnDisable()
+			assert(clock._shown == false, "the clock the client hid stays hidden")
+			_G.TimeManagerClockButton = nil
+			cl.EnableMouse, cl.IsMouseEnabled, cl._mouse = nil, nil, nil
+
 			BT.SetEnabled("minimap", false)
 			_G.Minimap, _G.MinimapBorder, _G.MinimapZoomIn = nil, nil, nil
 			_G.MiniMapTracking, _G.GameTimeFrame = nil, nil
@@ -13606,7 +16709,7 @@ if ok then
 				GetName = function() return "ItemTip" end,
 				NumLines = function() return 2 end,
 				SetScale = function(_, v) sized.scale = v end,
-			}, { __index = function() return function() end end })
+			}, FAKE_TIP)
 			for i = 1, 2 do
 				_G["ItemTipTextLeft" .. i] = _G.CreateFrame("FontString")
 				_G["ItemTipTextRight" .. i] = _G.CreateFrame("FontString")
@@ -13616,6 +16719,76 @@ if ok then
 			-- and the size setting reaches an item tooltip, not only a unit one
 			assert(type(sized.scale) == "number",
 				"the size setting is applied to item tooltips too")
+		end },
+		{ "the data processor's post calls reach the unit, item, spell, buff and macro fills", function()
+			-- (2026-10-17, audit) These tests have no TooltipDataProcessor, so
+			-- Core/Tooltip.lua took the old script hooks at load, and the post
+			-- calls this client runs were never called. Here it is loaded again
+			-- with one, into a BT of its own (the real one keeps its hooks), and
+			-- each post call is handed the tooltips the client hands it.
+			local tips = { _G.GameTooltip, _G.ShoppingTooltip1, _G.ItemRefTooltip }
+			local was = { proc = _G.TooltipDataProcessor, types = _G.Enum.TooltipDataType, util = _G.TooltipUtil, scripts = {} }
+			-- the stub's HookScript takes a script's place, so the scripts go back after
+			for _, tip in ipairs(tips) do
+				local copy = {}
+				for k, v in pairs(tip._scripts) do
+					copy[k] = v
+				end
+				was.scripts[tip] = copy
+			end
+			local hooks = {}
+			_G.TooltipDataProcessor = { AddTooltipPostCall = function(kind, fn)
+				hooks[kind] = hooks[kind] or {}
+				table.insert(hooks[kind], fn)
+			end }
+			local DT = { Item = 0, Spell = 1, Unit = 2, UnitAura = 7, Macro = 25 }
+			_G.Enum.TooltipDataType = DT
+			_G.TooltipUtil = { GetDisplayedUnit = function() return "Beeb", "target" end }
+			local own = setmetatable({}, { __index = BT })
+			assert(loadfile("Core/Tooltip.lua"))("BeebMod", own)
+			local T = own.UnitTip
+			assert(T ~= BT.UnitTip and T.path == "processor" and T.itemPath == "processor" and T.spellPath == "processor",
+				"every hook on the processor: " .. tostring(T.path) .. " " .. tostring(T.itemPath) .. " " .. tostring(T.spellPath))
+			assert(#hooks[DT.Unit] == 1 and #hooks[DT.Item] == 1 and #hooks[DT.Spell] == 1 and #hooks[DT.UnitAura] == 1
+				and #hooks[DT.Macro] == 1, "one post call for each kind")
+			local items, spells = {}, {}
+			own.OnItemTooltip(nil, 0, function(tip, data) items[#items + 1] = { tip, data } end)
+			own.OnSpellTooltip(nil, 0, function(tip, data, kind) spells[#spells + 1] = { tip, data, kind } end)
+			local data = { lines = {} }
+			-- an item: the tooltip you point with, the comparison, the chat link's
+			hooks[DT.Item][1](_G.UIParent, data)
+			for _, tip in ipairs(tips) do
+				hooks[DT.Item][1](tip, data)
+			end
+			assert(T.itemFills == 3 and #items == 3 and items[1][1] == _G.GameTooltip and items[2][1] == _G.ShoppingTooltip1
+				and items[3][1] == _G.ItemRefTooltip and items[3][2] == data, "an item fill on each of the three: " .. T.itemFills)
+			-- watched, so what we put on them goes when they hide or clear
+			assert(_G.ShoppingTooltip1._scripts.OnTooltipCleared == T.TipGone and _G.ItemRefTooltip._scripts.OnHide == T.TipGone,
+				"the comparison and the chat link's are watched")
+			-- a spell, a buff or a macro: the one you point with and the chat
+			-- link's, not the comparison
+			for _, kind in ipairs({ "Spell", "UnitAura", "Macro" }) do
+				for _, tip in ipairs(tips) do
+					hooks[DT[kind]][1](tip, data)
+				end
+			end
+			local said = {}
+			for _, s in ipairs(spells) do
+				said[#said + 1] = (s[1] == _G.GameTooltip and "main" or s[1] == _G.ItemRefTooltip and "link" or "other") .. " " .. s[3]
+			end
+			assert(T.spellFills == 6 and table.concat(said, ", ") == "main spell, link spell, main aura, link aura, main macro, link macro",
+				"the spell fills, by kind: " .. table.concat(said, ", "))
+			-- a unit: GameTooltip only, its data kept for a redraw
+			local fills = T.fills
+			hooks[DT.Unit][1](_G.ShoppingTooltip1, { guid = "Creature-0-1", dataInstanceID = 6 })
+			hooks[DT.Unit][1](_G.GameTooltip, { guid = "Creature-0-2", dataInstanceID = 7 })
+			assert(T.fills == fills + 1 and T.dataID == 7 and T.guid == "Creature-0-2" and T.unit == "target",
+				"a unit fill on GameTooltip alone, its data kept")
+			T.Gone()
+			for _, tip in ipairs(tips) do
+				tip._scripts = was.scripts[tip]
+			end
+			_G.TooltipDataProcessor, _G.Enum.TooltipDataType, _G.TooltipUtil = was.proc, was.types, was.util
 		end },
 		{ "a quest with an item gets a button to use it", function()
 			_G.C_QuestLog = nil
@@ -13914,6 +17087,35 @@ if ok then
 			assert(BT.settings.dockPos.y < 0, "measured down from the top of the screen")
 			assert(_G.BeebModTracker == nil, "there is no second floating panel any more")
 
+			-- THE EDGE IT IS NEAREST STAYS PUT (2026-10-17, audit): a new Size
+			-- keeps a dock on the right against its right edge, and saves it
+			-- by its top-right corner; one on the left keeps its left edge.
+			-- The dock's edges on the screen, in pixels, read in its own units.
+			local edges = { left = 1676, right = 1916, top = 795 }
+			local function e(self) return self._scale or 1 end
+			dock.GetEffectiveScale = e
+			dock.GetLeft = function(self) return edges.left / e(self) end
+			dock.GetRight = function(self) return edges.right / e(self) end
+			dock.GetTop = function(self) return edges.top / e(self) end
+			local hadRight, hadTop = _G.UIParent.GetRight, _G.UIParent._top
+			_G.UIParent.GetRight = function() return 1920 end
+			_G.UIParent._top = 1080
+			BT.Dock.SetScale(0.7)
+			local at = dock._points and dock._points.TOPRIGHT
+			assert(at and at.rel == _G.UIParent and at.relPoint == "TOPRIGHT" and math.abs(at.x * 0.7 + 4) < 0.01
+				and math.abs(at.y * 0.7 + 285) < 0.01,
+				"on the right, its right edge stays 4 from the screen's: " .. tostring(at and at.x))
+			assert(BT.settings.dockPos.point == "TOPRIGHT" and BT.settings.dockPos.rel == "TOPRIGHT",
+				"and it is saved by its top-right corner")
+			edges.left, edges.right = 10, 250
+			BT.Dock.SetScale(1)
+			at = dock._points and dock._points.TOPLEFT
+			assert(at and math.abs(at.x - 10) < 0.01 and BT.settings.dockPos.point == "TOPLEFT",
+				"on the left, its left edge stays where it was")
+			dock.GetEffectiveScale, dock.GetLeft, dock.GetRight, dock.GetTop = nil, nil, nil, nil
+			_G.UIParent.GetRight, _G.UIParent._top = hadRight, hadTop
+			BT.settings.dockPos = nil
+
 			-- the dock is the header plus its sections (the Ledger's row went on
 			-- 2026-10-05)
 			BT.SetEnabled("minimap", false)
@@ -13932,6 +17134,13 @@ if ok then
 			-- and it is the handle that does not go away: with the row
 			-- switched off there was nothing left to drag but a lone cog
 			assert(header:GetScript("OnDragStart"), "the header drags the panel")
+			-- and says how (Josh 2026-10-18: "Maybe a tooltip over the beebmod
+			-- logo to explain that would help")
+			header:GetScript("OnEnter")(header)
+			assert(BT.Tip.Says("SHIFT-DRAG") and BT.Tip.Says("move dock"),
+				"pointing at the name says Shift-drag moves the dock: " .. table.concat(BT.Tip.Texts(), " | "))
+			header:GetScript("OnLeave")(header)
+			BT.Tip.Hide()
 			assert(BT.Dock.Cog() and BT.Dock.Cog():GetParent() == header,
 				"and the cog lives in it rather than in a corner")
 			local headTall = header._height or 0
@@ -14008,8 +17217,8 @@ if ok then
 			tip.NumLines = function() return 1 end
 			local item = "item:2"
 			tip.GetItem = function() return "Thing", item end
-			_G.TestLevelTextLeft1 = _G.CreateFrame("Frame")
-			local right = _G.CreateFrame("Frame")
+			_G.TestLevelTextLeft1 = _G.CreateFrame("FontString")
+			local right = _G.CreateFrame("FontString")
 			right:Hide()
 			_G.TestLevelTextRight1 = right
 			_G.GetItemInfo = function(l)
@@ -14019,7 +17228,7 @@ if ok then
 			BT.settings.tooltips = BT.settings.tooltips or {}
 			BT.settings.tooltips.itemLevel = nil
 			tips.ItemLevel(tip)
-			assert(right:IsShown() and right._text:find("23", 1, true) and right._text:find("ilvl", 1, true),
+			assert(right:IsShown() and right._text:find("23", 1, true) and right._text:find("ILVL", 1, true),
 				"on the right of the name line: " .. tostring(right._text))
 			-- small print (Josh 2026-10-17: "Make the ilvl much smaller")
 			assert(select(2, right:GetFont()) == BT.Fonts.Size(tips.ILVL_SIZE), "and small: " .. tostring(select(2, right:GetFont())))
@@ -14049,10 +17258,10 @@ if ok then
 			}
 			tip.NumLines = function() return #said end
 			for i, text in ipairs(said) do
-				local fs = _G.CreateFrame("Frame")
+				local fs = _G.CreateFrame("FontString")
 				fs:SetText(text)
 				_G["TestItemTextLeft" .. i] = fs
-				_G["TestItemTextRight" .. i] = _G.CreateFrame("Frame")
+				_G["TestItemTextRight" .. i] = _G.CreateFrame("FontString")
 			end
 
 			tips.ComposeItem(tip)
@@ -14084,11 +17293,10 @@ if ok then
 			-- the error swallowed by the pcall around module hooks. It showed
 			-- up in game as "the Ledger tab is slow".
 			BT.Window.Show("ledger")
-			BT.moduleErrors = nil
+			local mark = #caught
 			BT.Find.Refresh()
 			BT.Window.Refresh()
-			assert(BT.moduleErrors == nil,
-				"no module error: " .. table.concat(BT.moduleErrors or {}, " | "))
+			assert(#caught == mark, "no module error: " .. caughtSince(mark))
 		end },
 		{ "a meter harvest", function()
 			assert(BT.Meter.available, "the meter source should be available against the stubs")
@@ -14113,7 +17321,11 @@ if ok then
 			local keepCheck, keepDropped = BT.betaCheck, BT.betaDropped
 			BT.betaCheck = { realm = false, client = false, known = true }
 			BT.betaDropped = { books = 1, characters = 36251, ledger = 1, people = 8, journals = 10, enemies = 107, records = 51 }
+			-- WITH COMMAS (2026-10-17, audit)
+			local keepTotal, keepCount = BT.boot.total, BT.boot.boundCount
+			BT.boot.total, BT.boot.boundCount = 150000, 149000
 			local ok, err = pcall(BT.WhatLoaded)
+			BT.boot.total, BT.boot.boundCount = keepTotal, keepCount
 			BT.betaCheck, BT.betaDropped = keepCheck, keepDropped
 			_G.print = realPrint
 			assert(ok, "What loaded runs: " .. tostring(err))
@@ -14123,85 +17335,41 @@ if ok then
 			assert(all:find("beta realm: no · beta client: no · beta records: dropped", 1, true)
 				and all:find("36,251 characters seen in 1 book · 8 people in the Ledger · 10 Expedition characters · 107 enemies · 51 other character records", 1, true),
 				"what told the launch reset, and what it dropped: " .. all)
+			assert(all:find("150,000 characters in", 1, true) and all:find("149,000 at login", 1, true),
+				"counts are written with commas: " .. all)
 		end },
-		{ "/bt note", function()
-			SlashCmdList.BEEBSTOOLKIT("note Beeb Bob solid tank")
-			assert((BT.Notes.Get("Beeb Bob") or {}).note == "solid tank", "the command wrote the note")
-			-- NOTHING TYPED READS IT BACK: it used to erase the note
-			SlashCmdList.BEEBSTOOLKIT("note Beeb Bob")
-			assert((BT.Notes.Get("Beeb Bob") or {}).note == "solid tank", "a bare /bt note keeps the note")
-			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob 4")
-			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob")
-			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob 9")
-			assert((BT.Notes.Get("Beeb Bob") or {}).rating == 4, "a bare or wrong rating keeps the rating")
-			SlashCmdList.BEEBSTOOLKIT("rate Beeb Bob clear")
-			assert((BT.Notes.Get("Beeb Bob") or {}).rating == nil, "and clear clears it")
-		end },
-		{ "/bt tag", function()
-			-- a toggle, so the check is that it CHANGED, not what it landed on
-			local before = (BT.Notes.Get("Beeb Bob") or {}).tags
-			before = before and before.troll or false
-			SlashCmdList.BEEBSTOOLKIT("tag Beeb Bob troll")
-			local after = (BT.Notes.Get("Beeb Bob") or {}).tags
-			after = after and after.troll or false
-			assert(after ~= before, "the command toggled the tag")
-			-- by its label too, in any case
-			local label = BT.Util.TagByKey("troll").label
-			-- /bt flag, its name until 2026-09-29, still does the same
-			SlashCmdList.BEEBSTOOLKIT("flag Beeb Bob " .. label:upper())
-			local back = (BT.Notes.Get("Beeb Bob") or {}).tags
-			back = back and back.troll or false
-			assert(back == before, "toggled back by its label: " .. label)
-			assert(not BT.Commands().flag.help, "and the help does not list it")
-		end },
-		{ "/bt census", function() SlashCmdList.BEEBSTOOLKIT("census") end },
-		{ "/bt autopurge", function()
-			SlashCmdList.BEEBSTOOLKIT("autopurge 30")
-			assert(BT.settings.pruneDays == 30, "autopurge sets the window")
-			-- 0 is off, never "a day" (the audit: it would have emptied the book)
-			SlashCmdList.BEEBSTOOLKIT("autopurge 0")
-			assert(BT.settings.pruneDays == 0, "autopurge 0 is off")
-			SlashCmdList.BEEBSTOOLKIT("autopurge 30")
-			SlashCmdList.BEEBSTOOLKIT("autopurge off")
-			assert(BT.settings.pruneDays == 0, "and can be turned off")
-		end },
-		{ "/bt cap", function()
-			SlashCmdList.BEEBSTOOLKIT("cap 5")
-			assert(BT.settings.bookCap == 1000, "a limit is never below a thousand")
-			SlashCmdList.BEEBSTOOLKIT("cap off")
-			assert(BT.settings.bookCap == 0, "and off is off")
-			SlashCmdList.BEEBSTOOLKIT("cap 150000")
-			assert(BT.settings.bookCap == 150000, "and it takes a number")
-		end },
-		{ "/bt help", function()
-			-- BUTTONS, NOT COMMANDS (Josh 2026-09-28: "We don't need hundreds of
-			-- slash commands for debugging"): the debug commands are gone, and
-			-- what takes typed input stays
+		-- NO COMMANDS AFTER /bt (Josh 2026-10-18: "I actually never use the
+		-- slash commands. I'd be fine with removing these (and the others)
+		-- unless we are using them internally or for debug."): /bt and /beeb
+		-- open the window, and close it again, and what is typed after them
+		-- is not read
+		{ "/bt opens the window, whatever is typed after it", function()
+			assert(_G.SLASH_BEEBSTOOLKIT1 == "/bt" and _G.SLASH_BEEBSTOOLKIT2 == "/beeb", "both are registered")
+			local W = BT.Window
+			local wasShown = W.IsShown()
+			if wasShown then W.Toggle() end
+			if BT.CensusWindow.IsShown() then BT.CensusWindow.Hide() end
+			local note = (BT.Notes.Get("Beeb Bob") or {}).note
 			local said, realPrint = {}, _G.print
-			local hadLedger = BT.Switched("ledger")
-			BT.SetEnabled("ledger", true)
 			_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
-			SlashCmdList.BEEBSTOOLKIT("help")
+			local ran, why = pcall(function()
+				for _, line in ipairs({ "", "help", "note Beeb Bob a new note", "demo on", "ledger", "beeb" }) do
+					SlashCmdList.BEEBSTOOLKIT(line)
+					assert(W.IsShown(), "/bt " .. line .. " opens the window")
+					SlashCmdList.BEEBSTOOLKIT(line)
+					assert(not W.IsShown(), "and a second /bt " .. line .. " closes it")
+				end
+			end)
 			_G.print = realPrint
-			BT.SetEnabled("ledger", hadLedger)
-			local have = {}
-			for name in pairs(BT.Commands()) do
-				have[#have + 1] = name
-			end
-			table.sort(have)
-			assert(table.concat(have, " ") == "adopt autopurge books cap census demo expedition find flag help "
-				.. "menagerie note prune rate setup tag", "only these commands are left: " .. table.concat(have, " "))
-			local all = table.concat(said, " | ")
-			for _, word in ipairs({ "debug", "edge", "lore", "model", "scene", "toast", "reset", "dump" }) do
-				assert(not all:find("%f[%w]" .. word .. "%f[%W]"), "the help names nothing that is gone: " .. word)
-			end
-			-- a module by the name its tab shows, not its key (Josh 2026-09-30, review)
-			assert(all:find("(Ledger)", 1, true) and not all:find("(ledger)", 1, true),
-				"a command names its module as the tab does: " .. all)
+			if wasShown then W.Toggle() end
+			assert(ran, why)
+			assert(#said == 0, "nothing is said in chat: " .. table.concat(said, " | "))
+			assert(not BT.Demo.IsOn() and not BT.CensusWindow.IsShown()
+				and (BT.Notes.Get("Beeb Bob") or {}).note == note, "and nothing the old commands did is done")
 		end },
 		-- THE MENAGERIE (Josh 2026-09-25): a few kills, then the journal both
 		-- ways round, the dock's line and a toast, against the real widgets
-		{ "/bt expedition", function()
+		{ "the Expedition: a few kills, the journal, the dock's line and a toast", function()
 			local J, V = BT.Expedition, BT.ExpeditionWindow
 			BT.SetEnabled("expedition", true)
 			local m = BT.GetModule("expedition")
@@ -14254,8 +17422,8 @@ if ok then
 			assert(fc and math.abs(fc[1] - m.INK[1]) < 1e-6 and math.abs(fc[3] - m.INK[3]) < 1e-6,
 				"and the Expedition's bar is its own ink blue, not Experience's accent")
 			-- BIG FOR RANKS, SMALL FOR THE REST (Josh 2026-10-05: "I worry about
-			-- achievements being too spammy"): the new rank is the toast, with
-			-- Hemet's word under it, and nothing else is
+			-- achievements being too spammy"): the new rank is the toast, and
+			-- nothing else is
 			local toast = BT.ExpeditionToast.Frame()
 			local shown = { toast and toast:IsShown() and toast.spec or nil }
 			for _, spec in ipairs(BT.ExpeditionToast.queue) do
@@ -14269,8 +17437,7 @@ if ok then
 					other = spec
 				end
 			end
-			assert(ranked and ranked.quote == J.QUOTES[(J.Rank(points))],
-				"the new rank is toasted, with Hemet's line for it")
+			assert(ranked and ranked.quote == nil, "the new rank is toasted, with no line from Hemet")
 			assert(not other, "and nothing else is: " .. tostring(other and other.head))
 			-- the commendation is said on the dock's line, after a beat; the
 			-- unique kills are the points going up there
@@ -14298,8 +17465,10 @@ if ok then
 			-- the notices are let go, so the line is the line again
 			m.notices, m.gain, m.gainToken = nil, nil, nil
 			m.Update()
-			SlashCmdList.BEEBSTOOLKIT("expedition")
-			assert(V.IsShown(), "/bt expedition opens the journal")
+			-- as a click on its line in the dock does (/bt expedition did the
+			-- same until 2026-10-18)
+			V.Toggle()
+			assert(V.IsShown(), "the journal opens")
 			local f = V.Frame()
 			assert(f.journal:IsShown() and not f.commendations:IsShown(), "on the compendium")
 			-- A RAIL (Josh 2026-09-26): All, then a row per type with its count,
@@ -14320,7 +17489,7 @@ if ok then
 				("and what each is worth: %s, %s"):format(tostring(entries[2].points), tostring(entries[3].points)))
 			local c = b.cards[1]
 			assert(c and c:IsShown() and c.npc and c.name:GetText():find("MOB") and c.kills:GetText() == "1"
-				and not c.lore:IsShown(),
+				and c.lore == nil,
 				"then a card per enemy, with its name and its kills, and no lore")
 			-- THE BORDER IS THE MASTERY (Josh 2026-09-26): each tier its own
 			-- ornaments, and only its own
@@ -14371,12 +17540,12 @@ if ok then
 			-- what is on it, and the lore is the enemy's page's
 			Card.Layout(tc, 179)
 			Card.Dress(tc, { name = "Lore", tier = 0, lore = "words" })
-			assert(not tc.lore:IsShown() and Card.Height(179) == 180,
+			assert(tc.lore == nil and Card.Height(179) == 180,
 				"no lore on the card, and the card no taller than it needs: " .. tostring(Card.Height(179)))
 			-- KILLS AND POINTS IN THE SHOULDERS (Josh 2026-09-26): up beside the
 			-- arch's top, not in a foot; the border says the mastery
 			assert(tc.kills._point.point == "TOP" and tc.kills._point.y < 0 and tc.points._point.point == "TOP"
-				and not tc.tier:IsShown(), "kills and points sit in the arch's shoulders, and no mastery word")
+				and tc.tier == nil, "kills and points sit in the arch's shoulders, and no mastery word")
 			Card.Layout(tc, 140)
 			-- A LONG NAME, SMALLER (Josh 2026-09-26): down to a floor, and a short
 			-- one keeps its size
@@ -14708,7 +17877,7 @@ if ok then
 			rareElite.family = nil
 			V.Open(250005)
 			local meta = b.page.meta:GetText() or ""
-			assert(meta:find("Rare Elite", 1, true) and meta:find("Zephras Isle", 1, true) and meta:find("Level 5", 1, true),
+			assert(meta:find("Rare elite", 1, true) and meta:find("Zephras Isle", 1, true) and meta:find("Level 5", 1, true),
 				"an enemy with no family still says its level, rank and zone: " .. meta)
 			rareElite.family = family
 			-- ONE CRITTER (Josh 2026-09-28, a Sickly Deer: "Critter · Level 5 ·
@@ -14761,11 +17930,13 @@ if ok then
 				local data, hadSpell = BT.ExpeditionAbilities, _G.C_Spell
 				assert(type(data) == "table" and data[2177] and data[2177][1] == 5884,
 					"the database's list is loaded: a Writhing Highborne casts Banshee Curse")
-				local NAMES = { [5884] = "Banshee Curse", [133] = "Fireball", [143] = "Fireball" }
+				-- (21150: Azuregos's "Summon Player", the server's own mechanic,
+				-- left out: Josh 2026-10-18)
+				local NAMES = { [5884] = "Banshee Curse", [133] = "Fireball", [143] = "Fireball", [21150] = "Summon Player" }
 				_G.C_Spell = { GetSpellInfo = function(id)
 					return NAMES[id] and { name = NAMES[id], iconID = 136183 } or nil
 				end }
-				data[npc] = { 5884, 133, 143, 999999 }
+				data[npc] = { 5884, 133, 143, 21150, 999999 }
 				V.Refresh()
 				-- IN VIEW (Josh 2026-10-03: "the abilities need to be in a more
 				-- prominent position"): a panel of their own under the ladder,
@@ -14787,7 +17958,7 @@ if ok then
 				local cells = piece.icons and piece.icons.cells
 				assert(piece.icons:IsShown(), "the abilities are icons")
 				assert(cells[1]:IsShown() and cells[2]:IsShown() and not (cells[3] and cells[3]:IsShown()),
-					"one icon for each ability")
+					"one icon for each ability, and none for the server's Summon Player")
 				assert(cells[1].spell.name == "Banshee Curse" and cells[2].spell.name == "Fireball",
 					"in order of their names")
 				local _, _, _, x1, y1 = cells[1]:GetPoint(1)
@@ -14885,7 +18056,12 @@ if ok then
 			ST.Paint(pg, enemy)
 			assert(pg.hint:GetText() == "Killed in a raid, which has no map.",
 				"a raid's enemy is met in a raid: " .. tostring(pg.hint:GetText()))
-			enemy.instance = nil
+			-- BY ITS ZONE TOO (2026-10-17, audit): a dungeon's enemy killed
+			-- before kills noted where they were is still in a dungeon
+			enemy.instance, enemy.zone = nil, "The Deadmines"
+			assert(ST.Paint(pg, enemy) == "screen" and pg.hint:GetText() == "Killed in a dungeon, which has no map.",
+				"a dungeon's enemy from before, by its zone: its loading screen")
+			enemy.zone = hadZone
 			local artWas = V.MapArt
 			V.MapArt = function() return nil end
 			assert(ST.Paint(pg, enemy) == "none" and pg.map.note:GetText() == "The game has no map of this zone.",
@@ -14986,6 +18162,37 @@ if ok then
 			assert(row.cells.type:GetText() == MJ.KindOf(m1) and row.cells.zone == nil and row.cells.family == nil
 				and row.cells.rank:GetText() ~= nil and row.cells.tier:GetText() ~= nil and row.face ~= nil,
 				"each row's cells: rank, type, level, kills, mastery, points, and its face (no family or zone in the narrower window)")
+			-- THE ROW'S RIM IS THE MASTERY, THICKER FOR EACH METAL, AND THE
+			-- NAME IS THE RANK (Josh 2026-10-18: "same as the card view", then
+			-- "Maybe we should just color the mobs name instead?")
+			do
+				local Card, panels = BT.ExpeditionCard, BT.Pill.Panels()
+				local tier = MJ.Mastery(1, m1)
+				local h = panels[row]
+				assert(h.edgeColour[1] == Card.TIERS[tier].color[1] and h.edgeColour[3] == Card.TIERS[tier].color[3]
+					and h.ownThick == V.LIST_THICK[tier], "the row's rim is its mastery's metal, as thick as it")
+				assert(V.LIST_THICK[1] < V.LIST_THICK[2] and V.LIST_THICK[2] < V.LIST_THICK[3]
+					and V.LIST_THICK[3] < V.LIST_THICK[4], "each metal thicker than the one before")
+				for t = 1, 4 do
+					local mc = MJ.MASTERY[t].color
+					assert(Card.TIERS[t].color[1] == mc[1] and Card.TIERS[t].color[2] == mc[2] and Card.TIERS[t].color[3] == mc[3],
+						"the cards' metals are the masteries': " .. MJ.MASTERY[t].name)
+				end
+				local wasRank = m1.rank
+				m1.rank = "normal"
+				V.Refresh()
+				local c = row.name._textColor
+				assert(c[1] == 1 and c[2] == 1 and c[3] == 1, "an ordinary enemy's name is white")
+				m1.rank = "elite"
+				V.Refresh()
+				local _, _, gold = V.CategoryOf(m1)
+				c = row.name._textColor
+				assert(c[1] == gold[1] and c[2] == gold[2] and c[3] == gold[3] and c[2] < 1,
+					"an elite's in its rank's colour, as its Rank cell")
+				m1.rank = wasRank
+				V.Refresh()
+				assert(row.edge == nil and row.ringOut == nil, "and no edge or ring by the face")
+			end
 			local cols = V.ListColumns(b.layout.w)
 			local lastCol = cols[#cols]
 			assert(cols[1].w >= 150 and lastCol.x + lastCol.w <= b.layout.w,
@@ -15014,11 +18221,33 @@ if ok then
 			local top = V.enemies[1]
 			assert(MJ.EnemyPoints(top.m, top.n) >= MJ.EnemyPoints(V.enemies[#V.enemies].m, V.enemies[#V.enemies].n)
 				and MJ.EnemyPoints(top.m, top.n) > 1, "a column of numbers starts with the most")
+			-- a level read beats the skull it once showed (2026-10-17, audit)
+			assert(V.ColumnValue({ m = { skull = true, lo = 35, hi = 35 } }, "level") == 35
+				and V.ColumnValue({ m = { skull = true } }, "level") == 1000,
+				"the level column sorts a level read as that level, and a skull alone above everything")
 			b.sorts.buttons[2]:GetScript("OnClick")(b.sorts.buttons[2])
 			assert(not heading("points").arrow:IsShown(), "and the toolbar's sort takes over from a heading")
+			-- A COLUMN THE TABLE NO LONGER HAS (2026-10-17, audit)
+			do
+				local u = BT.settings.expeditionUI
+				u.listSort, u.listDesc = "family", true
+				V.Refresh()
+				assert(u.listSort == nil and u.listDesc == nil,
+					"a table saved sorted by a column it no longer has takes the toolbar's order")
+			end
 			b.sorts.buttons[1]:GetScript("OnClick")(b.sorts.buttons[1])
 			row:GetScript("OnClick")(row)
 			assert(V.open == row.npc and b.dim:IsShown(), "a row opens the enemy's popup")
+			-- HIDDEN MID-DRAG (2026-10-17, audit): the model lets go
+			do
+				local pm, hadCursor = b.page.model, _G.GetCursorPosition
+				_G.GetCursorPosition = function() return 100, 100 end
+				pm:GetScript("OnMouseDown")(pm, "LeftButton")
+				assert(pm:GetScript("OnUpdate") and pm.turning, "a drag turns the model")
+				pm:GetScript("OnHide")(pm)
+				assert(not pm:GetScript("OnUpdate") and not pm.turning, "and a model hidden mid-drag lets go")
+				_G.GetCursorPosition = hadCursor
+			end
 			b.page.close:GetScript("OnClick")(b.page.close)
 			assert(V.open == nil and not b.dim:IsShown(), "and its close button closes it")
 			b.layouts.buttons[1]:GetScript("OnClick")(b.layouts.buttons[1])
@@ -15111,9 +18340,38 @@ if ok then
 				("the two views and the tallies are All between them (%d + %d + %d of %d)")
 					:format(#earnedRows, #todoRows, tallies, everything))
 			ach.shows.buttons[1]:GetScript("OnClick")(ach.shows.buttons[1])
+			-- A TALLY BY THE TILE (2026-10-17, audit): in the Masteries group,
+			-- an enemy nearest its next mastery has its count and its bar, and
+			-- a tier somebody is at wears its metal
+			local nearTile
+			for _, r in ipairs(drawnRows()) do
+				if (r.title:GetText() or ""):find("^Mob") then
+					nearTile = nearTile or r
+				end
+			end
+			assert(nearTile and nearTile.right:GetText():find("^%d+ / %d+$") and nearTile.track:IsShown(),
+				"an enemy near its next mastery says how near, with a bar: "
+					.. tostring(nearTile and nearTile.right:GetText()))
+			local gold, plat = MJ.MASTERY[3], MJ.MASTERY[4]
+			BT.Book.DrawCommendations(ach, { ranks = MJ.RANKS, badge = MJ.RankBadge, points = 0, groups = {
+				{ key = "mastery", title = "Masteries", count = "5 points", list = {
+					{ id = "t:gold", title = "Gold", color = gold.color, points = 5, need = 1, have = 1, right = "1 enemy" },
+					{ id = "t:plat", title = "Platinum", color = plat.color, points = 0, need = 1, have = 0,
+						right = "0 enemies" },
+					{ id = "n:1", title = "Defias Bandit", points = 5, need = 100, have = 57, text = "100 kills" },
+				} },
+			} })
+			local goldTile, platTile, near = ach.rows[1], ach.rows[2], ach.rows[3]
+			assert(goldTile.title._textColor[1] == gold.color[1] and goldTile.title._textColor[3] == gold.color[3]
+				and not goldTile.check:IsShown() and not goldTile.track:IsShown() and goldTile.right:GetText() == "1 enemy",
+				"a tier somebody is at wears its metal, and is a count, not earned")
+			assert(platTile.title._textColor[3] < plat.color[3], "a tier nobody is at is grey")
+			assert(near.right:GetText() == "57 / 100" and near.track:IsShown() and near.fill:IsShown()
+				and not near.check:IsShown(), "57 kills of 100 says so, with its bar: " .. tostring(near.right:GetText()))
+			V.Refresh()
 			-- THE PAGE REDRAWN (Josh 2026-09-28): a rail with a row a group to
 			-- show it alone, and the points; the rank is the header's now
-			-- (UI/Book.lua), with Hemet's word on it
+			-- (UI/Book.lua)
 			local rail = ach.rail
 			local points, _, _, uniquePoints, masteryPoints = MJ.Points(MJ.Counts("char"))
 			local rankN, rankTitle = MJ.Rank(points)
@@ -15290,27 +18548,543 @@ if ok then
 				"a quest with no story still puts the selection back: " .. tostring(selected))
 			for g, v in pairs(saved) do _G[g] = v end
 			al.lore = nil
+			-- A BOSS FIGHT WON (2026-10-17, audit): the boss's points are on the
+			-- dock's line at once, not at the next kill, and a rank they reach
+			-- is toasted
+			do
+				local c = MJ.Mine()
+				local hadBest, toasts = c.bestRank, BT.settings.expeditionToasts
+				BT.settings.expeditionToasts = false
+				m.Kill({ npc = 259950, name = "Mob Boss", kind = "Humanoid", rank = "elite", level = 5,
+					zone = "The Deadmines", instance = "party", myLevel = 5, guid = "Creature-0-1-2-3-259950-B" }, "dead")
+				m.notices, m.gain, m.gainToken = nil, nil, nil
+				local before = MJ.KeptScore()
+				local toasted
+				local wasToast = m.RankToast
+				m.RankToast = function(rank) toasted = rank end
+				c.bestRank = MJ.Rank(before + 4) - 1
+				assert(m.EncounterWon("Mob Boss") and m.eta:GetText():find(tostring(before + 4), 1, true)
+					and toasted == MJ.Rank(before + 4) and not m.EncounterWon("Mob Boss"),
+					"a boss marked after its kill puts its points on the line and checks the rank, once: "
+						.. tostring(m.eta:GetText()))
+				m.RankToast = wasToast
+				local s = MJ.Store()
+				s.enemies[259950], c.kills[259950], c.first[259950] = nil, nil, nil
+				for id, by in pairs(c.earnedBy or {}) do
+					if by == 259950 then c.earned[id], c.earnedBy[id] = nil, nil end
+				end
+				c.bestRank, BT.settings.expeditionToasts, MJ.kept = hadBest, toasts, nil
+				m.Update()
+			end
 			m.SampleNotice()
-			SlashCmdList.BEEBSTOOLKIT("menagerie")
-			assert(not V.IsShown(), "and /bt menagerie, its old name, closes it")
+			V.Toggle()
+			assert(not V.IsShown(), "and a second click closes it")
 			BT.ExpeditionToast.Next()
 		end },
+		-- THE LISTS THE CLIENT HOLDS, READ (2026-10-17, audit): the census's
+		-- readers of a /who answer, the friends list, a battleground's
+		-- scoreboard, the mail and a channel's members never ran here, though
+		-- their APIs were stubbed. Each is run as its event reaches the
+		-- collector, and the rows it wrote are read back.
+		{ "the census reads a /who, the friends list, a scoreboard, the mail and a channel", function()
+			local C, DB = BT.Collect, BT.DB
+			local h = C.handlers
+			BT.SetEnabled("census", true)
+			assert(BT.Collecting(), "the census is collecting")
+			local was = { friends = _G.C_FriendList, nScores = _G.GetNumBattlefieldScores,
+				score = _G.GetBattlefieldScore, nMail = _G.GetInboxNumItems, mail = _G.GetInboxHeaderInfo,
+				members = _G.GetNumGroupMembers }
+			-- (Warrior and Mage in words: the census reads the client's class
+			-- names once, and an earlier step gave it those two)
+			local who = {
+				{ fullName = "Wendel Whotest", fullGuildName = "Night Owls", level = 23, area = "Duskwood", filename = "ROGUE" },
+				{ fullName = "Nobody Guildless", fullGuildName = "", level = 0, area = "Elwynn Forest", filename = "MAGE" },
+			}
+			local friends = {
+				{ name = "Fern Offline", className = "Warrior", area = "Moonglade", level = 31, connected = false },
+				{ name = "Finn Online", className = "Mage", area = "Stranglethorn Vale", level = 40, connected = true },
+			}
+			_G.C_FriendList = {
+				GetNumWhoResults = function() return #who end,
+				GetWhoInfo = function(i) return who[i] end,
+				GetNumFriends = function() return #friends end,
+				GetFriendInfoByIndex = function(i) return friends[i] end,
+			}
+			-- name, killing blows, honourable kills, deaths, honour, side, rank,
+			-- race, class, class token: 0 is the Horde, 1 the Alliance
+			local scores = {
+				{ "Hordie Scorecard", 1, 2, 0, 50, 0, 3, "Orc", "Shaman", "SHAMAN" },
+				{ "Allie Scorecard", 0, 1, 2, 20, 1, 1, "Human", "Paladin", "PALADIN" },
+				{ "Odd Sider", 0, 0, 0, 0, 7, 0, "Gnome", "Warrior", "Warrior" },
+			}
+			_G.GetNumBattlefieldScores = function() return #scores end
+			_G.GetBattlefieldScore = function(i) return (table.unpack or unpack)(scores[i]) end
+			local senders = { "Letter Writer", "Auction House", "Alliance Auction House" }
+			_G.GetInboxNumItems = function() return #senders end
+			_G.GetInboxHeaderInfo = function(i) return 1, 1, senders[i] end
+			local ok2, err = pcall(function()
+				h.WHO_LIST_UPDATE(nil, "WHO_LIST_UPDATE")
+				h.FRIENDLIST_UPDATE(nil, "FRIENDLIST_UPDATE")
+				h.UPDATE_BATTLEFIELD_SCORE(nil, "UPDATE_BATTLEFIELD_SCORE")
+				h.MAIL_INBOX_UPDATE(nil, "MAIL_INBOX_UPDATE")
+				h.CHAT_MSG_CHANNEL_LIST(nil, "CHAT_MSG_CHANNEL_LIST", "@Chan Owner, +Chan Mod, Chan Member, General",
+					"", "", "1. General")
+				h.CHAT_MSG_WHISPER(nil, "CHAT_MSG_WHISPER", "hello", "Whis Perer-Whitemane", "Common", "", "Whis Perer",
+					"", 0, 0, "", 7, 101, "Player-4372-0000ABCD")
+			end)
+			_G.C_FriendList, _G.GetNumBattlefieldScores, _G.GetBattlefieldScore = was.friends, was.nScores, was.score
+			_G.GetInboxNumItems, _G.GetInboxHeaderInfo = was.nMail, was.mail
+			assert(ok2, "every list is read without an error: " .. tostring(err))
+			local function row(name) return DB.Get(BT.db, name) end
+			-- /who: the class as a token, the level, the zone, and the guild
+			-- stated outright, blank when there is none
+			local w1, w2 = row("Wendel Whotest"), row("Nobody Guildless")
+			assert(w1 and w1.class == "ROGUE" and w1.level == 23 and w1.zone == "Duskwood" and w1.guild == "Night Owls"
+				and w1.vouch and w1.seen == 1, "a /who row: class, level, zone and guild")
+			assert(w2 and w2.class == "MAGE" and w2.level == nil and w2.guild == "", "a level of 0 is no level, and no guild is a blank one")
+			assert(w1.faction == "Horde", "and the side is yours: " .. tostring(w1.faction))
+			-- friends: the class in words turned to its token; an offline one
+			-- listed, not seen, and not placed where they logged out
+			local off, on = row("Fern Offline"), row("Finn Online")
+			assert(off and off.class == "WARRIOR" and off.level == 31 and off.seen == 0 and off.zone == nil,
+				"an offline friend is listed, not seen: " .. tostring(off and off.seen) .. " " .. tostring(off and off.zone))
+			assert(on and on.class == "MAGE" and on.seen == 1 and on.zone == "Stranglethorn Vale", "an online friend is seen where they are")
+			-- the scoreboard: each player's own side
+			local hs, as, odd = row("Hordie Scorecard"), row("Allie Scorecard"), row("Odd Sider")
+			assert(hs and hs.faction == "Horde" and hs.class == "SHAMAN", "side 0 is the Horde")
+			assert(as and as.faction == "Alliance" and as.class == "PALADIN", "side 1 is the Alliance")
+			assert(odd and odd.faction == nil and odd.class == "WARRIOR", "a side it does not know is no side, and a class in words its token")
+			-- the mail: a sender listed, an auction house not a character
+			local mw = row("Letter Writer")
+			assert(mw and mw.seen == 0 and mw.vouch, "a letter's sender is listed, not seen")
+			assert(row("Auction House") == nil and row("Alliance Auction House") == nil, "and an auction house is nobody")
+			-- a channel's members, marks and all; a one-word name is not a character
+			assert(row("Chan Owner") and row("Chan Mod") and row("Chan Member") and row("General") == nil,
+				"a channel list files its members, owners and moderators too")
+			-- a whisper: who said it, by their GUID, on your side
+			local wh = row("Whis Perer")
+			assert(wh and wh.guid == "Player-4372-0000ABCD" and wh.faction == "Horde", "a whisper files its sender by GUID")
+			-- a group's roster: read once the burst has settled
+			TIMERS.keep = true
+			_G.GetNumGroupMembers = function() return 2 end
+			local asked, wasFromUnit = {}, C.FromUnit
+			C.FromUnit = function(unit) asked[#asked + 1] = unit end
+			h.GROUP_ROSTER_UPDATE(nil, "GROUP_ROSTER_UPDATE")
+			h.GROUP_ROSTER_UPDATE(nil, "GROUP_ROSTER_UPDATE")
+			local queued = #asked
+			local failed = TIMERS.RunAfters(1)
+			TIMERS.keep = false
+			C.FromUnit, _G.GetNumGroupMembers = wasFromUnit, was.members
+			assert(#failed == 0, "the roster's read runs: " .. table.concat(failed, " | "))
+			assert(queued == 0 and table.concat(asked, ",") == "party1,party1target,party2,party2target",
+				"a group's roster is read once, after the burst: " .. table.concat(asked, ","))
+		end },
+		-- ANOTHER BOOK, MOVED IN (Josh 2026-10-18: "I actually never use the
+		-- slash commands..."): what /bt books and /bt adopt did, from a row for
+		-- each other book on the Testing page
+		{ "another book is moved in from its row on the Testing page", function()
+			local body = BT.Window.BuildPanel("testing").body
+			local function click(b)
+				local said, realPrint = {}, _G.print
+				_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
+				local good, err = pcall(b:GetScript("OnClick"), b)
+				_G.print = realPrint
+				assert(good, "a click runs: " .. tostring(err))
+				return table.concat(said, " | ")
+			end
+			local function row(name)
+				for _, r in ipairs(body.bookRows) do
+					if r:IsShown() and r.label:GetText() == name then
+						return r
+					end
+				end
+			end
+			-- three other books in the file: one from before the sides were
+			-- one book, one empty, and a realm's
+			BeebModDB.realms["Oldrealm|Horde"] = { players = { ["Arch Adopted"] = { name = "Arch Adopted", seen = 1,
+				last = 1000, first = 1000 } }, stats = { sightings = 1 } }
+			BeebModDB.realms["Emptyrealm|All"] = { players = {}, stats = { sightings = 0 } }
+			BeebModDB.realms["Tworealm|All"] = { players = { ["Two One"] = { name = "Two One", seen = 1, last = 1000,
+				first = 1000 }, ["Two Two"] = { name = "Two Two", seen = 1, last = 1000, first = 1000 } },
+				stats = { sightings = 2 } }
+			local ran, why = pcall(function()
+				body.fillBooks()
+				local old, two = row("Oldrealm Horde"), row("Tworealm")
+				assert(old and old.blurb:GetText() == "Moves its 1 character into this realm's book",
+					"a row for the old side's book, by its realm and side: " .. tostring(old and old.blurb:GetText()))
+				assert(two and two.blurb:GetText() == "Moves its 2 characters into this realm's book",
+					"and one for a realm's book, by its realm alone")
+				assert(not row("Emptyrealm"), "a book with nobody in it has no row")
+				local out = click(old.move)
+				assert(out:find("Ledger: moved in Oldrealm Horde · 1 new · 0 already here", 1, true),
+					"moving it in says so: " .. out)
+				assert(BT.DB.Get(BT.db, "Arch Adopted"), "and its character is in this book")
+				assert(not row("Oldrealm Horde") and row("Tworealm"), "and its row goes, the book empty")
+				-- a book that has gone from the file since the page was shown
+				BeebModDB.realms["Tworealm|All"] = nil
+				out = click(two.move)
+				assert(out:find("Ledger: Tworealm is no longer in the saved file.", 1, true), "a book gone says so: " .. out)
+				assert(not row("Tworealm"), "and its row goes")
+			end)
+			for _, key in ipairs({ "Oldrealm|Horde", "Emptyrealm|All", "Tworealm|All" }) do
+				BeebModDB.realms[key] = nil
+			end
+			body.fillBooks()
+			assert(ran, why)
+		end },
+		-- THE NOTICE BAR (2026-10-17, audit): for a journal's row that is not in
+		-- the dock, a notice is said on a bar at the top of the screen. It never
+		-- ran here. Two notices close together are said as one, the bar stays
+		-- while the mouse is on it, and it goes when its time is up.
+		{ "a notice on the bar: two said as one, held under the mouse, gone when its time is up", function()
+			local Nt = BT.Notice
+			local row = _G.CreateFrame("Frame", nil, _G.UIParent)
+			row:Hide()
+			local redrawn = 0
+			local owner = { frame = row, text = row:CreateFontString(), eta = row:CreateFontString(),
+				badge = row:CreateTexture(), colour = { 0.61, 0.5, 0.82 }, book = "Ledger",
+				Update = function() redrawn = redrawn + 1 end }
+			TIMERS.keep = true
+			assert(Nt.Say(owner, { name = "Fine Print", kind = "commendation", points = 10 })
+				and Nt.Say(owner, { name = "Old Hand", kind = "commendation", points = 25 }), "two notices, close together")
+			local failed = TIMERS.RunAfters(1)
+			assert(#failed == 0, "the merge runs: " .. table.concat(failed, " | "))
+			local bar = _G.BeebModNotice
+			assert(bar and bar:IsShown(), "with the row not in the dock, the bar says them")
+			local text = tostring(bar.text:GetText())
+			assert(text:find("2 commendations", 1, true) and text:find("+35", 1, true), "as one: " .. text)
+			-- one alone names its journal
+			Nt.Say(owner, { name = "Fine Print", kind = "commendation", points = 10 })
+			failed = TIMERS.RunAfters(1)
+			text = tostring(bar.text:GetText())
+			assert(#failed == 0 and text:find("^Fine Print") and text:find("Ledger commendation", 1, true)
+				and text:find("+10", 1, true), "a commendation alone names its journal: " .. text)
+			-- the mouse on it holds it; off it, it fades and goes
+			local tick = bar:GetScript("OnUpdate")
+			bar._mouseOver = true
+			tick(bar, 10)
+			assert(bar:IsShown() and bar._alpha == 1, "held while the mouse is on it")
+			bar._mouseOver = false
+			tick(bar, 0.3)
+			assert(bar:IsShown() and bar._alpha < 1, "fading once the mouse leaves: " .. tostring(bar._alpha))
+			tick(bar, 1)
+			assert(not bar:IsShown(), "and gone when its time is up")
+			-- a click opens what it says
+			local clicked = false
+			Nt.Bar(owner, { name = "Fine Print", kind = "commendation", points = 10, onClick = function() clicked = true end })
+			bar:GetScript("OnClick")(bar)
+			assert(clicked and not bar:IsShown(), "a click opens it and puts the bar away")
+			-- on a row that is in the dock: said there, then the row is itself again
+			row:Show()
+			Nt.Say(owner, { name = "Fine Print", kind = "commendation", points = 10 })
+			failed = TIMERS.RunAfters(1)
+			assert(#failed == 0 and Nt.Saying(owner) and tostring(owner.text:GetText()):find("Fine Print", 1, true),
+				"on its row while the row is shown: " .. tostring(owner.text:GetText()))
+			local before = redrawn
+			failed = TIMERS.RunAfters(1)
+			TIMERS.keep = false
+			assert(#failed == 0 and not Nt.Saying(owner) and redrawn > before, "and the row is itself again after")
+		end },
+		-- SECRETS, WHERE THEY ARRIVE (2026-10-17, audit): health, power, combo
+		-- points and range are always secret on this client. Each part that
+		-- draws them is given the client's secrets, which raise an error on a
+		-- sum or a comparison, and must hand them to its bars untouched.
+		{ "the unit frames, a nameplate, the resource display and the tooltip's health bar draw from secrets", function()
+			local was = SECRET_UNIT.Save()
+			local wasPlates, wasClass, wasAttack, wasHook = _G.C_NamePlate, _G.UnitClass, _G.UnitCanAttack, _G.hooksecurefunc
+			local wasFriend = _G.UnitIsFriend
+			SECRET_UNIT.Install()
+			local mark = #caught
+			local F = BT.UnitFrames
+			local ok2, err = pcall(function()
+				-- the unit frames, painted from the client's answers
+				local uf = BT.GetModule("unitframes")
+				BT.SetEnabled("unitframes", true)
+				local n = 0
+				for unit, cell in pairs(uf.singles or {}) do
+					F.Paint(cell, F.Source(unit))
+					n = n + 1
+				end
+				assert(n > 0 and isSecret(uf.singles.target.health._value), "the target's health bar holds the secret")
+				-- a party member's cell: the range, secret, onto the alpha by the
+				-- client's own setter
+				local wasParty = _G.UnitInParty
+				_G.UnitInParty = function(u) return u == "party1" end
+				local cell = F.Build(_G.UIParent, "party", nil, false)
+				F.Paint(cell, F.Source("party1"))
+				_G.UnitInParty = wasParty
+				assert(isSecret(cell.health._value) and isSecret(cell._alphaFrom),
+					"a party cell's health and range are the secrets as they came")
+				-- a nameplate, as the client hands one over
+				local p = _G.CreateFrame("Frame", nil, _G.UIParent)
+				p.UnitFrame = _G.CreateFrame("Button", nil, p)
+				p.UnitFrame.selectionHighlight = p.UnitFrame:CreateTexture()
+				_G.C_NamePlate = { GetNamePlateForUnit = function(token)
+					if token == "nameplate1" then return p end
+				end }
+				_G.UnitCanAttack = function() return true end
+				_G.UnitIsFriend = function() return false end
+				_G.hooksecurefunc = function(obj, name, fn)
+					local orig = obj[name]
+					obj[name] = function(...) local r = orig(...) fn(...) return r end
+				end
+				local plates = BT.GetModule("nameplates")
+				BT.SetEnabled("nameplates", true)
+				plates.MakeAll()
+				plates.events:GetScript("OnEvent")(plates.events, "NAME_PLATE_UNIT_ADDED", "nameplate1")
+				local skin = plates.skins and plates.skins.nameplate1
+				assert(skin and isSecret(skin.health._value), "an enemy's plate holds the secret")
+				plates.events:GetScript("OnEvent")(plates.events, "NAME_PLATE_UNIT_REMOVED", "nameplate1")
+				-- the resource display: a rogue's combo points, secret
+				local rd = BT.GetModule("resourcedisplay")
+				local own = _G.CreateFrame("Frame", nil, _G.UIParent)
+				own.UnitFrame = _G.CreateFrame("Frame", nil, own)
+				_G.C_NamePlate = { GetNamePlateForUnit = function(token)
+					if token == "player" then return own end
+				end }
+				_G.UnitClass = function() return "Rogue", "ROGUE" end
+				BT.SetEnabled("resourcedisplay", true)
+				rd.Apply()
+				rd.events:GetScript("OnEvent")(rd.events, "UNIT_POWER_FREQUENT", "player", "COMBO_POINTS")
+				local pips = rd.PipFrame()
+				assert(pips and pips.squares[1] and isSecret(pips.squares[1]._value), "the combo points' bars hold the secret")
+				-- the tooltip's health bar, painted as it ticks
+				local tips = BT.GetModule("tooltips")
+				local tip = _G.CreateFrame("GameTooltip", "SecretHealthTip", _G.UIParent)
+				local bar = tips.HealthLine(tip, "target")
+				bar:GetScript("OnUpdate")(bar, 1)
+				assert(isSecret(bar._value) and isSecret(bar._max), "the tooltip's health bar holds the secret")
+				tips.HealthLine(tip, nil)
+			end)
+			SECRET_UNIT.Restore(was)
+			_G.C_NamePlate, _G.UnitClass, _G.UnitCanAttack, _G.hooksecurefunc = wasPlates, wasClass, wasAttack, wasHook
+			_G.UnitIsFriend = wasFriend
+			assert(ok2, tostring(err))
+			assert(#caught == mark, "and the addon caught no error on the way: " .. caughtSince(mark))
+		end },
+		-- EVERY HANDLER HEARS ITS EVENT (2026-10-17, audit). Of the events the
+		-- addon registers here, most never reached a frame: the steps call a
+		-- module's functions, not the frame the client calls, and no ticker
+		-- ever ticked. So each event every frame registered is fired at it,
+		-- with the arguments the client sends (the forever branch's API
+		-- documentation, 2026-10-17) and the unit values secret as in game:
+		-- once out of a fight and once in one. Then every frame's OnUpdate and
+		-- every ticker runs once, and what they all left for later. An error,
+		-- or one the addon catches and logs, fails it. The last step before
+		-- the logout check, which fires PLAYER_LOGOUT itself.
+		{ "every event each frame listens for, with what the client sends, then every OnUpdate and ticker once", function()
+			local GUID = "Player-4372-0002BFB2" -- Corwin Bob, as GetPlayerInfoByGUID knows him
+			local function chat(text, channel)
+				return { text, "Corwin Bob-Whitemane", "Common", channel or "", "Corwin Bob", "", 0, channel and 2 or 0,
+					channel and "Trade - City" or "", 7, 101, GUID, 0, false, false, false, false }
+			end
+			local CAST = "Cast-3-4372-0-1-133-000ABCDEF0"
+			local function cast(unit)
+				-- an enemy's spell is a secret; yours and your group's are not
+				local mine = unit == "player" or unit == "pet" or tostring(unit):find("^party") ~= nil
+				return { unit, CAST, mine and 133 or Strict.Secret(133), 0 }
+			end
+			local ARGS = {
+				ACTIONBAR_SLOT_CHANGED = { 1 }, ADDON_LOADED = { "Blizzard_InspectUI" },
+				ADDON_ACTION_BLOCKED = { "BeebMod", "CheckInteractDistance()" },
+				ADDON_ACTION_FORBIDDEN = { "BeebMod", "CheckInteractDistance()" },
+				BAG_UPDATE = { 0 }, CVAR_UPDATE = { "uiScale", "0.8" }, DUEL_REQUESTED = { "Corwin Bob" },
+				CHAT_MSG_CHANNEL = chat("wts linen cloth", "2. Trade - City"),
+				CHAT_MSG_CHANNEL_LIST = { "Corwin Bob, @Chan Owner, Baragon Stoneshaper", "", "", "1. General" },
+				CHAT_MSG_COMBAT_XP_GAIN = { "Defias Thug dies, you gain 45 experience." },
+				CHAT_MSG_SYSTEM = { "Corwin Bob has come online." },
+				CHAT_MSG_TEXT_EMOTE = chat("Corwin Bob waves at you."),
+				EDIT_MODE_LAYOUTS_UPDATED = { { layouts = {}, activeLayout = 1 }, false },
+				ENCOUNTER_END = { 1094, "Edwin VanCleef", 1, 5, 1, {} },
+				GET_ITEM_INFO_RECEIVED = { 2589, true }, GUILD_ROSTER_UPDATE = { false },
+				INCOMING_RESURRECT_CHANGED = { "party1" }, INCOMING_SUMMON_CHANGED = { "party1" },
+				ITEM_LOCK_CHANGED = { 0, 1 }, LOOT_OPENED = { false, false }, LOOT_READY = { false },
+				LOOT_SLOT_CLEARED = { 1 }, NAME_PLATE_UNIT_ADDED = { "nameplate1" }, NAME_PLATE_UNIT_REMOVED = { "nameplate1" },
+				PLAYERBANKSLOTS_CHANGED = { 1 }, PLAYER_ENTERING_WORLD = { false, false },
+				PLAYER_EQUIPMENT_CHANGED = { 16, true }, PLAYER_INTERACTION_MANAGER_FRAME_SHOW = { 5 },
+				PLAYER_LEVEL_UP = { 12, 15, 10, 0, 0, 1, 1, 1, 1, 1 },
+				MAJOR_FACTION_RENOWN_LEVEL_CHANGED = { 2503, 4, 3 }, TOOLTIP_DATA_UPDATE = { 12 },
+				QUEST_ACCEPTED = { 4401 }, QUEST_REMOVED = { 4401, false }, QUEST_WATCH_LIST_CHANGED = { 4401, true },
+				QUEST_WATCH_UPDATE = { 4401 }, READY_CHECK = { "Corwin Bob", 30 }, READY_CHECK_CONFIRM = { "party1", true },
+				READY_CHECK_FINISHED = { false },
+				UNIT_AURA = function(unit)
+					return { unit or "player", { isFullUpdate = false, addedAuras = { { auraInstanceID = 7, spellId = 774,
+						name = "Rejuvenation", icon = 136081, duration = 12, expirationTime = 1012, isHelpful = true,
+						sourceUnit = "player", applications = 0 } }, updatedAuraInstanceIDs = { 5 }, removedAuraInstanceIDs = { 3 } } }
+				end,
+				UNIT_CONNECTION = function(unit) return { unit or "party1", true } end,
+				UNIT_IN_RANGE_UPDATE = function(unit) return { unit or "party1", Strict.Secret(true) } end,
+			}
+			for _, e in ipairs({ "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER",
+				"CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING",
+				"CHAT_MSG_WHISPER" }) do
+				ARGS[e] = chat("well met")
+			end
+			for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_SUCCEEDED",
+				"UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_DELAYED",
+				"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_CHANNEL_UPDATE" }) do
+				ARGS[e] = cast
+			end
+			for _, e in ipairs({ "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER" }) do
+				ARGS[e] = function(unit) return { unit or "player", "MANA" } end
+			end
+			-- the unit events that carry the unit and nothing else
+			for _, e in ipairs({ "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED",
+				"UNIT_TARGET", "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_FACTION", "UNIT_FLAGS",
+				"UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_CLASSIFICATION_CHANGED", "UNIT_PORTRAIT_UPDATE", "UNIT_DISPLAYPOWER",
+				"UNIT_HAPPINESS", "UNIT_PET", "UNIT_INVENTORY_CHANGED", "UNIT_QUEST_LOG_CHANGED", "UNIT_SPELLCAST_INTERRUPTIBLE",
+				"UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "PLAYER_SPECIALIZATION_CHANGED", "PLAYER_XP_UPDATE" }) do
+				ARGS[e] = function(unit) return { unit or "target" } end
+			end
+			-- and those that carry nothing at all
+			for _, e in ipairs({ "ACTIONBAR_PAGE_CHANGED", "BAG_CONTAINER_UPDATE", "BAG_UPDATE_COOLDOWN", "BAG_UPDATE_DELAYED",
+				"BANKFRAME_OPENED", "DISABLE_XP_GAIN", "ENABLE_XP_GAIN", "DISPLAY_SIZE_CHANGED", "FRIENDLIST_UPDATE",
+				"GROUP_ROSTER_UPDATE", "LOOT_CLOSED", "MAIL_INBOX_UPDATE", "MINIMAP_UPDATE_ZOOM", "PARTY_LEADER_CHANGED",
+				"PARTY_LOOT_METHOD_CHANGED", "PET_BAR_UPDATE", "PLAYER_AVG_ITEM_LEVEL_UPDATE", "PLAYER_FOCUS_CHANGED",
+				"PLAYER_MONEY", "PLAYER_PVP_KILLS_CHANGED", "PLAYER_PVP_RANK_CHANGED", "PLAYER_TARGET_CHANGED",
+				"PLAYER_UPDATE_RESTING", "PORTRAITS_UPDATED", "QUEST_LOG_UPDATE", "RAID_TARGET_UPDATE", "SPELLS_CHANGED",
+				"UI_SCALE_CHANGED", "UPDATE_BATTLEFIELD_SCORE", "UPDATE_BINDINGS", "UPDATE_EXHAUSTION", "UPDATE_FACTION",
+				"UPDATE_FLOATING_CHAT_WINDOWS", "UPDATE_INVENTORY_DURABILITY", "UPDATE_MOUSEOVER_UNIT",
+				"UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "WEAPON_ENCHANT_CHANGED", "WHO_LIST_UPDATE",
+				"ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+				"PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "UPDATE_CHAT_WINDOWS", "PLAYER_ENTER_COMBAT",
+				"PLAYER_LEAVE_COMBAT", "SUPER_TRACKING_CHANGED" }) do
+				ARGS[e] = {}
+			end
+			-- (fired by the logout check after this, which looks at what it packs)
+			local SKIP = { PLAYER_LOGOUT = true }
+			local was = SECRET_UNIT.Save()
+			SECRET_UNIT.Install()
+			local mark = #caught
+			TIMERS.keep = true
+			local failed, fired, frames, bare, heard = {}, 0, 0, {}, {}
+			local function fire(f, onEvent, event, unit)
+				heard[debug.getinfo(onEvent, "S").short_src] = true
+				local args = ARGS[event]
+				if args == nil then
+					bare[event] = true
+					args = {}
+				elseif type(args) == "function" then
+					args = args(unit)
+				elseif unit and args[1] ~= nil then
+					args = { unit, select(2, (table.unpack or unpack)(args)) }
+				end
+				fired = fired + 1
+				local good, err = pcall(onEvent, f, event, (table.unpack or unpack)(args, 1, 20))
+				if not good then
+					local src = debug.getinfo(onEvent, "S")
+					failed[#failed + 1] = ("%s (handler at %s:%s): %s"):format(event, src.short_src, tostring(src.linedefined),
+						tostring(err))
+				end
+			end
+			-- the frames there are now, oldest first (one a handler makes waits);
+			-- an event heard for every unit is fired for each of `units`
+			local function pass(units, count)
+				for i = 1, #ALL_FRAMES do
+					local f = ALL_FRAMES[i]
+					local onEvent = f._scripts and f._scripts.OnEvent
+					-- a test's own stand-in, which listens to what its test said
+					local src = onEvent and debug.getinfo(onEvent, "S").short_src or ""
+					if onEvent and f._events and not src:find("tests/", 1, true) then
+						frames = frames + (count and 1 or 0)
+						local names = {}
+						for e in pairs(f._events) do
+							if not SKIP[e] then
+								names[#names + 1] = e
+							end
+						end
+						table.sort(names)
+						for _, e in ipairs(names) do
+							-- (an earlier one may have let it go)
+							local reg = f._events and f._events[e]
+							if reg then
+								local two = f._eventUnits and f._eventUnits[e]
+								if reg ~= "all" then
+									fire(f, onEvent, e, reg)
+									if two and two[2] then
+										fire(f, onEvent, e, two[2])
+									end
+								elseif e:find("^UNIT_") then
+									for _, u in ipairs(units) do
+										fire(f, onEvent, e, u)
+									end
+								else
+									fire(f, onEvent, e, nil)
+								end
+							end
+						end
+					end
+				end
+			end
+			-- out of a fight: yours, and an enemy's
+			pass({ "player", "target" }, true)
+			-- and in one, for your group, your focus and a plate
+			local wasLock, wasCombat = _G.InCombatLockdown, _G.UnitAffectingCombat
+			_G.InCombatLockdown, _G.UnitAffectingCombat = function() return true end, function() return true end
+			pass({ "party1", "focus", "nameplate1" })
+			_G.InCombatLockdown, _G.UnitAffectingCombat = wasLock, wasCombat
+			-- every frame's OnUpdate once, a second after the last
+			local updated = 0
+			for i = 1, #ALL_FRAMES do
+				local f = ALL_FRAMES[i]
+				local onUpdate = f._scripts and f._scripts.OnUpdate
+				local src = onUpdate and debug.getinfo(onUpdate, "S").short_src or ""
+				if onUpdate and not src:find("tests/", 1, true) then
+					updated = updated + 1
+					local good, err = pcall(onUpdate, f, 1)
+					if not good then
+						failed[#failed + 1] = ("OnUpdate (at %s:%s): %s"):format(src,
+							tostring(debug.getinfo(onUpdate, "S").linedefined), tostring(err))
+					end
+				end
+			end
+			-- every ticker once, and what the events and the tickers put off
+			local tickFailed, ticked = TIMERS.RunTickers()
+			local laterFailed = TIMERS.RunAfters(4)
+			TIMERS.keep = false
+			SECRET_UNIT.Restore(was)
+			local missing = {}
+			for e in pairs(bare) do
+				missing[#missing + 1] = e
+			end
+			table.sort(missing)
+			print(("     %d events fired at %d frames, %d OnUpdates and %d tickers run once"):format(fired, frames, updated, ticked))
+			if #missing > 0 then
+				print("     fired with no arguments, having no entry in this step's table: " .. table.concat(missing, ", "))
+			end
+			assert(fired > 150 and frames > 20 and ticked > 5, "the step reached the frames and the tickers")
+			-- the routers no step had reached before this one
+			local unheard = {}
+			for _, file in ipairs({ "Modules/Pickpocket/Pickpocket.lua", "Modules/Expedition/Expedition.lua",
+				"Modules/XP/XP.lua", "Modules/Currency/Currency.lua", "Modules/Rep/Rep.lua", "Modules/PvP/PvP.lua",
+				"Modules/Ledger/Groups.lua", "Modules/Ledger/Duels.lua", "UI/Welcome.lua", "Core/Reach.lua" }) do
+				if not heard[file] then
+					unheard[#unheard + 1] = file
+				end
+			end
+			assert(#unheard == 0, "every router heard its events, these too: " .. table.concat(unheard, ", "))
+			assert(#failed == 0, ("%d handler(s) raised an error:\n       %s"):format(#failed, table.concat(failed, "\n       ")))
+			assert(#tickFailed == 0, "a ticker raised an error: " .. table.concat(tickFailed, " | "))
+			assert(#laterFailed == 0, "a timer they set raised an error: " .. table.concat(laterFailed, " | "))
+			assert(#caught == mark, "and the addon caught no error on the way: " .. caughtSince(mark))
+		end },
 	}
+	sweepLogs()
 	for _, step in ipairs(steps) do
+		stepName = step[1]
 		local good, err = pcall(step[2])
+		sweepLogs()
+		-- a step that fails half way leaves no secret widths behind it, and
+		-- no timers kept for later
+		_G.secretMeasurements = false
+		TIMERS.keep, TIMERS.afters = false, {}
 		if good then
 			print("ok   runs " .. step[1])
 		else
 			fail(step[1] .. ": " .. tostring(err))
 		end
 	end
-	local p = BT.Notes.Get("Beeb Bob")
-	-- each command checks its own effect above; this is the belt to that braces
-	if not (p and p.note) then
-		fail("the slash commands did not reach the Ledger")
-	else
-		print("ok   the slash commands wrote a note and a tag")
-	end
+	stepName = "after the steps"
 end
 
 -- PACKED FOR THE NIGHT (Josh 2026-09-24): logout packs every book, and the
@@ -15347,6 +19121,51 @@ do
 		print("ok   logout packs the book, and it reads the same")
 	else
 		fail("logout packing: " .. tostring(err))
+	end
+end
+
+-- WHAT WAS CAUGHT (2026-10-17, audit): the last check. Every error the
+-- addon caught and wrote down while the steps ran, except the ones a step
+-- makes on purpose to see it handled, listed here by step and exact message.
+-- An entry here that no step made any more fails too, so the list stays true.
+local CAUGHT_ON_PURPOSE = {
+	-- a menu entry that fails to build costs the entry, not the menu
+	{ "the Ledger in the right-click menu on a player", "Ledger menu: no buttons today" },
+	-- a game menu button that fails to dress is said once in chat
+	{ "the game menu in the toolkit's clothes, and back again",
+		"gamemenu: GameMenu.lua:999: attempt to index a nil value" },
+	-- a buff tray that cannot be made leaves the game's own buffs
+	{ "the unit frames' auras are the client's, in containers we describe", "buffs: boom at Buffs.lua:1" },
+	-- a tooltip of a kind nobody planned for is left alone
+	{ "every tooltip in the game, not the ones we thought of", "tips.dress OddTooltip: not that kind of tooltip" },
+}
+do
+	stepName = "the last check"
+	sweepLogs()
+	local wanted, unexpected = {}, {}
+	for _, c in ipairs(caught) do
+		local hit = false
+		for i, p in ipairs(CAUGHT_ON_PURPOSE) do
+			if p[1] == c.step and p[2] == c.msg then
+				wanted[i], hit = true, true
+			end
+		end
+		if not hit then
+			unexpected[#unexpected + 1] = ("  [%s] in \"%s\": %s"):format(c.where, c.step, c.msg)
+		end
+	end
+	local stale = {}
+	for i, p in ipairs(CAUGHT_ON_PURPOSE) do
+		if not wanted[i] then
+			stale[#stale + 1] = ("  in \"%s\": %s"):format(p[1], p[2])
+		end
+	end
+	if #unexpected > 0 then
+		fail(("the addon caught %d error(s) no step made on purpose:\n%s"):format(#unexpected, table.concat(unexpected, "\n")))
+	elseif #stale > 0 then
+		fail("errors listed as made on purpose that no step made any more:\n" .. table.concat(stale, "\n"))
+	else
+		print(("ok   the addon caught no error but the %d the steps make on purpose"):format(#caught))
 	end
 end
 

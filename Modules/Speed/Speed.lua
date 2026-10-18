@@ -15,7 +15,9 @@
 -- client but not added, divided or printed - "attempt to perform arithmetic on
 -- a secret number value". So the sum is tried once, and where it is refused
 -- the number comes from the character sheet instead, which the client fills in
--- itself: the same figure, moving only when that sheet is open.
+-- itself. That figure is your running speed, or your swimming or flying speed
+-- (PaperDollFrame.lua, MovementSpeed_OnUpdate), not how fast you are going,
+-- and it moves only while the sheet is open (2026-10-17, audit).
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Speed/Speed.lua")
 
@@ -82,6 +84,11 @@ local function readSheet()
 			local l = label:lower()
 			if l:find(want, 1, true) or l:find("movement", 1, true) then
 				local value = row.Value and row.Value.GetText and row.Value:GetText()
+				-- A SECRET ROW (2026-10-17, audit) is not read: matching it
+				-- would error on every tick while the sheet is open
+				if issecretvalue and issecretvalue(value) then
+					return nil
+				end
 				local n = type(value) == "string" and (value:match("(%d+)%s*%%") or value:match("(%d+)"))
 				if n then
 					return tonumber(n)
@@ -178,7 +185,13 @@ function M.Tip()
 		t:Header({ name = "Movement speed" })
 		t:Headline(pct and (pct .. "%") or "-", "of running speed")
 		if M.secret then
-			t:Note("From your character sheet. The game doesn't give addons your live speed.")
+			-- WHEN IT WAS LAST OPEN (2026-10-17, audit). Closed, the sheet's
+			-- last figure stands: opened on a mount, closed, and dismounted,
+			-- the cell still says 160%.
+			local sheet = _G.CharacterFrame
+			local open = sheet and sheet.IsShown and sheet:IsShown()
+			t:Note((open and "From your character sheet." or "From your character sheet when it was last open.")
+				.. " The game doesn't give addons your live speed.")
 			return
 		end
 		local rows = {}

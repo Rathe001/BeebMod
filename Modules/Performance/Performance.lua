@@ -49,8 +49,12 @@ function M.FpsState(fps)
 	return "alert"
 end
 
+-- LATENCY THAT FEELS LATE (2026-10-17, audit). Amber from M.LATE, and the
+-- hover's note gives the same number: it said 150 ms while amber came at 100.
+M.LATE = 100
+
 function M.MsState(ms)
-	if ms < 100 then
+	if ms < M.LATE then
 		return nil
 	elseif ms < 250 then
 		return "warn"
@@ -212,7 +216,8 @@ function M.Tip(owner)
 			{ world or "-", "world ms", tone(ws, "world") },
 		})
 		t:Graph(M.Series(), 40)
-		t:Note("Last 2 minutes. Home is chat and the auction house. World is combat. Over 150 ms feels laggy.")
+		t:Note(("Last 2 minutes. Home is chat and the auction house. World is combat. "
+			.. "Above about %d ms, casts and swings feel late."):format(M.LATE))
 	end })
 end
 

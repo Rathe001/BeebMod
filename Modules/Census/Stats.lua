@@ -76,15 +76,6 @@ local function sorted(counts)
 	return rows
 end
 
-local function median(t)
-	if #t == 0 then
-		return nil
-	end
-	table.sort(t)
-	local mid = math.floor((#t + 1) / 2)
-	return t[mid]
-end
-
 -- Which band a level falls in, or nil for a character we have never seen.
 -- (Looked up rather than searched for the whole levels: the census asks for
 -- every character in the book each time it is drawn - Josh 2026-09-24.)
@@ -183,7 +174,9 @@ local function begin(now, filter)
 		faction = (filter.faction == "Alliance" or filter.faction == "Horde") and filter.faction or nil,
 		sex = (filter.sex == 2 or filter.sex == 3) and filter.sex or nil,
 		class = {}, race = {}, band = {}, tag = {}, guild = {}, zone = {},
-		ages = {}, ageBuckets = {},
+		-- how many have an age, their sum, and how many at each step of the
+		-- age line (S.AgeStep)
+		ageN = 0, ageSum = 0, ageSteps = {}, ageBuckets = {},
 		-- book: every character; total: those seen recently enough; matched:
 		-- those of them the pick picks (all of them with no pick)
 		book = 0, total = 0, matched = 0, mine = 0,
@@ -223,6 +216,28 @@ local function yours(t, key, p)
 end
 
 local DAY = 86400
+
+-- THE AGE LINE'S STEPS, NOT EVERY AGE (2026-10-17, audit). The median was
+-- found by keeping every character's age and sorting them all in the last
+-- frame of the count: 150,000 numbers in one frame. The line only says it to
+-- the hour under a day and to the day after that, rounded up (S.AgeLine), so
+-- each age is counted at its step instead: 1 to 24 hours, then 24 + days.
+-- The middle step is the line the middle age would give.
+function S.AgeStep(age)
+	if age < DAY then
+		return math.max(1, math.ceil(age / 3600))
+	end
+	return 24 + math.ceil(age / DAY)
+end
+
+-- the age at the top of a step: what the line says for anyone in it
+local function stepAge(step)
+	if step <= 24 then
+		return step * 3600
+	end
+	return (step - 24) * DAY
+end
+
 local function count(t, p, key)
 	t.book = t.book + 1
 	local age = t.now - (p.last or t.now)
@@ -321,7 +336,9 @@ local function count(t, p, key)
 	if pick and not picks(pick, p, tags) then
 		return
 	end
-	t.ages[#t.ages + 1] = age
+	t.ageN, t.ageSum = t.ageN + 1, t.ageSum + age
+	local step = S.AgeStep(age)
+	t.ageSteps[step] = (t.ageSteps[step] or 0) + 1
 	for i = 1, #AGE do
 		local b = AGE[i]
 		if age < b.within then
@@ -355,11 +372,27 @@ local function topRows(counts, top, last)
 	return kept
 end
 
-local function finish(t)
-	local ages, sum = t.ages, 0
-	for _, a in ipairs(ages) do
-		sum = sum + a
+-- the lower middle of the ages, as the top of its step (S.AgeStep)
+local function median(t)
+	local n = t.ageN
+	if n == 0 then
+		return nil
 	end
+	local steps = {}
+	for step in pairs(t.ageSteps) do
+		steps[#steps + 1] = step
+	end
+	table.sort(steps)
+	local mid, upto = math.floor((n + 1) / 2), 0
+	for _, step in ipairs(steps) do
+		upto = upto + t.ageSteps[step]
+		if upto >= mid then
+			return stepAge(step)
+		end
+	end
+end
+
+local function finish(t)
 	-- bands sort by level, not by size: a chart of 1-10 .. 51-60 out of order
 	-- is unreadable however tall the bars are
 	local bands = {}
@@ -390,7 +423,10 @@ local function finish(t)
 		class = classRows,
 		race = sorted(t.race),
 		level = bands,
-		tag = sorted(t.tag),
+		-- ELEVEN AND THE REST (2026-10-17, audit): there can be 15 tags and
+		-- the chart has 12 rows, so the smallest went missing and the shares
+		-- shown came up short of 100%
+		tag = topRows(t.tag, S.TOP + 1),
 		guild = topRows(t.guild, S.TOP, { [S.UNGUILDED] = true }),
 		zone = topRows(t.zone, S.TOP + 1),
 		tagged = t.tagged,
@@ -399,8 +435,9 @@ local function finish(t)
 			guild = t.unknownGuild, zone = t.unknownZone,
 		},
 		age = {
-			mean = #ages > 0 and (sum / #ages) or nil,
-			median = median(ages),
+			mean = t.ageN > 0 and (t.ageSum / t.ageN) or nil,
+			-- rounded up to the hour, or the day past one
+			median = median(t),
 			buckets = buckets,
 		},
 	}
@@ -504,8 +541,22 @@ function S.AgeLine(census)
 	end
 	-- IN PLAIN WORDS (Josh 2026-09-30, the census redesign): "Median 6 days
 	-- old · average 5 days" needed decoding; the median is the half
-	if a.median < 3600 then
-		return "Half were last seen in the past hour"
+	-- ROUNDED UP (2026-10-17, audit): U.Ago rounds down, and a middle of 1.9
+	-- days read "the past 1 day", which fewer than half were. The counting
+	-- keeps these same steps (S.AgeStep).
+	local m = a.median
+	if m < DAY then
+		local hours = math.max(1, math.ceil(m / 3600))
+		if hours == 1 then
+			return "Half were last seen in the past hour"
+		elseif hours < 24 then
+			return ("Half were last seen in the past %d hours"):format(hours)
+		end
+		return "Half were last seen in the past day"
 	end
-	return ("Half were last seen in the past %s"):format(U.Ago(0, a.median))
+	local days = math.ceil(m / DAY)
+	if days == 1 then
+		return "Half were last seen in the past day"
+	end
+	return ("Half were last seen in the past %s days"):format(U.Commas(days))
 end

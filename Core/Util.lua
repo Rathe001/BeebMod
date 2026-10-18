@@ -498,7 +498,7 @@ function U.OpenCharacter(page)
 		return false
 	end
 	if InCombatLockdown and InCombatLockdown() then
-		U.Print("BeebMod can't open the character window during a fight.")
+		U.Print("Can't open the character window during a fight.")
 		return false
 	end
 	pcall(ToggleCharacter, p.frame)

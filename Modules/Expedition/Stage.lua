@@ -161,13 +161,16 @@ local BY_NAME = {
 }
 
 -- the loading screen for an enemy met in a dungeon or a raid, or nil for one
--- met in the open world
+-- met in the open world. BY ITS ZONE TOO (2026-10-17, audit), as its
+-- category is (J.InstanceOf): an enemy killed before kills noted where they
+-- were had the open world's empty map.
 function ST.LoadScreen(m)
-	if not (m and (m.instance == "party" or m.instance == "raid")) then
+	local inst = J.InstanceOf(m)
+	if not inst then
 		return nil
 	end
 	local name = type(m.zone) == "string" and m.zone:lower():gsub("^the ", "") or ""
-	local file = BY_NAME[name] or (m.instance == "raid" and "LoadScreenRaid" or "LoadScreenDungeon")
+	local file = BY_NAME[name] or (inst == "raid" and "LoadScreenRaid" or "LoadScreenDungeon")
 	return SCREENS .. file
 end
 
@@ -350,7 +353,8 @@ function ST.Paint(page, m)
 			page.reset:Hide()
 		end
 		if page.hint then
-			page.hint:SetText(("Killed in a %s, which has no map."):format(m.instance == "raid" and "raid" or "dungeon"))
+			page.hint:SetText(("Killed in a %s, which has no map."):format(J.InstanceOf(m) == "raid" and "raid"
+				or "dungeon"))
 		end
 		return "screen"
 	end
@@ -399,9 +403,11 @@ function ST.Paint(page, m)
 	end
 	place(map)
 	if page.hint then
-		-- short: Reset view shares the line
+		-- short: Reset view shares the line. The clicks on a line of their
+		-- own and set apart by space, not joined by the dot, which is for data
+		-- (2026-10-17, audit); under the stage is room for two lines, not three
 		page.hint:SetText((#spots == 1 and "1 kill marked." or
-			("%d kills marked."):format(#spots)) .. " Wheel: zoom · Drag: move")
+			("%d kills marked."):format(#spots)) .. "\nWheel: zoom    Drag: move")
 	end
 	return "map", #pieces, #spots
 end

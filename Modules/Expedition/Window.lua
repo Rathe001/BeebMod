@@ -1,7 +1,8 @@
 -- The Expedition, in a window of its own (Josh 2026-09-25).
 --
--- Opened from its line in the dock (or /bt expedition), in the same surface
--- as the Census. Two views, of this character's kills:
+-- Opened from its line in the dock, or the Journal row on its page in
+-- settings, in the same surface as the Census. Two views, of this
+-- character's kills:
 --
 --   Field Journal  a card or a row for every enemy killed, with its portrait,
 --                  filed by creature type; a click opens its page, the whole
@@ -15,8 +16,7 @@
 --
 -- THE LEDGER'S SISTER (Josh 2026-10-05, the "Sister journals" canvas): the
 -- window is the journals' own (UI/Book.lua), 760 x 640 where it was
--- 1180 x 746, with Hemet's face and a line from him at your rank over the
--- tabs. The types or zones are the rail; Sort, View and the search are the
+-- 1180 x 746, with your rank under the tabs. The types or zones are the rail; Sort, View and the search are the
 -- toolbar over the cards; the cards are three across; and Commendations is
 -- the page the Ledger has too.
 local _, BT = ...
@@ -87,30 +87,38 @@ local function ui()
 	u.sort = u.sort or "name"
 	-- cards, or the list
 	u.layout = u.layout or "cards"
+	-- A COLUMN THE TABLE NO LONGER HAS (2026-10-17, audit): family and zone
+	-- left it on 2026-10-05, and a table saved sorted by one went on sorting
+	-- by it, with no heading lit and the toolbar saying A to Z
+	if u.listSort ~= nil and V.LIST_COLUMNS then
+		local known = false
+		for _, c in ipairs(V.LIST_COLUMNS) do
+			known = known or c.key == u.listSort
+		end
+		if not known then
+			u.listSort, u.listDesc = nil, nil
+		end
+	end
 	return u
 end
 
--- 12,345
+-- 12,345: commas from a thousand, written the one way every count in
+-- BeebMod is (U.Commas; 2026-10-17, audit: six copies used the client's
+-- separator and the rest a comma)
 local function big(n)
-	n = math.floor(n or 0)
-	if type(BreakUpLargeNumbers) == "function" then
-		local ok, s = pcall(BreakUpLargeNumbers, n)
-		if ok and type(s) == "string" then
-			return s
-		end
-	end
-	local s = tostring(n):reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return (s:gsub("^,", ""))
+	return BT.Util.Commas(n)
 end
 V.Big = big
 
+-- a level read beats the skull: -1 was only "ten or more above you" then
+-- (J.Learn, 2026-10-17, audit)
 local function level(m)
-	if m.skull then
-		return "Level ??"
-	elseif m.lo and m.hi and m.lo ~= m.hi then
+	if m.lo and m.hi and m.lo ~= m.hi then
 		return ("Level %d-%d"):format(m.lo, m.hi)
 	elseif m.lo then
 		return ("Level %d"):format(m.lo)
+	elseif m.skull then
+		return "Level ??"
 	end
 	return nil
 end
@@ -195,7 +203,9 @@ local ZOOM = 1.1
 -- A TABLE (Josh 2026-09-28: "Can we make the list view an actual grid?
 -- column headers, and a single row for each enemy. Keep the avatars."): one
 -- row an enemy, the width of the grid, under a row of headings that stays put
-local LIST_COLS, LIST_H, LIST_GAP = 1, 30, 2
+-- (34 high and 6 apart since 2026-10-18, for the mastery's rim, up to 4 thick:
+-- "I think the rows need a bit of margin between them now")
+local LIST_COLS, LIST_H, LIST_GAP = 1, 34, 6
 local LIST_HEAD_H = 22
 -- a margin inside the grid's edges: room for a card in the top row to be
 -- lifted without the grid's edge clipping it (Josh 2026-09-26: "the hover
@@ -510,6 +520,9 @@ function V.SpellIcons(page, p, spells, parent, width)
 			c.lit:Hide()
 			c:SetScript("OnEnter", spellEnter)
 			c:SetScript("OnLeave", spellLeave)
+			-- so the tooltip works out its DPS by its cooldown
+			-- (Modules/Tooltips, M.ShowsEnemyAbility)
+			c.beebEnemyAbility = true
 			cells[j] = c
 		end
 		if j <= n then
@@ -668,10 +681,15 @@ function V.BuildPage(b)
 		end
 		self:SetScript("OnUpdate", drag)
 	end)
-	model:SetScript("OnMouseUp", function(self)
+	local function letGo(self)
 		self.turning, self.panning = nil, nil
 		self:SetScript("OnUpdate", nil)
-	end)
+	end
+	model:SetScript("OnMouseUp", letGo)
+	-- HIDDEN MID-DRAG (2026-10-17, audit): a model put away with a button
+	-- down never hears it let go, and on the next page it turned with the
+	-- pointer until a click
+	model:SetScript("OnHide", letGo)
 	drag = function(self)
 		if not (self.turning or self.panning) then
 			self:SetScript("OnUpdate", nil)
@@ -710,7 +728,10 @@ function V.BuildPage(b)
 	page.sexes:SetPoint("TOPLEFT", stage, "TOPLEFT", 6, -6)
 	page.sexes:SetFrameLevel((model:GetFrameLevel() or 1) + 5)
 
-	page.hint = W.Label(page, WORDS:format("Drag: turn · Right-drag: move · Wheel: zoom"), "small")
+	-- the clicks set apart by space, not joined by the dot, which is for data;
+	-- one a line wants three lines, and the ladder starts two lines down
+	-- (2026-10-17, audit)
+	page.hint = W.Label(page, WORDS:format("Drag: turn    Right-drag: move    Wheel: zoom"), "small")
 	page.hint:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
 	-- at the popup's right edge, under the numbers: the narrower stage has no
 	-- room for the hint and the button side by side
@@ -1074,7 +1095,15 @@ local function loaded(model)
 		return true
 	end
 	local ok, id = pcall(model.GetModelFileID, model)
-	return ok and type(id) == "number" and id > 0
+	if not ok or type(id) ~= "number" then
+		return false
+	end
+	-- a secret is tested before it is compared (2026-10-17, audit): a file the
+	-- game will not name is still a model, and asking again names nothing
+	if issecretvalue and issecretvalue(id) then
+		return true
+	end
+	return id > 0
 end
 
 -- The look you chose for the enemy (V.SetLook) is drawn: by its display id
@@ -1647,10 +1676,25 @@ end
 -- ---------------------------------------------------------------------------
 --
 -- A face, the name, what it is, and on the right its kills with its mastery
--- in its metal and its points. A thin edge down the left in the tooltips'
--- gold or silver for an elite or a rare. A click is its page, as a card's is.
+-- in its metal and its points. A click is its page, as a card's is.
+-- THE ROW'S RIM IS THE MASTERY, AS A CARD'S BORDER IS (Josh 2026-10-18: "the
+-- border on the row to indicate mastery level (same as the card view)"): the
+-- metal (Card.TIERS), dim with none yet, and thicker for each metal ("Maybe
+-- we should increase border thickness the higher the rank as well?").
+-- THE NAME IS THE RANK. A ring round the face in the card's arch colours was
+-- tried the same day ("Hard to see the normal/rare/elite border. Maybe we
+-- should just color the mobs name instead?"): an ordinary enemy's name is
+-- white, anything else's in its category's colour, as its Rank cell is. Both
+-- replace a thin edge down the row's left in gold or silver (2026-09-26).
 
-local LIST_FACE = 26
+local LIST_FACE = 24
+-- each tier's rim: its metal, none yet dimmer, and how thick
+local LIST_RIM, LIST_THICK = {}, { [0] = 1, 1, 2, 3, 4 }
+for t, metal in pairs(Card.TIERS) do
+	local c = metal.color
+	LIST_RIM[t] = { c[1], c[2], c[3], t == 0 and 0.5 or 1 }
+end
+V.LIST_THICK = LIST_THICK
 
 -- the table's columns, left to right: the name takes what the rest leave
 -- (seven of the nine since the window is 760 wide, Josh 2026-10-05: family
@@ -1709,7 +1753,7 @@ function V.ColumnValue(e, key)
 	elseif key == "zone" then
 		return m.zone and m.zone:lower() or "\255"
 	elseif key == "level" then
-		return m.skull and 1000 or (m.hi or m.lo or -1)
+		return m.hi or m.lo or (m.skull and 1000) or -1
 	elseif key == "kills" then
 		return e.n or 0
 	elseif key == "tier" then
@@ -1721,17 +1765,22 @@ function V.ColumnValue(e, key)
 end
 
 -- `enemies` in the order of column `key`, highest first when `desc`; a tie by
--- name, then by id, so the order is the same every time
+-- name, then by id, so the order is the same every time. Each enemy's two
+-- values are worked out once, not at every comparison (2026-10-17, audit).
 function V.SortList(enemies, key, desc)
+	local value, name = {}, {}
+	for _, e in ipairs(enemies) do
+		value[e], name[e] = V.ColumnValue(e, key), V.ColumnValue(e, "name")
+	end
 	table.sort(enemies, function(a, b)
-		local va, vb = V.ColumnValue(a, key), V.ColumnValue(b, key)
+		local va, vb = value[a], value[b]
 		if va ~= vb then
 			if desc then
 				return va > vb
 			end
 			return va < vb
 		end
-		local na, nb = V.ColumnValue(a, "name"), V.ColumnValue(b, "name")
+		local na, nb = name[a], name[b]
 		if na ~= nb then
 			return na < nb
 		end
@@ -1764,14 +1813,11 @@ local function listRow(i)
 	local W = BT.Widgets
 	r = CreateFrame("Button", nil, b.grid.content)
 	r:SetHeight(LIST_H)
-	BT.Pill.Panel(r, W.FILL, W.HAIR)
-	r.edge = r:CreateTexture(nil, "ARTWORK")
-	r.edge:SetPoint("TOPLEFT", 1, -1)
-	r.edge:SetPoint("BOTTOMLEFT", 1, 1)
-	r.edge:SetWidth(2)
+	BT.Pill.Panel(r, W.FILL, LIST_RIM[0])
 	r.face = CreateFrame("PlayerModel", nil, r)
 	r.face:SetSize(LIST_FACE, LIST_FACE)
-	r.face:SetPoint("LEFT", 6, 0)
+	-- clear of platinum's rim, the thickest
+	r.face:SetPoint("LEFT", LIST_THICK[4] + 3, 0)
 	pcall(r.face.SetScript, r.face, "OnModelLoaded", function(self)
 		settle(self)
 		V.LearnBody(self)
@@ -1832,9 +1878,15 @@ local function bindRow(r, e, w)
 	cells.name:SetText(m.name or ("#" .. e.npc))
 	-- the rank in words, in the tooltips' colour (Josh 2026-09-26: "List
 	-- view doesn't show rare/elite enemy indicators")
-	local _, catWord, catColor = V.CategoryOf(m)
+	local cat, catWord, catColor = V.CategoryOf(m)
 	cells.rank:SetText(catWord or "")
 	cells.rank:SetTextColor(catColor[1], catColor[2], catColor[3])
+	-- and the name in its colour, an ordinary enemy's white
+	if cat == "normal" or cat == "critter" then
+		cells.name:SetTextColor(1, 1, 1)
+	else
+		cells.name:SetTextColor(catColor[1], catColor[2], catColor[3])
+	end
 	cells.type:SetText(J.KindOf(m))
 	local lv = level(m)
 	cells.level:SetText(lv and lv:gsub("^Level ", "") or "")
@@ -1849,13 +1901,8 @@ local function bindRow(r, e, w)
 	else
 		cells.tier:SetTextColor(mc[1], mc[2], mc[3])
 	end
-	-- the rank, as the tooltips wear it
-	local rs = Card.RANK_STYLE[e.m.rank]
-	local edge = rs and rs.level >= 1 and (rs.ornament or rs.line)
-	r.edge:SetShown(edge and true or false)
-	if edge then
-		r.edge:SetColorTexture(edge[1], edge[2], edge[3], 1)
-	end
+	-- and the mastery on the row's rim
+	BT.Pill.Recolour(r, nil, LIST_RIM[tier], LIST_THICK[tier])
 end
 
 -- what a card says it is: "Beast · Cat · Lv 5-6"
@@ -2063,7 +2110,8 @@ function V.DrawJournal(kills)
 	local zone = (GetRealZoneText and GetRealZoneText()) or nil
 	local map = BT.ExpeditionKills.Where()
 	J.GuessSpots(zone, map)
-	local pages = J.Pages(kills, u.group, u.sort)
+	-- (sorted below: the section shown, or All, once - 2026-10-17, audit)
+	local pages = J.Pages(kills, u.group, u.sort, true)
 	b.groups:Select(u.group)
 	b.sorts:Select(u.sort)
 	b.layouts:Select(u.layout)
@@ -2089,15 +2137,16 @@ function V.DrawJournal(kills)
 			end
 		end
 	end
-	if picked == V.ALL then
+	-- the table in the order of the heading clicked (V.SortBy), or the
+	-- order picked; the matches, the best first
+	local byHeading = u.layout == "list" and u.listSort
+	if not byHeading then
 		J.SortEnemies(enemies, u.sort)
 	end
-	-- the matches, the best first
 	if query then
 		enemies = J.Search(enemies, query)
 	end
-	-- the table in the order of the heading clicked (V.SortBy)
-	if u.layout == "list" and u.listSort then
+	if byHeading then
 		V.SortList(enemies, u.listSort, u.listDesc)
 	end
 	b.noMatch:SetText(query and ("No enemy matches \"%s\"."):format(query) or "")
@@ -2365,8 +2414,9 @@ function V.MasteryRows(kills)
 			id = "mastery:" .. m.name, title = m.name, color = m.color, points = t.points,
 			need = 1, have = t.enemies > 0 and 1 or 0,
 			-- two lines on a tile two across (Josh 2026-10-05): the elites',
-			-- rares' and bosses' own counts are on each enemy's page
-			text = ("%d points for each enemy killed %s times. Elites, rares and bosses take fewer.")
+			-- rares' and bosses' own counts are on each enemy's page. A critter
+			-- takes more (2026-10-17, audit: the line said only fewer)
+			text = ("%d points for each enemy killed %s times. Critters take more, elites and rares fewer.")
 				:format(m.points, big(m.n)),
 			right = ("%s %s"):format(big(t.enemies), t.enemies == 1 and "enemy" or "enemies"),
 		}
@@ -2416,10 +2466,10 @@ function V.Groups(kills, feats)
 	end
 	if #uniques > 0 then
 		out[#out + 1] = { title = "Unique kills", list = uniques, key = "uniques",
-			count = ("%s points"):format(big(kindTotal)) }
+			count = ("%s %s"):format(big(kindTotal), kindTotal == 1 and "point" or "points") }
 		local masteries, masteryTotal = V.MasteryRows(kills)
 		out[#out + 1] = { title = "Masteries", list = masteries, key = "mastery",
-			count = ("%s points"):format(big(masteryTotal)) }
+			count = ("%s %s"):format(big(masteryTotal), masteryTotal == 1 and "point" or "points") }
 	end
 	for _, g in ipairs(J.GROUPS) do
 		local list = byGroup[g.key]

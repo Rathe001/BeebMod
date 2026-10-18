@@ -1,9 +1,9 @@
 -- Durability: how worn your gear is, a readout of the panel (Josh 2026-09-22).
 --
--- Everything you wear, as one percentage - what it has left of what it could
--- have - and the most worn piece beside it, once something has taken damage.
--- Point at it for every piece. Amber from half, red from a fifth or anything
--- broken: the same points the client's own armour figure changes colour.
+-- Everything you wear, as one percentage: what it has left of what it could
+-- have. Point at it for the most worn pieces. Amber from half, red from a
+-- fifth or anything broken: the same points the client's own armour figure
+-- changes colour.
 --
 -- THE CLIENT'S FIGURE GOES WHILE THIS IS ON. The little armoured man it puts
 -- on screen when gear wears down says the same thing less exactly. It is
@@ -25,26 +25,13 @@ local M = BT.Module({
 	part = "metrics",
 })
 
-local WORDS = "|cff8a9894%s|r"
-local RED = "|cfff26659"
-local AMBER = "|cfff2c75a"
-local PLAIN = "|cffe6ebe8"
-
--- the slots that wear down, and what to call them
+-- the slots that wear down, and what to call them. The names are row
+-- labels, so sentence case (2026-10-17, audit).
 M.SLOTS = {
 	{ 1, "Head" }, { 3, "Shoulders" }, { 5, "Chest" }, { 6, "Waist" }, { 7, "Legs" },
 	{ 8, "Feet" }, { 9, "Wrists" }, { 10, "Hands" },
-	{ 16, "Main Hand" }, { 17, "Off Hand" }, { 18, "Ranged" },
+	{ 16, "Main hand" }, { 17, "Off hand" }, { 18, "Ranged" },
 }
-
-local function colour(pct, broken)
-	if broken or pct <= 20 then
-		return RED
-	elseif pct <= 50 then
-		return AMBER
-	end
-	return PLAIN
-end
 
 -- Every worn piece that has durability: its name, what it has, what it could
 -- have. And all of them together, and the worst.
@@ -68,21 +55,6 @@ function M.Read()
 	end
 	out.pct = out.max > 0 and math.floor(out.cur / out.max * 100 + 0.5) or nil
 	return out
-end
-
-function M.Lines(d)
-	d = d or M.Read()
-	if not d.pct then
-		return "", ""
-	end
-	local broken = d.worst and d.worst.cur <= 0
-	local left = ("%s %s%d%%|r"):format(WORDS:format("Durability"), colour(d.pct, broken), d.pct)
-	local right = ""
-	if d.worst and d.worst.pct < 100 then
-		right = ("%s %s%d%%|r"):format(WORDS:format(d.worst.name), colour(d.worst.pct, d.worst.cur <= 0),
-			d.worst.pct)
-	end
-	return left, right
 end
 
 -- ---------------------------------------------------------------------------

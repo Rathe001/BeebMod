@@ -8,10 +8,11 @@
 -- rank, and on the right your rank points ("0 / 750 pts"); the bar is how
 -- far through them you are. Point at it for your honorable kills.
 --
--- WHERE THE RANK COMES FROM. This game has none of Classic's honor calls: its
--- PvP tab shows a rank and rank points that no call gives, so they are read
--- off that tab (M.FromTab). A client with Classic's calls is read those
--- instead. With neither, there is no line, and the settings page says so.
+-- WHERE THE RANK COMES FROM. This game has none of Classic's honor calls.
+-- Its PvP tab shows a rank and rank points, which come from the client's
+-- C_MajorFactions call (M.FromCall); where that says nothing, they are read
+-- off the tab (M.FromTab). A client with Classic's calls is read those
+-- instead. With none of them, there is no line.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/PvP/PvP.lua")
 
@@ -38,16 +39,11 @@ M.SIDES = {
 }
 M.NEUTRAL = { 0.60, 0.62, 0.64 }
 
+-- 12,345: commas from a thousand, written the one way every count in
+-- BeebMod is (U.Commas; 2026-10-17, audit: six copies used the client's
+-- separator and the rest a comma)
 local function big(n)
-	n = math.floor(n or 0)
-	if type(BreakUpLargeNumbers) == "function" then
-		local ok, s = pcall(BreakUpLargeNumbers, n)
-		if ok and type(s) == "string" then
-			return s
-		end
-	end
-	local out = tostring(n):reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return (out:gsub("^,", ""))
+	return BT.Util.Commas(n)
 end
 M.Big = big
 
@@ -91,26 +87,55 @@ function M.Side()
 	return M.SIDES[M.SideName() or ""] or M.NEUTRAL
 end
 
--- a rank's number, 1 to 14, from its name; 0 for none (Civilian)
+-- a rank's number, 1 to 14, from the tab's label; 0 for none (Civilian).
+-- THE LABEL IS NUMBER AND TITLE (2026-10-17, audit). The tab writes a ranked
+-- character's label as PVP_RANK_NUMBER_AND_TITLE, the number and the name
+-- together; only Civilian is a bare word. So the number in it is taken
+-- first, and failing that the longest rank name inside it ("Master Sergeant"
+-- holds "Sergeant").
 function M.NumberOf(name)
 	if type(name) ~= "string" then
 		return 0
 	end
+	local digits = tonumber(name:match("%d+"))
+	if digits and digits >= 1 and digits <= 14 then
+		return math.floor(digits)
+	end
+	local low = name:lower()
+	local best, bestLen = 0, 0
 	local lists = { M.RANKS[M.SideName() or ""], M.RANKS.Alliance, M.RANKS.Horde }
 	for _, list in ipairs(lists) do
 		for i, rank in ipairs(list or {}) do
-			if rank:lower() == name:lower() then
-				return i
+			if #rank > bestLen and low:find(rank:lower(), 1, true) then
+				best, bestLen = i, #rank
 			end
 		end
 	end
-	return 0
+	return best
+end
+
+-- rank `n`'s name on your side: the client's own words, as its tab writes
+-- them, or the list's
+function M.RankName(n)
+	n = tonumber(n)
+	if not (n and n >= 1 and n <= 14) then
+		return nil
+	end
+	local side = M.SideName()
+	local ranks = _G.Enum and _G.Enum.PvPRanks
+	if type(ranks) == "table" and type(ranks.Rank_1) == "number" and side then
+		local key = ("PVP_RANK_%d_%d"):format(ranks.Rank_1 + n - 1, side == "Alliance" and 1 or 0)
+		local word = ask("GetText", key, ask("UnitSex", "player"))
+		if type(word) == "string" and word ~= "" and word ~= key and not (issecretvalue and issecretvalue(word)) then
+			return word
+		end
+	end
+	return (M.RANKS[side or ""] or M.RANKS.Alliance)[n]
 end
 
 -- the rank after number `n` on your side, by name
 function M.NextName(n)
-	local list = M.RANKS[M.SideName() or ""] or M.RANKS.Alliance
-	return list[(n or 0) + 1]
+	return M.RankName((n or 0) + 1)
 end
 
 -- CLASSIC'S HONOR SYSTEM, where a client has it: a rank id from 5 up, and
@@ -134,11 +159,12 @@ function M.RankOf(id)
 end
 
 -- THIS GAME'S OWN: RANK POINTS (Josh 2026-09-29, two records). The PvP tab
--- of the character window says "Civilian" and "Rank Points: 0 / 750", and
--- no call an addon can make says either: the game writes them onto the
--- tab's own labels and nowhere else. So they are read off those labels,
--- each time the game writes them (M.WatchTab), and kept for the character,
--- so the line has them after a restart too.
+-- of the character window says "Civilian" and "Rank Points: 0 / 750". The
+-- first records found no call that says either, so they are read off the
+-- tab's labels, each time the game writes them (M.WatchTab), and kept for
+-- the character, so the line has them after a restart too. Since the audit
+-- (2026-10-17) the call the tab reads comes first (M.FromCall), and the
+-- labels are what is left where it says nothing.
 -- The tab is a frame with a name of its own, PVPRankFrame: the character
 -- window holds it, but not under that key (the record's first try looked
 -- there and found nothing).
@@ -175,7 +201,51 @@ local function number(s)
 	return tonumber((s:gsub("[,%.%s]", "")))
 end
 
--- what the tab says now: { name, points, cap }, or nil when it says nothing
+-- a number the client gave, or nil for none or a secret
+local function plainNumber(v)
+	if type(v) ~= "number" or (issecretvalue and issecretvalue(v)) then
+		return nil
+	end
+	return v
+end
+
+-- THE CLIENT'S OWN CALL FIRST (2026-10-17, audit). The tab fills its labels
+-- from C_MajorFactions.GetMajorFactionProgressionInfo: rank points are a
+-- faction of their own (PVP_RANK_POINTS_FACTION_ID, 2800, a local in the
+-- tab's file). Its renownLevel is the rank, 0 to 14; renownReputationEarned
+-- and renownLevelThreshold are the points and the cap. Read here, it needs
+-- no tab and no label to pick apart. { name, number, points, cap }, or nil
+-- where the client has no such call or it says nothing.
+M.RANK_FACTION = 2800
+function M.HasCall()
+	local factions = _G.C_MajorFactions
+	return type(factions) == "table" and type(factions.GetMajorFactionProgressionInfo) == "function"
+end
+
+function M.FromCall()
+	if not M.HasCall() then
+		return nil
+	end
+	local ok, info = pcall(_G.C_MajorFactions.GetMajorFactionProgressionInfo, M.RANK_FACTION)
+	if not (ok and type(info) == "table") then
+		return nil
+	end
+	local n = plainNumber(info.renownLevel)
+	if not n then
+		return nil
+	end
+	n = math.max(0, math.min(14, math.floor(n)))
+	local civilian = type(_G.PVP_RANK_0_NAME) == "string" and _G.PVP_RANK_0_NAME or "Civilian"
+	return {
+		name = n > 0 and M.RankName(n) or civilian,
+		number = n,
+		points = plainNumber(info.renownReputationEarned) or 0,
+		cap = plainNumber(info.renownLevelThreshold) or 0,
+	}
+end
+
+-- what the tab says now: { name, number, points, cap }, or nil when it says
+-- nothing
 function M.FromTab()
 	local info = M.TabFields()
 	if not info then
@@ -190,7 +260,8 @@ function M.FromTab()
 	if not a then
 		return nil
 	end
-	return { name = plainText(name), points = number(a) or 0, cap = number(b) or 0 }
+	name = plainText(name)
+	return { name = name, number = M.NumberOf(name), points = number(a) or 0, cap = number(b) or 0 }
 end
 
 -- the rank points kept for this character: the tab's last word on them
@@ -207,9 +278,10 @@ local function kept()
 	return BT.settings.pvp, who
 end
 
--- read the tab and keep what it says; true when there was something
+-- read the client's call, or else the tab, and keep what it says; true when
+-- there was something
 function M.TakeTab()
-	local t = M.FromTab()
+	local t = M.FromCall() or M.FromTab()
 	local all, who = kept()
 	if not (t and all) then
 		return false
@@ -268,10 +340,17 @@ end
 -- PVPRankFrame:Update), which writes them without showing anything: it is
 -- asked to, until this character's rank is on file, at most every half
 -- minute. Its labels are then read as ever (M.WatchTab, M.TakeTab).
+-- NOT WHERE THE CALL IS THERE (2026-10-17, audit). The tab's Update fills its
+-- labels from the call M.FromCall reads, so asking it adds nothing there; and
+-- run from BeebMod, it leaves BeebMod's taint on Blizzard's frame for the
+-- session. It is asked only on a client without that call.
 M.ASK_EVERY = 30
 function M.AskTab()
 	local tab = M.Tab()
 	local now = BT.Util.Now and BT.Util.Now() or 0
+	if M.HasCall() then
+		return false
+	end
 	if not (tab and type(tab.Update) == "function") or now - (M.askedAt or -math.huge) < M.ASK_EVERY then
 		return false
 	end
@@ -279,9 +358,10 @@ function M.AskTab()
 	return (pcall(tab.Update, tab))
 end
 
--- whether there is anything to read: Classic's calls, or this game's tab
+-- whether there is anything to read: Classic's calls, or this game's call
+-- or tab
 function M.Available()
-	return M.Classic() or M.TabFields() ~= nil
+	return M.Classic() or M.FromCall() ~= nil or M.TabFields() ~= nil
 end
 
 -- Everything the line and the hover say: your rank, the next, how far, and
@@ -313,10 +393,11 @@ function M.Read()
 		return nil
 	end
 	p.fromTab, p.at = true, t.at
-	p.number = M.NumberOf(t.name)
+	-- the number as read; one kept before it was kept is found in the label
+	p.number = tonumber(t.number) or M.NumberOf(t.name)
 	-- Civilian, and anything else the ranks do not name, is no rank yet
-	p.name = p.number > 0 and t.name or nil
-	p.title = t.name
+	p.name = p.number > 0 and (M.RankName(p.number) or t.name) or nil
+	p.title = p.name or t.name
 	p.points, p.cap = t.points or 0, t.cap or 0
 	p.nextName = M.NextName(p.number)
 	p.progress = p.cap > 0 and math.max(0, math.min(1, p.points / p.cap)) or 0
@@ -506,8 +587,10 @@ function M.Build()
 end
 
 M.events = CreateFrame("Frame")
+-- rank points are a faction's (M.FromCall): its changes are heard as the
+-- tab hears them (2026-10-17, audit)
 for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_PVP_KILLS_CHANGED", "PLAYER_PVP_RANK_CHANGED",
-	"UNIT_FACTION" }) do
+	"UNIT_FACTION", "UPDATE_FACTION", "MAJOR_FACTION_RENOWN_LEVEL_CHANGED" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
 M.events:SetScript("OnEvent", function(_, event, unit)
@@ -729,6 +812,7 @@ function M.Dump()
 			step(key .. " textOf", textOf(fs))
 		end
 	end
+	step("FromCall", M.FromCall())
 	step("FromTab", M.FromTab())
 	local all, who = kept()
 	step("who", who)

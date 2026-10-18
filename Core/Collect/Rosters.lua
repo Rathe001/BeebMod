@@ -6,9 +6,11 @@
 --
 --   /who results      you ran the query; reading the answer is free, and it is
 --                     the only source carrying level, guild AND zone at once
---   friends           name, level, class and where, for everyone on your list
+--   friends           name, level and class for everyone on your list, and
+--                     where the online ones are
 --   battleground      forty players with class and faction in one table
---   mail              who sent you things: names you would never otherwise meet
+--   mail              who sent you things: names you would never otherwise
+--                     meet (listed, not seen: a letter can be a month old)
 --   channel list      every player in a chat channel, after a /chatlist
 --
 -- These sources have no GUID to offer, so a row from them is `vouched`: it is
@@ -116,9 +118,15 @@ function R.Friends()
 	for i = 1, (cf.GetNumFriends() or 0) do
 		local f = cf.GetFriendInfoByIndex(i)
 		if type(f) == "table" and f.name then
+			-- AN OFFLINE FRIEND IS LISTED, NOT SEEN (2026-10-17, audit), as
+			-- in the guild roster: the list names them every refresh, and
+			-- that kept a friend gone for months "seen just now". Where they
+			-- logged out is not where they are.
+			local online = f.connected and true or false
 			if note(f.name, {
-				src = "friends", class = R.ClassToken(f.className), zone = f.area,
+				src = "friends", class = R.ClassToken(f.className), zone = online and f.area or nil,
 				level = (type(f.level) == "number" and f.level > 0) and f.level or nil,
+				listed = not online or nil,
 			}) then
 				wrote = wrote + 1
 			end
@@ -161,7 +169,10 @@ function R.Mail()
 		-- builds): the old pattern needed capitals BEFORE the word and let the
 		-- plain one through, where LooksLikeName then filed it as a person
 		if type(sender) == "string" and sender ~= "" and not sender:lower():find("auction", 1, true) then
-			if note(sender, { src = "mail" }) then
+			-- A LETTER IS NOT A SIGHTING (2026-10-17, audit): it can sit in
+			-- the inbox for a month, and the inbox refreshes while it is open,
+			-- so the sender is listed, not seen
+			if note(sender, { src = "mail", listed = true }) then
 				wrote = wrote + 1
 			end
 		end

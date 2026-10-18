@@ -12,10 +12,11 @@
 -- original ranges as PC Games lists them (pcgames.de, "Classic Dungeons:
 -- Level-Bereich"), the figures most guides give - except the Armory, which
 -- PC Games prints as 35-45, the Cathedral's; 32-42 is the wing's usual
--- range. Guides disagree on a few (The Deadmines is 15-22 in one, 17-24 in
--- most). The client's group finder (C_LFGList) can carry Blizzard's own
--- suggested levels, but this client has no group finder of its own, and it
--- was not checked.
+-- range. Guides disagree on a few. THE DEADMINES (2026-10-17, audit) is
+-- 17-26, Blizzard's own Classic range, where guides give 15-22 to 18-23; at
+-- 17-24 levels 24 and 25 never saw it. The client's group finder
+-- (C_LFGList) can carry Blizzard's own suggested levels, but this client has
+-- no group finder of its own, and it was not checked.
 --
 -- NOT YET WHICH HAVE QUESTS FOR YOU: nothing in the game or BeebMod's data
 -- says which quests a dungeon holds.
@@ -30,7 +31,7 @@ D.LIST = {
 	{ name = "The Hall of Thanes", lo = 13, hi = 18, side = "Alliance" },
 	{ name = "Ruins of Lordaeron", lo = 15, hi = 20, side = "Horde" },
 	{ name = "Wailing Caverns", lo = 17, hi = 24 },
-	{ name = "The Deadmines", lo = 17, hi = 24 },
+	{ name = "The Deadmines", lo = 17, hi = 26 },
 	{ name = "Shadowfang Keep", lo = 22, hi = 30 },
 	{ name = "The Stockade", lo = 24, hi = 31, side = "Alliance" },
 	{ name = "Blackfathom Deeps", lo = 24, hi = 32 },

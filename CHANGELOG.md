@@ -5,6 +5,213 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **A note can't be lost from Find people.** Someone you wrote on, found
+  through the census by a guild your Ledger hadn't seen, showed an empty
+  note box, and clicking in and out of it wiped the note. Their card now
+  shows your own note and tags.
+
+- **Find people is quick on a big book.** A search read every character in
+  the book at each letter and each click. On a book of 150,000 characters
+  the first search is about five times faster, and asking again costs
+  nothing.
+
+- **Find people says when it found someone by their guild.** Searching
+  "kitten" listed Brit Magoo with nothing to say why. The card now shows
+  `<Discord Kittens>` after the level. People whose name starts with what
+  you typed come first, then guild matches.
+
+- **The Ledger's line no longer shows a gain at every login.** It counted
+  the book's characters as new points each time you logged in or reloaded.
+
+- **A new first-login window.** The five parts are a list on the left, each
+  with its switch. Click one to see what it adds and four new pictures of
+  it (five for the journals), with arrows to go through them. The keepers'
+  quotes and the jokes are gone from it.
+
+- **Plain words on the settings pages.** The Dock's, Unit frames' and Game
+  frames' pages open with a line on what each does, as the journals' do.
+  The jokes are gone ("Even the seventeen quests you swear you'll
+  finish").
+
+- **Made-up data no longer turns on the made-up party.** Made-up people
+  on the Testing page is the one switch for that.
+
+- **No more quotes from Hemet and Jorach.** The Ledger's and the
+  Expedition's settings pages no longer open with a line from them, and a
+  new rank's toast shows the rank and its badge without one.
+
+- **/bt is the only command left.** It opens the window, as the cog does,
+  whatever you type after it. Notes, tags and ratings are on a player's
+  right-click menu, and Find people searches. Made-up data is a switch on
+  the Testing page, and moving another book's characters in is a button
+  there. The other commands are gone, and with them what only they did:
+  pruning the census, and changing how many days the purge waits (90) or
+  how many characters a book keeps (150,000).
+
+- **Expedition**
+  - In the list view, a row's border shows its mastery, as a card's does,
+    and is thicker for each metal: bronze 1 pixel up to platinum 4. An
+    elite's or a rare's name is in its rank's colour, as in the Rank
+    column. The rows have more space between them.
+  - The four metals are easier to tell apart: a darker bronze, a brighter
+    gold, and an ice-blue platinum beside a plain silver. Cards, the list
+    and the Masteries page use the same four.
+  - A critter, a grey enemy or anything else killed with your first hit now
+    counts when it was your target and you cast or swung in the 3 seconds
+    before, so a Wrath still flying when the cast ended counts too. It
+    counted before only if it gave XP or you looted it.
+  - The Testing page's report says why your target's last death wasn't
+    counted.
+  - Azuregos's abilities no longer list Summon Player, a spell the server
+    uses to run the fight. Nor do eight other enemies' that had it.
+  - An enemy ability's DPS counts its cooldown. Stitches's Aura of Rot,
+    38 damage every 3 seconds, shows 12.7 DPS. It showed 25.3, as if cast
+    every 1.5 seconds.
+  - The commendations for beasts of 5 and 10 families are Beast Watcher and
+    Beast Scholar. They had the same names as the ranks Tracker and Trapper.
+  - The Masteries page shows how far you are to each next mastery again,
+    as 57 / 100 with a bar, and each tier's name is in its metal.
+  - When the game says a boss fight was won after its kill was counted,
+    the dock line and the rank toast follow at once.
+  - A mastery or a rank is said once. It could be said again when an enemy
+    turned out to be a boss or in a dungeon.
+  - An enemy's level shows once it is known. One that had shown as ?? kept
+    "Level ??" for good.
+  - A kill is far less work with a big journal: a pack of 10 dying at once
+    with 2,000 unique kills took about 30 ms, and now takes under 1 ms.
+  - The map shows the dungeon's loading screen for dungeon enemies recorded
+    before dungeons were noted.
+  - A quest's lore is matched by whole words, so a rat no longer gets a
+    quest about pirates.
+  - Counts from 1,000 have commas, "1 point" is singular, and ranks are
+    written "Rare elite", as on the unit tooltip.
+
+- **Tooltips**
+  - Item tooltips match the spell tooltips. A weapon's DPS, or armour's
+    armor, and the item level (ILVL) sit at the right of the name. How it binds
+    and whether it's unique are small tags under its kind, beside a taller
+    icon. Damage, speed and the level you need are in a row of cells, and
+    the stats are lines under them. An item with none of those, such as
+    food, has no cells. The headings and tiles are gone.
+  - The lines round an item's or a spell's cells are one pixel thick
+    everywhere. At some interface scales one of them could come out two
+    pixels thick.
+  - The sell price shows once, in the footer. The game's own "Sell Price:"
+    line came along under it with other addons' lines.
+  - Renew and other heals worded "Heals the target of 45 damage" show HPS
+    in green, not DPS in red.
+  - A range such as Eviscerate's 6-11 damage counts as its middle, 8.5.
+  - Garrote, Rupture and Rip show what they do a second over their
+    duration: Garrote is 8.0 DPS, not 28.8.
+  - Drain Life, Hellfire, Hurricane, Volley, Healing Stream Totem and
+    Healthstone get their figures.
+  - Damage dealt on each of many hits gets no DPS and no per mana: Thorns,
+    Lightning Shield, Retribution Aura, Fire Shield, Holy Shield, Seal of
+    Righteousness, Flametongue Weapon and Searing Totem. The damage of one
+    hit still shows.
+  - Blessing of Sanctuary shows its damage. A comma in its first sentence
+    stopped it being read.
+  - Lines other addons add to item and spell tooltips, such as an auction
+    price, stay on the card.
+  - The Equipped tooltip shows the item level.
+  - Numbers from 1,000 have commas, as 1,400 HEALING.
+  - A chat link's tooltip no longer keeps the last item's width and edge.
+  - Recipes and other tooltips kept in the game's lines say BoE and BoP too.
+
+- **Unit frames and nameplates**
+  - The resource display's crosshair says how near your target is. Green
+    crossed swords: in melee range. A green crosshair: in reach of your
+    ranged attack or spells. A red no-action sign: too close to shoot or
+    throw, too far to hit. A red crosshair: out of reach. A warrior's or
+    rogue's ranged attack is Throw or Shoot, and a hunter's Auto Shot. A
+    caster's is whichever of their spells reaches furthest, so talents that
+    add range count. Melee is measured by the Attack button when Attack is
+    on one of your action bars, as it is for a new character. Otherwise
+    it's a warrior's Heroic Strike, a rogue's Sinister Strike, a hunter's
+    Raptor Strike, a paladin's Holy Strike, or Claw or Maul in cat or bear
+    form; a mage, priest or warlock without Attack on a bar gets no swords.
+    Nothing is added to your bars. A friend gets the green crosshair in
+    reach of your heals. With no target, or one the game isn't drawing, the
+    crosshair is grey and faint as before.
+  - Raid markers on nameplates follow when a mark is set or moved.
+  - A nameplate changes when a duel starts or ends, or a player flags for
+    PvP.
+  - Nameplates choose the friend or enemy look as the game does. A neutral
+    NPC and a player of the other faction who isn't flagged for PvP get the
+    enemy look.
+  - A block Shift-dragged at a Size other than 100% stays where you drop it.
+  - Unit frames follow the Size down to 70%.
+  - Main tanks get the HoT lane, as their raid frames do.
+  - Debuffs on you with no duration show in the buff tray.
+  - Your target's DoT timers stay on the target frame when its nameplate
+    isn't one of BeebMod's.
+  - A skull level is red on the target and boss frames, as on nameplates.
+    Level colours change when you level. The target of target fades with
+    range. Weapon enchant times read as the game's buff times do.
+  - A class with no damage spells yet no longer makes new frames at every
+    loading screen.
+  - The damage meter adds no second per-second figure on DPS and HPS, with
+    Compact or Complete numbers, or on interrupts and dispels. Its clock
+    waits while the game's own shows.
+
+- **Dock**
+  - Pointing at the BeebMod name in the dock's header says how to move it:
+    Shift-drag.
+  - The game's addon compartment is back, first in the Addon buttons line.
+    It shows when an addon is in it, and a click opens its menu as before.
+    An addon that is only in the compartment can be opened again.
+  - With the Dock switched off, the Expedition's and the Ledger's lines
+    stay under the logo while their journals are on.
+  - The bags tooltip lists a reagent only when you know a spell that takes
+    it or you carry some. A level 10 druid saw every Rebirth seed in red,
+    and "item 22147", a seed this client doesn't have.
+  - Changing the Size keeps a dock at the right edge against it.
+  - The top right corner of the screen takes clicks again. The game's old
+    minimap holder caught them after the map moved into the dock.
+  - The zone name is coloured for hostile, contested and sanctuary zones.
+  - Map pins from other addons, such as Questie and HandyNotes, know the
+    map is square.
+  - Your PvP rank reads right once you have one: its name, its insignia and
+    the next rank.
+  - Reputation counts every faction that moved, losses too.
+  - The quest tracker follows the quest you pick on the world map, and a
+    timed quest's clock keeps running after you scroll past it.
+  - The micro menu dresses every button, such as Legacy, and is laid out
+    once a frame and never in a fight.
+  - The performance tooltip's note matches its colours: above about 100 ms,
+    casts and swings feel late.
+  - The speed tooltip says when its figure is from your character sheet as
+    it was last open.
+  - The bag readout's second row is Special bags, since it counts quivers
+    and soul bags too.
+  - Pick Pocket's counts have commas, the Money tooltip names you in full,
+    and The Deadmines is listed for levels 17 to 25.
+
+- **Game frames**
+  - Equipped items on the action bars get a green edge again.
+  - The character sheet places the pet tab, and does less while open.
+  - The bag window does less while you loot, and its drag strip is gone
+    when you switch it off.
+  - A menu is dressed once when it opens.
+
+- **Census and Ledger**
+  - Friends who are offline and people who sent you mail no longer count as
+    seen.
+  - "Was in Night Watch" keeps the time they were last seen in it.
+  - The charts count once at a time, finish on a big book, and stop when
+    you close the window. Tags past the eleventh share an "Other tags" row.
+  - "Eyes Everywhere" asks for 125,000 characters. At 150,000 it was the
+    book's own size limit, which a login trims below.
+  - A tag name can be 20 letters, accents included.
+  - Chat lines start with "Ledger:", and counts from 1,000 have commas.
+
+- **At launch,** one chat line says the beta's records were cleared.
+
+- **The download is about 1.3 MB smaller.** Fonts and art nothing used are
+  gone, and the first-login window's pictures are compressed.
+
 ## 0.1.0-beta.28
 
 - **The beta's records go when the game launches.** BeebMod files what it
@@ -58,8 +265,7 @@ game and the addon settle.
     ability's DPS is its damage per energy times the energy you get back a
     second, about 10. That is what it does over a whole fight: Backstab's
     95.5 damage for 60 energy is 15.9 DPS, Sinister Strike's 46.5 for 45 is
-    10.3. Beside the rank is its damage per energy, as 1.03 damage per
-    energy.
+    10.3. Beside the rank is its damage per energy, as 1.03 per energy.
   - A rage ability's DPS is per second of the global cooldown, as a
     caster's is. One that lands on your next swing, such as Heroic Strike
     or Maul, takes the place of a swing you would have made anyway, so it
@@ -76,11 +282,11 @@ game and the addon settle.
   - The numbers are the tooltip's own, so they leave out any bonus from
     your gear that the game leaves out of the tooltip.
 
-  A buff or debuff has its kind under its name, and what it does and the
+  A buff or debuff has its type under its name, and what it does and the
   time it has left in the same cells, as 47 absorb | 25 sec remaining. One
   that works over time, such as Renew, shows its HPS or DPS at the right.
-  Where the game names a debuff's kind, such as Magic or Curse, the left
-  edge is that kind's colour. A linked spell gets the same
+  Where the game names a debuff's type, such as Magic or Curse, the left
+  edge is that type's colour. A linked spell gets the same
   layout, and so does a macro on your action bars that casts a spell. On
   an item tooltip, a weapon's DPS tile is faintly red, and a number too wide
   for its tile is set smaller.
