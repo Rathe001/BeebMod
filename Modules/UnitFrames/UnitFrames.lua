@@ -157,9 +157,13 @@ local function holder(key)
 end
 M.Holder = holder
 
--- where a holder was left, or where it starts
+-- where Edit Mode puts the game's frame it stands in for (M.EDIT_MODE); or
+-- without one, where it was left, or where it starts
 function M.PlaceHolder(key)
 	local h = holder(key)
+	if M.EDIT_MODE[key] and M.ToEditMode(key, h) then
+		return h
+	end
 	local saved = opt("pos", {})[key]
 	local at = (type(saved) == "table" and saved.point) and { saved.point, saved.rel or saved.point, saved.x or 0, saved.y or 0 }
 		or HOLDERS[key].at
@@ -207,6 +211,11 @@ function M.Handle(f, key)
 	f:RegisterForDrag("LeftButton")
 	f:HookScript("OnDragStart", function(self)
 		if not (IsShiftKeyDown and IsShiftKeyDown()) then
+			return
+		end
+		-- a block that goes where Edit Mode says is moved there (M.EDIT_MODE)
+		if M.FollowsEditMode(self.bmHandle) then
+			U.Print("Unit frames: move them in Edit Mode. BeebMod's go where the game's would.")
 			return
 		end
 		if inCombat() then
@@ -275,7 +284,10 @@ local function place(key, f)
 	f:ClearAllPoints()
 	local s = M.singles
 	if key == "target" then
-		f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", M.TARGET_X, -24)
+		-- where Edit Mode puts the game's target frame (M.EDIT_MODE, below)
+		if not M.ToEditMode("target", f) then
+			f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", M.TARGET_X, -24)
+		end
 	-- A COLUMN BESIDE THE TARGET (Josh 2026-09-23): its target at the top,
 	-- level with it, and the focus under that - the two together as tall as
 	-- the target, so the three read as one block. The target's debuffs moved
@@ -320,6 +332,337 @@ local function buildSingles()
 		if pair[2] == "boss" then
 			M.Handle(M.singles[pair[1]], "boss")
 		end
+	end
+end
+
+-- ---------------------------------------------------------------------------
+-- Where Edit Mode puts the game's own
+-- ---------------------------------------------------------------------------
+--
+-- EDIT MODE DECIDES (Josh 2026-10-18: "Doesn't seem like our unit frames
+-- respect edit mode, which might actually be a bug we need to fix", then "I
+-- think we should respect edit mode"). This client has Edit Mode, with a
+-- layout of its own for a controller (the forever branch's
+-- Blizzard_EditMode, EDIT_MODE_GAMEPAD_SYSTEM_MAP), and our frames sat where
+-- they had been Shift-dragged whatever it said. Now each block of ours sits
+-- where Edit Mode puts the game's frame it stands in for, by one corner:
+--   the party column (you at its top)    the player frame's top left
+--   the target, and its column beside it the target frame's top left
+--   the raid                             the raid frames' top left
+--   the bosses                           the boss frames' top right
+--   your cast bar                        the cast bar's bottom
+-- Moving one in Edit Mode moves ours, and so does a layout changing, the
+-- controller's among them: Edit Mode places every frame of its own with
+-- ApplySystemAnchor, which is hooked. While Edit Mode is open the game's
+-- frames are back out, so they can be dragged, and ours are out of sight.
+-- The main tanks have no frame of Edit Mode's: they go on following the raid,
+-- and Shift-drag still moves them. With no Edit Mode frame to go by, a block
+-- goes where it was Shift-dragged, or where it starts, as it did before.
+-- BY THE ART, NOT THE BOX (Josh 2026-10-18: "It is offset a bit"). The
+-- game's player and target frames are 232 by 100, and what is drawn starts
+-- inside that: the player's portrait 24 in and 19 down, the target's health
+-- bar 22 in and its portrait 19 down (the forever branch's
+-- Blizzard_UnitFrame/Mainline/PlayerFrame.xml and TargetFrame.xml). `inset`
+-- is that, in the frame's own units.
+M.EDIT_MODE = {
+	party = { index = "Player", corner = "TOPLEFT", inset = { 24, 19 } },
+	target = { index = "Target", corner = "TOPLEFT", inset = { 22, 19 } },
+	raid = { index = "Raid", corner = "TOPLEFT" },
+	boss = { index = "Boss", corner = "TOPRIGHT" },
+	cast = { system = "CastBar", corner = "BOTTOM" },
+}
+
+-- the game's frame Edit Mode places for block `key`, or nil
+function M.EditModeFrame(key)
+	local spec = M.EDIT_MODE[key]
+	local mgr = rawget(_G, "EditModeManagerFrame")
+	local E = rawget(_G, "Enum")
+	if not (spec and type(mgr) == "table" and type(mgr.GetRegisteredSystemFrame) == "function"
+		and type(E) == "table" and type(E.EditModeSystem) == "table") then
+		return nil
+	end
+	local system, index
+	if spec.system then
+		system = E.EditModeSystem[spec.system]
+	else
+		system = E.EditModeSystem.UnitFrame
+		index = type(E.EditModeUnitFrameSystemIndices) == "table" and E.EditModeUnitFrameSystemIndices[spec.index] or nil
+		if index == nil then
+			return nil
+		end
+	end
+	if system == nil then
+		return nil
+	end
+	local ok, f = pcall(mgr.GetRegisteredSystemFrame, mgr, system, index)
+	return ok and type(f) == "table" and f or nil
+end
+
+-- where on the screen, in pixels from its bottom left, Edit Mode puts the
+-- corner block `key` goes by; nil without a frame or a rect to read
+function M.EditModeSpot(key)
+	local f = M.EditModeFrame(key)
+	if not f then
+		return nil
+	end
+	local num, call = BT.Pill.Number, BT.Furniture.Call
+	local eff = num(call(f, "GetEffectiveScale"), nil)
+	local l, r = num(call(f, "GetLeft"), nil), num(call(f, "GetRight"), nil)
+	local t, b = num(call(f, "GetTop"), nil), num(call(f, "GetBottom"), nil)
+	local spec = M.EDIT_MODE[key]
+	local corner = spec.corner
+	if not (eff and eff > 0 and l and r and t and b) then
+		-- NO RECT, BY ITS ANCHOR (Josh 2026-10-18: "Raid frames are not
+		-- tracking the edit mode raid frames"). The raid's container sizes
+		-- itself to who is in it, and empty it has no rect to read. Edit Mode
+		-- always anchors it by its top left (alwaysUseTopLeftAnchor), so that
+		-- corner is the point it hangs from, plus the offset.
+		return M.AnchorSpot(f, corner)
+	end
+	local x = corner:find("LEFT") and l or corner:find("RIGHT") and r or (l + r) / 2
+	local y = corner:find("TOP") and t or corner:find("BOTTOM") and b or (t + b) / 2
+	if spec.inset then
+		x, y = x + spec.inset[1], y - spec.inset[2]
+	end
+	return x * eff, y * eff
+end
+
+-- how far across (0 left, 1 right) and up (0 bottom, 1 top) a point is
+local function fractions(point)
+	return point:find("LEFT") and 0 or point:find("RIGHT") and 1 or 0.5,
+		point:find("BOTTOM") and 0 or point:find("TOP") and 1 or 0.5
+end
+
+-- a corner of `f` in pixels from the screen's bottom left, worked out from
+-- its first anchor: the point of the frame it hangs from, plus its offset in
+-- its own units, and from that point to the corner by its size (none for an
+-- empty container, whose every corner is the one point); or nil.
+-- ANY POINT (Josh 2026-10-18: "Boss frames are also not respecting edit
+-- mode"): the bosses hang by their right side in the controller's layout,
+-- not by the top right they are matched by
+function M.AnchorSpot(f, corner)
+	local num, call = BT.Pill.Number, BT.Furniture.Call
+	local ok, point, rel, relPoint, x, y = pcall(f.GetPoint, f, 1)
+	if not (ok and type(point) == "string") then
+		return nil
+	end
+	if type(rel) == "string" then
+		rel = _G[rel]
+	end
+	rel = rel or UIParent
+	local eff, relEff = num(call(f, "GetEffectiveScale"), nil), num(call(rel, "GetEffectiveScale"), nil)
+	local l, r = num(call(rel, "GetLeft"), nil), num(call(rel, "GetRight"), nil)
+	local t, b = num(call(rel, "GetTop"), nil), num(call(rel, "GetBottom"), nil)
+	if not (eff and relEff and l and r and t and b) then
+		return nil
+	end
+	relPoint = type(relPoint) == "string" and relPoint or point
+	local rx, ry = fractions(relPoint)
+	local ax = (l + (r - l) * rx) * relEff + (num(x, 0) or 0) * eff
+	local ay = (b + (t - b) * ry) * relEff + (num(y, 0) or 0) * eff
+	-- from the anchored point to the corner wanted
+	local w, h = num(call(f, "GetWidth"), 0) or 0, num(call(f, "GetHeight"), 0) or 0
+	local px, py = fractions(point)
+	local cx, cy = fractions(corner)
+	return ax + (cx - px) * w * eff, ay + (cy - py) * h * eff
+end
+
+-- block `key` (a holder, or the target's frame `f`) put at its Edit Mode
+-- spot; whether there was one. The offset is in `f`'s own units, so the
+-- Size it is drawn at counts.
+function M.ToEditMode(key, f)
+	local x, y = M.EditModeSpot(key)
+	local eff = x and BT.Pill.Number(BT.Furniture.Call(f, "GetEffectiveScale"), nil)
+	if not (x and eff and eff > 0) then
+		return false
+	end
+	local corner = M.EDIT_MODE[key].corner
+	f:ClearAllPoints()
+	f:SetPoint(corner, UIParent, "BOTTOMLEFT", x / eff, y / eff)
+	return true
+end
+
+-- whether block `key` goes where Edit Mode says rather than where it is
+-- dragged
+function M.FollowsEditMode(key)
+	return M.EDIT_MODE[key] ~= nil and M.EditModeSpot(key) ~= nil
+end
+
+-- every block put at its Edit Mode spot again, after a fight if in one; not
+-- while Edit Mode is open (it is done as it closes)
+local function followNow()
+	if not M.live or F.editMode then
+		return
+	end
+	for key in pairs(M.EDIT_MODE) do
+		if key == "target" then
+			if M.singles.target then
+				place("target", M.singles.target)
+			end
+		elseif M.holders[key] then
+			M.PlaceHolder(key)
+		end
+	end
+	-- the main tanks stand on the raid
+	if M.holders.tanks then
+		M.PlaceHolder("tanks")
+	end
+end
+-- AND AGAIN A MOMENT LATER (Josh 2026-10-18: in the controller's layout the
+-- party column sat above the player frame, over the resource display). A
+-- frame Edit Mode places against another one - the controller layout's cast
+-- bar on its action bar, say - is only where it ends up once that one has
+-- been placed too, so it is read once more when the layout has settled.
+local SETTLE = 0.5
+local settling = false
+function M.FollowEditMode()
+	if not M.live or F.editMode then
+		return false
+	end
+	if not settling and C_Timer and C_Timer.After then
+		settling = true
+		C_Timer.After(SETTLE, function()
+			settling = false
+			later("editmode", followNow)
+		end)
+	end
+	return later("editmode", followNow)
+end
+
+-- our frames faded out or back: the singles, every group cell and the cast bar
+function M.Fade(a)
+	local function set(f)
+		if f and f.SetAlpha then
+			f:SetAlpha(a)
+		end
+	end
+	for _, f in pairs(M.singles) do set(f) end
+	for _, f in ipairs(M.GroupCells()) do set(f) end
+	set(M.cast)
+	-- and the made-up people and bosses from the Testing page
+	for _, f in ipairs(M.previews or {}) do set(f) end
+end
+
+-- EDIT MODE OPEN: the game's frames out from where they were put away, so
+-- they can be seen and dragged, and ours out of sight (Unit.lua's range
+-- paint keeps them so while F.editMode is set)
+-- how often each was heard, for the Testing page (M.EditModeSaid)
+M.editModeSeen = { enter = 0, exit = 0 }
+
+function M.EditModeEnter()
+	M.editModeSeen.enter = M.editModeSeen.enter + 1
+	-- once: it is heard both from the registry and from the manager's own
+	if not M.live or F.editMode then
+		return
+	end
+	F.editMode = true
+	M.editModeOut = {}
+	for _, group in ipairs(M.STANDS_FOR) do
+		for _, name in ipairs(group.names) do
+			if F.Unstow(name) then
+				M.editModeOut[#M.editModeOut + 1] = name
+			end
+		end
+	end
+	M.Fade(0)
+end
+
+-- EDIT MODE CLOSED: the game's put away again, and ours back where it left them
+function M.EditModeExit()
+	M.editModeSeen.exit = M.editModeSeen.exit + 1
+	local was = F.editMode
+	local out = M.editModeOut or {}
+	M.editModeOut = nil
+	F.editMode = false
+	later("editmode-exit", function()
+		for _, name in ipairs(out) do
+			F.Stow(name)
+		end
+		-- and every one still meant to be away that Edit Mode took out, even
+		-- if its opening went unheard; and once more a moment later, for any
+		-- the client puts back as Edit Mode finishes closing
+		local function sweep()
+			for _, group in ipairs(M.STANDS_FOR) do
+				for _, name in ipairs(group.names) do
+					F.Restow(name)
+				end
+			end
+		end
+		sweep()
+		if C_Timer and C_Timer.After then
+			C_Timer.After(SETTLE, function()
+				if not F.editMode then
+					later("editmode-restow", sweep)
+				end
+			end)
+		end
+		if was then
+			M.Fade(1)
+		end
+		M.FollowEditMode()
+		M.PaintAll()
+	end)
+end
+
+-- what Edit Mode was heard to do, for the Testing page's What loaded
+function M.EditModeSaid()
+	local seen = M.editModeSeen
+	-- each block: the game's frame it goes by, and where that says, in
+	-- pixels; or what was missing
+	local parts = {}
+	for _, key in ipairs({ "party", "target", "raid", "boss", "cast" }) do
+		local f = M.EditModeFrame(key)
+		local x, y = M.EditModeSpot(key)
+		local name = f and BT.Furniture.Call(f, "GetName")
+		parts[#parts + 1] = ("%s %s"):format(key, not f and "no frame"
+			or x and ("by %s at %d,%d"):format(type(name) == "string" and name or "?", math.floor(x + 0.5), math.floor(y + 0.5))
+			or ("by %s, no place read"):format(type(name) == "string" and name or "?"))
+	end
+	return ("Edit Mode: opened %d, closed %d · %s"):format(seen.enter, seen.exit, table.concat(parts, " · "))
+end
+M.Status = M.EditModeSaid
+
+-- the hooks, once: each Edit Mode frame's placing, and Edit Mode opening and
+-- closing (the client's EventRegistry callbacks, "EditMode.Enter" and
+-- "EditMode.Exit")
+local hookedFrames = {}
+function M.HookEditMode()
+	for key in pairs(M.EDIT_MODE) do
+		local f = M.EditModeFrame(key)
+		if f and not hookedFrames[f] and type(f.ApplySystemAnchor) == "function" and hooksecurefunc then
+			hookedFrames[f] = true
+			hooksecurefunc(f, "ApplySystemAnchor", function()
+				M.FollowEditMode()
+			end)
+		end
+	end
+	local reg = rawget(_G, "EventRegistry")
+	if not M.editModeHooked and type(reg) == "table" and type(reg.RegisterCallback) == "function" then
+		M.editModeHooked = true
+		pcall(reg.RegisterCallback, reg, "EditMode.Enter", M.EditModeEnter, M)
+		pcall(reg.RegisterCallback, reg, "EditMode.Exit", M.EditModeExit, M)
+	end
+	-- AND THE MANAGER'S OWN (Josh 2026-10-18: ours stayed up in Edit Mode, and
+	-- the game's player frame flashed, as if the registry's word never came):
+	-- its EnterEditMode and ExitEditMode, hooked, say the same
+	local mgr = rawget(_G, "EditModeManagerFrame")
+	if not M.managerHooked and type(mgr) == "table" and hooksecurefunc
+		and type(mgr.EnterEditMode) == "function" and type(mgr.ExitEditMode) == "function" then
+		M.managerHooked = true
+		hooksecurefunc(mgr, "EnterEditMode", function() M.EditModeEnter() end)
+		hooksecurefunc(mgr, "ExitEditMode", function() M.EditModeExit() end)
+	end
+	-- and a layout loaded or swapped: once the client has placed its frames
+	if not M.editModeEvents then
+		M.editModeEvents = CreateFrame("Frame")
+		pcall(M.editModeEvents.RegisterEvent, M.editModeEvents, "EDIT_MODE_LAYOUTS_UPDATED")
+		M.editModeEvents:SetScript("OnEvent", function()
+			if C_Timer and C_Timer.After then
+				C_Timer.After(0, M.FollowEditMode)
+			else
+				M.FollowEditMode()
+			end
+		end)
 	end
 end
 
@@ -643,7 +986,10 @@ function F.Stow(name)
 	if type(f) ~= "table" or not f.SetParent or f.bmStowed then
 		return false
 	end
-	hider = hider or CreateFrame("Frame")
+	-- UNDER UIPARENT, HIDDEN (2026-10-18, Edit Mode): a frame put away keeps
+	-- the scale it would have had, so where Edit Mode puts it reads true
+	-- (M.EditModeSpot); under a frame with no parent it lost UIParent's
+	hider = hider or CreateFrame("Frame", nil, UIParent)
 	hider:Hide()
 	local okP, home = pcall(f.GetParent, f)
 	f.bmHome = (okP and home ~= hider) and home or UIParent
@@ -660,6 +1006,14 @@ function F.Stow(name)
 	if hooksecurefunc and not f.bmHooked then
 		f.bmHooked = true
 		hooksecurefunc(f, "SetParent", function(self, parent)
+			-- NOT WHILE EDIT MODE IS OPEN: Edit Mode takes the frame out to be
+			-- moved. By our own word that it is open (M.EditModeEnter), not the
+			-- manager's IsEditModeActive (Josh 2026-10-18: "Default player frame
+			-- is now sitting on top of ours"): that stays true while Edit Mode
+			-- is only put aside for another panel, and kept the frame out after
+			if F.editMode then
+				return
+			end
 			if self.bmStowed and parent ~= hider then
 				later("restow" .. name, function()
 					if self.bmStowed then
@@ -669,6 +1023,21 @@ function F.Stow(name)
 			end
 		end)
 	end
+	return true
+end
+
+-- a frame meant to be away, under its hider again if something took it out
+-- (Edit Mode does); whether it was moved
+function F.Restow(name)
+	local f = _G[name]
+	if type(f) ~= "table" or not f.bmStowed or not hider then
+		return false
+	end
+	local ok, now = pcall(f.GetParent, f)
+	if ok and now == hider then
+		return false
+	end
+	pcall(f.SetParent, f, hider)
 	return true
 end
 
@@ -996,6 +1365,12 @@ local function tick()
 	-- stood here undid a light or medium fade four times a second
 	-- (the target's target too, 2026-10-17, audit: a paint fades it, and
 	-- skipped here its fade moved only when its unit did)
+	-- NOT WHILE EDIT MODE IS OPEN (Josh 2026-10-18: "The player frame is
+	-- turning on and off about 3 times per second"): this fade set ours back
+	-- in sight four times a second, and the paint put them out again
+	if F.editMode then
+		return
+	end
 	local far, groupFar = F.Far(false), F.Far(true)
 	for key, f in pairs(M.singles) do
 		if f:IsShown() then
@@ -1066,6 +1441,7 @@ function M.Apply()
 		M.Stow()
 		M.Sweep()
 		M.UpdateLooter()
+		M.HookEditMode()
 		M.ApplyScale()
 		M.PaintAll()
 	end)
@@ -1613,6 +1989,9 @@ function M.ApplyScale()
 		for _, h in pairs(M.holders) do set(h) end
 		set(M.cast)
 		for _, f in ipairs(M.previews or {}) do set(f) end
+		-- a block at its Edit Mode spot is placed in its own units, so placed
+		-- again at the new Size
+		M.FollowEditMode()
 	end)
 end
 

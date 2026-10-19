@@ -514,20 +514,34 @@ local function reachIcon()
 	return reach
 end
 
--- whether the target is there to measure: one you have, and the game is
--- drawing ("if target is nowhere to be seen")
-local function seen()
-	local ok, there = pcall(UnitExists or function() return false end, "target")
+-- whether `unit` is there to measure: one you have, and the game is drawing
+-- ("if target is nowhere to be seen")
+local function seen(unit)
+	local ok, there = pcall(UnitExists or function() return false end, unit)
 	if not (ok and not secret(there) and there) then
 		return false
 	end
 	if type(UnitIsVisible) == "function" then
-		local okV, v = pcall(UnitIsVisible, "target")
+		local okV, v = pcall(UnitIsVisible, unit)
 		if okV and not secret(v) and not v then
 			return false
 		end
 	end
 	return true
+end
+
+-- WHAT IS MEASURED: your target, or with none the enemy the game has soft-
+-- targeted (Josh 2026-10-18, on controllers: with one, the game picks the
+-- enemy in front of you, "softenemy", and your attacks go to it without a
+-- target of yours). The Expedition counts its kills the same way
+-- (Modules/Expedition/Kills.lua).
+function M.ReachUnit()
+	if seen("target") then
+		return "target"
+	elseif seen("softenemy") then
+		return "softenemy"
+	end
+	return nil
 end
 
 -- the icon and its colour for how near your target is; returns the band
@@ -539,9 +553,11 @@ function M.PaintReach()
 		return nil
 	end
 	local band, spell = nil, nil
-	if seen() and BT.Reach then
-		band, spell = BT.Reach.Band("target")
+	local unit = M.ReachUnit()
+	if unit and BT.Reach then
+		band, spell = BT.Reach.Band(unit)
 	end
+	f.unit = unit
 	f.spell = spell
 	local file = not secret(band) and M.REACH_ICONS[band] or M.REACH_ICON
 	if f.file ~= file then

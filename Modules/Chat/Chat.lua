@@ -661,8 +661,46 @@ end
 local FLUSH_INSET = 6
 M.FLUSH_INSET = FLUSH_INSET
 
+-- WHERE EDIT MODE PUTS IT, OR FLUSH IN THE CORNER (Josh 2026-10-18: "As soon
+-- as I move it in edit mode, the padding comes back. If I save it and close
+-- edit mode the padding is removed... but that is a bit jarring"). The window
+-- went into the corner whatever Edit Mode said, so a drag showed Edit Mode's
+-- place with its margin, and closing Edit Mode yanked it back. Now:
+--   never moved in Edit Mode       the corner, flush, as before
+--   left near the corner           the corner, flush, at once as it is let go
+--   left anywhere else             where it was left
+-- "Near" is within M.NEAR_CORNER of both the left and the bottom of the
+-- screen, in the window's own units.
+M.NEAR_CORNER = 60
+
+function M.WantsCorner(frame)
+	if type(frame.IsInDefaultPosition) ~= "function" then
+		-- (a client without Edit Mode: the corner)
+		return true
+	end
+	local ok, default = pcall(frame.IsInDefaultPosition, frame)
+	if not ok or default then
+		return true
+	end
+	local N = BT.Pill.Number
+	local left = N(frame.GetLeft and frame:GetLeft(), nil)
+	local bottom = N(frame.GetBottom and frame:GetBottom(), nil)
+	if not (left and bottom) then
+		return true
+	end
+	return left <= M.NEAR_CORNER and bottom <= M.NEAR_CORNER
+end
+
 function M.Corner(frame, plain)
 	if not (frame and frame.ClearAllPoints and frame.SetPoint) then
+		return false
+	end
+	if not plain and not M.WantsCorner(frame) then
+		-- left where Edit Mode put it; only the margin the clamp would keep
+		-- goes, so it can be dragged flush to any edge
+		if frame.SetClampRectInsets then
+			pcall(frame.SetClampRectInsets, frame, 0, 0, 0, 0)
+		end
 		return false
 	end
 	if plain then
@@ -1298,6 +1336,22 @@ function M.HookEditMode()
 		return false
 	end
 	M.editHooked = true
+	-- AS IT IS LET GO, AND AS EDIT MODE PLACES IT (M.WantsCorner): a drop near
+	-- the corner goes flush into it at once, while Edit Mode is still open,
+	-- rather than when it closes
+	local chat = _G.ChatFrame1
+	if chat and hooksecurefunc then
+		local function settle()
+			if BT.Enabled("chat") then
+				M.Corner(chat)
+			end
+		end
+		for _, fn in ipairs({ "OnDragStop", "ApplySystemAnchor" }) do
+			if type(chat[fn]) == "function" then
+				pcall(hooksecurefunc, chat, fn, settle)
+			end
+		end
+	end
 	manager:HookScript("OnHide", function()
 		if not BT.Enabled("chat") then
 			return

@@ -217,6 +217,7 @@ local function build()
 	box:SetClampedToScreen(true)
 	W.Panel(box, W.SOLID)
 	tinsert(UISpecialFrames, "BeebModCopyLink") -- escape closes it
+	BT.Gamepad.Watch(box) -- and a controller's D-pad reaches it
 
 	box.title = box:CreateFontString(nil, "OVERLAY", "BeebModFontNormal")
 	box.title:SetPoint("TOPLEFT", PAD + 2, -PAD)

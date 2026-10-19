@@ -5344,6 +5344,146 @@ if ok then
 			mod.ResetPlaces()
 			assert(BT.settings.unitframes.pos == nil, "reset forgets it")
 			assert(raidHolder._points.TOPLEFT.x == 24, "and puts the raid back where it started")
+
+			-- EDIT MODE DECIDES (Josh 2026-10-18: "I think we should respect edit
+			-- mode"): each block goes where Edit Mode puts the game's frame it
+			-- stands in for, by one corner, and follows it when it moves
+			do
+				local hadMgr, hadHook = rawget(_G, "EditModeManagerFrame"), _G.hooksecurefunc
+				local E = _G.Enum
+				local hadSystem, hadIndices = E.EditModeSystem, E.EditModeUnitFrameSystemIndices
+				_G.hooksecurefunc = function(obj, name, fn)
+					local orig = obj[name]
+					obj[name] = function(...)
+						local r = orig(...)
+						fn(...)
+						return r
+					end
+				end
+				-- the game's frames as Edit Mode left them, at a scale of 0.8
+				local function gameFrame(l, t, w, h)
+					return { l = l, t = t, w = w, h = h,
+						GetLeft = function(s) return s.l end, GetRight = function(s) return s.l + s.w end,
+						GetTop = function(s) return s.t end, GetBottom = function(s) return s.t - s.h end,
+						GetEffectiveScale = function() return 0.8 end,
+						ApplySystemAnchor = function() end }
+				end
+				local game = { [1] = gameFrame(400, 300, 230, 80), [2] = gameFrame(700, 300, 230, 80),
+					[5] = gameFrame(30, 600, 400, 300), [6] = gameFrame(1100, 700, 200, 300), cast = gameFrame(600, 150, 200, 20) }
+				E.EditModeSystem = { UnitFrame = 0, CastBar = 1 }
+				E.EditModeUnitFrameSystemIndices = { Player = 1, Target = 2, Focus = 3, Party = 4, Raid = 5, Boss = 6 }
+				_G.EditModeManagerFrame = { GetRegisteredSystemFrame = function(_, system, index)
+					if system == 1 then return game.cast end
+					return game[index]
+				end }
+				mod.HookEditMode()
+				mod.FollowEditMode()
+				local function at(f, corner)
+					local p = f._points[corner]
+					return p and p.rel == _G.UIParent and p.relPoint == "BOTTOMLEFT" and math.floor(p.x + 0.5) .. "," .. math.floor(p.y + 0.5) or "-"
+				end
+				assert(at(mod.Holder("party"), "TOPLEFT") == "339,225", "the party column, you at its top, where the player frame's art starts: " .. at(mod.Holder("party"), "TOPLEFT"))
+				assert(at(mod.singles.target, "TOPLEFT") == "578,225", "the target where the target frame's art starts")
+				assert(at(mod.Holder("raid"), "TOPLEFT") == "24,480", "the raid where the raid frames are")
+				assert(at(mod.Holder("boss"), "TOPRIGHT") == "1040,560", "the bosses by their top right")
+				assert(at(mod.Holder("cast"), "BOTTOM") == "560,104", "your cast bar by its bottom")
+				-- a frame moved in Edit Mode, or a layout swapped (a controller's):
+				-- ours follow
+				game[1].l = 500
+				game[1]:ApplySystemAnchor()
+				assert(at(mod.Holder("party"), "TOPLEFT") == "419,225", "the player frame moved, the party column with it")
+				-- NO RECT, BY ITS ANCHOR ("Raid frames are not tracking the edit
+				-- mode raid frames"): an empty raid has no size and no rect, and
+				-- hangs by its top left from the raid manager's top right
+				do
+					local manager = gameFrame(10, 650, 20, 100)
+					manager.GetEffectiveScale = function() return 0.8 end
+					local empty = { GetEffectiveScale = function() return 0.8 end,
+						GetPoint = function() return "TOPLEFT", manager, "TOPRIGHT", 0, -5 end,
+						ApplySystemAnchor = function() end }
+					local hadRaid = game[5]
+					game[5] = empty
+					mod.FollowEditMode()
+					assert(at(mod.Holder("raid"), "TOPLEFT") == "24,516",
+						"the empty raid placed from its anchor: " .. at(mod.Holder("raid"), "TOPLEFT"))
+					game[5] = hadRaid
+					-- ANY POINT ("Boss frames are also not respecting edit
+					-- mode"): the bosses hang by their right side; empty, every
+					-- corner is that one point
+					local screen = gameFrame(0, 960, 1600, 960)
+					local bosses = { GetEffectiveScale = function() return 0.8 end,
+						GetWidth = function() return 0 end, GetHeight = function() return 0 end,
+						GetPoint = function() return "RIGHT", screen, "RIGHT", -40, 10 end,
+						ApplySystemAnchor = function() end }
+					local hadBoss = game[6]
+					game[6] = bosses
+					mod.FollowEditMode()
+					assert(at(mod.Holder("boss"), "TOPRIGHT") == "1248,392",
+						"the bosses placed from their right side: " .. at(mod.Holder("boss"), "TOPRIGHT"))
+					game[6] = hadBoss
+					mod.FollowEditMode()
+				end
+				-- Shift-drag does not move what Edit Mode places
+				mod.Preview("party")
+				local handle
+				for _, f in ipairs(mod.previews) do
+					if f.bmHandle == "party" then handle = f end
+				end
+				_G.IsShiftKeyDown = function() return true end
+				handle:GetScript("OnDragStart")(handle)
+				assert(not mod.Holder("party").moving, "a Shift-drag on the party is sent to Edit Mode")
+				mod.Preview(nil)
+				-- Edit Mode open: the game's frames out to be dragged, ours unseen;
+				-- closed: the game's put away again, ours back
+				local stowed = _G.PlayerFrame and _G.PlayerFrame.bmStowed
+				mod.EditModeEnter()
+				assert(BT.UnitFrames.editMode and mod.singles.target._alpha == 0, "open: ours out of sight")
+				-- ("The player frame is turning on and off about 3 times per
+				-- second"): the range fade's tick leaves them so
+				mod.Tick()
+				assert(mod.singles.target._alpha == 0, "and kept so by the tick")
+				-- the dock under what Edit Mode moves ("the box to move them is
+				-- sitting under the dock so I cant move it"), faint, and back after
+				local D = BT.Dock
+				D.EditMode(true)
+				assert(_G.BeebModDock._strata == "BACKGROUND" and _G.BeebModDock._alpha == D.EDIT_MODE_ALPHA,
+					"the dock drops under Edit Mode's boxes and shows faintly: " .. tostring(_G.BeebModDock._strata))
+				D.EditMode(false)
+				assert(_G.BeebModDock._strata == "MEDIUM" and _G.BeebModDock._alpha == 1, "and comes back after")
+				assert(not stowed or not _G.PlayerFrame.bmStowed, "and the game's player frame out to be moved")
+				mod.EditModeExit()
+				assert(not BT.UnitFrames.editMode and mod.singles.target._alpha ~= 0, "closed: ours back")
+				assert(not stowed or _G.PlayerFrame.bmStowed, "and the game's put away again")
+				-- heard twice (the registry and the manager's own): done once
+				mod.EditModeEnter()
+				mod.EditModeEnter()
+				assert(not stowed or not _G.PlayerFrame.bmStowed, "opened twice: the game's frame still out")
+				mod.EditModeExit()
+				assert(not stowed or _G.PlayerFrame.bmStowed, "and put away once it closes")
+				-- NOT PUT BACK WHILE EDIT MODE IS OPEN ("The player frame is also
+				-- flashing in edit mode"), and put back when it closes even if its
+				-- opening went unheard
+				if stowed then
+					local home = _G.PlayerFrame.bmHome or _G.UIParent
+					BT.UnitFrames.editMode = true
+					_G.PlayerFrame:SetParent(home)
+					assert(_G.PlayerFrame:GetParent() == home, "Edit Mode takes it out, and it stays out while it is open")
+					mod.EditModeExit()
+					assert(_G.PlayerFrame:GetParent() ~= home, "and Edit Mode closed, it is put away again")
+					-- BY OUR OWN WORD, NOT THE MANAGER'S ("Default player frame is
+					-- now sitting on top of ours"): the manager says active while
+					-- Edit Mode is only put aside, and that kept it out after
+					_G.EditModeManagerFrame.IsEditModeActive = function() return true end
+					_G.PlayerFrame:SetParent(home)
+					assert(_G.PlayerFrame:GetParent() ~= home, "Edit Mode closed by our word: put straight back")
+				end
+				assert(mod.Status():find("Edit Mode: opened", 1, true), "What loaded says what Edit Mode was heard to do: " .. mod.Status())
+				_G.EditModeManagerFrame, _G.hooksecurefunc = hadMgr, hadHook
+				E.EditModeSystem, E.EditModeUnitFrameSystemIndices = hadSystem, hadIndices
+				mod.FollowEditMode()
+				mod.ResetPlaces()
+				assert(raidHolder._points.TOPLEFT.x == 24, "with no Edit Mode, a block goes where it starts")
+			end
 			-- the made-up target is not a block: a shift-drag on it moves nothing,
 			-- and does not fail looking for one (2026-09-23)
 			mod.Preview("party")
@@ -7539,6 +7679,50 @@ if ok then
 			assert(afterCancel and afterCancel.x == pad,
 				("closing it puts the corner back (%s)")
 					:format(tostring(afterCancel and afterCancel.x)))
+
+			-- WHERE EDIT MODE PUTS IT, OR FLUSH IN THE CORNER (Josh 2026-10-18:
+			-- "As soon as I move it in edit mode, the padding comes back... a
+			-- bit jarring"): moved in Edit Mode, the window stays where it was
+			-- left, unless that is near the corner, which it goes flush into at
+			-- once, as it is let go
+			do
+				local had = { f1.IsInDefaultPosition, f1.GetLeft, f1.GetBottom, f1.ApplySystemAnchor }
+				local x, y = 400, 300
+				f1.IsInDefaultPosition = function() return false end
+				f1.GetLeft = function() return x end
+				f1.GetBottom = function() return y end
+				f1:ClearAllPoints()
+				f1:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", x, y)
+				mod.StyleAll()
+				assert(f1._points.BOTTOMLEFT.x == 400, "moved far from the corner in Edit Mode: left there")
+				-- let go near the corner, while Edit Mode is open: flush at once
+				f1.ApplySystemAnchor = function() end
+				local hadHook = _G.hooksecurefunc
+				_G.hooksecurefunc = function(obj, name, fn)
+					local orig = obj[name]
+					obj[name] = function(...)
+						local r = orig(...)
+						fn(...)
+						return r
+					end
+				end
+				mod.editHooked = nil
+				mod.HookEditMode()
+				_G.hooksecurefunc = hadHook
+				x, y = 35, 40
+				f1:ClearAllPoints()
+				f1:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", x, y)
+				f1:ApplySystemAnchor()
+				assert(f1._points.BOTTOMLEFT.x == pad, "let go near the corner: flush into it at once")
+				-- never moved in Edit Mode: the corner, as ever
+				f1.IsInDefaultPosition = function() return true end
+				x, y = 400, 300
+				f1:ClearAllPoints()
+				f1:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", x, y)
+				mod.StyleAll()
+				assert(f1._points.BOTTOMLEFT.x == pad, "never moved in Edit Mode: the corner")
+				f1.IsInDefaultPosition, f1.GetLeft, f1.GetBottom, f1.ApplySystemAnchor = had[1], had[2], had[3], had[4]
+			end
 
 			-- and switching the module off gives the client everything back
 			mod:OnDisable()
@@ -10066,6 +10250,19 @@ if ok then
 			_G.UnitExists = function() return false end
 			_G.C_Spell.IsSpellInRange = function() error("nothing is asked without a target") end
 			assert(mod.PaintReach() == false and icon._alpha == mod.REACH_DIM, "dim without a target")
+			-- A CONTROLLER'S SOFT TARGET (Josh 2026-10-18, controller support):
+			-- with no target of yours, the enemy the game soft-targeted is
+			-- measured
+			local askedOf = nil
+			_G.UnitExists = function(unit) return unit == "softenemy" end
+			_G.C_Spell.IsSpellInRange = function(id, unit) askedOf = unit return answers[id] end
+			answers = { [75] = true, [2973] = false }
+			assert(mod.ReachUnit() == "softenemy" and mod.PaintReach() == "ranged" and askedOf == "softenemy",
+				"with only a soft target, it is the one measured")
+			-- and your own target comes first
+			_G.UnitExists = function(unit) return unit == "softenemy" or unit == "target" end
+			mod.PaintReach()
+			assert(mod.ReachUnit() == "target" and askedOf == "target", "your target before the soft one")
 			_G.UnitExists = wasExists
 			_G.C_Spell.IsSpellInRange = function(id) return answers[id] end
 			answers = { [75] = true, [2973] = false }
@@ -10079,6 +10276,57 @@ if ok then
 			_G.UnitClass, _G.C_Spell = wasClass, wasSpell
 			mod.Apply()
 			assert(not icon:IsShown(), "and with no display there is no icon")
+		end },
+		{ "BeebMod's windows tell a controller's navigation when they open and close", function()
+			-- (Josh 2026-10-18: "One thing I have not tested at all is
+			-- controller support"): the client's D-pad navigation reaches a
+			-- window that says it is open (Core/Gamepad.lua)
+			local G = BT.Gamepad
+			local had = { InputUtil = _G.InputUtil, GamepadMode = _G.GamepadMode, fight = _G.InCombatLockdown }
+			local shownList, hiddenList = {}, {}
+			local gamepad = true
+			local w = _G.CreateFrame("Frame", nil, _G.UIParent)
+			_G.InputUtil = { IsGamepadUIEnabled = function() return gamepad end }
+			_G.GamepadMode = { FrameControlsManager = {
+				-- (only the test's own window: the end of a fight tells of every
+				-- open window of ours)
+				FrameShown = function(_, f) if f == w then shownList[#shownList + 1] = f end end,
+				FrameHidden = function(_, f) if f == w then hiddenList[#hiddenList + 1] = f end end,
+			} }
+			w:Hide()
+			G.Watch(w)
+			-- (the stub keeps scripts but does not run them on Show and Hide)
+			local function open() w:Show() w:GetScript("OnShow")(w) end
+			local function close() w:Hide() w:GetScript("OnHide")(w) end
+			open()
+			assert(shownList[1] == w, "opened with a controller: the navigation is told")
+			close()
+			assert(hiddenList[1] == w, "and told when it closes")
+			-- in a fight: not told it opened; told it closed once the fight ends
+			local fighting = true
+			_G.InCombatLockdown = function() return fighting end
+			open()
+			assert(#shownList == 1, "opened in a fight: not told")
+			fighting = false
+			G.AfterFight()
+			assert(shownList[2] == w, "told when the fight ends, still open")
+			fighting = true
+			close()
+			assert(#hiddenList == 1, "closed in a fight: not told yet")
+			fighting = false
+			G.AfterFight()
+			assert(hiddenList[2] == w, "and told when it ends")
+			-- with the mouse and keyboard, nothing is told
+			gamepad = false
+			open()
+			close()
+			assert(#shownList == 2 and #hiddenList == 2, "without a controller, nothing")
+			_G.InputUtil, _G.GamepadMode, _G.InCombatLockdown = had.InputUtil, had.GamepadMode, had.fight
+			-- every window of ours is watched
+			for _, name in ipairs({ "BeebModWelcome", "BeebModWindow" }) do
+				local f = _G[name]
+				assert(f == nil or f:GetScript("OnShow") ~= nil, "a window of ours is watched: " .. name)
+			end
 		end },
 		{ "the compare tooltip does not wear a second border", function()
 			-- ZEROING THE COLOURS WAS NOT ENOUGH (Josh 2026-09-21). The

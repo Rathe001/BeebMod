@@ -670,6 +670,8 @@ function W.Build()
 
 	-- Escape puts it off to the next login rather than choosing for you
 	tinsert(UISpecialFrames, "BeebModWelcome")
+	-- the D-pad moves between its rows, switches and buttons (Core/Gamepad.lua)
+	BT.Gamepad.Watch(frame)
 	frame:Hide()
 	return frame
 end

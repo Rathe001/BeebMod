@@ -33,8 +33,10 @@ The **core** is what every feature would otherwise build for itself: the
 settings window, the dock's header, the look of a button and a pill, and
 **General**. General holds the colours of every panel, one Size for every
 panel (the dock, the frames, the buffs and the tooltips), and a Positions
-button that puts the dock, the unit frames, the bag windows and the character
-sheet back where they start. Shift-drag any of them to move it. The typeface
+button that puts the dock, the main tanks, the bag windows and the character
+sheet back where they start. Shift-drag any of them to move it. The other
+unit frames go where the game's Edit Mode puts the frames they replace: move
+those in Edit Mode, and BeebMod's follow. The typeface
 is Google Sans. The dock's logo and cog are always on screen. With the Dock
 off, or every feature off, they are all that BeebMod shows. Click the cog to
 get back to the settings.
@@ -72,7 +74,7 @@ in a fight until you point at it.
 
 | part | what it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The game's bag bar is hidden while the bag window or the Bags readout is on. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
+| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The game's bag bar is hidden while the bag window or the Bags readout is on. The chat window sits flush in the bottom-left corner. Move it in Edit Mode and it stays where you leave it; let go of it near the corner and it goes flush into it. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
 | **Character sheet** | Item level on every slot, and BeebMod's look. |
 | **Tooltips** | Unit tooltips rebuilt in BeebMod's look: the name and level, then small tags for what they are and what state they are in, then a row each for a quest objective, your kills of an enemy, and your note. Elites and rares get a gold or silver border. Item tooltips, and the Equipped tooltips beside them, are written again in the spell tooltips' look: the item's icon beside its name, its DPS or armor at the right with its item level (ilvl) under it, how it binds (BoE, BoP, Soulbound) and whether it is unique as small tags under its kind, a row of cells for its damage, speed and the level it needs, then its stats and effects as plain lines, and durability as a bar beside the sell price. A potion's cells say what it restores and its cooldown. An item with none of those has no cells. |
 | **Game menu**, **Dropdown menus** | The menu Escape opens, and every dropdown and right-click menu. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
@@ -211,6 +213,8 @@ lives in `Modules/Ledger`.
     Core/Reach.lua       how far your class's skills reach a unit, asked of the
                          game spell by spell, for the frames' fade and the
                          resource display's crosshair
+    Core/Gamepad.lua     tells the game's controller navigation when one of
+                         BeebMod's windows opens and closes
     Core/Furniture.lua   restyles the client's own frames by what each one is
     Modules/Ledger/      its own book of notes (Store.lua), tags, the Find tab
                          (Find.lua, in the Ledger's window), its entry in
@@ -289,6 +293,8 @@ lives in `Modules/Ledger`.
                          well as its colour
     Art/Rank/            the Art Deco corner and crest round an elite or rare
                          enemy's frame, gold or silver (scripts/make-rank.py)
+    Art/icon.tga         BeebMod's picture in the AddOn list
+                         (scripts/make-addon-icon.ps1)
     Art/crosshair.tga    the resource display's crosshair, white, tinted green,
                          red or dim (scripts/make-crosshair.py)
     Art/reach-melee.tga  its crossed swords and no-action sign, white, tinted

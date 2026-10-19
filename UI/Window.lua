@@ -1544,6 +1544,7 @@ function W.Build()
 	-- the theme's fill, nearly solid: see W.SOLID in UI/Widgets.lua
 	BT.Widgets.Panel(frame, BT.Widgets.SOLID)
 	tinsert(UISpecialFrames, "BeebModWindow") -- escape closes it
+	BT.Gamepad.Watch(frame) -- and a controller's D-pad moves through it
 
 	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
 	frame.title:SetPoint("TOPLEFT", PAD + 4, -PAD)

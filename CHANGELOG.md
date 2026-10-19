@@ -5,6 +5,32 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Unit frames follow Edit Mode.** Your party column (you at its top), the
+  target, the raid, the bosses and your cast bar sit where Edit Mode puts
+  the game's frames they replace. Move one in Edit Mode and BeebMod's
+  follows, and the game's controller layout moves them too. While Edit Mode
+  is open the game's frames show so you can drag them, and the dock drops
+  behind them and fades so it doesn't cover any. Shift-drag still moves the
+  main tanks.
+
+- **The chat window respects Edit Mode.** Moved in Edit Mode, it stays
+  where you leave it. Let go of it near the bottom-left corner and it goes
+  flush into the corner straight away, so there's no gap while Edit Mode
+  is open and no jump when it closes. A window never moved in Edit Mode
+  sits in the corner as before.
+
+- **BeebMod has an icon in the AddOn list,** a blue B, where it showed a
+  question mark.
+
+- **Controllers.** BeebMod's windows (the first-login window, the settings,
+  the Ledger and the Expedition, the chat reader and the link box) tell the
+  game when they open and close, so a controller's D-pad can move through
+  their buttons, as it does in the game's own windows. The resource
+  display's icon measures the enemy the game soft-targets for a controller
+  when you have no target of your own.
+
 ## 0.1.0-beta.29
 
 - **A note can't be lost from Find people.** Someone you wrote on, found

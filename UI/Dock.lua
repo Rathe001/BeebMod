@@ -861,6 +861,8 @@ function B.Relayout()
 	if not dock then
 		return
 	end
+	-- (Edit Mode's hooks, if they could not be made when the dock was built)
+	B.WatchEditMode()
 	-- the modules in your order, worked out once for the sections, the
 	-- readouts and the stack
 	local rank = moduleRank()
@@ -1211,6 +1213,7 @@ function B.Create()
 	dock:SetMovable(true)
 	dock:EnableMouse(true)
 	B.WatchFade()
+	B.WatchEditMode()
 	dock:RegisterForDrag("LeftButton")
 	dock:RegisterForClicks("AnyUp")
 	dock:SetClampedToScreen(true)
@@ -1498,11 +1501,49 @@ function B.Fade()
 	end
 	local fighting = InCombatLockdown and InCombatLockdown()
 	local a = 1
-	if fighting and not (dock.IsMouseOver and dock:IsMouseOver()) then
+	if B.editMode then
+		a = B.EDIT_MODE_ALPHA
+	elseif fighting and not (dock.IsMouseOver and dock:IsMouseOver()) then
 		a = B.FadeLevel()
 	end
 	dock:SetAlpha(a)
 	return a
+end
+
+-- UNDER WHAT EDIT MODE MOVES (Josh 2026-10-18: the boss frames' "box to move
+-- them is sitting under the dock so I cant move it"). While Edit Mode is open
+-- the dock drops beneath everything and shows faintly: the boxes Edit Mode
+-- draws over the game's frames can be grabbed where the dock is, and the dock
+-- can still be seen to place things beside. Heard from the client's
+-- EventRegistry ("EditMode.Enter", "EditMode.Exit") and from the manager's
+-- own EnterEditMode and ExitEditMode, as the unit frames hear it.
+B.EDIT_MODE_ALPHA = 0.35
+
+function B.EditMode(on)
+	B.editMode = on and true or false
+	if dock then
+		dock:SetFrameStrata(B.editMode and "BACKGROUND" or "MEDIUM")
+		B.Fade()
+	end
+	return B.editMode
+end
+
+-- each hook once, and the ones not there yet tried again next time (the
+-- dock is built at login, and asked again as it is laid out)
+function B.WatchEditMode()
+	local reg = rawget(_G, "EventRegistry")
+	if not B.editModeHeard and type(reg) == "table" and type(reg.RegisterCallback) == "function" then
+		B.editModeHeard = true
+		pcall(reg.RegisterCallback, reg, "EditMode.Enter", function() B.EditMode(true) end, B)
+		pcall(reg.RegisterCallback, reg, "EditMode.Exit", function() B.EditMode(false) end, B)
+	end
+	local mgr = rawget(_G, "EditModeManagerFrame")
+	if not B.editModeHooked and type(mgr) == "table" and hooksecurefunc and type(mgr.EnterEditMode) == "function"
+		and type(mgr.ExitEditMode) == "function" then
+		B.editModeHooked = true
+		hooksecurefunc(mgr, "EnterEditMode", function() B.EditMode(true) end)
+		hooksecurefunc(mgr, "ExitEditMode", function() B.EditMode(false) end)
+	end
 end
 
 function B.WatchFade()

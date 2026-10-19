@@ -56,6 +56,7 @@ function R.Build()
 	frame:SetClampedToScreen(true)
 	W.Panel(frame, W.SOLID)
 	tinsert(UISpecialFrames, "BeebModChatReader") -- escape closes it
+	BT.Gamepad.Watch(frame) -- and a controller's D-pad moves through it
 
 	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontNormalLarge")
 	frame.title:SetPoint("TOPLEFT", PAD + 4, -PAD)

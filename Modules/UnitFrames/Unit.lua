@@ -1622,6 +1622,13 @@ end
 -- range and target, which may be secret: onto alpha, never tested
 local function paintRange(b, src)
 	local k = b.bmSpec
+	-- OUT OF SIGHT WHILE EDIT MODE IS OPEN: the game's own frames are what
+	-- is dragged there, and ours go where they are left
+	-- (Modules/UnitFrames/UnitFrames.lua, M.EditModeEnter)
+	if F.editMode and not k.plate then
+		b:SetAlpha(0)
+		return
+	end
 	if k.group then
 		alphaFrom(b, src:InRange(), 1, F.Far(true))
 		b.outline:Show()

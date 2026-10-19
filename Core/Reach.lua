@@ -420,9 +420,14 @@ watch:RegisterEvent("ADDON_ACTION_BLOCKED")
 watch:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 watch:RegisterEvent("PLAYER_TARGET_CHANGED")
 watch:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+-- (the enemy a controller soft-targets: Modules/ResourceDisplay, M.ReachUnit)
+pcall(watch.RegisterEvent, watch, "PLAYER_SOFT_ENEMY_CHANGED")
 watch:SetScript("OnEvent", function(_, event, addon, func)
 	if event == "PLAYER_TARGET_CHANGED" then
 		R.last.target = nil
+		return
+	elseif event == "PLAYER_SOFT_ENEMY_CHANGED" then
+		R.last.softenemy = nil
 		return
 	elseif event == "ACTIONBAR_SLOT_CHANGED" then
 		-- the Attack button may have moved (R.AttackSlot)

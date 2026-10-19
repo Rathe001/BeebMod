@@ -5,6 +5,8 @@
 ## Title: BeebMod
 ## Notes: Small utilities for WoW: Forever, set from one window and one button.
 ## Author: Josh
+# the picture in the AddOn list, in place of a "?" (scripts/make-addon-icon.ps1)
+## IconTexture: Interface\AddOns\BeebMod\Art\icon
 ## Version: 0.1.0-beta.29
 ## X-Curse-Project-ID: 1711982
 # ONE VARIABLE IN USE, TWO KEPT FOR READING (Josh 2026-09-20; 2026-10-17,
@@ -32,6 +34,7 @@ Core\Session.lua
 Core\Fonts.lua
 Core\Blocked.lua
 Core\Reach.lua
+Core\Gamepad.lua
 Core\Pack.lua
 Core\DB.lua
 Core\Tooltip.lua

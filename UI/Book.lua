@@ -160,6 +160,7 @@ function Bk.Window(spec)
 	if spec.name then
 		tinsert(UISpecialFrames, spec.name) -- escape closes it
 	end
+	BT.Gamepad.Watch(f) -- and a controller's D-pad moves through it
 	f.spec = spec
 	local c = spec.colour or { 1, 1, 1 }
 
