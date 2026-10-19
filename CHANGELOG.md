@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.31
 
 - **Plainer wording.** The settings, the first-login window, the dock's
   tooltips and both journals were reworded to lead with the thing, in the
