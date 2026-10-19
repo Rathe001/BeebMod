@@ -890,7 +890,7 @@ end
 
 function M:DockRow()
 	return {
-		label = "Expedition", blurb = "From the Expedition: your points and rank", field = "expeditionLine",
+		label = "Expedition", blurb = "Your rank and points", field = "expeditionLine",
 		get = function() return M.LineOn() end,
 		set = function(v)
 			BT.EnsureBound()

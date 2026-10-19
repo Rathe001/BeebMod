@@ -42,7 +42,7 @@ BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-10-18-edit-mode-restow"
+BT.BUILD = "2026-10-18-tone-pass"
 
 -- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
 -- to disable it in production builds so normal users don't see it?"). The
@@ -319,11 +319,11 @@ end
 -- frames.
 BT.FEATURES = {
 	{ key = "dock", title = "Dock", group = "interface", color = { 0.45, 0.75, 0.99 },
-		blurb = "Your map, experience, quests and readouts, in a panel at the side of the screen" },
+		blurb = "A panel at the side of your screen with your minimap, XP, quests and stats" },
 	{ key = "unitframes", title = "Unit frames", group = "interface", color = { 0.49, 0.77, 0.48 },
-		blurb = "Frames for you, your group and your target, and nameplates" },
+		blurb = "Player, party, target and raid frames, plus nameplates" },
 	{ key = "interface", title = "Game frames", group = "interface", color = { 0.88, 0.64, 0.29 },
-		blurb = "The game's own bars, bags, chat, tooltips and menus, drawn to match" },
+		blurb = "The game's own bars, bags, chat and tooltips, restyled to match" },
 	-- THE RAVENHOLDT LEDGER (Josh 2026-10-05: "I don't think we can use the
 	-- whole 'debt collector' theme, because we aren't actually collecting any
 	-- gold. Is there something we could use that would be more of the 'big
@@ -335,7 +335,7 @@ BT.FEATURES = {
 	-- the Alliance's blue nor the Horde's red.
 	{ key = "ledger", title = "Ravenholdt Ledger", short = "Ledger", group = "journals", color = { 0.61, 0.50, 0.82 },
 		single = "ledger",
-		blurb = "Everyone you see on your realm, and your notes, tags and ratings on them" },
+		blurb = "A record of every player you meet" },
 	-- NESINGWARY'S EXPEDITION (Josh 2026-09-27: "make the player feel like
 	-- they are part of the nesingwary expidition"). Its key, module, files and
 	-- saved journal took the name too on 2026-09-29 (Core/Rename.lua).
@@ -344,7 +344,7 @@ BT.FEATURES = {
 	-- it over in The Burning Crusade.
 	{ key = "expedition", title = "Nesingwary's Expedition", short = "Expedition", group = "journals",
 		color = { 0.44, 0.64, 0.80 }, single = "expedition",
-		blurb = "A journal of every enemy you kill, with points and ranks" },
+		blurb = "A journal of every enemy you kill" },
 }
 local featureByKey = {}
 for _, f in ipairs(BT.FEATURES) do
@@ -859,8 +859,8 @@ function BT.DropBeta(realm)
 	-- SAID, ONCE (2026-10-17, audit): a player's copy has no Testing page,
 	-- and the journals came up empty at launch with no word why
 	if BT.Util and BT.Util.Print then
-		BT.Util.Print("Cleared the census, Ledger, Expedition and character records from the beta realms, "
-			.. "for the launch. Your settings and the tags you made are kept.")
+		BT.Util.Print("Cleared the Ledger, Expedition and character records from the beta realms. "
+			.. "Your settings and tags stay.")
 	end
 	return out
 end

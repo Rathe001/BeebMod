@@ -179,7 +179,7 @@ function M.Tip()
 		if not moved then
 			t:Note("No money in or out yet this session.")
 		else
-			t:Note(("%s%s this session, in %s."):format(net >= 0 and "+" or "-", M.Coins(math.abs(net)), duration(long)),
+			t:Note(("%s%s in %s this session."):format(net >= 0 and "+" or "-", M.Coins(math.abs(net)), duration(long)),
 				net >= 0 and "good" or "bad")
 			t:Section("This session")
 			t:Row("Earned", M.Coins(s.earned or 0))

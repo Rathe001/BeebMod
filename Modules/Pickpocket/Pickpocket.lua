@@ -284,13 +284,13 @@ function M.Tip()
 	end
 	local s = M.session
 	BT.Tip.Show(M.chip, { build = function(t)
-		t:Header({ icon = POUCH, name = "Pick Pocket", sub = "Coin and loot, at vendor prices" })
+		t:Header({ icon = POUCH, name = "Pick Pocket", sub = "Coin and loot at vendor prices" })
 		local sc, si = M.Worth(s)
 		local picks = s and s.picks or 0
 		-- COMMAS FROM 1,000 (2026-10-17, audit): 1,234 pockets read "1234"
 		if picks > 0 then
 			t:Headline(coins(sc + si))
-			t:Note(("This session, from %s %s. Average %s a pocket."):format(U.Commas(picks),
+			t:Note(("From %s %s this session. Average %s a pocket."):format(U.Commas(picks),
 				picks == 1 and "pocket" or "pockets", coins(math.floor((sc + si) / picks))))
 		else
 			t:Headline(coins(0))

@@ -46,7 +46,7 @@ function M:Parts()
 			get = tipGet, set = tipSet, field = "tooltip" },
 		{ label = "People you grouped with", blurb = "Counts a group after 5 minutes together, or in a dungeon",
 			get = groupGet, set = groupSet, field = "ledgerGroups" },
-		{ label = "Duel scores", blurb = "The duels you win and lose against each player",
+		{ label = "Duel scores", blurb = "Your duel record against each player",
 			get = duelGet, set = duelSet, field = "ledgerDuels" },
 	}
 end

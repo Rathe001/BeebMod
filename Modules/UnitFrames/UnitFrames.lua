@@ -215,7 +215,7 @@ function M.Handle(f, key)
 		end
 		-- a block that goes where Edit Mode says is moved there (M.EDIT_MODE)
 		if M.FollowsEditMode(self.bmHandle) then
-			U.Print("Unit frames: move them in Edit Mode. BeebMod's go where the game's would.")
+			U.Print("Unit frames: move the default frames in Edit Mode. BeebMod's frames go wherever those go.")
 			return
 		end
 		if inCombat() then

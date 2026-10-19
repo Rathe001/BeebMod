@@ -1370,7 +1370,7 @@ function B.Build(parent, shell)
 		end)
 	end)
 	searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
-	local prompt = label(bar, "Name, guild, or a word you wrote", "small", 0.42, 0.47, 0.45)
+	local prompt = label(bar, "Name, guild or a word you wrote", "small", 0.42, 0.47, 0.45)
 	prompt:SetPoint("LEFT", searchBox, "RIGHT", 10, 0)
 
 	-- the questions you actually ask, on the rail: who did I write about, and

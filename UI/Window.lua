@@ -209,13 +209,13 @@ end
 -- none here has no row of its own (the Ledger and the Expedition: their
 -- switch is the feature's, and their parts are their own `Parts`).
 W.LABELS = {
-	clock = { "Clock", "In the header. Click it for local or server time." },
-	minimap = { "Minimap", "The game's minimap, square" },
-	buttons = { "Addon buttons", "Other addons' minimap buttons, in a line" },
-	xp = { "Experience", "Your XP bar and time to level" },
-	pvp = { "PvP", "Your PvP rank, and how far to the next" },
+	clock = { "Clock", "In the header. Click for local or server time." },
+	minimap = { "Minimap", "Square minimap with coordinates" },
+	buttons = { "Addon buttons", "Other addons' minimap buttons in one row" },
+	xp = { "Experience", "XP bar with time to level" },
+	pvp = { "PvP", "Your PvP rank and progress to the next" },
 	rep = { "Reputation", "Your standing with the faction you watch" },
-	metrics = { "Metrics", "Small readouts, three to a row" },
+	metrics = { "Metrics", "Small stats in rows of three" },
 	currency = { "Gold" },
 	bags = { "Bags" },
 	durability = { "Durability" },
@@ -223,21 +223,22 @@ W.LABELS = {
 	pickpocket = { "Pick Pocket" },
 	speed = { "Movement speed" },
 	performance = { "Performance" },
-	tracker = { "Quest tracker", "The quests you track, lowest level first" },
+	tracker = { "Quest tracker", "Tracked quests grouped by zone" },
 	micro = { "Micro menu", "The game's menu buttons" },
-	unitframes = { "Unit frames", "You, your target, focus and target of target" },
-	buffs = { "Buffs", "Your buffs and debuffs, in a tray beside the dock" },
-	nameplates = { "Nameplates", "Enemies with your damage over time. Needs the game's nameplates on." },
-	resourcedisplay = { "Resource display", "Flat bars and combo points on the game's Personal Resource Display" },
-	damagemeter = { "Damage meter", "The game's own meter, flat, with figures per second" },
-	bars = { "Action bars", "Flat buttons with their hotkeys" },
-	bagwindow = { "Bag window", "Flat bags, quality rings, and bag slots along the bottom" },
-	charsheet = { "Character sheet", "Item level on every slot you wear" },
-	chat = { "Chat", "Flat windows, short channel names and links you can copy" },
-	tooltips = { "Tooltips", "Tags on players and NPCs, and an icon on items, spells and buffs" },
+	unitframes = { "Unit frames", "Player, target, focus and target of target frames" },
+	buffs = { "Buffs", "Buff and debuff tray next to the dock" },
+	nameplates = { "Nameplates", "Enemy nameplates with your DoTs and casts you should interrupt. "
+		.. "Needs the game's nameplates on." },
+	resourcedisplay = { "Resource display", "Personal resource bar with combo points and a range icon" },
+	damagemeter = { "Damage meter", "The game's damage meter with per-second numbers" },
+	bars = { "Action bars", "Restyled buttons with their hotkeys" },
+	bagwindow = { "Bag window", "All bags in one window, with bag slots along the bottom" },
+	charsheet = { "Character sheet", "Item level on every slot" },
+	chat = { "Chat", "Restyled windows with short channel names and clickable links" },
+	tooltips = { "Tooltips", "Tags on players and NPCs. DPS on items and spells." },
 	gamemenu = { "Game menu", "The menu Escape opens" },
 	dropdowns = { "Dropdown menus", "Dropdown and right-click menus" },
-	census = { "Record everyone you see", "Class, race, level, guild and zone of each player, for the charts" },
+	census = { "Record everyone you see", "Saves each player's class, race, level, guild and zone for the charts" },
 }
 
 -- the modules on a page, in the page's order (the Dock's is the dock's own,
@@ -255,7 +256,7 @@ W.OPTIONS = {
 	dock = function()
 		return {
 			-- FADED IN COMBAT, ONE WAY (the audit: "One switch, 70%")
-			{ label = "Fade in combat", blurb = "Shows again when you point at it",
+			{ label = "Fade in combat", blurb = "Shows again on mouseover",
 				get = function() return BT.Dock.FadeLevel() < 1 end,
 				set = function(on) BT.Dock.SetFade(on and "soft" or "off") end },
 		}
@@ -269,10 +270,10 @@ W.OPEN = {
 			-- the charts are the census's: without it, Open went to Find people
 			-- (UI/CensusWindow.lua), so the row is dimmed and its button off
 			-- (2026-10-17, audit)
-			{ label = "Charts", blurb = "Who is on your realm, by class, race, level and guild", button = "Open",
+			{ label = "Charts", blurb = "Your realm by class, race, level, guild and zone", button = "Open",
 				needs = function() return BT.GetModule("census") ~= nil and BT.Enabled("census") end,
 				run = function() return BT.CensusWindow and BT.CensusWindow.Show("charts") end },
-			{ label = "Find people", blurb = "By name, guild or a word you wrote", button = "Open",
+			{ label = "Find people", blurb = "Search by name, guild or anything you wrote in a note", button = "Open",
 				run = function() return BT.CensusWindow and BT.CensusWindow.Show("find") end },
 		}
 	end,
@@ -290,9 +291,9 @@ W.FOOT = {
 	-- Warcraft Wiki's sentences, so CC BY-SA 3.0 asks for the source and the
 	-- licence to be named - here, not under every enemy
 	expedition = {
-		"The journal's descriptions come from the Warcraft Wiki (warcraft.wiki.gg), some of them rewritten, "
-			.. "under the CC BY-SA 3.0 licence.",
-		"An enemy's abilities come from the VMaNGOS database (github.com/vmangos), under the GPL 2.0 licence.",
+		"Enemy lore comes from the Warcraft Wiki (warcraft.wiki.gg) under the CC BY-SA 3.0 licence. "
+			.. "Some of it is rewritten.",
+		"Enemy abilities come from the VMaNGOS database (github.com/vmangos) under the GPL 2.0 licence.",
 	},
 }
 
@@ -1100,7 +1101,7 @@ local function hayOf(r)
 		local spec = r.spec or {}
 		local extra = (not spec.head) and W.SEARCH_WORDS[spec.label or ""] or ""
 		-- a feature's own switch by its name only (2026-10-05, audit): its line,
-		-- "The whole feature, on or off", is every feature's, and "off" or
+		-- "Switches the whole feature on or off", is every feature's, and "off" or
 		-- "feature" brought every page into the results
 		local blurb = (not spec.head) and spec.blurb or ""
 		local text = table.concat({ spec.label or "", blurb, spec.words or "", extra }, " ")
@@ -1127,7 +1128,7 @@ local function searchFeature(panel, st, fkey)
 	local sec = st:Section(f.title)
 	local first = #panel.rows + 1
 	local head = addRow(panel, sec, {
-		label = f.title, blurb = "The whole feature, on or off", head = true, words = f.short,
+		label = f.title, blurb = "Switches the whole feature on or off", head = true, words = f.short,
 		get = function() return W.TabOn(fkey) end,
 		set = function(on) BT.SetFeature(fkey, on) end,
 	}, 0)

@@ -5,6 +5,16 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **Plainer wording.** The settings, the first-login window, the dock's
+  tooltips and both journals were reworded to lead with the thing, in the
+  words players use. "Square minimap with coordinates" replaces "The game's
+  minimap, square". "FPS and latency" replaces "Frame rate and latency".
+
+- **The census charts** say "Race unknown for 70" under their bars, where
+  they said "70 with no race on file".
+
 ## 0.1.0-beta.30
 
 - **Unit frames follow Edit Mode.** Your party column (you at its top), the

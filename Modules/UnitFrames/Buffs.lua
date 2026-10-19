@@ -769,7 +769,7 @@ function M:OnEnable()
 		if not M.failed then
 			M.failed = tostring(err)
 			BT.Err("buffs: " .. M.failed)
-			U.Print("Buffs: BeebMod couldn't make the buff tray, so the game's own buffs stay.")
+			U.Print("Buffs: BeebMod couldn't make the buff tray. The default buffs stay.")
 		end
 		return
 	end

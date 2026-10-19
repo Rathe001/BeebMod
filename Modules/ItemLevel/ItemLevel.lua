@@ -172,7 +172,7 @@ function M.Tip()
 	end
 	local d = M.Read()
 	BT.Tip.Show(M.chip, { build = function(t)
-		t:Header({ name = "Item level", sub = "All 17 slots, a two-hander counted twice" })
+		t:Header({ name = "Item level", sub = "All 17 slots. Two-handers count twice." })
 		t:Headline(d.avg and ("%.1f"):format(d.avg) or "-", "average")
 		local worn = {}
 		for _, item in ipairs(d.items) do

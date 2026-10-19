@@ -353,8 +353,8 @@ function ST.Paint(page, m)
 			page.reset:Hide()
 		end
 		if page.hint then
-			page.hint:SetText(("Killed in a %s, which has no map."):format(J.InstanceOf(m) == "raid" and "raid"
-				or "dungeon"))
+			page.hint:SetText(J.InstanceOf(m) == "raid" and "Killed in a raid. Raids have no map."
+				or "Killed in a dungeon. Dungeons have no map.")
 		end
 		return "screen"
 	end

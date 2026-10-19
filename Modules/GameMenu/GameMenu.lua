@@ -288,7 +288,7 @@ function M.DressNow(frame)
 						-- loaded on the Testing page prints
 						M.failed = tostring(dressed)
 						BT.Err("gamemenu: " .. M.failed)
-						U.Print("Game menu: BeebMod couldn't redraw a button, so it keeps the game's look.")
+						U.Print("Game menu: one button keeps the default look. BeebMod couldn't restyle it.")
 					end
 				else
 					walk(child, depth + 1)

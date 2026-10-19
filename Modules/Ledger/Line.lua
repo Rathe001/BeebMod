@@ -360,7 +360,7 @@ end
 -- ITS LINE IN THE DOCK, switched and dragged on the Dock's page
 function M:DockRow()
 	return {
-		label = "Ledger", blurb = "From the Ledger: your points and rank", field = "ledgerLine",
+		label = "Ledger", blurb = "Your rank and points", field = "ledgerLine",
 		get = function() return M.LineOn() end,
 		set = function(v)
 			BT.EnsureBound()

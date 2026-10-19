@@ -84,7 +84,7 @@ function BT.AddTag(label, colorIndex, key)
 		end
 	end
 	if #(BT.settings.tags or {}) >= 12 then
-		return nil, "you have 12 tags, the most the panel can show."
+		return nil, "you can make 12 tags at most."
 	end
 	local pick = BT.TAG_COLORS[tonumber(colorIndex) or (#(BT.settings.tags or {}) % #BT.TAG_COLORS + 1)]
 		or BT.TAG_COLORS[1]

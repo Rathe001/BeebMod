@@ -203,7 +203,7 @@ function M.Tip(owner)
 		local ws = world and TIP_STATE[M.MsState(world) or ""]
 		local worst = (fs == "bad" or hs == "bad" or ws == "bad") and "bad"
 			or ((fs or hs or ws) and "warn" or "good")
-		t:Header({ name = "Performance", sub = "Frame rate and latency",
+		t:Header({ name = "Performance", sub = "FPS and latency",
 			pill = worst == "bad" and "Slow" or (worst == "warn" and "Uneven" or "Smooth"), pillState = worst })
 		-- each figure in its line's colour, red when it is bad: the key to
 		-- the graph under them (Josh 2026-09-29: the graph in the tooltip)
@@ -216,7 +216,7 @@ function M.Tip(owner)
 			{ world or "-", "world ms", tone(ws, "world") },
 		})
 		t:Graph(M.Series(), 40)
-		t:Note(("Last 2 minutes. Home is chat and the auction house. World is combat. "
+		t:Note(("Last 2 minutes. Home latency is chat and the auction house. World latency is combat. "
 			.. "Above about %d ms, casts and swings feel late."):format(M.LATE))
 	end })
 end

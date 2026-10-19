@@ -381,17 +381,19 @@ function J.LoreLine(m)
 	else
 		what = kind:lower()
 	end
+	-- the level before the kind, not hung off the end: "A level 6 fox of
+	-- Zephras Isle." (2026-10-18, the tone pass)
+	if m.lo then
+		what = ("level %d %s"):format(m.lo, what)
+	elseif m.skull then
+		what = "level ?? " .. what
+	end
 	local article = what:match("^[aeiou]") and "An" or "A"
 	local out = ("%s %s"):format(article, what)
 	if m.zone then
 		-- "of" after a kind, "on" after no kind: "a creature of no known kind
 		-- of Zephras Isle" read twice over
 		out = out .. (kind == J.UNTYPED and not m.family and " in " or " of ") .. m.zone
-	end
-	if m.lo then
-		out = out .. (", level %d"):format(m.lo)
-	elseif m.skull then
-		out = out .. ", level ??"
 	end
 	return out .. "."
 end
@@ -1545,7 +1547,7 @@ function J.List(st)
 	}
 	out[#out + 1] = {
 		id = "feat:skull", group = "world", title = "Skull and Bones", points = 25, need = 1,
-		have = st.feats.skull and 1 or 0, text = "Kill an enemy whose level shows as a skull",
+		have = st.feats.skull and 1 or 0, text = "Kill a skull-level enemy",
 	}
 	return out
 end

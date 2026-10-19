@@ -304,7 +304,7 @@ function C.Build(parent, shell)
 			if BT.Tip and self.n then
 				BT.Tip.Show(self, { near = true, build = function(t)
 					t:Header({ name = self.name:GetText(), sub = U.Commas(self.n) })
-					t:Note(("%d%% of these %s."):format(self.share or 0, U.Commas(self.of or 0)))
+					t:Note(("%d%% of the %s in this chart."):format(self.share or 0, U.Commas(self.of or 0)))
 					if self.pickable then
 						t:Foot({ { "Click", self.picked and "show everyone" or "show only these" } })
 					end
@@ -649,7 +649,7 @@ function C.Refresh(view, census)
 	view.note:SetPoint("TOPRIGHT", view, "TOPRIGHT", -4, bottom)
 	local unknown = census.unknown and census.unknown[view.mode] or 0
 	view.note:SetText(unknown > 0 and C.NOTE[view.mode]
-		and ("%s with no %s on file"):format(U.Commas(unknown), C.NOTE[view.mode]) or "")
+		and ("%s unknown for %s"):format(C.NOTE[view.mode], U.Commas(unknown)) or "")
 	view.height = -bottom + 16
 	if view.onHeight then
 		view.onHeight(view.height)
@@ -682,8 +682,9 @@ function C.PaintModes(view)
 	end
 end
 
--- what the line under the bars calls a chart's gap in the book
-C.NOTE = { class = "class", race = "race", level = "level", guild = "guild", zone = "zone" }
+-- what the line under the bars calls a chart's gap in the book: "Race
+-- unknown for 70", so the guild chart's gap is not read as its No guild row
+C.NOTE = { class = "Class", race = "Race", level = "Level", guild = "Guild", zone = "Zone" }
 
 -- the tiles, from the census: its count, both splits, and the level columns
 function C.PaintTiles(view, census)

@@ -136,8 +136,8 @@ function M.Tip()
 		t:Header({ name = "Clock", sub = day and (day:gsub(" 0", " ")) or nil })
 		local which = M.Which()
 		t:Stats({
-			{ M.Text("local"), which == "local" and "local, in the header" or "local", nil, which == "local" },
-			{ M.Text("server"), which == "server" and "server, in the header" or "server", nil, which == "server" },
+			{ M.Text("local"), "local", nil, which == "local" },
+			{ M.Text("server"), "server", nil, which == "server" },
 		}, 16)
 		local s = M.session
 		if s and s.start then

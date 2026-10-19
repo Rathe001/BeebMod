@@ -518,7 +518,7 @@ function M.Tip()
 				t:Scale(("Next rank: %s"):format(p.nextName))
 			end
 		elseif p.nextName then
-			t:Headline(math.floor(p.progress * 100) .. "%", ("of the way to %s"):format(p.nextName))
+			t:Headline(math.floor(p.progress * 100) .. "%", ("to %s"):format(p.nextName))
 			t:Bar(p.progress, c)
 		else
 			t:Headline(p.name or "PvP", nil, c, true)
@@ -532,7 +532,7 @@ function M.Tip()
 		if p.last and p.last.hk then
 			t:ListRow("Last week", big(p.last.hk))
 		end
-		t:ListRow("In all", big(p.life.hk))
+		t:ListRow("All time", big(p.life.hk))
 		if p.week and p.week.honor then
 			t:Section("Honor")
 			t:ListRow("Today", big(p.today.honor))

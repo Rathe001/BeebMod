@@ -83,7 +83,7 @@ function S.Build(parent)
 		S.SetScale(S.Scale() + dir * S.SCALE_STEP)
 		S.Refresh()
 	end))
-	local where = W.Row(place, "Positions", "Shift-drag the dock, frames and bag windows to move them")
+	local where = W.Row(place, "Positions", "Shift-drag the dock, bags, main tanks and character sheet to move them")
 	S.resetButton = where:SetControl(W.Button(where, "Reset", 70, 20))
 	S.resetButton:SetScript("OnClick", function()
 		S.ResetPositions()
@@ -268,7 +268,7 @@ function S.ResetPositions()
 			pcall(reset)
 		end
 	end
-	BT.Util.Print("Positions: the dock, the unit frames, the bag windows and the character sheet are back where they start.")
+	BT.Util.Print("Positions: the dock, unit frames, bags and character sheet are back where they started.")
 end
 
 -- the tests want the rows without going through frames

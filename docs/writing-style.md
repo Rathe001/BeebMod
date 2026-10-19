@@ -90,6 +90,35 @@ enough to have an effect? Could I put it more shortly?
     hints drop "the" and "it": "Click: open journal", not "Click: open the
     journal"; "Shift-click: untrack", not "stop tracking it".
 
+## Tone: like an addon page
+
+`docs/curseforge.md` is the model for how BeebMod sounds (Josh 2026-10-18:
+"This is much better!"). It reads like the pages of popular addons such as
+Leatrix Plus, Questie, Bartender4 and Bagnon. That is an addon author talking
+plainly to a player. It is neither a manual nor a narrator.
+
+- **Lead with the thing.** "Square minimap with coordinates", not "The
+  minimap, square, with your coordinates".
+- **Fragments are fine** for labels, grey lines, list items, toasts and
+  tooltip rows. Keep full sentences for notes, empty states, chat lines and
+  answers.
+- **Don't hang descriptors off the end with commas.** "Other addons' minimap
+  buttons in one row", not "Other addons' minimap buttons, in a line". "Damage
+  meter with per-second numbers", not "The game's own meter, flat, with
+  figures per second".
+- **One fact per sentence.** See ", and" under Dirty glass.
+- **Use the words players use.** DPS, HPS, DoTs, FPS, XP, cooldown, in range,
+  out of range. Say "next to", not "beside"; "numbers", not "figures";
+  "stats", not "readouts"; "restyled", not "flat" or "drawn to match".
+  Enemy, unique kill and NPC still hold (rule 9).
+- **Leave out how the game works** unless the player needs it to understand a
+  limit. "Casts you should interrupt", not "a cast the game says to
+  interrupt". "The game's own" only where it tells two things apart.
+- **Answer a yes-or-no question with "Yes." or "No." first.**
+- **"Please" is fine** when you ask the player to do something, such as report
+  a bug. Once.
+- Still no pitch, no cheering, no jokes and no role-play.
+
 ## Writing to Josh
 
 Replies, reports and summaries follow the same voice.
@@ -140,6 +169,10 @@ So every screen reads the same:
 These are the smudges that make a reader notice the writing. Most of them show
 up constantly in generated text. Don't use them:
 
+- Two facts joined into one sentence with ", and": "BeebMod changes the
+  interface, and you set it all in one window." "It has five features, and
+  each has one switch." Write two sentences, or drop the weaker half (Josh
+  2026-10-18: "it sounds very AI").
 - Asides set off with dashes: "Your gear — all of it — is fine."
 - "Not X, but Y": "It's not a list, it's a story."
 - A colon that sets up a reveal: "One thing matters: your rank."
@@ -165,6 +198,10 @@ up constantly in generated text. Don't use them:
 | Your notes, beautifully organized. | Notes you wrote, newest first. |
 | Great news — the rewrite is done, and it's a big improvement! | The rewrite is done. Every page was read, and 2,005 were left out. |
 | Right-click: start the pace again | Right-click: reset session |
+| The minimap, square, with your coordinates | Square minimap with coordinates |
+| Flat bags, quality rings, and bag slots along the bottom | All bags in one window, with bag slots along the bottom |
+| A cast the game says to interrupt has a red rim, and your damage over time shows above the plate. | Red rim on casts you should interrupt. Your DoTs above each nameplate. |
+| BeebMod changes the game's interface for WoW: Forever, and you set it all in one window. | BeebMod is a UI addon for WoW: Forever. |
 
 ## Before you ship a line
 

@@ -665,7 +665,7 @@ do
 		check(same, "the line from the steps is the line from the middle age itself")
 	end
 	-- the line under a chart says how many are not on it: the census
-	-- redesign's "1 with no class on file" (Modules/Census/Chart.lua)
+	-- redesign's "Class unknown for 1" (Modules/Census/Chart.lua)
 	check(c.unknown.class == 1, "the class chart owns up to its gap")
 	check(c.unknown.race == 1, "a chart that leaves people out says how many")
 	check(c.shown == c.total, "and the count is everybody every filter keeps")
@@ -1121,7 +1121,7 @@ do
 	check(saved.settings.rep["Beeb Bob"] == nil and saved.settings.rep["Ola Bard@Whitemane"]
 		and saved.settings.clock["Ola Bard"] == nil,
 		"and so do the ones filed under a name alone, so no launch character of that name takes them over")
-	check(#said == 1 and said[1]:find("Cleared the census, Ledger, Expedition and character records from the beta realms, for the launch.", 1, true),
+	check(#said == 1 and said[1]:find("Cleared the Ledger, Expedition and character records from the beta realms.", 1, true),
 		"and one line in chat says so: " .. table.concat(said, " | "))
 	check(saved.realms["ClassicBetaPvE2|All"] == nil and DB.Get(BT.db, "Home Body") ~= nil,
 		"the census's beta book goes, and this realm's stays")
@@ -2171,7 +2171,7 @@ do
 	end
 	-- and one no quest names keeps the journal's own line, made only of facts
 	J.Learn({ npc = 5004, name = "Vuldren", kind = "Beast", family = "Fox", zone = "Zephras Isle", level = 6 })
-	check(J.LoreLine(J.Store().enemies[5004]) == "A fox of Zephras Isle, level 6.", "with no quest, a line of facts")
+	check(J.LoreLine(J.Store().enemies[5004]) == "A level 6 fox of Zephras Isle.", "with no quest, a line of facts")
 	check(J.LoreLine({ kind = "Elemental" }) == "An elemental.", "with the right article")
 	for _, npc in ipairs({ 5001, 5002, 5003, 5004 }) do J.Store().enemies[npc] = nil end
 	-- LORE FROM THE WIKI (Josh 2026-09-28: "I think we need an exact match on

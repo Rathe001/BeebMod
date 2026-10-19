@@ -5714,7 +5714,7 @@ if ok then
 				and adds[3].text._points.TOPLEFT.y < adds[1].text._points.TOPLEFT.y, "its six, two to a row")
 			assert(d.pic.art._texture == ART .. "dock1" and math.abs(d.pic.art._texCoord[2] - 455 / 512) < 1e-9,
 				"its picture: the left 455 of the 512")
-			assert(d.caption:GetText() == "The dock beside the game", "its caption under it")
+			assert(d.caption:GetText() == "The dock next to the game", "its caption under it")
 			-- THE EDGE OVER THE PICTURE (2026-10-17, audit): drawn above the art,
 			-- in the feature's colour
 			assert(d.pic.rim[1]._layer == "OVERLAY" and d.pic.rim[1]._color[1] == BT.Feature("dock").color[1],
@@ -5766,7 +5766,7 @@ if ok then
 			-- each feature keeps its place
 			d.dots[2]:GetScript("OnClick")(d.dots[2])
 			f.rows[1]:GetScript("OnClick")(f.rows[1])
-			assert(d.caption:GetText() == "The dock beside the game", "the Dock, on its first picture")
+			assert(d.caption:GetText() == "The dock next to the game", "the Dock, on its first picture")
 			f.rows[2]:GetScript("OnClick")(f.rows[2])
 			assert(d.caption:GetText() == slides[2].caption, "back on Unit frames, on the picture it was on")
 			-- ONE PICTURE: no arrows and no dots, and the caption stays
@@ -6599,7 +6599,7 @@ if ok then
 				bm.failed = nil
 				bm:OnEnable()
 				BT.Util.Print, Bf.SetShown = hadPrint, hadShown
-				assert(said[1] == "Buffs: BeebMod couldn't make the buff tray, so the game's own buffs stay.",
+				assert(said[1] == "Buffs: BeebMod couldn't make the buff tray. The default buffs stay.",
 					"said in words: " .. tostring(said[1]))
 				local logged = false
 				for _, e in ipairs(BT.moduleErrors or {}) do
@@ -13221,7 +13221,7 @@ if ok then
 			local cell = mod.Cell(r)
 			assert(cell.text:find("43", 1, true), "one cell: 1 silver 43 copper in all: " .. cell.text)
 			mod.Tip()
-			assert(BT.Tip.Says("This session, from 1 pocket."),
+			assert(BT.Tip.Says("From 1 pocket this session."),
 				"and this session on the hover: " .. table.concat(BT.Tip.Texts(), " | "))
 			BT.Tip.Hide()
 
@@ -13259,7 +13259,7 @@ if ok then
 			r.picks, r.items[5374], mod.session.picks = 1234, 1500, 2345
 			mod.Tip()
 			assert(BT.Tip.Says("1,234") and BT.Tip.Says("Small Pocket Watch ×1,500")
-				and BT.Tip.Says("This session, from 2,345 pockets."),
+				and BT.Tip.Says("From 2,345 pockets this session."),
 				"the counts with commas: " .. table.concat(BT.Tip.Texts(), " | "))
 			BT.Tip.Hide()
 			r.picks, r.items[5374], mod.session.picks = hadPicks, hadWatch, hadSession
@@ -14468,7 +14468,7 @@ if ok then
 			-- the hover
 			mod.Tip()
 			local said = table.concat(BT.Tip.Texts(), " | ")
-			assert(said:find("of the way to Rank 4", 1, true) and said:find("210", 1, true)
+			assert(said:find("to Rank 4", 1, true) and said:find("210", 1, true)
 				and said:find("812", 1, true) and said:find("Corporal", 1, true),
 				"the hover: the next rank, your kills, last week's standing and your highest rank: " .. said)
 			BT.Tip.Hide()
@@ -18296,18 +18296,18 @@ if ok then
 			enemy.instance, enemy.zone = "party", "The Deadmines"
 			assert(ST.Paint(pg, enemy) == "screen" and pg.map.screen._texture:find("LoadScreenDeadmines", 1, true),
 				"a dungeon's enemy: its loading screen, there being no map")
-			assert(pg.hint:GetText() == "Killed in a dungeon, which has no map.", "and the hint says so")
+			assert(pg.hint:GetText() == "Killed in a dungeon. Dungeons have no map.", "and the hint says so")
 			enemy.zone = "Some Forever Crypt"
 			ST.Paint(pg, enemy)
 			assert(pg.map.screen._texture:find("LoadScreenDungeon", 1, true), "one the list does not know: the game's dungeon screen")
 			enemy.instance, enemy.zone = "raid", "Molten Core"
 			ST.Paint(pg, enemy)
-			assert(pg.hint:GetText() == "Killed in a raid, which has no map.",
+			assert(pg.hint:GetText() == "Killed in a raid. Raids have no map.",
 				"a raid's enemy is met in a raid: " .. tostring(pg.hint:GetText()))
 			-- BY ITS ZONE TOO (2026-10-17, audit): a dungeon's enemy killed
 			-- before kills noted where they were is still in a dungeon
 			enemy.instance, enemy.zone = nil, "The Deadmines"
-			assert(ST.Paint(pg, enemy) == "screen" and pg.hint:GetText() == "Killed in a dungeon, which has no map.",
+			assert(ST.Paint(pg, enemy) == "screen" and pg.hint:GetText() == "Killed in a dungeon. Dungeons have no map.",
 				"a dungeon's enemy from before, by its zone: its loading screen")
 			enemy.zone = hadZone
 			local artWas = V.MapArt

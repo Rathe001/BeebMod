@@ -12,7 +12,7 @@
 -- shows it. Its switch is what picks it.
 -- NOT WHAT STAYS WHEN IT IS OFF (Josh 2026-10-18: "It is self explainatory
 -- what will happen if you turn off a module"). The Ledger's line says its
--- records never leave your computer, which its "Off:" line used to.
+-- record is saved on your computer only, which its "Off:" line used to.
 --
 -- Start switches the features as the switches say. They are the same
 -- switches the settings rail has, so any of it can be changed later. This
@@ -62,53 +62,53 @@ BT.Welcome = W
 -- it (Josh: "Dock slide 2 seems ok").
 W.ABOUT = {
 	dock = {
-		tag = "Map, experience, quests and readouts",
-		line = "A panel at the side of the screen with your map, experience, quests and readouts.",
-		adds = { "The minimap, square, with your coordinates", "Level, XP to go and time to level",
-			"Your quests by zone, lowest level first", "Gold, bags, durability and item level",
-			"Frame rate and latency", "PvP rank and the faction you watch" },
+		tag = "Minimap, XP, quests and stats",
+		line = "A panel at the side of your screen with your minimap, XP, quests and stats.",
+		adds = { "Square minimap with coordinates", "XP bar with time to level",
+			"Zones and dungeons for your level", "Quest list grouped by zone",
+			"Gold, bags, durability and item level", "PvP rank, reputation and journal ranks" },
 		slides = {
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock1", caption = "The dock beside the game" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock2", caption = "Experience: time to level, and where to go" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock1", caption = "The dock next to the game" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock2", caption = "Time to level and where to go" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock3", caption = "Your quests by zone" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock4", caption = "Readouts, each with a tooltip" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\dock4", caption = "A tooltip for every stat" },
 		},
 	},
 	unitframes = {
 		tag = "Group, target and nameplates",
-		line = "Frames for you, your group and your target, and nameplates, in one look.",
-		adds = { "Party and raid, with pets and targets", "Target, focus and boss frames",
-			"Nameplates with casts to interrupt", "Buffs and debuffs beside the dock",
-			"A flat resource bar", "Combo points under it" },
+		line = "Player, party, target and raid frames, plus nameplates.",
+		adds = { "Player, party, pet and raid frames", "Target, focus, main tank and boss frames",
+			"Red rim on casts you should interrupt", "Your DoTs above each nameplate",
+			"Buff and debuff tray next to the dock", "Personal resource bar with a range icon" },
 		slides = {
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes1", caption = "Your party, your target and nameplates" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes2", caption = "Nameplates, with your damage over time" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes1", caption = "Party, target and nameplates" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes2", caption = "Nameplates with your DoTs" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes3", caption = "Raid frames" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes4", caption = "Buffs beside the dock, and your resource bar" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes4", caption = "Buff tray and personal resource bar" },
 		},
 	},
 	interface = {
 		tag = "Bars, bags, chat, tooltips and menus",
-		line = "The game's own bars, bags, chat, tooltips and menus, drawn to match.",
-		adds = { "Action bars and the game menu", "One bag window you can drag",
-			"Item and spell tooltips with their DPS", "Item level on the character sheet",
-			"Guild names in chat you can click", "Every dropdown and right-click menu" },
+		line = "The game's own bars, bags, chat and tooltips, restyled to match.",
+		adds = { "Item tooltips with DPS and item level", "Spell tooltips with DPS or HPS",
+			"All your bags in one window", "Item level on the character sheet",
+			"Clickable guild names and links in chat", "Action bars, menus and dropdowns" },
 		slides = {
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface1", caption = "One bag window" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface2", caption = "Item tooltips, beside the item you have on" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface3", caption = "Spell tooltips, with DPS and cost" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface1", caption = "All your bags in one window" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface2", caption = "Item tooltips next to the item you have on" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface3", caption = "Spell tooltips with DPS and cost" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\interface4", caption = "Item level on the character sheet" },
 		},
 	},
 	ledger = {
-		tag = "Everyone you see, and your notes",
-		line = "A record of everyone you see, with your notes, tags and ratings. It never leaves your computer.",
+		tag = "Every player you meet",
+		line = "A record of every player you come across. It's saved on your computer only.",
 		adds = { "Charts of your realm", "Find anyone by name or guild",
 			"Notes and tags from the right-click menu", "Groups and duel scores",
 			"Commendations and points", "Ranks up to Eye of Ravenholdt" },
 		slides = {
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger1", caption = "Your realm in charts" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger2", caption = "Find anyone, with your notes" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger2", caption = "Find anyone by name, guild or note" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger3", caption = "Your note on their tooltip" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger4", caption = "Commendations and ranks" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\ledger5", caption = "A new rank" },
@@ -116,13 +116,13 @@ W.ABOUT = {
 	},
 	expedition = {
 		tag = "Every enemy you kill",
-		line = "A journal of every enemy you kill, with its model, lore and where you found it.",
+		line = "A bestiary that fills in as you play.",
 		adds = { "A page for each enemy", "A map of where you killed it",
-			"Masteries, Bronze to Platinum", "Commendations for rares and elites",
+			"Bronze to Platinum mastery", "Commendations for rares and elites",
 			"Points for each unique kill", "Ranks up to Expedition Leader" },
 		slides = {
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition1", caption = "A page for every enemy" },
-			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition2", caption = "What it casts, and what that does" },
+			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition2", caption = "Its abilities and what they do" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition3", caption = "Every enemy you've killed" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition4", caption = "Commendations" },
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\expedition5", caption = "A new rank" },

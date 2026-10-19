@@ -5,9 +5,8 @@ cog in the dock or type `/bt` to open it.
 
 ## Features
 
-BeebMod is opinionated. It asks whether you want each part, and it decides
-how each part looks. It has five features in two groups, and each feature has one
-switch:
+BeebMod is opinionated. It asks whether you want each part. It decides how
+each part looks. It has five features in two groups:
 
 - **Interface:** the Dock, Unit frames and Game frames
 - **Journals:** the Ravenholdt Ledger and Nesingwary's Expedition
@@ -19,8 +18,8 @@ what it adds. The settings window's rail lists
 General, then the features under their headings. Each feature has one page:
 its switch at the top right, then a switch for each of its parts, a part of a
 part indented under it. Switch a feature off and everything in it goes off.
-Each part keeps its own switch, and the setting stays as you left it while
-the feature is off. No feature needs another.
+Each part keeps its own setting while the feature is off. No feature needs
+another.
 
 The window's title bar has a search box. Type a word, such as pets or gold,
 and BeebMod lists every row with that word in its name or its line, under its
@@ -35,8 +34,8 @@ settings window, the dock's header, the look of a button and a pill, and
 panel (the dock, the frames, the buffs and the tooltips), and a Positions
 button that puts the dock, the main tanks, the bag windows and the character
 sheet back where they start. Shift-drag any of them to move it. The other
-unit frames go where the game's Edit Mode puts the frames they replace: move
-those in Edit Mode, and BeebMod's follow. The typeface
+unit frames go where the game's Edit Mode puts the frames they replace. When
+you move those in Edit Mode, BeebMod's follow. The typeface
 is Google Sans. The dock's logo and cog are always on screen. With the Dock
 off, or every feature off, they are all that BeebMod shows. Click the cog to
 get back to the settings.
@@ -76,7 +75,7 @@ in a fight until you point at it.
 |---|---|
 | **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The game's bag bar is hidden while the bag window or the Bags readout is on. The chat window sits flush in the bottom-left corner. Move it in Edit Mode and it stays where you leave it; let go of it near the corner and it goes flush into it. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
 | **Character sheet** | Item level on every slot, and BeebMod's look. |
-| **Tooltips** | Unit tooltips rebuilt in BeebMod's look: the name and level, then small tags for what they are and what state they are in, then a row each for a quest objective, your kills of an enemy, and your note. Elites and rares get a gold or silver border. Item tooltips, and the Equipped tooltips beside them, are written again in the spell tooltips' look: the item's icon beside its name, its DPS or armor at the right with its item level (ilvl) under it, how it binds (BoE, BoP, Soulbound) and whether it is unique as small tags under its kind, a row of cells for its damage, speed and the level it needs, then its stats and effects as plain lines, and durability as a bar beside the sell price. A potion's cells say what it restores and its cooldown. An item with none of those has no cells. |
+| **Tooltips** | Unit tooltips rebuilt in BeebMod's look: the name and level, then small tags for what they are and what state they are in, then a row each for a quest objective, your kills of an enemy, and your note. Elites and rares get a gold or silver border. Item tooltips, and the Equipped tooltips beside them, are written again in the spell tooltips' look: the item's icon beside its name, its DPS or armor at the right with its item level (ILVL) under it, how it binds (BoE, BoP, Soulbound) and whether it is unique as small tags under its kind, a row of cells for its damage, speed and the level it needs, then its stats and effects as plain lines, and durability as a bar beside the sell price. A potion's cells say what it restores and its cooldown. An item with none of those has no cells. |
 | **Game menu**, **Dropdown menus** | The menu Escape opens, and every dropdown and right-click menu. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
 
 **The journals** are the Ledger and the Expedition. Their windows are the
@@ -124,8 +123,8 @@ points set your rank, from Greenhorn to Expedition Leader. A line in the
 dock shows your points and rank. Click it to open the journal.
 
 **Made-up data** is for screenshots, and its switch is on the Testing page.
-It shows a made-up realm, notes, a journal and a party in every feature at
-once. BeebMod saves none of it. **Made-up people** on the same page shows the
+It shows a made-up realm, notes, a journal and a full buff tray in every
+feature at once. BeebMod saves none of it. **Made-up people** on the same page shows the
 unit frames as a party or a raid.
 
 **The Testing page** is also where the debug tools are. Its buttons show
@@ -601,8 +600,8 @@ The charts show what BeebMod doesn't know. The class chart has "Unknown" as
 its own grey row, so it counts every character in the book and shows how much
 of the realm you have identified. The race and level charts leave those
 characters out, because an unknown bar in all three would count the same
-people three times. Each of them says so under its bars, for example "70
-with no race on file".
+people three times. Each of them says so under its bars, for example "Race
+unknown for 70".
 
 ## No /who
 
