@@ -5,6 +5,15 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **"Can't use" tag on item tooltips.** A red tag on items your character
+  can't use, such as a two-handed mace on a rogue. Words the game shows in
+  red stay red.
+
+- **An item's icon and numbers no longer stay on the next tooltip.** The
+  icon sat outside the left edge of whatever tooltip came next.
+
 ## 0.1.0-beta.31
 
 - **Plainer wording.** The settings, the first-login window, the dock's

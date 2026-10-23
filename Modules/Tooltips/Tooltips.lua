@@ -1489,7 +1489,7 @@ M.crestSaid = "none yet"
 
 -- for What loaded on the Testing page
 function M.Status()
-	return ("last crest: %s"):format(M.crestSaid)
+	return ("last crest: %s; card parts left over: %d"):format(M.crestSaid, M.leftovers)
 end
 
 -- Lays `faction`'s crest on `tip`; returns it, or nil where there is none
@@ -2031,6 +2031,11 @@ end
 local function isGreen(c)
 	return c ~= nil and c[2] > 0.8 and c[1] < 0.35 and c[3] < 0.35
 end
+-- the client's red on what you cannot use: a slot or weapon kind you have no
+-- skill in, a level, class or profession you do not have
+local function isRed(c)
+	return c ~= nil and c[1] > 0.8 and c[2] < 0.35 and c[3] < 0.35
+end
 
 -- lines this rebuild does not know how to place: the tooltip is restyled
 -- where it is instead
@@ -2078,7 +2083,10 @@ function M.ReadItem(data, shopping)
 				or left:find("^Unique %(%d+%)$")) then
 				item.unique = left
 			elseif kind ~= nil and kind == LT.EquipSlot then
+				-- with their colours: a rogue's "Two-Hand" and "Mace" are red
 				item.slot, item.kind = left, right
+				item.slotRgb, item.kindRgb = lc, rc
+				item.unusable = item.unusable or isRed(lc) or isRed(rc)
 			elseif kind ~= nil and kind == LT.SellPrice then
 				local price = plainLine(line.price)
 				if not shopping and type(price) == "number" and price > 0 then
@@ -2109,6 +2117,7 @@ function M.ReadItem(data, shopping)
 				item.block = bare:match(P.block)
 			elseif bare:find(P.level) then
 				item.require = { text = left, rgb = lc }
+				item.unusable = item.unusable or isRed(lc)
 			elseif bare:find(P.durability) then
 				local now, most = bare:match(P.durability)
 				item.durability = { now = tonumber(now), most = tonumber(most), text = now .. "/" .. most }
@@ -2135,6 +2144,8 @@ function M.ReadItem(data, shopping)
 				else
 					item.rest[#item.rest + 1] = { text = left, rgb = lc, right = right, rrgb = rc,
 						wrap = plainLine(line.wrapText) and true or nil }
+					-- "Classes: Priest", "Requires Leatherworking (200)"
+					item.unusable = item.unusable or isRed(lc)
 				end
 			end
 		end
@@ -2348,8 +2359,15 @@ end
 -- write them; Soulbound a word) and whether it is unique are outlined tags
 -- on a line of their own under the kind and slot, and the icon grows to the
 -- three lines. Each { words, look, keepCase } for T.TagsOnLine.
+M.CANT_USE = "Can't use"
 function M.ItemTags(item)
 	local tags = {}
+	-- FIRST, IN RED, WHERE THE CLIENT SAID SO IN RED (Josh 2026-10-23: "we
+	-- are not showing the tag for items the player cannot use... I cannot use
+	-- two handed maces as a rogue")
+	if item.unusable then
+		tags[#tags + 1] = { M.CANT_USE, "warn" }
+	end
 	if item.bind then
 		local short = M.BindShort(item.bind)
 		tags[#tags + 1] = { short or item.bind, "bound", keepCase = short ~= nil }
@@ -2421,6 +2439,42 @@ end
 -- ours on each tooltip: the icon and its edge, the figures, the cells and
 -- the bar, made the first time a card is written on it
 local bitsOf = setmetatable({}, { __mode = "k" })
+
+-- THE PARTS GO WITH THEIR CARD (Josh 2026-10-23: the tooltips were "showing
+-- the previous hovered item instead of the current. The icon was also moved
+-- to the left of the tooltip frame"; his screenshot had an epic item's icon
+-- beside a Gnarlpine Defender's tooltip, outside its edge). The parts are
+-- hidden when the tooltip is cleared or hides, and one time that night they
+-- were not: they stayed over the next thing shown, and the icon, hung off a
+-- name line that was no longer moved in to make room for it, sat outside
+-- the card. So they look for themselves, each frame they are shown: while
+-- the tooltip's first line is not the name their card wrote, they go.
+-- true while `tip` still shows the card its parts `b` were laid for
+function M.CardShown(tip, b)
+	if not (b and b.name and tip and tip.NumLines and BT.Pill.Number(tip:NumLines(), 0) > 0) then
+		return false
+	end
+	local fs = BT.UnitTip.LineOf(tip, 1)
+	if not (fs and fs.GetText) or (fs.IsShown and not fs:IsShown()) then
+		return false
+	end
+	local text = fs:GetText()
+	if issecretvalue and issecretvalue(text) then
+		return false
+	end
+	return text == b.name
+end
+-- how many times the parts outlived their card and were taken off by the
+-- watch, not by the clear or the hide (What loaded, M.Status)
+M.leftovers = 0
+function M.WatchParts(holder)
+	local tip = holder.tip
+	if tip and not M.CardShown(tip, bitsOf[tip]) then
+		M.leftovers = M.leftovers + 1
+		M.HideItemBits(tip)
+	end
+end
+
 function M.ItemBits(tip)
 	local b = bitsOf[tip]
 	if b then
@@ -2431,6 +2485,9 @@ function M.ItemBits(tip)
 	-- ours: the comparison tooltip's tab is looked for among its children
 	-- (restyleTab), and this is not it
 	b.holder.beebs = true
+	b.holder.tip = tip
+	-- only while it is shown, so only while a card is up
+	b.holder:SetScript("OnUpdate", M.WatchParts)
 	b.holder:SetFrameStrata("TOOLTIP")
 	b.holder:SetAllPoints(tip)
 	b.edge = b.holder:CreateTexture(nil, "BORDER")
@@ -2504,6 +2561,8 @@ local function card(tip)
 	M.ClearLines(tip)
 	T.HideTags(tip)
 	M.HideItemBits(tip)
+	-- the name this card writes, once its header does (M.CardShown)
+	b.name = nil
 	b.holder:Show()
 	local c = { b = b, off = 0 }
 	function c.last()
@@ -2557,6 +2616,7 @@ local function card(tip)
 	-- `tags`, where there are any, are a row of tags on a third line, under
 	-- the line under the name, and the icon is as tall as the three (M.ItemTags)
 	function c.header(name, rgb, icon, sub, edge, figs, tags)
+		b.name = name
 		c.tags = (tags and #tags > 0) and tags or nil
 		local size = c.tags and I.ICON_TALL or I.ICON
 		c.off = icon and (size + I.ICON_GAP) or 0
@@ -2746,10 +2806,12 @@ function M.WriteItem(tip, item, icon, level)
 	-- this line.
 	local q = item.quality or ITEM_INK
 	level = level or item.level
+	-- the words the client made red stay red
 	local sub = {}
-	for _, words in ipairs({ item.kind or false, item.slot or false }) do
+	for _, part in ipairs({ { item.kind, item.kindRgb }, { item.slot, item.slotRgb } }) do
+		local words, rgb = part[1], part[2]
 		if words then
-			sub[#sub + 1] = words
+			sub[#sub + 1] = isRed(rgb) and hex(rgb, words) or words
 		end
 	end
 	if #sub == 0 then
@@ -2989,6 +3051,9 @@ function M.ComposeItem(tip, data)
 	M.Seen("item", data)
 	local rebuilt = M.RebuildItem(tip, data)
 	if rebuilt == false then
+		-- the client's lines restyled where they are: no card, so none of a
+		-- card's parts (M.CardShown)
+		M.HideItemBits(tip)
 		M.ItemLines(tip, data)
 	else
 		-- DRESSED AGAIN AFTER THE REBUILD (Josh 2026-10-17: "Looks like we

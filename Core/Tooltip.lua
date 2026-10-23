@@ -490,6 +490,9 @@ T.TAG = {
 	-- an edge where what the item is has a fill
 	bound = { fg = { 0.64, 0.69, 0.67 }, edge = { 0.47, 0.53, 0.51, 0.9 } },
 }
+-- AN ITEM YOU CANNOT USE (Josh 2026-10-23: "we are not showing the tag for
+-- items the player cannot use"), in the red the client warns with
+T.TAG.warn = T.TAG.pvp
 
 -- `tags` = { { words, kind } }, in rows no wider than `width`
 function T.TagRows(tags, width)

@@ -11057,6 +11057,62 @@ if ok then
 				and not all:find("63", 1, true), "nothing the client did not show, and the level said once")
 			assert(tip._minWidth and tip._minWidth >= mod.ITEM.MIN_W, "as wide as a spell's card")
 
+			-- THE PARTS GO WITH THEIR CARD (Josh 2026-10-23: "showing the
+			-- previous hovered item instead of the current. The icon was also
+			-- moved to the left of the tooltip frame"): while the first line is
+			-- the name the card wrote they stay; once it is anything else, the
+			-- watch takes them off, without a clear or a hide
+			do
+				local first = _G.RebuiltTipTextLeft1
+				local watch = b.holder:GetScript("OnUpdate")
+				local before = mod.leftovers
+				first:SetText("Arcanite Reaper")
+				watch(b.holder)
+				assert(b.holder._shown ~= false and b.icon._shown ~= false and mod.leftovers == before,
+					"the parts stay while their card is up")
+				first:SetText("Gnarlpine Defender")
+				watch(b.holder)
+				assert(b.holder._shown == false and b.icon._shown == false and b.figs[1].num._shown == false
+					and mod.leftovers == before + 1, "and go once the tooltip shows something else")
+				first:SetText(nil)
+			end
+
+			-- AN ITEM YOU CANNOT USE (Josh 2026-10-23: "we are not showing the
+			-- tag for items the player cannot use... I cannot use two handed
+			-- maces as a rogue"): the words the client made red stay red, and a
+			-- red tag comes before the binding's
+			do
+				local red = { r = 1, g = 0.125, b = 0.125 }
+				local function earthshaker(slotColour, kindColour)
+					return { id = 1, lines = {
+						{ type = LT.ItemName, leftText = "Earthshaker", leftColor = { r = 0.64, g = 0.21, b = 0.93 },
+							lineIndex = 1 },
+						{ type = LT.ItemBinding, leftText = "Binds when equipped", lineIndex = 2 },
+						{ type = LT.EquipSlot, leftText = "Two-Hand", rightText = "Mace", leftColor = slotColour,
+							rightColor = kindColour, lineIndex = 3 },
+						{ type = LT.None, leftText = "87 - 132 Damage", rightText = "Speed 3.50", lineIndex = 4 },
+					} }
+				end
+				mod.ComposeItem(tip, earthshaker(red, red))
+				local pool, used = T.TagPool(tip)
+				assert(used == 2 and pool[1].text._text == "CAN'T USE" and pool[1].tag[2] == "warn"
+					and pool[2].text._text == "BoE", "a red tag first, then how it binds")
+				assert(t.lines[2] == "|cffff2020Mace|r · |cffff2020Two-Hand|r",
+					"what it is, in the client's red: " .. tostring(t.lines[2]))
+				-- the requirement the client made red says so too
+				local young = reaper()
+				young.lines[9].leftColor = red
+				mod.ComposeItem(tip, young)
+				pool, used = T.TagPool(tip)
+				assert(used == 2 and pool[1].text._text == "CAN'T USE", "a level not yet reached is one too")
+				-- one you can use has none, and its words their own grey
+				mod.ComposeItem(tip, earthshaker(nil, nil))
+				pool, used = T.TagPool(tip)
+				assert(used == 1 and pool[1].text._text == "BoE" and t.lines[2] == "Mace · Two-Hand",
+					"an item you can use has no such tag")
+				mod.ComposeItem(tip, reaper())
+			end
+
 			-- THE EQUIPPED ONE BESIDE IT, the same way, with no price
 			local shop, st = makeTip("ShoppingTooltip1")
 			_G.ShoppingTooltip1 = shop
