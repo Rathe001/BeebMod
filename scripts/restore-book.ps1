@@ -4,15 +4,11 @@
 # restore only sticks while the game is CLOSED. This refuses to run otherwise
 # rather than write a file that is about to be overwritten.
 #
-# On the Forever beta the file is read back through the Data\Live link in the
-# addon rather than by the client (see the README), so a restored file is what
-# the next launch loads either way.
-#
 #   powershell -ExecutionPolicy Bypass -File scripts\restore-book.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\restore-book.ps1 -From "...\BeebMod-2026-09-22-0617.lua"
 param(
     [string]$From   = "",
-    [string]$Dest   = "C:\Program Files (x86)\World of Warcraft\_classic_beta_\WTF\Account\960221#4\SavedVariables\BeebMod.lua",
+    [string]$Dest   = "C:\Program Files (x86)\World of Warcraft\_forever_\WTF\Account\960221#4\SavedVariables\BeebMod.lua",
     [string]$Backups = "C:\Users\josh\Projects\LedgerBackups",
     [switch]$Force
 )

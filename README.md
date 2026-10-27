@@ -617,12 +617,13 @@ until you see them. The census charts show that gap.
 
 ## Notes on the client
 
-Built against the beta's builds from 1.60.1.70009 to 1.60.1.70450
-(`wow_classic_beta`). The TOC says
+Built against the beta's builds from 1.60.1.70009 to 1.60.1.70532
+(`wow_classic_beta`). The released client is build 1.60.1.70634 (`wowf`)
+in the `_forever_` game folder. The TOC says
 `## Interface: 16001`, checked in the game with
 `/dump select(4, GetBuildInfo())` on build 1.60.1.69893. The client writes
-1.60.1 as 1-60-01, not 11600. A beta build can change it. If the addon ever
-shows as out of date, check it again. The tooltip hook works with either the
+1.60.1 as 1-60-01, not 11600. The released client is still 1.60.1, so the
+number should hold. If the addon ever shows as out of date, check it again. The tooltip hook works with either the
 newer `TooltipDataProcessor` or the old `OnTooltipSetUnit`, whichever the build
 has.
 

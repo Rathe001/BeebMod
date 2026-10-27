@@ -48,7 +48,7 @@ $Out = Join-Path $Root "Modules\Expedition\LoreData.lua"
 if (-not $Saved) {
 	# the ACCOUNT's (WTF\Account\<name>\SavedVariables), where the journal is
 	# kept - not a character's, three folders deeper, which has none of it
-	$found = Get-ChildItem "C:\Program Files (x86)\World of Warcraft\_classic_beta_\WTF\Account" -Recurse -Filter "BeebMod.lua" -ErrorAction SilentlyContinue |
+	$found = Get-ChildItem "C:\Program Files (x86)\World of Warcraft\_forever_\WTF\Account" -Recurse -Filter "BeebMod.lua" -ErrorAction SilentlyContinue |
 		Where-Object { $_.Directory.Name -eq "SavedVariables" -and $_.Directory.Parent.Parent.Name -eq "Account" } |
 		Select-Object -First 1
 	if ($found) { $Saved = $found.FullName }

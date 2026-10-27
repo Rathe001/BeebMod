@@ -5,6 +5,15 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
+## Unreleased
+
+- **For the released game.** This version is for the released WoW: Forever
+  client, build 1.60.1.70634. The addon works the same as 0.1.0-beta.32.
+
+- **Beta records clear at launch.** Your first login on a launch realm
+  clears the characters, notes and kills BeebMod kept on the beta realms.
+  Your settings and the tags you made stay.
+
 ## 0.1.0-beta.32
 
 - **"Can't use" tag on item tooltips.** A red tag on items your character

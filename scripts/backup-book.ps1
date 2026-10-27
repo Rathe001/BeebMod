@@ -7,7 +7,7 @@
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\backup-book.ps1
 param(
-    [string]$Source = "C:\Program Files (x86)\World of Warcraft\_classic_beta_\WTF\Account\960221#4\SavedVariables\BeebMod.lua",
+    [string]$Source = "C:\Program Files (x86)\World of Warcraft\_forever_\WTF\Account\960221#4\SavedVariables\BeebMod.lua",
     [string]$Dest   = "C:\Users\josh\Projects\LedgerBackups",
     [int]$Keep      = 20
 )
