@@ -9,7 +9,7 @@
 # and then prints the one command that publishes it. Pushing the tag is what
 # starts .github/workflows/release.yml.
 #
-#   powershell -ExecutionPolicy Bypass -File scripts\cut-release.ps1 -Version 0.1.0-beta.2
+#   powershell -ExecutionPolicy Bypass -File scripts\cut-release.ps1 -Version 1.0.1
 param(
     [Parameter(Mandatory = $true)]
     [string]$Version
@@ -23,9 +23,9 @@ function Fail($msg) {
     exit 1
 }
 
-# MAJOR.MINOR.PATCH, and -beta.N (or -alpha.N) while the client is in beta
+# MAJOR.MINOR.PATCH from 1.0.0; -beta.N (or -alpha.N) still marks a test build
 if ($Version -notmatch '^\d+\.\d+\.\d+(-(alpha|beta)\.\d+)?$') {
-    Fail "a version looks like 0.1.0-beta.2"
+    Fail "a version looks like 1.0.1"
 }
 $tag = "v$Version"
 if (git tag --list $tag) {

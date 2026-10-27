@@ -8,7 +8,7 @@ BeebMod is a UI addon for WoW: Forever. It has five parts:
 
 Use all five or only the ones you like. On your first login BeebMod asks which ones you want. Anything you switch off goes back to the default UI.
 
-BeebMod is in beta, like WoW: Forever itself. If something breaks, please report it on GitHub (link at the bottom).
+If something breaks, please report it on GitHub (link at the bottom).
 
 ## Features
 

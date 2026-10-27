@@ -1,9 +1,12 @@
 # Changelog
 
-BeebMod is built against the WoW: Forever beta client, and is a beta itself
-until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
-beta number goes up with each build handed to anyone, and the rest once the
-game and the addon settle.
+BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
+0.1.0-beta versions were made during the game's beta.
+
+## Unreleased
+
+- **Out of beta.** BeebMod 1.0.0 is for the launch of WoW: Forever. The
+  addon works the same as 0.1.0-beta.33.
 
 ## 0.1.0-beta.33
 

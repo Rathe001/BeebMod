@@ -1,6 +1,7 @@
 # BeebMod
 
-A WoW: Forever (Classic beta client) addon, written in Lua.
+A WoW: Forever addon, written in Lua. The game is in
+`C:\Program Files (x86)\World of Warcraft\_forever_`.
 
 - **Anything a player reads** (tooltips, settings, notes, toasts, empty states,
   chat lines, the journal's descriptions, README, changelog) follows

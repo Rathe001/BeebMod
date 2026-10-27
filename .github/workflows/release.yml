@@ -1,5 +1,5 @@
 # Packages the addon and publishes it when a version tag is pushed
-# (v0.1.0-beta.2 and so on; scripts/cut-release.ps1 makes one). The same
+# (v1.0.1 and so on; scripts/cut-release.ps1 makes one). The same
 # checks as the Tests workflow run first, so nothing red is ever packaged.
 #
 # Where it goes:

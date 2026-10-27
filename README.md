@@ -313,15 +313,16 @@ widget methods, so a typo fails there and not in the game.
 
 ## Releasing
 
-A version is `MAJOR.MINOR.PATCH-beta.N` while the client is in beta.
+A version is `MAJOR.MINOR.PATCH`, from 1.0.0 at the game's launch. Before
+that, versions were `0.1.0-beta.N`.
 `CHANGELOG.md` keeps what has changed since the last one under
 `## Unreleased`. To cut one, with everything committed:
 
-    powershell -ExecutionPolicy Bypass -File scripts\cut-release.ps1 -Version 0.1.0-beta.2
-    git push origin main v0.1.0-beta.2
+    powershell -ExecutionPolicy Bypass -File scripts\cut-release.ps1 -Version 1.0.1
+    git push origin main v1.0.1
 
 The script refuses a dirty tree or a failing test. It writes the version into
-the TOC and `Core/Init.lua`, turns `## Unreleased` into `## 0.1.0-beta.2`,
+the TOC and `Core/Init.lua`, turns `## Unreleased` into `## 1.0.1`,
 commits and tags. Pushing the tag runs `.github/workflows/release.yml`. That
 runs the tests again, checks that the tag and the TOC agree, then runs the
 BigWigs packager. The packager zips the addon without its tests, scripts and
@@ -334,7 +335,7 @@ It goes to:
 - **CurseForge**, project 1711982. The packager finds the project by the
   `## X-Curse-Project-ID` line in `BeebMod.toc`, and signs in with the
   repository secret `CF_API_KEY`. A tag with `beta` in it goes up as a beta
-  file.
+  file. A plain tag such as `v1.0.1` goes up as a release.
 
 `.github/workflows/tests.yml` runs both suites on every push to `main`.
 
