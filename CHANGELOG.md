@@ -5,7 +5,7 @@ until that client is released. Versions are `MAJOR.MINOR.PATCH-beta.N`: the
 beta number goes up with each build handed to anyone, and the rest once the
 game and the addon settle.
 
-## Unreleased
+## 0.1.0-beta.33
 
 - **For the released game.** This version is for the released WoW: Forever
   client, build 1.60.1.70634. The addon works the same as 0.1.0-beta.32.
