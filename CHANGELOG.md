@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.0.1
 
 - **Bag window fixed for the latest game patch.** Item icons stay cropped and
   square. Empty slots stay plain. The game's new bag icons in empty slots are
