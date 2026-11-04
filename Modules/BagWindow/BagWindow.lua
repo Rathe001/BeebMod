@@ -249,12 +249,54 @@ local function remember(s, key, t)
 	end
 end
 
-local ART = { "NormalTexture", "ItemSlotBackground", "SlotBackground", "slotTexture" }
+local ART = { "NormalTexture", "EmptyBagIcon", "SlotBackground", "slotTexture" }
+
+-- THE CLIENT CLEARS THE CROP (build 70707). SetItemButtonTexture_Base now sets
+-- the whole picture after every SetTexture, so the crop goes on again after
+-- it. An empty slot now gets the client's own art by SetAtlas, as well as
+-- EmptyBagIcon in the combined bag. The picture is hidden for that art and the
+-- client's next item shows it again (it calls SetShown before SetTexture).
+local function wearPicture(b, s)
+	local icon = b.icon or b.Icon
+	if not (icon and icon.SetTexCoord) then
+		return
+	end
+	s.cropping = true
+	icon:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
+	s.cropping = false
+	if type(b.HasItem) == "function" and not b:HasItem() then
+		icon:Hide()
+	end
+	-- the rounded mask every item button has had since build 70707: our slots
+	-- are square
+	if b.Mask and icon.RemoveMaskTexture and not s.mask then
+		s.mask = b.Mask
+		pcall(icon.RemoveMaskTexture, icon, b.Mask)
+	end
+end
+
+local function watchPicture(s, icon)
+	if not (icon and icon.SetTexCoord and type(hooksecurefunc) == "function") then
+		return
+	end
+	pcall(hooksecurefunc, icon, "SetTexCoord", function(self)
+		if s.dressed and not s.cropping then
+			s.cropping = true
+			self:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
+			s.cropping = false
+		end
+	end)
+	pcall(hooksecurefunc, icon, "SetAtlas", function(self)
+		if s.dressed then
+			self:Hide()
+		end
+	end)
+end
 
 -- ONCE A SLOT, NOT EVERY UPDATE: the window lays its slots out again on every
 -- bag change while you loot, and a slot already dressed keeps what it wears -
--- the client sets a new picture, not a new crop, and its quality comes through
--- the hooks. Painted again only for a new theme (`force`).
+-- its picture and its quality come through the hooks. Painted again only for a
+-- new theme (`force`).
 function M.StyleSlot(b, plain, force)
 	if not isSlot(b) then
 		return false
@@ -283,12 +325,21 @@ function M.StyleSlot(b, plain, force)
 			icon:SetTexCoord(0, 1, 0, 1)
 			icon:ClearAllPoints()
 			icon:SetAllPoints()
+			if s.mask and icon.AddMaskTexture then
+				pcall(icon.AddMaskTexture, icon, s.mask)
+			end
+		end
+		s.mask = nil
+		-- an empty slot has the client's art again now, not at its next update
+		if type(b.SyncAppearanceWithHasItem) == "function" then
+			pcall(b.SyncAppearanceWithHasItem, b)
 		end
 		return true
 	end
 	if not s then
 		s = { surface = BT.Pill.Surface(b, "BACKGROUND", -8), quality = BT.Pill.Ring(b, "OVERLAY", 7), was = {} }
 		slots[b] = s
+		watchPicture(s, b.icon or b.Icon)
 		-- the quality as the client paints it: its border goes see-through,
 		-- and what colour it was given, and whether it is showing, is ours
 		local border = b.IconBorder
@@ -316,11 +367,11 @@ function M.StyleSlot(b, plain, force)
 	-- the picture without its own border, inside the rim
 	local icon = b.icon or b.Icon
 	if icon and icon.SetTexCoord then
-		icon:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
 		icon:ClearAllPoints()
 		icon:SetPoint("TOPLEFT", 1, -1)
 		icon:SetPoint("BOTTOMRIGHT", -1, 1)
 	end
+	wearPicture(b, s)
 	-- the ring's corners follow the slot's, so a new size needs nothing more
 	placeRing(s, b)
 	paintQuality(b)

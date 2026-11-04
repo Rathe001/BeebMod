@@ -671,9 +671,17 @@ function M.DressSlot(button)
 	end
 	local icon = button.icon or button.Icon
 		or (button.GetName and button:GetName() and _G[button:GetName() .. "IconTexture"])
-	if icon and icon.SetTexCoord and not keep(icon).coords then
-		keep(icon).coords = true
+	-- EVERY TIME, NOT ONCE (build 70707): the client clears the crop each time
+	-- it sets a picture, and this runs after PaperDollItemSlotButton_Update.
+	-- Item buttons also gained a rounded mask in that build. Our slots are square.
+	if icon and icon.SetTexCoord then
+		local w = keep(icon)
+		w.coords = true
 		icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		if button.Mask and icon.RemoveMaskTexture and not w.mask then
+			w.mask = button.Mask
+			pcall(icon.RemoveMaskTexture, icon, button.Mask)
+		end
 	end
 end
 
@@ -819,6 +827,17 @@ local function dressFrame(frame)
 			if scene[key] then
 				hide(scene[key])
 			end
+		end
+		-- PUT BACK AS THE SHEET OPENS (build 70707): PaperDollFrame_OnShow calls
+		-- SetPaperDollBackground, which now sets this overlay's alpha by race
+		if not M.overlayWatched and type(hooksecurefunc) == "function"
+			and type(_G.SetPaperDollBackground) == "function" then
+			M.overlayWatched = true
+			pcall(hooksecurefunc, "SetPaperDollBackground", function(model)
+				if model == _G.CharacterModelScene and model.BackgroundOverlay and M.Themed() then
+					hide(model.BackgroundOverlay)
+				end
+			end)
 		end
 		-- the zoom and turn controls: every texture but the marks off, and
 		-- no surface of ours on the strip or the buttons (see isBare)
@@ -2691,6 +2710,9 @@ function M.Undress()
 		end
 		if w.coords then
 			r:SetTexCoord(0, 1, 0, 1)
+		end
+		if w.mask and r.AddMaskTexture then
+			pcall(r.AddMaskTexture, r, w.mask)
 		end
 		if w.text then
 			r:SetTextColor(w.text[1], w.text[2], w.text[3])

@@ -8169,6 +8169,41 @@ if ok then
 			end
 			local normal = slot:CreateTexture()
 			slot.GetNormalTexture = function() return normal end
+			-- build 70707: each item button has a rounded mask on its picture, a
+			-- grey bag icon for an empty slot, and the empty slot's art by atlas
+			local function asTheClientBuilds(b)
+				b.Mask = {}
+				b.icon._mask = b.Mask
+				b.icon.AddMaskTexture = function(self, mask) self._mask = mask end
+				b.icon.RemoveMaskTexture = function(self) self._mask = nil end
+				b.icon.SetAtlas = function(self, atlas) self._atlas = atlas end
+				b.EmptyBagIcon = b:CreateTexture()
+				b.HasItem = function(self) return self.hasItem end
+				-- ContainerFrameItemButtonMixin:SyncAppearanceWithHasItem, as far
+				-- as the picture goes (SetItemButtonTexture_Base)
+				b.SyncAppearanceWithHasItem = function(self)
+					if self.hasItem then
+						self.EmptyBagIcon:Hide()
+					else
+						self.EmptyBagIcon:Show()
+						self.icon:SetShown(true)
+						self.icon:SetAtlas("bags-item-slot-blank", false, nil, true)
+					end
+				end
+				b.ShowPicture = function(self, picture)
+					self.icon:SetShown(true)
+					self.icon:SetTexture(picture)
+					self.icon:SetTexCoord(0, 1, 0, 1)
+				end
+			end
+			slot.hasItem = true
+			asTheClientBuilds(slot)
+			-- a slot already empty when the window is first dressed
+			local bare = _G.CreateFrame("Button", nil, win)
+			bare.icon = bare:CreateTexture()
+			bare.IconBorder = bare:CreateTexture()
+			asTheClientBuilds(bare)
+			bare:SyncAppearanceWithHasItem()
 			local money = _G.CreateFrame("Frame", "ContainerFrameCombinedBagsMoneyFrame", win)
 			local coin = money:CreateTexture()
 			coin.GetAtlas = function() return "coin-gold" end
@@ -8183,6 +8218,22 @@ if ok then
 			assert(normal._alpha == 0 and slot.IconBorder._alpha == 0, "a slot's art and quality glow see-through")
 			assert(slot.icon._texCoord and slot.icon._texCoord[1] > 0, "the picture cropped of its own border")
 			assert(coin._alpha ~= 0 and coin._vertex == nil, "and the coins left exactly as they are")
+			-- THE CLIENT CLEARS THE CROP (build 70707): it sets the picture and
+			-- then the whole of it, every time
+			assert(slot.icon._mask == nil, "the picture square, the client's mask off")
+			slot:ShowPicture(134400)
+			assert(slot.icon._texCoord[1] > 0 and slot.icon:IsShown(), "a new picture is cropped like the first")
+			-- an empty slot is our square alone
+			assert(not bare.icon:IsShown() and bare.EmptyBagIcon._alpha == 0,
+				"a slot empty at the first dressing shows none of the client's art")
+			slot.hasItem = nil
+			slot:SyncAppearanceWithHasItem()
+			assert(not slot.icon:IsShown() and slot.EmptyBagIcon._alpha == 0,
+				"a slot emptied later shows none of it either")
+			slot.hasItem = true
+			slot:ShowPicture(134401)
+			slot:SyncAppearanceWithHasItem()
+			assert(slot.icon:IsShown() and slot.icon._texCoord[1] > 0, "and the next item shows, cropped")
 			-- the client paints an uncommon item: our ring in its green
 			slot.IconBorder:SetVertexColor(0.12, 1, 0)
 			slot.IconBorder:Show()
@@ -8214,11 +8265,11 @@ if ok then
 			slot.IconBorder:Hide()
 			assert(not found:IsShown(), "and none for an item with no quality border")
 			-- a second update leaves a dressed slot alone
-			slot.icon:SetTexCoord(0, 1, 0, 1)
+			normal:SetAlpha(1)
 			mod.StyleAll()
-			assert(slot.icon._texCoord[1] == 0, "a slot is dressed once, not on every bag update")
+			assert(normal._alpha == 1, "a slot is dressed once, not on every bag update")
 			mod.Restyle()
-			assert(slot.icon._texCoord[1] > 0, "and again for a new theme")
+			assert(normal._alpha == 0, "and again for a new theme")
 			-- ONLY THE WINDOWS YOU CAN SEE (Josh 2026-09-30, review): a bag
 			-- update passes a closed window by, and its opening dresses it
 			win:Hide()
@@ -8418,6 +8469,11 @@ if ok then
 			assert(frameArt._alpha == 1 and redX._alpha == 1 and fieldArt._alpha == 1
 				and normal._alpha == 1 and slot.IconBorder._alpha == 1, "switched off, every piece is the client's again")
 			assert(slot.icon._texCoord[1] == 0 and not panel.fill:IsShown(), "the picture and the window too")
+			assert(slot.icon._mask == slot.Mask, "its mask back on the picture")
+			assert(bare.icon:IsShown() and bare.icon._atlas == "bags-item-slot-blank" and bare.EmptyBagIcon._alpha == 1,
+				"an empty slot has the client's art again at once")
+			slot:ShowPicture(134402)
+			assert(slot.icon._texCoord[1] == 0, "off, a new picture stays as the client set it")
 			-- the hooks stay on the border: the client painting it again,
 			-- with the module off, leaves its own glow showing
 			slot.IconBorder:SetVertexColor(0.12, 1, 0)
@@ -15754,6 +15810,27 @@ if ok then
 			_G.CharacterModelScene = scene
 			scene.ControlFrame = _G.CreateFrame("Frame", nil, scene)
 			scene.ControlFrame:SetPoint("TOP", left, "TOP", 0, -40)
+			-- build 70707: PaperDollFrame_OnShow calls this, and it sets the
+			-- overlay's alpha by race
+			scene.BackgroundOverlay = scene:CreateTexture()
+			scene.BackgroundOverlay:SetAlpha(0.85)
+			local hadHook = _G.hooksecurefunc
+			_G.hooksecurefunc = function(name, fn)
+				local orig = _G[name]
+				_G[name] = function(...)
+					orig(...)
+					fn(...)
+				end
+			end
+			_G.SetPaperDollBackground = function(model) model.BackgroundOverlay:SetAlpha(0.75) end
+			-- and an item slot's picture has a mask, its crop set back to the whole
+			local slot = _G.CreateFrame("Button", "CharacterHeadSlot", frame)
+			_G.CharacterHeadSlot = slot
+			slot.icon = slot:CreateTexture()
+			slot.Mask = {}
+			slot.icon._mask = slot.Mask
+			slot.icon.AddMaskTexture = function(self, mask) self._mask = mask end
+			slot.icon.RemoveMaskTexture = function(self) self._mask = nil end
 			local title = frame:CreateFontString()
 			_G.CharacterFrameTitleText = title
 			local lines = {}
@@ -15773,6 +15850,15 @@ if ok then
 			mod.Dress()
 			assert(stone._alpha == 0, "the stone behind the stats comes off under its new name")
 			assert(doll.TopBackgroundStripHost._alpha == 0, "and the rock strip over the model")
+			assert(scene.BackgroundOverlay._alpha == 0, "and the overlay on the model")
+			_G.SetPaperDollBackground(scene, "player")
+			assert(scene.BackgroundOverlay._alpha == 0, "and it stays off when the sheet opens: "
+				.. tostring(scene.BackgroundOverlay._alpha))
+			assert(slot.icon._texCoord and slot.icon._texCoord[1] > 0 and slot.icon._mask == nil,
+				"an item's picture cropped and square")
+			slot.icon:SetTexCoord(0, 1, 0, 1)
+			mod.DressSlot(slot)
+			assert(slot.icon._texCoord[1] > 0, "cropped again after the client redraws the slot")
 			local at = scene.ControlFrame._points.TOP
 			assert(at and at.rel == scene and at.y == -10, "the model's controls 10 under its top, as before")
 			for i, line in ipairs(lines) do
@@ -15784,6 +15870,10 @@ if ok then
 			end
 			BT.SetEnabled("charsheet", false)
 			assert(stone._alpha == 1 and doll.TopBackgroundStripHost._alpha == 1, "off, the client's art is back")
+			assert(slot.icon._texCoord[1] == 0 and slot.icon._mask == slot.Mask, "and the item's picture as it drew it")
+			assert(scene.BackgroundOverlay._alpha == 0.85, "and the overlay")
+			_G.SetPaperDollBackground(scene, "player")
+			assert(scene.BackgroundOverlay._alpha == 0.75, "off, the client's alpha stays")
 			for _, line in ipairs(lines) do
 				local _, size, flags = line.text:GetFont()
 				assert(line.info:GetFrameStrata() == "HIGH" and size == 16 and flags == "OUTLINE",
@@ -15794,6 +15884,7 @@ if ok then
 			_G.CharacterFrame, _G.CharacterFrameRightPaneHost, _G.CharacterFrameTitleText = nil, nil, nil
 			_G.PaperDollFrame, _G.CharacterModelScene = nil, nil
 			_G.PaperDollLevelInfo, _G.CharacterLevelText, _G.PaperDollPetLevelInfo, _G.PetCharacterLevelText = nil, nil, nil, nil
+			_G.SetPaperDollBackground, _G.CharacterHeadSlot, _G.hooksecurefunc = nil, nil, hadHook
 		end },
 		{ "the character sheet drags by its title and opens where it was left", function()
 			local mod = BT.GetModule("charsheet")
