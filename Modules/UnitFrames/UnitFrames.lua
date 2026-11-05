@@ -367,7 +367,7 @@ end
 M.EDIT_MODE = {
 	party = { index = "Player", corner = "TOPLEFT", inset = { 24, 19 } },
 	target = { index = "Target", corner = "TOPLEFT", inset = { 22, 19 } },
-	raid = { index = "Raid", corner = "TOPLEFT" },
+	raid = { index = "Raid", corner = "TOPLEFT", byAnchor = true },
 	boss = { index = "Boss", corner = "TOPRIGHT" },
 	cast = { system = "CastBar", corner = "BOTTOM" },
 }
@@ -406,11 +406,23 @@ function M.EditModeSpot(key)
 		return nil
 	end
 	local num, call = BT.Pill.Number, BT.Furniture.Call
+	local spec = M.EDIT_MODE[key]
+	local corner = spec.corner
+	-- THE RAID BY ITS ANCHOR, IN A RAID TOO (Josh 2026-11-04: "Raid frames dont
+	-- respect the edit mode location"). The raid's container takes its size
+	-- from the raid frames in it that can be seen (the forever branch's
+	-- CompactRaidFrameContainerMixin:GetBounds). Put away, none can, and its
+	-- size comes out as nonsense, so its box put ours at the top of the
+	-- screen. Edit Mode always hangs it by its top left, so that is read.
+	if spec.byAnchor then
+		local x, y = M.AnchorSpot(f, corner)
+		if x then
+			return x, y
+		end
+	end
 	local eff = num(call(f, "GetEffectiveScale"), nil)
 	local l, r = num(call(f, "GetLeft"), nil), num(call(f, "GetRight"), nil)
 	local t, b = num(call(f, "GetTop"), nil), num(call(f, "GetBottom"), nil)
-	local spec = M.EDIT_MODE[key]
-	local corner = spec.corner
 	if not (eff and eff > 0 and l and r and t and b) then
 		-- NO RECT, BY ITS ANCHOR (Josh 2026-10-18: "Raid frames are not
 		-- tracking the edit mode raid frames"). The raid's container sizes

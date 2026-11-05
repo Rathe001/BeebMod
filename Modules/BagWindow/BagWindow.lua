@@ -779,6 +779,11 @@ end
 -- page's Record button)
 function M.Dump()
 	local lines = BT.Furniture.Dump(M.Windows())
+	if M.BagSlots and M.BagSlots.Dump then
+		for _, line in ipairs(M.BagSlots.Dump()) do
+			lines[#lines + 1] = line
+		end
+	end
 	BT.EnsureBound()
 	BeebModDB.bagwindowDump = {
 		at = U.Now(),

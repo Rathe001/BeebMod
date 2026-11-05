@@ -3,6 +3,28 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Quest reagents on enemy tooltips.** A quest item the game doesn't tie to
+  an enemy now shows on its tooltip, with your count. Small Spider Leg shows
+  on spiders, for example. BeebMod matches the item's name to the enemy's
+  name or family. It also remembers which enemies you looted the item from.
+
+- **Kills on enemy tooltips are quieter.** The row with your kills and next
+  mastery is now greyer and a little smaller than the quest rows. A faint
+  line separates it from them.
+
+- **Double-click to fish.** With a fishing pole equipped, double right-click
+  the world to cast Fishing. It doesn't work in combat or on a person or NPC.
+  Switch it off under General, in Fishing.
+
+- **The queue eye shows on the minimap.** While you wait in a queue for a
+  battleground or a group, its eye sits at the bottom middle of the minimap.
+  It was hidden under the dock.
+
+- **Raid frames follow Edit Mode in a raid.** They sat at the top of the
+  screen. They now go where Edit Mode puts the raid frames.
+
 ## 1.0.2
 
 - **Unit tooltips show all their rows again.** Some tooltips stopped after

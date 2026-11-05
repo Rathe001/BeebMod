@@ -893,8 +893,11 @@ end
 -- log changes. A unit's tooltip is written again several times a second
 -- while you point at it, and each time it walked the whole quest log.
 local questTitles = nil
+-- and the item objectives still open, the same way (M.WithItemQuests)
+local itemObjectives = nil
 function M.ForgetQuests()
 	questTitles = nil
+	itemObjectives = nil
 end
 if CreateFrame then
 	M.questWatch = CreateFrame("Frame")
@@ -1025,13 +1028,259 @@ function M.QuestRows(tip, quests)
 	return n
 end
 
+-- ITEMS A QUEST ASKS FOR THAT THE CLIENT DOES NOT TIE TO AN ENEMY (Josh
+-- 2026-11-04: "Small spider leg should be showing as a quest item on this
+-- spider's tooltip"). The client writes a quest line on a tooltip only for a
+-- quest-only item; a reagent a quest wants, like Small Spider Leg, has none.
+-- Josh chose two ways to tell, either one enough: the item's name shares a
+-- word with the enemy's name or family ("Small Spider Leg" on a Spider,
+-- "Webwood Venom Sac" on a Webwood Lurker), or you have looted that item from
+-- that enemy before. The first may now and then put a row on an enemy that
+-- does not drop it. Only an enemy you can attack, and never a player.
+
+-- an NPC's number from its GUID ("Creature-0-…-<npc>-…")
+local function npcOf(guid)
+	if type(guid) ~= "string" or (issecretvalue and issecretvalue(guid)) then
+		return nil
+	end
+	local kind, npc = guid:match("^(%a+)%-[^-]*%-[^-]*%-[^-]*%-[^-]*%-(%d+)")
+	if kind ~= "Creature" and kind ~= "Vehicle" then
+		return nil
+	end
+	return tonumber(npc)
+end
+M.NpcOf = npcOf
+
+-- the words worth matching: four letters or more, in lower case, without "'s"
+local function wordsOf(text, into)
+	into = into or {}
+	if type(text) ~= "string" then
+		return into
+	end
+	for word in text:lower():gmatch("[%a']+") do
+		word = word:gsub("'s$", ""):gsub("'", "")
+		if #word >= 4 then
+			into[word] = true
+		end
+	end
+	return into
+end
+
+-- A QUEST-ONLY ITEM IS THE CLIENT'S TO TIE. The client writes a line for one
+-- on every enemy that drops it, so one with no line there is not dropped by
+-- it: the Webwood Egg comes from a nest, not a Webwood spider. The name is
+-- not matched for such an item. Only an item the client has seen can be
+-- asked about by name; one it has not is matched as any other.
+M.QUEST_CLASS = (Enum and Enum.ItemClass and Enum.ItemClass.Questitem) or 12
+local function questOnly(name)
+	local instant = (C_Item and C_Item.GetItemInfoInstant) or _G.GetItemInfoInstant
+	if type(instant) == "function" then
+		local ok, id, _, _, _, _, class = pcall(instant, name)
+		if ok and id then
+			return class == M.QUEST_CLASS
+		end
+	end
+	return false
+end
+
+-- what you have looted that a quest wanted, by enemy: { [npc] = { [item] = true } }
+-- for the account, since every character's spiders drop the same legs
+function M.Drops()
+	local s = BT.settings
+	if not s then
+		return nil
+	end
+	if type(s.questDrops) ~= "table" then
+		s.questDrops = {}
+	end
+	return s.questDrops
+end
+
+-- the loot window open: each item a quest still wants, under every enemy it
+-- came from. Nothing else is kept.
+function M.LearnDrops()
+	if not (type(GetNumLootItems) == "function" and type(GetLootSlotInfo) == "function"
+		and type(GetLootSourceInfo) == "function" and BT.Quests and BT.Quests.ItemObjectives) then
+		return 0
+	end
+	local ok, objectives = pcall(BT.Quests.ItemObjectives)
+	if not (ok and objectives and #objectives > 0) then
+		return 0
+	end
+	local wanted = {}
+	for _, o in ipairs(objectives) do
+		wanted[o.text] = true
+	end
+	local drops = M.Drops()
+	if not drops then
+		return 0
+	end
+	local n = 0
+	local okN, count = pcall(GetNumLootItems)
+	for slot = 1, (okN and tonumber(count)) or 0 do
+		local okI, _, name = pcall(GetLootSlotInfo, slot)
+		if okI and type(name) == "string" and not (issecretvalue and issecretvalue(name)) and wanted[name] then
+			local r = { pcall(GetLootSourceInfo, slot) }
+			-- guid, quantity, guid, quantity, ...
+			for i = 2, #r, 2 do
+				local npc = r[1] and npcOf(r[i])
+				if npc then
+					drops[npc] = drops[npc] or {}
+					if not drops[npc][name] then
+						drops[npc][name] = true
+						n = n + 1
+					end
+				end
+			end
+		end
+	end
+	return n
+end
+if CreateFrame then
+	M.lootWatch = CreateFrame("Frame")
+	pcall(M.lootWatch.RegisterEvent, M.lootWatch, "LOOT_READY")
+	M.lootWatch:SetScript("OnEvent", function()
+		if BT.Enabled("tooltips") then
+			M.LearnDrops()
+		end
+	end)
+end
+
+-- `quests` as questBlock gave it (or nil), with the item objectives this
+-- enemy counts towards that the client left out, each under its quest's name
+function M.WithItemQuests(unit, quests)
+	if not (BT.Quests and BT.Quests.ItemObjectives) then
+		return quests
+	end
+	if plainYes(UnitIsPlayer, unit) or not plainYes(UnitCanAttack, "player", unit) then
+		return quests
+	end
+	if not itemObjectives then
+		local ok, list = pcall(BT.Quests.ItemObjectives)
+		itemObjectives = ok and list or {}
+	end
+	if #itemObjectives == 0 then
+		return quests
+	end
+	local said = {}
+	for _, q in ipairs(quests or {}) do
+		if not q.title then
+			said[q.text] = true
+		end
+	end
+	local npc = npcOf(plainText(UnitGUID, unit))
+	local learnt = npc and M.Drops() and M.Drops()[npc] or nil
+	local own = wordsOf(plainText(UnitName, unit))
+	wordsOf(plainText(UnitCreatureFamily, unit), own)
+	for _, o in ipairs(itemObjectives) do
+		local match = learnt and learnt[o.text]
+		if not match and not questOnly(o.text) then
+			for word in pairs(wordsOf(o.text)) do
+				if own[word] then
+					match = true
+					break
+				end
+			end
+		end
+		if match and not said[o.text] then
+			said[o.text] = true
+			quests = quests or {}
+			local row = { text = o.text, have = o.have, need = o.need, done = false }
+			-- under its quest's name when the client already wrote that quest
+			local at = nil
+			for i, q in ipairs(quests) do
+				if q.title and q.text == o.title then
+					at = i
+				end
+			end
+			if at then
+				local j = at + 1
+				while quests[j] and not quests[j].title do
+					j = j + 1
+				end
+				table.insert(quests, j, row)
+			else
+				quests[#quests + 1] = { text = o.title, title = true }
+				quests[#quests + 1] = row
+			end
+		end
+	end
+	return quests
+end
+
 -- YOUR KILLS OF IT (Josh 2026-10-17, the tooltip canvas): how many of this
 -- enemy the Expedition has from this character, and how far it is to its next
 -- mastery, in that mastery's metal. Only for something you can attack, and
 -- only while the Expedition is on.
+-- QUIETER THAN THE QUESTS (Josh 2026-11-05: "The mastery is secondary
+-- content, so I don't want to make users think they have to complete it").
+-- The quest rows are in the tooltip's bright ink. This row is in grey, its
+-- paw and its metal toned down by M.HUSH, and a row with no kills greyer still.
 M.EXPEDITION = { 0.44, 0.64, 0.80 }
-M.NO_KILLS = { 0.62, 0.68, 0.65 }
-function M.KillsRow(tip, unit)
+M.KILLS_INK = { 0.62, 0.68, 0.65 }
+M.NO_KILLS = { 0.50, 0.55, 0.53 }
+M.HUSH = 0.7
+
+-- AND SMALLER, SET APART (Josh 2026-11-05: "Maybe make the text slightly
+-- smaller, and put some margin or a divider above it to separate it from the
+-- quest text?"). A point smaller than the quest rows, and under quest rows a
+-- short blank line with a faint rule across its middle. With no quest rows
+-- above it, the gap under the tags already sets it apart.
+M.KILLS_SIZE = 9.5
+M.RULE_LINE = 7
+M.RULE_INK = { 1, 1, 1, 0.10 }
+M.RULE_INSET = 10
+-- CENTRED BY EYE (Josh 2026-11-05: "can you vertically center it?"). The
+-- middle of the blank line sat low: in his screenshot the quest's letters
+-- ended at row 88, the rule was at 96 and the kills began at 101, so 7 rows
+-- above it and 4 below. Lifted to the middle.
+M.RULE_LIFT = 1.5
+-- NEARER THE BOTTOM (Josh 2026-11-05: "Maybe move it closer to the bottom of
+-- the tooltip"). Under "2 kills" there were 11 empty rows to the health line,
+-- more than the gap above it. As the last line, its margin under it is this
+-- much smaller. Its line is as tall as the paw, taller than its words, so the
+-- words keep room under them.
+M.KILLS_TUCK = 4
+
+-- the faint rule across line `i` of `tip`, or put away for nil
+function M.KillsRule(tip, i)
+	local rule = tip and tip.beebsKillsRule
+	if not i then
+		if rule then
+			rule:Hide()
+		end
+		return nil
+	end
+	local fs = BT.UnitTip.LineOf(tip, i)
+	if not fs then
+		return nil
+	end
+	if not rule then
+		local ok, made = pcall(tip.CreateTexture, tip, nil, "ARTWORK")
+		if not (ok and type(made) == "table" and made.SetColorTexture) then
+			return nil
+		end
+		rule = made
+		rule:SetColorTexture(M.RULE_INK[1], M.RULE_INK[2], M.RULE_INK[3], M.RULE_INK[4])
+		tip.beebsKillsRule = rule
+	end
+	rule:ClearAllPoints()
+	rule:SetPoint("LEFT", fs, "LEFT", 0, M.RULE_LIFT)
+	rule:SetPoint("RIGHT", tip, "RIGHT", -M.RULE_INSET, 0)
+	rule:SetHeight(1)
+	rule:Show()
+	return rule
+end
+
+-- `c` toned down toward the tooltip's dark: each part scaled by M.HUSH
+function M.Hushed(c)
+	if type(c) ~= "table" then
+		return c
+	end
+	return { (c[1] or 1) * M.HUSH, (c[2] or 1) * M.HUSH, (c[3] or 1) * M.HUSH }
+end
+function M.KillsRow(tip, unit, apart)
+	M.KillsRule(tip, nil)
 	local J = BT.Expedition
 	if not (J and J.GuidNpc and J.Store and BT.Enabled("expedition")) then
 		return nil
@@ -1071,8 +1320,19 @@ function M.KillsRow(tip, unit)
 		right, rc = reached.name, reached.color
 	end
 	local feature = BT.Feature and BT.Feature("expedition")
-	return BT.UnitTip.Row(tip, "kills", feature and feature.color or M.EXPEDITION, words,
-		have == 0 and M.NO_KILLS or BT.UnitTip.INK, right, rc)
+	if apart then
+		tip:AddLine(" ")
+		local gap = BT.Pill.Number(tip:NumLines(), 1)
+		BT.UnitTip.SizeLine(tip, gap, M.RULE_LINE)
+		M.KillsRule(tip, gap)
+	end
+	local i = BT.UnitTip.Row(tip, "kills", M.Hushed(feature and feature.color or M.EXPEDITION), words,
+		have == 0 and M.NO_KILLS or M.KILLS_INK, right, M.Hushed(rc))
+	BT.UnitTip.SizeLine(tip, i, M.KILLS_SIZE, nil, "text")
+	if right then
+		BT.UnitTip.SizeLine(tip, i, M.KILLS_SIZE, "TextRight", "text")
+	end
+	return i
 end
 
 -- THE HEALTH, AS A LINE (Josh 2026-10-17, the tooltip canvas): two pixels
@@ -1145,8 +1405,9 @@ function M.HealthFrame()
 end
 
 -- a unit's line goes with its tooltip, whatever comes next
-BT.OnUnitTooltipHide(function()
+BT.OnUnitTooltipHide(function(tip)
 	M.HealthLine(nil, nil)
+	M.KillsRule(tip or _G.GameTooltip, nil)
 end)
 
 -- the gap between the level and the Elite tag beside it, and how much
@@ -1205,6 +1466,10 @@ function M.Compose(tip, unit)
 	end
 	for line in pairs(usedByQuests or {}) do
 		spoken[line] = true
+	end
+	-- and the items a quest wants that the client did not tie to it
+	if not isPlayer then
+		quests = M.WithItemQuests(unit, quests)
 	end
 	-- the name may be secret (the width below is not measured for one), and a
 	-- secret is never compared: the client's lines are matched against it only
@@ -1330,8 +1595,9 @@ function M.Compose(tip, unit)
 	end
 
 	-- the rows: the quests it counts for, then your kills of it
+	local beforeQuests = BT.Pill.Number(tip:NumLines(), 0)
 	M.QuestRows(tip, quests)
-	M.KillsRow(tip, unit)
+	local killsAt = M.KillsRow(tip, unit, BT.Pill.Number(tip:NumLines(), 0) > beforeQuests)
 
 	-- Elite, Rare or Boss, as a tag just before the level
 	if rank then
@@ -1389,7 +1655,11 @@ function M.Compose(tip, unit)
 		-- and the two pixels the tags were dropped by, which the client does
 		-- not count when it measures the lines
 		local room = (fighting and (M.HEALTH_H + 1) or 0) + (firstTags and M.TAG_DROP or 0)
-		skins[tip].extraBottom = room > 0 and room or nil
+		-- and the kills row, when it is the last line, nearer the bottom
+		if killsAt and killsAt == BT.Pill.Number(tip:NumLines(), 0) then
+			room = room - M.KILLS_TUCK
+		end
+		skins[tip].extraBottom = room ~= 0 and room or nil
 	end
 	if tip.SetMinimumWidth then
 		pcall(tip.SetMinimumWidth, tip, width)

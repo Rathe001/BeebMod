@@ -1269,7 +1269,116 @@ end
 --
 -- Everything moved is remembered when it is moved. Undoing is walking that
 -- list, not searching again.
+-- THE QUEUE EYE (Josh 2026-11-05: "I queued for warsong gulch, but don't see
+-- the indicator anywhere"). On this client the eye that says you are in a
+-- queue is QueueStatusButton, a frame of its own under UIParent. In its
+-- default place the client hangs it 68 left and 68 down from the minimap's
+-- centre, the edge of a round map (the forever branch's
+-- Blizzard_QueueStatusFrame/Camelot, QueueStatusButtonMixin:UpdateDefaultAnchor).
+-- With the map in the dock that is under the dock, out of sight. So while the
+-- map is in the dock, the eye sits at the middle of its bottom edge, above the
+-- map, as big as the corner icons. It stays up like the mail: being in a
+-- queue is no use if you have to go looking for it. Moved in Edit Mode, it is
+-- left where it was put. The client places it again each time it shows, so
+-- it is placed again after the client.
+M.QUEUE = { spot = "BOTTOM", x = 0, y = 3, size = 22 }
+
+local function queueEye()
+	local eye = rawget(_G, "QueueStatusButton")
+	if type(eye) == "table" and type(eye.SetPoint) == "function" and type(eye.ClearAllPoints) == "function" then
+		return eye
+	end
+	return nil
+end
+
+-- whether the eye is where the client puts it unless told otherwise
+local function eyeAtHome(eye)
+	if type(eye.IsInDefaultPosition) ~= "function" then
+		return true
+	end
+	local ok, home = pcall(eye.IsInDefaultPosition, eye)
+	return not ok or home ~= false
+end
+
+-- the eye on `map`, or given back to the client for nil; whether it moved
+function M.Queue(map)
+	local eye = queueEye()
+	if not eye then
+		return false
+	end
+	if not M.queueHooked and hooksecurefunc then
+		M.queueHooked = true
+		for _, method in ipairs({ "UpdateDefaultAnchor", "ApplySystemAnchor" }) do
+			if type(eye[method]) == "function" then
+				hooksecurefunc(eye, method, function()
+					if M.queueMap and not M.placingEye then
+						M.Queue(M.queueMap)
+					end
+				end)
+			end
+		end
+	end
+	local was = M.queueWas
+	if not map or not eyeAtHome(eye) then
+		M.queueMap = nil
+		if not was then
+			return false
+		end
+		M.queueWas = nil
+		pcall(eye.SetScale, eye, was.scale or 1)
+		if was.strata then
+			pcall(eye.SetFrameStrata, eye, was.strata)
+		end
+		if was.level then
+			pcall(eye.SetFrameLevel, eye, was.level)
+		end
+		-- the client's own place for it, worked out by the client
+		if type(eye.UpdateDefaultAnchor) == "function" then
+			M.placingEye = true
+			pcall(eye.UpdateDefaultAnchor, eye)
+			M.placingEye = false
+		end
+		return true
+	end
+	M.queueMap = map
+	if not was then
+		local function ask(method)
+			if type(eye[method]) ~= "function" then
+				return nil
+			end
+			local ok, v = pcall(eye[method], eye)
+			return ok and v or nil
+		end
+		M.queueWas = { scale = ask("GetScale"), strata = ask("GetFrameStrata"), level = ask("GetFrameLevel") }
+	end
+	-- as big as the corner icons, on the screen's ruler: the eye hangs from
+	-- UIParent, the map from the dock
+	local w = M.QUEUE
+	local side = BT.Pill.Number(eye.GetWidth and eye:GetWidth(), 0)
+	local parentScale = BT.Pill.Number(eye.GetParent and eye:GetParent() and scaleOf(eye:GetParent()), 1)
+	if side > 0 and type(eye.SetScale) == "function" then
+		pcall(eye.SetScale, eye, w.size * scaleOf(map) / (side * parentScale))
+	end
+	if map.GetFrameStrata and eye.SetFrameStrata then
+		local ok, strata = pcall(map.GetFrameStrata, map)
+		if ok and strata then
+			pcall(eye.SetFrameStrata, eye, strata)
+		end
+	end
+	if map.GetFrameLevel and eye.SetFrameLevel then
+		pcall(eye.SetFrameLevel, eye, BT.Pill.Number(map:GetFrameLevel(), 1) + 10)
+	end
+	-- the offset is in the eye's own units, the map's edge in the map's
+	local own = scaleOf(eye)
+	M.placingEye = true
+	pcall(eye.ClearAllPoints, eye)
+	pcall(eye.SetPoint, eye, w.spot, map, w.spot, w.x * scaleOf(map) / own, w.y * scaleOf(map) / own)
+	M.placingEye = false
+	return true
+end
+
 function M.Restore()
+	M.Queue(nil)
 	local n = 0
 	for thing in pairs(moved) do
 		move(thing)
@@ -1525,6 +1634,7 @@ function M.Apply(plain)
 
 	M.Chrome(true)
 	M.Keepers(frame, map, false)
+	M.Queue(map)
 	M.WatchHover(frame, map)
 	M.Caption()
 	-- the coordinates change as you walk, so they are read a few times a

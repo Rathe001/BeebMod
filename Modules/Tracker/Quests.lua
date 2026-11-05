@@ -169,6 +169,39 @@ function Q.All()
 	return out
 end
 
+-- EVERY ITEM STILL TO COLLECT (Josh 2026-11-04: "Small spider leg should be
+-- showing as a quest item on this spider's tooltip"). The client puts a quest
+-- line on an enemy's tooltip only for a quest-only item, so a reagent a quest
+-- asks for, like Small Spider Leg, never gets one. Each unfinished item
+-- objective in the log: { title, text, have, need }, `text` the item's name.
+function Q.ItemObjectives()
+	local out = {}
+	for i = 1, numEntries() do
+		local title, _, isHeader, questID = entry(i)
+		if title and not isHeader then
+			if C_QuestLog and C_QuestLog.GetNumQuestObjectives and GetQuestObjectiveInfo and questID then
+				local n = tonumber(C_QuestLog.GetNumQuestObjectives(questID)) or 0
+				for j = 1, n do
+					local text, kind, finished, fulfilled, required = GetQuestObjectiveInfo(questID, j, false)
+					if kind == "item" and not finished and type(text) == "string" and text ~= "" then
+						local words, have, need = Q.SplitObjective(text, fulfilled, required)
+						out[#out + 1] = { title = title, text = words, have = have, need = need }
+					end
+				end
+			elseif GetNumQuestLeaderBoards and GetQuestLogLeaderBoard then
+				for j = 1, tonumber(GetNumQuestLeaderBoards(i)) or 0 do
+					local text, kind, finished = GetQuestLogLeaderBoard(j, i)
+					if kind == "item" and not finished and type(text) == "string" and text ~= "" then
+						local words, have, need = Q.SplitObjective(text)
+						out[#out + 1] = { title = title, text = words, have = have, need = need }
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+
 -- THE QUEST'S ITEM (Josh 2026-09-22). Some quests hand you a thing to use -
 -- a horn to blow, a cage to open - and the client's own tracker shows it as
 -- a button beside the quest. GetQuestLogSpecialItemInfo answers with the

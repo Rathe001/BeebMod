@@ -2450,7 +2450,11 @@ if ok then
 			-- left here belongs to everything (Josh 2026-09-20)
 			-- GENERAL IS THE LOOK (Josh 2026-09-24): the clock and the census
 			-- button are the Dock's page's, the target row the Ledger's
-			assert(#generalSwitches() == 0, "no switches on General, only the look")
+			-- AND FISHING (Josh 2026-11-05: "Should be in the general settings
+			-- probably"): a utility with no page of its own
+			local switches = generalSwitches()
+			assert(#switches == 1 and switches[1] == BT.Settings.fishingRow,
+				"on General, only the look and double-click fishing: " .. #switches)
 			-- the target row's switch went with the row (Josh 2026-10-05)
 			local function rowFor(page, field)
 				BT.Window.SetView(page)
@@ -3343,6 +3347,106 @@ if ok then
 			assert(not all:find("Press F6", 1, true),
 				"the client's own footnote is not copied back in: " .. all)
 			_G.UnitIsPlayer, _G.UnitCreatureType = wasPlayer, wasType
+		end },
+		{ "an item a quest wants shows on the enemies that drop it", function()
+			-- SMALL SPIDER LEG (Josh 2026-11-04): a reagent a quest asks for has
+			-- no quest line from the client. Josh chose both ways to tell: a word
+			-- of the item's name in the enemy's name or family, or the item
+			-- looted from that enemy before.
+			local mod = BT.GetModule("tooltips")
+			local was = { player = _G.UnitIsPlayer, family = _G.UnitCreatureFamily, name = _G.UnitName,
+				attack = _G.UnitCanAttack, guid = _G.UnitGUID, boards = _G.GetNumQuestLeaderBoards,
+				board = _G.GetQuestLogLeaderBoard, n = _G.GetNumLootItems, slot = _G.GetLootSlotInfo,
+				source = _G.GetLootSourceInfo, drops = BT.settings.questDrops }
+			_G.UnitIsPlayer = function() return false end
+			_G.UnitCanAttack = function() return true end
+			_G.C_QuestLog = nil
+			_G.GetNumQuestLogEntries = function() return 2 end
+			_G.GetQuestLogTitle = function(i)
+				if i == 1 then return "Cooking", 0, nil, true, nil, nil, nil, nil end
+				return "Recipe of the Kaldorei", 7, nil, false, nil, nil, nil, 4161
+			end
+			_G.GetNumQuestLeaderBoards = function() return 1 end
+			_G.GetQuestLogLeaderBoard = function() return "Small Spider Leg: 2/7", "item", false end
+			BT.settings.questDrops = nil
+			mod.ForgetQuests()
+			local lines, rights = {}, {}
+			local tip = setmetatable({
+				AddLine = function(_, text) lines[#lines + 1] = tostring(text) end,
+				AddDoubleLine = function(_, l, r)
+					lines[#lines + 1] = tostring(l)
+					rights[#lines] = r
+				end,
+				ClearLines = function() lines = {} end,
+				NumLines = function() return #lines end,
+				GetName = function() return "LegTip" end,
+				GetWidth = function() return 220 end,
+			}, FAKE_TIP)
+			for i = 1, 10 do
+				local fs = _G.CreateFrame("FontString")
+				fs.GetText = function() return lines[i] end
+				_G["LegTipTextLeft" .. i] = fs
+				_G["LegTipTextRight" .. i] = _G.CreateFrame("FontString")
+			end
+			local function hover(name, family, npc)
+				_G.UnitName = function() return name end
+				_G.UnitCreatureFamily = function() return family end
+				_G.UnitGUID = function() return ("Creature-0-1-1-1-%d-0000ABCDEF"):format(npc) end
+				lines, rights = { name, "Level 5", "Beast" }, {}
+				mod.Compose(tip, "target")
+				for i, text in ipairs(lines) do
+					if text:find("Small Spider Leg", 1, true) then
+						return i
+					end
+				end
+			end
+			local row = hover("Webwood Lurker", "Spider", 1998)
+			assert(row and rights[row] == "2/7", "a Spider wears the leg's row, its count on the right: " .. table.concat(lines, " | "))
+			assert(not hover("Mangy Nightsaber", "Cat", 2032), "a cat shares no word with it, and has none")
+			-- looted from the cat once: the cat wears it too
+			_G.GetNumLootItems = function() return 2 end
+			_G.GetLootSlotInfo = function(slot)
+				return 1, slot == 1 and "Small Spider Leg" or "Ruined Pelt", 1
+			end
+			_G.GetLootSourceInfo = function() return "Creature-0-1-1-1-2032-0000ABCDEF", 1 end
+			assert(mod.LearnDrops() == 1, "only what a quest wants is kept")
+			assert(BT.settings.questDrops[2032]["Small Spider Leg"] and not BT.settings.questDrops[2032]["Ruined Pelt"],
+				"under the enemy it came from")
+			assert(hover("Mangy Nightsaber", "Cat", 2032), "and after that the cat wears the row")
+			-- A QUEST-ONLY ITEM IS THE CLIENT'S: the Webwood Egg is from a nest,
+			-- and the client would have said so if a spider dropped it
+			local hadItem = _G.C_Item
+			_G.GetQuestLogLeaderBoard = function() return "Webwood Egg: 0/1", "item", false end
+			mod.ForgetQuests()
+			local function eggRow(name, family, npc)
+				hover(name, family, npc)
+				for _, text in ipairs(lines) do
+					if text:find("Webwood Egg", 1, true) then
+						return true
+					end
+				end
+				return false
+			end
+			_G.C_Item = setmetatable({ GetItemInfoInstant = function() return nil end }, { __index = hadItem })
+			assert(eggRow("Webwood Lurker", "Spider", 1998), "an item the client has not seen is matched by name")
+			_G.C_Item = setmetatable({ GetItemInfoInstant = function() return 5167, "Quest", "Quest", "", 1, 12, 0 end },
+				{ __index = hadItem })
+			assert(not eggRow("Webwood Lurker", "Spider", 1998), "but not once the client says it is a quest item")
+			_G.C_Item = hadItem
+			_G.GetQuestLogLeaderBoard = function() return "Small Spider Leg: 2/7", "item", false end
+			mod.ForgetQuests()
+			-- a friendly NPC, or one finished: none
+			_G.UnitCanAttack = function() return false end
+			assert(not hover("Webwood Lurker", "Spider", 1998), "nothing on one you cannot attack")
+			_G.UnitCanAttack = function() return true end
+			_G.GetQuestLogLeaderBoard = function() return "Small Spider Leg: 7/7", "item", true end
+			mod.ForgetQuests()
+			assert(not hover("Webwood Lurker", "Spider", 1998), "nor once you have them all")
+			_G.UnitIsPlayer, _G.UnitCreatureFamily, _G.UnitName = was.player, was.family, was.name
+			_G.UnitCanAttack, _G.UnitGUID, _G.GetNumQuestLeaderBoards = was.attack, was.guid, was.boards
+			_G.GetQuestLogLeaderBoard, _G.GetNumLootItems, _G.GetLootSlotInfo = was.board, was.n, was.slot
+			_G.GetLootSourceInfo, BT.settings.questDrops = was.source, was.drops
+			mod.ForgetQuests()
 		end },
 		{ "a line whose place is secret does not end the rebuild", function()
 			-- LAUNCH DAY (Josh 2026-11-04): a Thistle Boar's tooltip had its
@@ -4318,6 +4422,72 @@ if ok then
 				"a plain zone-in leaves the bound book as it is")
 			BT.boot.boundCount = count
 			_G.GetRealmName, _G.UnitFactionGroup = wasRealm, wasFaction
+		end },
+		{ "a double right-click casts Fishing with a pole in hand", function()
+			-- DOUBLE-CLICK TO FISH (Josh 2026-11-05, as Fishing Buddy does it)
+			local mod = BT.GetModule("fishing")
+			local names = { "GetTime", "GetInventoryItemID", "C_Item", "IsPlayerSpell", "C_Spell",
+				"SetOverrideBindingClick", "ClearOverrideBindings", "InCombatLockdown", "UnitExists", "IsMounted" }
+			local had = {}
+			for _, n in ipairs(names) do
+				had[n] = rawget(_G, n)
+			end
+			local clock, pole, fight, someone, mounted = 100, true, false, false, false
+			local bound, cleared = nil, 0
+			_G.GetTime = function() return clock end
+			_G.GetInventoryItemID = function(_, slot) return slot == 16 and (pole and 6256 or 2361) or nil end
+			_G.C_Item = setmetatable({ GetItemInfoInstant = function(id)
+				return id, "Weapon", "", "INVTYPE_2HWEAPON", 0, 2, id == 6256 and 20 or 1
+			end }, { __index = had.C_Item })
+			_G.IsPlayerSpell = function(id) return id == 7620 end
+			_G.C_Spell = setmetatable({ GetSpellName = function(id) return id == 7620 and "Fishing" or nil end },
+				{ __index = had.C_Spell })
+			_G.SetOverrideBindingClick = function(owner, _, key, name) bound = { owner, key, name } end
+			_G.ClearOverrideBindings = function() cleared = cleared + 1 end
+			_G.InCombatLockdown = function() return fight end
+			_G.UnitExists = function(unit) return unit == "mouseover" and someone end
+			_G.IsMounted = function() return mounted end
+			local function double()
+				bound = nil
+				mod.lastRight = nil
+				mod.MouseDown("RightButton")
+				clock = clock + 0.25
+				return mod.MouseDown("RightButton")
+			end
+			BT.SetEnabled("fishing", true)
+			local b = mod.Build()
+			assert(not mod.MouseDown("RightButton") and bound == nil, "one right-click is the world's")
+			clock = clock + 0.25
+			assert(mod.MouseDown("RightButton") and bound and bound[2] == "BUTTON2"
+				and bound[3] == "BeebModFishingButton" and b:GetAttribute("spell") == "Fishing"
+				and b:GetAttribute("type") == "spell",
+				"a second within the double-click time points the right button at the cast")
+			b:GetScript("PostClick")(b, "RightButton", false)
+			assert(cleared == 1 and not mod.taken, "and the click gives the right button back")
+			clock = clock + 5
+			mod.MouseDown("RightButton")
+			clock = clock + 1
+			assert(not mod.MouseDown("RightButton"), "two clicks a second apart are not a double-click")
+			someone = true
+			assert(not double(), "a double-click on someone is still theirs")
+			someone, mounted = false, true
+			assert(not double(), "not mounted")
+			mounted, pole = false, false
+			assert(not double(), "not without a fishing pole")
+			pole, fight = true, true
+			assert(not double(), "not in a fight")
+			fight = false
+			assert(not mod.MouseDown("LeftButton") and not mod.MouseDown("LeftButton"), "left clicks are not it")
+			BT.SetEnabled("fishing", false)
+			assert(not double(), "switched off, it does nothing")
+			BT.SetEnabled("fishing", true)
+			assert(double(), "and switched on again it casts")
+			-- a fight starting while the button is ours gives it back
+			mod.events:GetScript("OnEvent")(mod.events, "PLAYER_REGEN_DISABLED")
+			assert(cleared == 2 and not mod.taken, "a fight starting gives the right button back")
+			for _, n in ipairs(names) do
+				_G[n] = had[n]
+			end
 		end },
 		{ "a module that sets itself up does it at login too", function()
 			-- THE BUG THIS EXISTS TO STOP (Josh 2026-09-20). OnEnable fires
@@ -5451,6 +5621,15 @@ if ok then
 					mod.FollowEditMode()
 					assert(at(mod.Holder("raid"), "TOPLEFT") == "24,516",
 						"the empty raid placed from its anchor: " .. at(mod.Holder("raid"), "TOPLEFT"))
+					-- IN A RAID TOO ("Raid frames dont respect the edit mode
+					-- location"): put away, the container's size is nonsense and
+					-- its box is no guide, so its top left anchor is read
+					local full = gameFrame(30, 100000, -100000, -100000)
+					full.GetPoint = function() return "TOPLEFT", manager, "TOPRIGHT", 0, -5 end
+					game[5] = full
+					mod.FollowEditMode()
+					assert(at(mod.Holder("raid"), "TOPLEFT") == "24,516",
+						"a raid's frames placed from its anchor, not its box: " .. at(mod.Holder("raid"), "TOPLEFT"))
 					game[5] = hadRaid
 					-- ANY POINT ("Boss frames are also not respecting edit
 					-- mode"): the bosses hang by their right side; empty, every
@@ -8519,6 +8698,36 @@ if ok then
 			assert(bs[1].icon._texture == 133644 and bs[1].icon:IsShown(),
 				"a bag the slot gives no picture for shows its item's: " .. tostring(bs[1].icon._texture))
 			assert(not bs[2].icon:IsShown(), "and an empty slot still shows none")
+			-- the record says what each slot read (Josh 2026-11-04: "Small brown
+			-- pouch icon isnt showing on the bag bar now")
+			local said = table.concat(S.Dump(), "\n")
+			assert(said:find("bag1: inv=31 now=31 gameID=31 tex=nil id=22976 picture=133644", 1, true)
+				and said:find("bag1: icon=[^ ]+ iconShown=true") and said:find("reagent: ", 1, true),
+				"the record names each slot's numbers:\n" .. said)
+			-- AND AGAIN A MOMENT LATER (Josh 2026-11-04: after a /reload "the bag
+			-- icon appears"): a bag just put on has no picture when the event
+			-- comes, and has one half a second on
+			local ready, waits, hadAfter = false, {}, _G.C_Timer.After
+			_G.C_Timer.After = function(_, fn) waits[#waits + 1] = fn end
+			_G.GetInventoryItemID = function(_, inv) return inv == 31 and 22976 or nil end
+			_G.C_Item = setmetatable({ GetItemIconByID = function(id) return ready and id == 22976 and 133644 or nil end },
+				{ __index = hadItem })
+			local hear = S.events:GetScript("OnEvent")
+			hear(S.events, "PLAYER_EQUIPMENT_CHANGED", 31, false)
+			assert(not bs[1].icon:IsShown(), "a bag with no picture yet shows none")
+			hear(S.events, "BAG_CONTAINER_UPDATE")
+			assert(#waits == 1, "and the row looks again once, however many events came: " .. #waits)
+			ready = true
+			waits[1]()
+			assert(bs[1].icon._texture == 133644 and bs[1].icon:IsShown(),
+				"half a second on, its picture shows: " .. tostring(bs[1].icon._texture))
+			local looked = table.concat(S.Dump(), "\n")
+			assert(looked:find("looked: [%d%.]+ PLAYER_EQUIPMENT_CHANGED 31=nil/false")
+				and looked:find("looked: [%d%.]+ later 31=133644/true"),
+				"the record says when the row looked and what it got:\n" .. looked)
+			hear(S.events, "UNIT_INVENTORY_CHANGED", "target")
+			assert(#waits == 1, "another unit's change is not ours")
+			_G.C_Timer.After = hadAfter
 			_G.GetInventoryItemID, _G.C_Item = hadID, hadItem
 			_G.CharacterBag0Slot, _G.GetInventoryItemTexture = nil, hadTex
 			S.Refresh()
@@ -10868,9 +11077,11 @@ if ok then
 				lines, rights = {}, {}
 			end
 			tip.AddLine = function(_, text) lines[#lines + 1] = tostring(text) end
-			tip.AddDoubleLine = function(_, l, r)
+			local inks = {}
+			tip.AddDoubleLine = function(_, l, r, lr, lg, lb, rr, rg, rb)
 				lines[#lines + 1] = tostring(l)
 				rights[#lines] = r
+				inks[#lines] = { lr, lg, lb, rr, rg, rb }
 			end
 			tip.NumLines = function() return #lines end
 			for i = 1, 10 do
@@ -10903,12 +11114,39 @@ if ok then
 			assert(row and lines[row]:find("256:32:32:64", 1, true),
 				"your kills of it, under the Expedition's paw: " .. table.concat(lines, " | "))
 			assert(rights[row] == "Bronze 4/10", "and how far to its next mastery: " .. tostring(rights[row]))
+			-- QUIETER THAN THE QUESTS (Josh 2026-11-05: "The mastery is secondary
+			-- content"): its words and its metal both darker than a quest's ink
+			local ink, quest = inks[row], BT.UnitTip.INK
+			assert(ink[1] < quest[1] and ink[2] < quest[2] and ink[3] < quest[3]
+				and ink[4] < quest[1] and ink[5] < quest[2] and ink[6] < quest[3],
+				"the kills row is quieter than a quest's: " .. table.concat(ink, ","))
+			-- AND SET APART ("put some margin or a divider above it"): with no
+			-- quest rows above it, no rule; under a quest row, a blank line
+			-- with a faint rule across it
+			assert(not (tip.beebsKillsRule and tip.beebsKillsRule:IsShown()),
+				"with no quest above it, the gap under the tags is enough")
+			local hadRows = mod.QuestRows
+			mod.QuestRows = function(t) t:AddLine("Mountain Cougar Hide 2/5") end
+			lines = { "Mountain Cougar", "Level 3", "Cat", "Skinnable" }
+			mod.Compose(tip, "target")
+			mod.QuestRows = hadRows
+			row = rowWith("4 kills")
+			assert(row and lines[row - 1] == " " and lines[row - 2] == "Mountain Cougar Hide 2/5",
+				"under a quest row, a blank line first: " .. table.concat(lines, " | "))
+			assert(tip.beebsKillsRule and tip.beebsKillsRule:IsShown(), "with a rule across it")
+			lines = { "Mountain Cougar", "Level 3", "Cat", "Skinnable" }
+			mod.Compose(tip, "target")
+			assert(not tip.beebsKillsRule:IsShown(), "and the next tooltip with no quest has none")
 			local bar = mod.HealthFrame()
 			assert(bar and bar:IsShown() and bar._value == 40 and bar._max == 100,
 				"its health as a line along the bottom")
 			assert(bar._points.BOTTOMLEFT and bar._height == mod.HEALTH_H, "two pixels on the bottom edge")
-			assert(mod.Skins()[tip] == nil or mod.Skins()[tip].extraBottom == mod.HEALTH_H + 1 + mod.TAG_DROP,
-				"with room for it under the last line, and for the tags' drop")
+			-- (less the kills row's tuck: it is the last line, and sits nearer
+			-- the bottom - Josh 2026-11-05)
+			assert(mod.Skins()[tip] == nil
+				or mod.Skins()[tip].extraBottom == mod.HEALTH_H + 1 + mod.TAG_DROP - mod.KILLS_TUCK,
+				"with room for it under the last line, and for the tags' drop, less the kills row's tuck: "
+					.. tostring(mod.Skins()[tip] and mod.Skins()[tip].extraBottom))
 
 			-- dead: grey, and no line of health
 			_G.UnitIsDead = function() return true end
@@ -16357,6 +16595,57 @@ if ok then
 			assert(BT.Enabled("performance"), "and a click on it switches Performance on")
 			BT.SetEnabled("performance", false)
 			_G.GetFramerate = nil
+		end },
+		{ "the queue eye sits on the map in the dock", function()
+			-- THE QUEUE EYE (Josh 2026-11-05: "I queued for warsong gulch, but
+			-- don't see the indicator anywhere"): the client hangs it off the
+			-- round map's edge, which in the dock is under the dock
+			local mod = BT.GetModule("minimap")
+			local hadHook = _G.hooksecurefunc
+			_G.hooksecurefunc = function(obj, name, fn)
+				local orig = obj[name]
+				obj[name] = function(...)
+					local r = orig(...)
+					fn(...)
+					return r
+				end
+			end
+			local map = _G.Minimap or _G.CreateFrame("Frame", "Minimap", _G.UIParent)
+			_G.Minimap = map
+			local eye = _G.CreateFrame("Button", "QueueStatusButton", _G.UIParent)
+			eye:SetSize(45, 45)
+			local home = true
+			eye.IsInDefaultPosition = function() return home end
+			eye.UpdateDefaultAnchor = function(self)
+				self:ClearAllPoints()
+				self:SetPoint("CENTER", _G.Minimap, "CENTER", -68, -68)
+			end
+			eye:UpdateDefaultAnchor()
+			_G.QueueStatusButton = eye
+			BT.SetEnabled("minimap", true)
+			mod.Apply()
+			local function on()
+				local p = eye._points and eye._points.BOTTOM
+				return p and p.rel == map and p.relPoint == "BOTTOM" and not eye._points.CENTER
+			end
+			assert(on(), "the eye at the middle of the map's bottom edge")
+			assert(math.abs(eye:GetScale() * 45 - mod.QUEUE.size) < 0.01,
+				"as big as the corner icons: " .. eye:GetScale() * 45)
+			eye:UpdateDefaultAnchor()
+			assert(on(), "the client places it again as it shows, and it comes back to the map")
+			-- moved in Edit Mode: where it was put
+			home = false
+			eye:UpdateDefaultAnchor()
+			assert(eye._points.CENTER and not eye._points.BOTTOM and eye:GetScale() == 1,
+				"moved in Edit Mode, it is left where it was put, at its own size")
+			home = true
+			mod.Apply()
+			assert(on(), "back in its default place, it is on the map again")
+			BT.SetEnabled("minimap", false)
+			assert(eye._points.CENTER and not eye._points.BOTTOM, "with the minimap off, the client places it")
+			BT.SetEnabled("minimap", true)
+			_G.QueueStatusButton = nil
+			_G.hooksecurefunc = hadHook
 		end },
 		{ "the minimap moves into the panel and takes its ring off", function()
 			-- SAME BARGAIN AS THE ACTION BARS (Josh 2026-09-21): it is the

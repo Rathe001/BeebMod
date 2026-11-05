@@ -95,6 +95,7 @@ Modules\Bags\Bags.lua
 Modules\Durability\Durability.lua
 Modules\ItemLevel\ItemLevel.lua
 Modules\Pickpocket\Pickpocket.lua
+Modules\Fishing\Fishing.lua
 Modules\Speed\Speed.lua
 Modules\XP\Dungeons.lua
 Modules\XP\Zones.lua

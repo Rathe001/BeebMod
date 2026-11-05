@@ -92,6 +92,15 @@ function S.Build(parent)
 	-- no border width or corner radius here any more: the toolkit has one
 	-- shape (see Core/Theme.lua)
 
+	-- DOUBLE-CLICK TO FISH (Josh 2026-11-05: "Should be in the general settings
+	-- probably"). The one utility here: it has no panel and no page of its own
+	-- (Modules/Fishing/Fishing.lua).
+	local fishing = stack:Section("Fishing")
+	S.fishingRow = W.SwitchRow(fishing, "Double-click to fish",
+		"Double right-click to cast Fishing while you have a fishing pole equipped",
+		function() return BT.Switched("fishing") end,
+		function(on) BT.SetEnabled("fishing", on) end)
+
 	stack:Layout()
 end
 

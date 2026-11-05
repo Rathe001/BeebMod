@@ -370,10 +370,30 @@ function S.Picture(inv)
 	return call(C_Item and C_Item.GetItemIconByID, id) or call(_G.GetItemIcon, id)
 end
 
+-- the last few times the row looked, and what each slot got, for the record
+S.LOG = 12
+S.log = {}
+
+local function note(why, bags)
+	local parts = {}
+	for _, b in ipairs(bags) do
+		parts[#parts + 1] = ("%s=%s/%s"):format(tostring(b.inv), tostring(b.seen),
+			tostring(call(b.icon.IsShown, b.icon)))
+	end
+	local now = tonumber(call(_G.GetTime)) or 0
+	table.insert(S.log, ("%.1f %s %s"):format(now, tostring(why), table.concat(parts, " ")))
+	while #S.log > S.LOG do
+		table.remove(S.log, 1)
+	end
+end
+
 -- every slot's picture as it stands, faded while the game holds the bag
-function S.Refresh()
+function S.Refresh(why)
 	local f = S.frame
 	if not (f and f:IsShown()) then
+		if why then
+			note(tostring(why) .. "(hidden)", {})
+		end
 		return 0
 	end
 	local W = BT.Widgets
@@ -393,6 +413,7 @@ function S.Refresh()
 	end
 	for _, b in ipairs(bags) do
 		local tex = S.Picture(b.inv)
+		b.seen = tex
 		b.icon:SetTexture(tex)
 		b.icon:SetShown(tex ~= nil)
 		local locked = call(_G.IsInventoryItemLocked, b.inv)
@@ -403,7 +424,60 @@ function S.Refresh()
 			n = n + 1
 		end
 	end
+	note(why or "?", bags)
 	return n
+end
+
+-- WHAT EACH SLOT READS, FOR THE RECORD (Josh 2026-11-04: "Small brown pouch
+-- icon isnt showing on the bag bar now"). The pouch's slot named it in its
+-- tooltip but showed no picture, and the /run line to ask why was too long to
+-- type. The bag window's record (the Testing page's Record) writes these.
+local function said(v)
+	if issecretvalue and issecretvalue(v) then
+		return "secret"
+	end
+	return type(v) == "string" and ("%q"):format(v) or tostring(v)
+end
+
+function S.Dump()
+	local lines = {}
+	local f = S.frame
+	if not f then
+		lines[1] = "slots: not built"
+		return lines
+	end
+	local parent = f:GetParent()
+	lines[1] = ("slots: shown=%s parent=%s"):format(said(f:IsShown()),
+		said(parent and call(parent.GetName, parent)))
+	local all = {}
+	for i, b in ipairs(f.buttons) do
+		all[#all + 1] = { "bag" .. i, b, _G[GAME_SLOT[i]] }
+	end
+	all[#all + 1] = { "reagent", f.reagent, _G.CharacterReagentBag0Slot }
+	for _, row in ipairs(all) do
+		local name, b, game = row[1], row[2], row[3]
+		local inv = b.inv
+		local gameIcon = game and (game.icon or game.Icon)
+		lines[#lines + 1] = ("%s: inv=%s now=%s gameID=%s tex=%s id=%s picture=%s"):format(name, said(inv),
+			said(S.InvSlot(b.bag)), said(game and call(game.GetID, game)),
+			said(inv and call(_G.GetInventoryItemTexture, "player", inv)),
+			said(inv and call(_G.GetInventoryItemID, "player", inv)), said(S.Picture(inv)))
+		lines[#lines + 1] = ("%s: icon=%s iconShown=%s iconAlpha=%s button=%s size=%s gameIcon=%s"):format(name,
+			said(call(b.icon.GetTexture, b.icon)), said(b.icon:IsShown()), said(call(b.icon.GetAlpha, b.icon)),
+			said(b:IsShown()), said(call(b.icon.GetWidth, b.icon)),
+			said(gameIcon and call(gameIcon.GetTexture, gameIcon)))
+		local l, r, t, bt = call(b.icon.GetTexCoord, b.icon)
+		local cr, cg, cb, ca = call(b.icon.GetVertexColor, b.icon)
+		lines[#lines + 1] = ("%s: visible=%s file=%s desat=%s coords=%s,%s,%s,%s color=%s,%s,%s,%s layer=%s points=%s"):format(
+			name, said(call(b.icon.IsVisible, b.icon)), said(call(b.icon.GetTextureFileID, b.icon)),
+			said(call(b.icon.IsDesaturated, b.icon)), said(l), said(r), said(t), said(bt),
+			said(cr), said(cg), said(cb), said(ca), said(call(b.icon.GetDrawLayer, b.icon)),
+			said(call(b.icon.GetNumPoints, b.icon)))
+	end
+	for _, line in ipairs(S.log) do
+		lines[#lines + 1] = "looked: " .. line
+	end
+	return lines
 end
 
 -- in the backpack while it is open, the module on and the row wanted
@@ -422,17 +496,42 @@ function S.Attach()
 		f:SetFrameLevel((host:GetFrameLevel() or 1) + 5)
 	end
 	f:Show()
-	S.Refresh()
+	S.Refresh("attach")
 	return true
+end
+
+-- AND AGAIN A MOMENT LATER (Josh 2026-11-04: "Small brown pouch icon isnt
+-- showing on the bag bar now", and after a /reload: "the bag icon appears").
+-- The slot numbers and the picture were right, so the row had looked too
+-- soon: a bag just put on can have no picture yet when the event comes. Each
+-- change is looked at now and once more half a second later, and again when
+-- the game has loaded an item's data.
+S.LATER = 0.5
+
+function S.Soon(why)
+	S.Refresh(why or "soon")
+	if not (S.frame and S.frame:IsShown()) then
+		return
+	end
+	if S.waiting or not (C_Timer and C_Timer.After) then
+		return
+	end
+	S.waiting = true
+	C_Timer.After(S.LATER, function()
+		S.waiting = false
+		S.Refresh("later")
+	end)
 end
 
 S.events = CreateFrame("Frame")
 for _, event in ipairs({ "BAG_UPDATE_DELAYED", "BAG_CONTAINER_UPDATE", "PLAYER_EQUIPMENT_CHANGED",
-	"ITEM_LOCK_CHANGED", "PLAYER_ENTERING_WORLD" }) do
+	"ITEM_LOCK_CHANGED", "PLAYER_ENTERING_WORLD", "UNIT_INVENTORY_CHANGED", "ITEM_DATA_LOAD_RESULT",
+	"GET_ITEM_INFO_RECEIVED" }) do
 	pcall(S.events.RegisterEvent, S.events, event)
 end
-S.events:SetScript("OnEvent", function()
-	if S.frame and S.frame:IsShown() then
-		S.Refresh()
+S.events:SetScript("OnEvent", function(_, event, unit)
+	if event == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then
+		return
 	end
+	S.Soon(event)
 end)
