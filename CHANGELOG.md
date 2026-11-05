@@ -3,6 +3,22 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Unit tooltips show all their rows again.** Some tooltips stopped after
+  the name and tags. Quest objectives, your kills and the health line were
+  missing. Tags ran past the tooltip's edge.
+
+- **Bag slots show their bag again.** A bag in the slots under the backpack
+  could show an empty slot. It now shows the bag's icon.
+
+- **The welcome window waits for your intro.** On a new character's first
+  login, the race intro closed it before you could see it. It now opens
+  after the intro ends.
+
+- **Cast bars say "Opening".** Opening a quest object said "Opening - No
+  Text", the game's own name for that spell.
+
 ## 1.0.1
 
 - **Bag window fixed for the latest game patch.** Item icons stay cropped and

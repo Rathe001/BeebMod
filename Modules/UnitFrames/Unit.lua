@@ -514,7 +514,7 @@ function Live:Cast()
 		important = raw(C_Spell.IsSpellImportant, spell)
 	end
 	F.NoteCast(unit, name, icon, shield, important)
-	return { duration = dur, name = name, icon = icon, shielded = shield, important = important, channel = channel }
+	return { duration = dur, name = BT.Util.CastName(name), icon = icon, shielded = shield, important = important, channel = channel }
 end
 
 -- WHAT THE GAME GAVE FOR A CAST, ONCE A KIND OF UNIT (the same day: the

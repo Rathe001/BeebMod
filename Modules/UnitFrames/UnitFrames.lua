@@ -1884,7 +1884,7 @@ local function current()
 	if not name or type(startMS) ~= "number" or (issecretvalue and issecretvalue(startMS)) then
 		return nil
 	end
-	return { name = name, icon = icon, start = startMS / 1000, finish = endMS / 1000, channel = channel }
+	return { name = U.CastName(name), icon = icon, start = startMS / 1000, finish = endMS / 1000, channel = channel }
 end
 
 local function paintCast(c, now)

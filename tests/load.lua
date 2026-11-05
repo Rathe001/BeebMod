@@ -3344,6 +3344,50 @@ if ok then
 				"the client's own footnote is not copied back in: " .. all)
 			_G.UnitIsPlayer, _G.UnitCreatureType = wasPlayer, wasType
 		end },
+		{ "a line whose place is secret does not end the rebuild", function()
+			-- LAUNCH DAY (Josh 2026-11-04): a Thistle Boar's tooltip had its
+			-- name and tags and nothing else, the tags past its right edge, and
+			-- What loaded said "Core/Tooltip.lua:144: attempt to perform
+			-- arithmetic on field '?' (a secret number value)". The client handed
+			-- a line's offset back secret, and T.Indent added to it.
+			local wasPlayer, wasType = _G.UnitIsPlayer, _G.UnitCreatureType
+			_G.UnitIsPlayer = function() return false end
+			_G.UnitCreatureType = function() return "Beast" end
+			_G.C_QuestLog = nil
+			_G.GetNumQuestLogEntries = function() return 1 end
+			_G.GetQuestLogTitle = function()
+				return "The Balance of Nature", 3, nil, false, nil, nil, nil, 456
+			end
+			BT.GetModule("tooltips").ForgetQuests()
+			local lines = { "Thistle Boar", "Level 3", "Beast", "The Balance of Nature", "- 1/7 Thistle Boar slain" }
+			local tip = setmetatable({
+				AddLine = function(_, text) lines[#lines + 1] = tostring(text) end,
+				AddDoubleLine = function(_, l) lines[#lines + 1] = tostring(l) end,
+				ClearLines = function() lines = {} end,
+				NumLines = function() return #lines end,
+				GetName = function() return "SecretSpotTip" end,
+				GetWidth = function() return 220 end,
+				SetMinimumWidth = function(self, w) self._minWidth = w end,
+			}, FAKE_TIP)
+			for i = 1, 10 do
+				for _, side in ipairs({ "Left", "Right" }) do
+					local fs = _G.CreateFrame("FontString")
+					if side == "Left" then
+						fs.GetText = function() return lines[i] end
+					end
+					fs.GetPoint = function() return "TOPLEFT", tip, "BOTTOMLEFT", _G.SECRET_WIDTH, -2 end
+					_G["SecretSpotTipText" .. side .. i] = fs
+				end
+			end
+			local before = #(BT.moduleErrors or {})
+			local ok, err = pcall(BT.GetModule("tooltips").Compose, tip, "target")
+			assert(ok, "the rebuild runs to its end: " .. tostring(err))
+			local all = table.concat(lines, " | ")
+			assert(all:find("Thistle Boar slain", 1, true), "the quest row is there: " .. all)
+			assert(tip._minWidth and tip._minWidth >= 200, "and the width is set: " .. tostring(tip._minWidth))
+			assert(#(BT.moduleErrors or {}) == before, "and nothing was caught on the way")
+			_G.UnitIsPlayer, _G.UnitCreatureType = wasPlayer, wasType
+		end },
 		{ "the client cannot leave a band of space under the last line", function()
 			-- THE BOTTOM PADDING IS NOT OURS ALONE (Josh 2026-09-19). The
 			-- client sets the tooltip's padding itself when it puts the health
@@ -4346,7 +4390,8 @@ if ok then
 			-- ONE WIDTH (Josh 2026-09-20). A tooltip sized to its own longest
 			-- line is a different shape for every person you point at, and two
 			-- of them side by side look like two different addons.
-			assert(tip._minWidth and tip._minWidth >= 200,
+			assert(tip._minWidth and tip._minWidth >= 200, tostring(tip._minWidth) .. " " .. tostring(rawget(tip, "SetMinimumWidth")) .. " " .. table.concat(BT.moduleErrors or {}, ";") ..
+				
 				"every unit tooltip keeps the same floor: " .. tostring(tip._minWidth))
 
 			-- ONE WIDTH, UNLESS THE NAME NEEDS MORE (Josh 2026-09-20). A
@@ -5552,6 +5597,15 @@ if ok then
 			_G.UnitCastingInfo = function() return nil end
 			mod.CastEvent("UNIT_SPELLCAST_STOP")
 			assert(mod.cast._shown == false, "and goes when it is done")
+			-- THE GAME'S NOTE TO ITSELF (Josh 2026-11-04: "Not sure this should
+			-- say "no text"?"): opening a quest object is "Opening - No Text"
+			_G.UnitCastingInfo = function() return "Opening - No Text", nil, 135846, 100000, 102000 end
+			mod.CastEvent("UNIT_SPELLCAST_START")
+			assert(mod.cast.name._text == "Opening", "it says Opening: " .. tostring(mod.cast.name._text))
+			_G.UnitCastingInfo = function() return nil end
+			mod.CastEvent("UNIT_SPELLCAST_STOP")
+			assert(BT.Util.CastName("Herb Gathering") == "Herb Gathering"
+				and BT.Util.CastName(_G.SECRET_WIDTH) == _G.SECRET_WIDTH, "any other name, or a secret one, as it came")
 			-- CUT SHORT, IT FLASHES RED (Josh 2026-09-30, review): the client says
 			-- the cast stopped after it says it was interrupted, and that hid the
 			-- flash at once
@@ -5827,7 +5881,40 @@ if ok then
 				if name == "BeebModWelcome" then listed = true end
 			end
 			f:Hide()
+			f:GetScript("OnHide")(f)
 			assert(listed and Wl.ShouldAsk(), "Escape closes it, and the next login asks again")
+			-- AFTER THE INTRO (Josh 2026-11-04: "the startup screen did not show
+			-- up when I logged in for the first time"): a cinematic closes every
+			-- window Escape closes, this one too, and it opens again after
+			local stop = function() Wl.watch:GetScript("OnEvent")(Wl.watch, "CINEMATIC_STOP") end
+			local hadAfter, later = _G.C_Timer.After, nil
+			_G.C_Timer.After = function(_, fn) later = fn end
+			assert(not Wl.reopen, "put off with Escape, nothing opens it again")
+			stop()
+			assert(later == nil and not f:IsShown(), "not even when a cinematic ends")
+			Wl.Show()
+			Wl.cinematic = true
+			f:Hide()
+			f:GetScript("OnHide")(f)
+			assert(Wl.reopen, "closed by a cinematic, it is owed")
+			stop()
+			assert(not Wl.cinematic and later, "and asked again when the cinematic ends")
+			later()
+			assert(f:IsShown(), "it is back")
+			f:Hide()
+			f:GetScript("OnHide")(f)
+			-- and never opened under one: it waits for the end
+			later = nil
+			_G.InCinematic = function() return true end
+			assert(not Wl.Ask() and not f:IsShown(), "not opened while a cinematic plays")
+			_G.InCinematic = function() return false end
+			stop()
+			assert(later, "but when it ends")
+			later()
+			assert(f:IsShown(), "it opens")
+			f:Hide()
+			f:GetScript("OnHide")(f)
+			_G.InCinematic, _G.C_Timer.After = nil, hadAfter
 			-- back as it was, for the tests that follow
 			Wl.selected, Wl.slideAt.unitframes = nil, nil
 			for _, feat in ipairs(BT.FEATURES) do
@@ -8420,6 +8507,19 @@ if ok then
 			assert(bs[1].inv == 31 and bs[1].icon._texture == 133639 and bs[1].icon:IsShown(),
 				"the bag in the game's first slot shows in ours: inventory slot " .. tostring(bs[1].inv))
 			assert(bs[2].inv == 21, "and a slot the game's button does not number is worked out as before")
+			-- THE ITEM'S PICTURE (Josh 2026-11-04: "Mining bag icon is not
+			-- showing in the bag slots"): the slot gives no picture, but the
+			-- item in it has one
+			local hadID, hadItem = _G.GetInventoryItemID, _G.C_Item
+			_G.GetInventoryItemTexture = function() return nil end
+			_G.GetInventoryItemID = function(_, inv) return inv == 31 and 22976 or nil end
+			_G.C_Item = setmetatable({ GetItemIconByID = function(id) return id == 22976 and 133644 or nil end },
+				{ __index = hadItem })
+			S.Refresh()
+			assert(bs[1].icon._texture == 133644 and bs[1].icon:IsShown(),
+				"a bag the slot gives no picture for shows its item's: " .. tostring(bs[1].icon._texture))
+			assert(not bs[2].icon:IsShown(), "and an empty slot still shows none")
+			_G.GetInventoryItemID, _G.C_Item = hadID, hadItem
 			_G.CharacterBag0Slot, _G.GetInventoryItemTexture = nil, hadTex
 			S.Refresh()
 			-- A TOOLTIP ON EVERY SLOT (Josh 2026-09-28): the bag's own, or its

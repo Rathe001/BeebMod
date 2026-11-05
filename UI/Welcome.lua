@@ -673,6 +673,10 @@ function W.Build()
 	-- the D-pad moves between its rows, switches and buttons (Core/Gamepad.lua)
 	BT.Gamepad.Watch(frame)
 	frame:Hide()
+	-- unless a cinematic closed it (W.Closed); hooked after the hide above
+	frame:HookScript("OnHide", function()
+		W.Closed()
+	end)
 	return frame
 end
 
@@ -693,31 +697,92 @@ function W.Frame()
 	return frame
 end
 
--- asked a few seconds after the first loading screen, out of combat
+-- AFTER THE INTRO, NOT UNDER IT (Josh 2026-11-04: "the startup screen did not
+-- show up when I logged in for the first time. It did show after my first
+-- /reload though"). A new character's first login plays its race's intro.
+-- The client opens a cinematic as a full-screen panel, and that closes every
+-- window Escape closes (UIParentPanelManager.lua, CloseAllWindows), this one
+-- too. So it is not opened while a cinematic plays, and one that a cinematic
+-- closed opens again when it ends.
+function W.InCinematic()
+	if type(_G.InCinematic) == "function" then
+		local ok, yes = pcall(_G.InCinematic)
+		if ok and yes then
+			return true
+		end
+	end
+	local cf = _G.CinematicFrame
+	return cf ~= nil and cf.IsShown ~= nil and cf:IsShown() and true or false
+end
+
+-- asked a few seconds after the first loading screen, out of combat and
+-- after any cinematic
 local watch = CreateFrame("Frame")
+W.watch = watch
 watch:RegisterEvent("PLAYER_ENTERING_WORLD")
+
+function W.Ask()
+	if not W.ShouldAsk() then
+		return false
+	end
+	if inCombat() then
+		watch:RegisterEvent("PLAYER_REGEN_ENABLED")
+		return false
+	end
+	if W.InCinematic() then
+		W.reopen = true
+		watch:RegisterEvent("CINEMATIC_STOP")
+		return false
+	end
+	-- a cinematic that starts while it is up closes it: it opens again after
+	watch:RegisterEvent("CINEMATIC_STOP")
+	W.Show()
+	return true
+end
+
+-- WHO CLOSED IT. Escape puts it off to the next login; a cinematic did not
+-- mean to. The client says a cinematic is starting before it closes the
+-- windows (CinematicFrame.lua, "CinematicFrame.CinematicStarting").
+W.cinematic = false
+if _G.EventRegistry and _G.EventRegistry.RegisterCallback then
+	pcall(_G.EventRegistry.RegisterCallback, _G.EventRegistry, "CinematicFrame.CinematicStarting", function()
+		W.cinematic = true
+	end, W)
+end
+
+function W.Closed()
+	W.reopen = (W.cinematic or W.InCinematic()) and W.ShouldAsk() or nil
+	if not W.reopen then
+		watch:UnregisterEvent("CINEMATIC_STOP")
+	end
+end
+
+local function askSoon(secs)
+	if C_Timer and C_Timer.After then
+		C_Timer.After(secs, W.Ask)
+	else
+		W.Ask()
+	end
+end
+
 watch:SetScript("OnEvent", function(self, event)
 	if event == "PLAYER_ENTERING_WORLD" then
 		self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-		local function ask()
-			if not W.ShouldAsk() then
-				return
-			end
-			if inCombat() then
-				self:RegisterEvent("PLAYER_REGEN_ENABLED")
-				return
-			end
-			W.Show()
-		end
-		if C_Timer and C_Timer.After then
-			C_Timer.After(4, ask)
-		else
-			ask()
-		end
+		askSoon(4)
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-		if W.ShouldAsk() then
-			W.Show()
+		W.Ask()
+	elseif event == "CINEMATIC_STOP" then
+		W.cinematic = false
+		-- answered, or put off with Escape: nothing to open again
+		if not (W.reopen and W.ShouldAsk()) then
+			self:UnregisterEvent("CINEMATIC_STOP")
+			return
+		end
+		if not (frame and frame:IsShown()) then
+			W.reopen = nil
+			-- the world back on screen first
+			askSoon(1)
 		end
 	end
 end)

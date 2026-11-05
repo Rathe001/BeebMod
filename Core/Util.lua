@@ -382,6 +382,17 @@ function U.GreenRange()
 	return n or 5
 end
 
+-- A SPELL'S NAME FOR A CAST BAR (Josh 2026-11-04: "Not sure this should say
+-- "no text"?"). Opening a quest object is the game's spell "Opening - No
+-- Text"; the part after the dash is a note for its own designers. A name the
+-- client keeps secret is handed back as it came.
+function U.CastName(name)
+	if type(name) ~= "string" or (issecretvalue and issecretvalue(name)) then
+		return name
+	end
+	return (name:gsub("%s*%-%s*No Text%s*$", ""))
+end
+
 -- AN NPC'S TITLE, FROM ITS TOOLTIP'S SECOND LINE (Josh 2026-10-04: an
 -- innkeeper's nameplate had no picture, and her tooltip said "Humanoid" with
 -- "Innkeeper" on a line of its own). The game once wrote "<Innkeeper>"; this

@@ -113,7 +113,14 @@ local function remember(fs, tip)
 	-- and where it sits, for anything that nudges a line sideways
 	if fs.GetPoint then
 		local ok, point, rel, relPoint, x, y = pcall(fs.GetPoint, fs, 1)
-		if ok and point then
+		-- A SECRET OFFSET IS NO PLACE (Josh 2026-11-04, launch day: the unit
+		-- tooltip lost its quest rows, kills row and width, and its tags ran
+		-- past the edge). The client may hand a line's offsets back secret,
+		-- and T.Indent's sum threw on the first line under the name, ending
+		-- the rebuild there. Such a line is left where the client put it.
+		local secret = issecretvalue and (issecretvalue(point) or issecretvalue(rel)
+			or issecretvalue(relPoint) or issecretvalue(x) or issecretvalue(y))
+		if ok and point and not secret then
 			was.at = { point, rel, relPoint, x or 0, y or 0 }
 		end
 	end

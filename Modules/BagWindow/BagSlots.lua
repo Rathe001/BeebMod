@@ -350,6 +350,26 @@ local function fit(f, reagentInv, keyring)
 	return shown
 end
 
+-- THE BAG'S PICTURE, OR ITS ITEM'S (Josh 2026-11-04: "Mining bag icon is not
+-- showing in the bag slots"). The slot's tooltip named the Apprentice's
+-- Mining Pack, so the item was readable, but the slot stayed empty. The
+-- picture is asked of the slot first, as the game's own bag bar asks it, and
+-- then of the item in it.
+function S.Picture(inv)
+	if not inv then
+		return nil
+	end
+	local tex = call(_G.GetInventoryItemTexture, "player", inv)
+	if tex then
+		return tex
+	end
+	local id = call(_G.GetInventoryItemID, "player", inv)
+	if not id then
+		return nil
+	end
+	return call(C_Item and C_Item.GetItemIconByID, id) or call(_G.GetItemIcon, id)
+end
+
 -- every slot's picture as it stands, faded while the game holds the bag
 function S.Refresh()
 	local f = S.frame
@@ -372,7 +392,7 @@ function S.Refresh()
 		bags[#bags + 1] = f.reagent
 	end
 	for _, b in ipairs(bags) do
-		local tex = call(_G.GetInventoryItemTexture, "player", b.inv)
+		local tex = S.Picture(b.inv)
 		b.icon:SetTexture(tex)
 		b.icon:SetShown(tex ~= nil)
 		local locked = call(_G.IsInventoryItemLocked, b.inv)
