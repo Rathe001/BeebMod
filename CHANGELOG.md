@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.1.0
 
 - **Quest reagents on enemy tooltips.** A quest item the game doesn't tie to
   an enemy now shows on its tooltip, with your count. Small Spider Leg shows
