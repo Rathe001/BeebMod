@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.2.0
 
 - **Dungeon entrances on the world map.** Each dungeon's entrance has a pin
   on its zone's map and on the continent. Hover over one to see its name and
