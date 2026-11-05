@@ -93,6 +93,26 @@ function U.HomeRealm()
 	return home and (home:gsub("%s+", "")) or nil
 end
 
+-- THE REALM AS A PLAYER CALLS IT (Josh 2026-11-05: "Should just be PvE, or
+-- Forever: PvE or something similar"). Forever's realms carry the server's
+-- own name, "CAMWOWUS2Realm1PvE". One realm a ruleset, so the ruleset is
+-- the name a player knows it by: "Forever PvE". A realm with a real name
+-- ("Whitemane", "Classic Beta PvE 2") is shown as it is. For the eye only;
+-- the book is still keyed by the realm the client gave.
+U.RULESETS = { pve = "PvE", pvp = "PvP", rp = "RP", rppvp = "RP-PvP", roleplay = "RP",
+	hardcore = "Hardcore", hc = "Hardcore" }
+
+function U.RealmLabel(realm)
+	if type(realm) ~= "string" or realm == "" then
+		return nil
+	end
+	local rules = not realm:find("%s") and realm:match("Realm%d*(%a+)$")
+	if not rules then
+		return realm
+	end
+	return "Forever " .. (U.RULESETS[rules:lower()] or rules)
+end
+
 -- A SURNAME IS NOT A REALM (Josh 2026-09-30: "pretty much everyone is
 -- showing as belonging to the Olympus guild"). From the evening of
 -- 2026-09-30 the game handed back a two-part name split in two, the surname

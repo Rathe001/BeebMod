@@ -3,6 +3,17 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Dungeon entrances on the world map.** Each dungeon's entrance has a pin
+  on its zone's map and on the continent. Hover over one to see its name and
+  level range. Scarlet Monastery and Blackrock Mountain list each dungeon
+  inside. Untick "Dungeon Entrances" in the map's filter menu to hide them.
+
+- **The realm by its ruleset.** The Ledger and the settings window showed the
+  server's name for the realm, "CAMWOWUS2Realm1PvE". They now say
+  "Forever PvE".
+
 ## 1.1.1
 
 - **A bag you put on shows in its slot.** The bag slots under the backpack

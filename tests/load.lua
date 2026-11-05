@@ -4489,6 +4489,141 @@ if ok then
 				_G[n] = had[n]
 			end
 		end },
+		{ "dungeon entrances are pinned on the world map, with a filter to hide them", function()
+			-- DUNGEON ENTRANCES (Josh 2026-11-05: "add dungeon enterance
+			-- locations to the map", "add it as a filter here")
+			local mod = BT.GetModule("entrances")
+			local names = { "WorldMapFrame", "C_Map", "Menu", "hooksecurefunc", "UnitLevel" }
+			local had = {}
+			for _, n in ipairs(names) do
+				had[n] = rawget(_G, n)
+			end
+			-- Westfall and Dun Morogh in the Eastern Kingdoms, Ironforge in Dun
+			-- Morogh, both ways into Blackrock Mountain at one spot on the continent
+			local MAPS = {
+				[947] = { mapType = 1 },
+				[1415] = { mapType = 2, parentMapID = 947 },
+				[1436] = { mapType = 3, parentMapID = 1415 },
+				[1426] = { mapType = 3, parentMapID = 1415 },
+				[1427] = { mapType = 3, parentMapID = 1415 },
+				[1428] = { mapType = 3, parentMapID = 1415 },
+				[1455] = { mapType = 3, parentMapID = 1426 },
+			}
+			local RECTS = {
+				["1436>1415"] = { 0.40, 0.50, 0.70, 0.80 },
+				["1426>1415"] = { 0.40, 0.50, 0.50, 0.60 },
+				["1455>1426"] = { 0.40, 0.60, 0.30, 0.50 },
+				-- each of Blackrock Mountain's spots lands on 0.4462, 0.5
+				["1427>1415"] = { 0.4462 - 0.348 * 0.1, 0.4462 + 0.652 * 0.1, 0.5 - 0.853 * 0.1, 0.5 + 0.147 * 0.1 },
+				["1428>1415"] = { 0.4462 - 0.294 * 0.1, 0.4462 + 0.706 * 0.1, 0.5 - 0.383 * 0.1, 0.5 + 0.617 * 0.1 },
+			}
+			_G.C_Map = {
+				GetMapInfo = function(id) return MAPS[id] end,
+				GetMapRectOnMap = function(id, top)
+					local r = RECTS[id .. ">" .. top]
+					if r then
+						return r[1], r[2], r[3], r[4]
+					end
+				end,
+			}
+			local hooks = {}
+			_G.hooksecurefunc = function(obj, name, fn) hooks[name] = fn end
+			local canvas = CreateFrame("Frame")
+			canvas.GetWidth = function() return 1000 end
+			canvas.GetHeight = function() return 600 end
+			local shownMap, scale = 1436, 1
+			local function noop() end
+			_G.WorldMapFrame = {
+				GetMapID = function() return shownMap end,
+				GetCanvas = function() return canvas end,
+				GetCanvasScale = function() return scale end,
+				OnMapChanged = noop, OnCanvasScaleChanged = noop, OnCanvasSizeChanged = noop,
+				HookScript = noop,
+			}
+			local filter
+			_G.Menu = { ModifyMenu = function(tag, fn) if tag == "MENU_WORLD_MAP_TRACKING" then filter = fn end end }
+			_G.UnitLevel = function() return 20 end
+			-- every pin has its levels, and every dungeon of the XP tooltip a pin
+			local pinned = {}
+			for _, spot in ipairs(mod.SPOTS) do
+				local found = mod.Dungeons(spot)
+				assert(#found == #(spot.wings or { 1 }), "a pin whose dungeon has no levels: " .. spot[1])
+				for _, d in ipairs(found) do
+					pinned[d.name] = true
+				end
+			end
+			for _, d in ipairs(BT.Dungeons.LIST) do
+				assert(pinned[d.name], "a dungeon with no pin: " .. d.name)
+			end
+			mod.layer, mod.pins, mod.mapHooked, mod.menuHooked = nil, {}, nil, nil
+			BT.SetEnabled("entrances", true)
+			mod.Hook()
+			assert(hooks.OnMapChanged and hooks.OnCanvasScaleChanged, "it redraws when the map changes or zooms")
+
+			assert(mod.Draw() == 1 and mod.pins[1].spot[1] == "The Deadmines", "Westfall shows the Deadmines")
+			local p = mod.pins[1]._point
+			assert(p.relPoint == "TOPLEFT" and math.abs(p.x - 425) < 0.01 and math.abs(p.y + 430.2) < 0.01,
+				"at its spot on the map")
+			scale = 2
+			mod.Draw()
+			p = mod.pins[1]._point
+			assert(mod.pins[1]._scale == 0.5 and math.abs(p.x - 850) < 0.01,
+				"zoomed in, the pin is shrunk to keep its size and its spot")
+			scale = 1
+
+			shownMap = 1426
+			local names2 = {}
+			for i = 1, mod.Draw() do
+				names2[mod.pins[i].spot[1]] = true
+			end
+			assert(names2["Gnomeregan"] and names2["The Hall of Thanes"],
+				"Dun Morogh shows Gnomeregan and the Hall of Thanes from the Ironforge map")
+			assert(not mod.pins[3] or not mod.pins[3]._shown, "and no pin left over from before")
+
+			shownMap = 1415
+			local brm = 0
+			for i = 1, mod.Draw() do
+				if mod.pins[i].spot[1] == "Blackrock Mountain" then
+					brm = brm + 1
+				end
+			end
+			assert(brm == 1, "the continent shows Blackrock Mountain once, not once from each zone: " .. brm)
+			shownMap = 947
+			assert(mod.Draw() == 0, "nothing on the whole world")
+
+			-- the card: one dungeon's levels; a place of several, each
+			shownMap = 1436
+			mod.Draw()
+			mod.pins[1]:GetScript("OnEnter")(mod.pins[1])
+			assert(BT.Tip.lastError == nil and BT.Tip.LineOf("The Deadmines") and BT.Tip.LineOf("Levels 17-26"),
+				"hovering the Deadmines names it with its levels")
+			shownMap = 1427
+			mod.Draw()
+			mod.pins[1]:GetScript("OnEnter")(mod.pins[1])
+			assert(BT.Tip.lastError == nil and BT.Tip.LineOf("3 dungeons") and BT.Tip.LineOf("Lower Blackrock Spire"),
+				"hovering Blackrock Mountain lists its dungeons")
+			BT.Tip.Hide()
+
+			-- the filter
+			mod.HookMenu()
+			assert(filter, "a line is added to the map's filter menu")
+			local box
+			filter(nil, { CreateCheckbox = function(_, text, get, set)
+				box = { text = text, get = get, set = set }
+				return nil
+			end })
+			assert(box.text == "Dungeon Entrances" and box.get(), "Dungeon Entrances, ticked")
+			box.set()
+			assert(not box.get() and not BT.Enabled("entrances"), "unticking it turns the pins off")
+			assert(mod.Draw() == 0 and not mod.pins[1]._shown, "and takes them off the map")
+			box.set()
+			assert(box.get() and mod.Draw() == 1, "ticking it puts them back")
+
+			mod.layer, mod.pins, mod.mapHooked, mod.menuHooked = nil, {}, nil, nil
+			for _, n in ipairs(names) do
+				_G[n] = had[n]
+			end
+		end },
 		{ "a module that sets itself up does it at login too", function()
 			-- THE BUG THIS EXISTS TO STOP (Josh 2026-09-20). OnEnable fires
 			-- on the off-to-on transition, which never happens to a module

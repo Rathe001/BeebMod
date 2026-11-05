@@ -1614,7 +1614,7 @@ function W.UpdateSubtitle()
 	if not frame then
 		return
 	end
-	local where = BT.scope and BT.scope.realm or "?"
+	local where = BT.scope and BT.Util.RealmLabel(BT.scope.realm) or "?"
 	if BT.DB and BT.db then
 		-- counted from the list alone: reading each character to count them
 		-- was a long frame on a big book every time the window opened

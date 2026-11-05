@@ -3192,6 +3192,14 @@ do
 
 	check(U.Commas(26210) == "26,210" and U.Commas(999) == "999" and U.Commas(1234567) == "1,234,567",
 		"big numbers have commas")
+
+	-- the realm as a player calls it (Josh 2026-11-05)
+	check(U.RealmLabel("CAMWOWUS2Realm1PvE") == "Forever PvE"
+		and U.RealmLabel("CAMWOWUS2Realm1PVP") == "Forever PvP"
+		and U.RealmLabel("CAMWOWUS2Realm3Hardcore") == "Forever Hardcore",
+		"a server's name for a realm reads as its ruleset")
+	check(U.RealmLabel("Whitemane") == "Whitemane" and U.RealmLabel("Classic Beta PvE 2") == "Classic Beta PvE 2"
+		and U.RealmLabel(nil) == nil, "a realm with a real name keeps it")
 end
 
 -- ONE BOOK FOR BOTH SIDES, AND A CENSUS BY SIDE AND SEX (Josh 2026-09-30:

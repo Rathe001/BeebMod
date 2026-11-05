@@ -21,7 +21,7 @@ function BT.StatsReport()
 	-- noted: the Ledger's to count (its own book), when there is a Ledger
 	local noted = BT.Notes and BT.Notes.CountNoted() or s.mine
 	U.Print(("Ledger: %s · %s characters · %s noted · %s in a guild · %s sightings")
-		:format(BT.scope.realm, U.Commas(s.total), U.Commas(noted), U.Commas(s.guilded), U.Commas(BT.db.stats.sightings or 0)))
+		:format(U.RealmLabel(BT.scope.realm) or "?", U.Commas(s.total), U.Commas(noted), U.Commas(s.guilded), U.Commas(BT.db.stats.sightings or 0)))
 	-- how the book is kept (Core/Pack.lua): packed, and how big it may grow
 	local n, packed = DB.Count(BT.db)
 	local cap = BT.settings.bookCap or 0

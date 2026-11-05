@@ -121,7 +121,7 @@ function M.Tip()
 	local f = feature()
 	BT.Tip.Show(M.frame, { edge = f and f.color, build = function(t)
 		local rank, title, at, nextAt, nextTitle = L.Rank(points)
-		local realm = BT.scope and BT.scope.realm
+		local realm = BT.scope and BT.Util.RealmLabel(BT.scope.realm)
 		t:Header({ name = f and f.title or "Ravenholdt Ledger", sub = realm and ("Your book on %s"):format(realm) or nil,
 			pill = ("Rank %d / %d"):format(rank, #L.RANKS) })
 		t:Title(title, points > 0 and ("%s %s"):format(big(points), points == 1 and "point" or "points") or nil)

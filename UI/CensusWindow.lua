@@ -143,7 +143,7 @@ local function header(points)
 	local total, today = counts()
 	local U = BT.Util
 	Bk.SetHeader(frame, {
-		subtitle = BT.scope and BT.scope.realm or "?",
+		subtitle = BT.scope and U.RealmLabel(BT.scope.realm) or "?",
 		ranks = L.RANKS, badge = L.RankBadge, points = shown,
 		stats = {
 			{ "Characters", U.Commas(total) },
