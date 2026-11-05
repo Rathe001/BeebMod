@@ -1022,7 +1022,7 @@ end
 -- exactly as they came.
 local SHORT = {
 	general = "Gen", trade = "Trd", localdefense = "Def", worlddefense = "Def",
-	lookingforgroup = "LFG", guildrecruitment = "GR", services = "Svc",
+	lookingforgroup = "LFG", guildrecruitment = "GR", services = "Svc", ["trade (services)"] = "Svc",
 	guild = "G", officer = "O", party = "P", raid = "R", instance = "I",
 	["raid leader"] = "RL", ["party leader"] = "PL", ["raid warning"] = "RW",
 }
@@ -1038,10 +1038,62 @@ local function abbreviate(name)
 end
 M.Abbreviate = abbreviate
 
+-- TWO TRADES ARE TOLD APART (Josh 2026-11-05: "Are we able to do anything
+-- about the duplicate channel abbreviations?", his chat saying [2.Trd],
+-- [4.Trd] and [5.Trd]). Cutting the part after " - " made every "Trade - X"
+-- the same "Trd". So a channel whose short name another channel you are in
+-- also has keeps a word of what came after its dash, cut to four letters:
+-- "Trade - City" is "Trd·City". One with no twin stays as short as before.
+-- The channels you are in are asked of the client (GetChannelName), once a
+-- second at most, since every line of chat passes through here.
+M.TWIN_WORD = 4
+M.CHANNEL_MAX = 20
+
+local function split(full)
+	local base, rest = full:match("^(.-)%s+%-%s+(.+)$")
+	return base or full, rest
+end
+
+local twins = { at = nil, short = {} }
+local function twinned(short, full)
+	local now = (type(GetTime) == "function" and GetTime()) or 0
+	if twins.at == nil or now - twins.at >= 1 then
+		twins.at, twins.short = now, {}
+		if type(GetChannelName) == "function" then
+			for k = 1, M.CHANNEL_MAX do
+				local ok, id, name = pcall(GetChannelName, k)
+				if ok and type(name) == "string" and not (issecretvalue and issecretvalue(name))
+					and tonumber(id) and tonumber(id) > 0 then
+					local s = abbreviate((split(name)))
+					local set = twins.short[s] or {}
+					set[name] = true
+					twins.short[s] = set
+				end
+			end
+		end
+	end
+	local set = twins.short[short]
+	if not set then
+		return false
+	end
+	for name in pairs(set) do
+		if name ~= full then
+			return true
+		end
+	end
+	return false
+end
+M.ForgetTwins = function() twins.at = nil end
+
 local CHANNEL = "%[(%d+)%.%s*([^%]|]+)%]"
 local function shortenChannel(n, rest)
-	local name = rest:match("^(.-)%s+%-%s+") or rest
-	return "[" .. n .. "." .. abbreviate(name) .. "]"
+	local name, after = split(rest)
+	local short = abbreviate(name)
+	if after and twinned(short, rest) then
+		local word = after:match("^[%w']+") or after
+		short = short .. "·" .. word:sub(1, M.TWIN_WORD)
+	end
+	return "[" .. n .. "." .. short .. "]"
 end
 
 function M.Shorten(text)

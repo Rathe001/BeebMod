@@ -777,6 +777,14 @@ end
 
 -- the windows as the client built them, into the saved file (the Testing
 -- page's Record button)
+-- THE BAG SLOTS IN WHAT LOADED (Josh 2026-11-05: "Bag icons are still not
+-- showing", and What loaded is what he pastes). Each slot's numbers, and the
+-- row's last few passes, in chat (M.BagSlots.Brief).
+function M.Status()
+	local S = M.BagSlots
+	return S and S.Brief and S.Brief() or nil
+end
+
 function M.Dump()
 	local lines = BT.Furniture.Dump(M.Windows())
 	if M.BagSlots and M.BagSlots.Dump then

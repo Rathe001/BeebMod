@@ -3,6 +3,23 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **A bag you put on shows in its slot.** The bag slots under the backpack
+  stayed empty after you put a bag on, until a reload. The bag window's
+  restyle was fading BeebMod's own slot pictures along with the game's art.
+
+- **Combo points only for rogues and druids.** Other classes, such as mages,
+  had an empty row of combo points under the personal resource bars.
+
+- **Channels with the same short name are told apart.** Two Trade channels
+  both showed as "Trd". Each now adds a word from its full name, such as
+  "Trd·City".
+
+- **The buff tray keeps up with your buffs.** After a buff or debuff
+  changed, icons and weapon enchants could sit outside the tray's border for
+  a moment. Out of combat the border now changes size at the same moment.
+
 ## 1.1.0
 
 - **Quest reagents on enemy tooltips.** A quest item the game doesn't tie to

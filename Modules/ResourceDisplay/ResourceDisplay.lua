@@ -231,6 +231,8 @@ local function ask(fn, ...)
 	return nil
 end
 
+M.COMBO_CLASS = { ROGUE = true, DRUID = true }
+
 function M.Combo()
 	local _, class = nil, nil
 	if UnitClass then
@@ -239,8 +241,15 @@ function M.Combo()
 			_, class = a, b
 		end
 	end
+	-- ROGUES AND DRUIDS ONLY (Josh 2026-11-05: "Should my mage show the combo
+	-- points on personal resource?"). This client says five for a mage too,
+	-- and an empty row hung under the mana bar. Only these two earn points.
+	-- A class not known yet shows no row; the next pass knows it.
+	if not M.COMBO_CLASS[class] then
+		return 0, 0, false, false
+	end
 	local max = BT.Pill.Number(ask(UnitPowerMax, "player", COMBO), 0)
-	if max <= 0 and (class == "ROGUE" or class == "DRUID") then
+	if max <= 0 then
 		max = 5 -- a client that will not say still has five for these two
 	end
 	if max <= 0 then

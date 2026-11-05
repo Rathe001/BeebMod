@@ -6721,8 +6721,25 @@ if ok then
 			Bf.SetShown(true)
 			assert(buffs.timed.enabled and debuffs.timed.enabled, "and reads again when it is back")
 			assert(debuffs.timedPin._points.TOPRIGHT.y < buffs.timedPin._points.TOPRIGHT.y, "the debuffs under the buffs")
-			assert(buffs.surface._points.TOPLEFT.rel == buffs.timed,
-				"the tray hangs off the row, so it grows and shrinks with it unmeasured")
+			-- THE SURFACE BY ITS COUNT, OUT OF A FIGHT (Josh 2026-11-05: "Still a
+			-- delay on buffs and debuffs going inside the border"): as wide as
+			-- the counts at once; in a fight it hangs off the timed container,
+			-- which keeps up with what the client draws
+			do
+				local s = buffs.surface
+				local n = (buffs.lead or 0) + buffs.timedCount
+				assert(s._points.TOPRIGHT and s._points.TOPRIGHT.rel == Bf.real and not s._points.TOPLEFT
+					and s._width == n * Bf.STEP - Bf.GAP + 2 * Bf.PAD,
+					"out of a fight, the tray is as wide as its count: " .. tostring(s._width))
+				local hadCombat = _G.InCombatLockdown
+				_G.InCombatLockdown = function() return true end
+				Bf.Update()
+				assert(s._points.TOPLEFT and s._points.TOPLEFT.rel == buffs.timed,
+					"in a fight, it hangs off the row, so it grows and shrinks with it unmeasured")
+				_G.InCombatLockdown = hadCombat
+				Bf.Update()
+				assert(s._points.TOPRIGHT.rel == Bf.real and not s._points.TOPLEFT, "and by its count again after")
+			end
 			-- the campfire, seen out of a fight, is learned as permanent
 			assert(Bf.perm.HELPFUL[7353], "a permanent aura, learned")
 			-- right to left: the campfire, the poison, then the timed three
@@ -6730,6 +6747,53 @@ if ok then
 			assert(Bf.enchants[1]._shown ~= false and Bf.enchants[2]._shown == false, "one weapon enchant")
 			assert(Bf.enchants[1]._points.TOPRIGHT.x == -Bf.STEP, "past the campfire")
 			assert(Bf.enchants[1].words._text == "24 m", "with its time: " .. tostring(Bf.enchants[1].words._text))
+			-- WHAT THE CLIENT DREW, NOT WHAT WAS COUNTED (Josh 2026-11-05: "We had
+			-- an alignment issue here"): two permanent auras read, one drawn; the
+			-- enchant goes past the one drawn, not a slot further on
+			do
+				local auras = _G.C_UnitAuras
+				_G.C_UnitAuras = { GetAuraDataByIndex = function(_, i, filter)
+					if filter == "HELPFUL" and i <= 2 then return { duration = 0, spellId = 7353 + i } end
+				end }
+				local shown = _G.CreateFrame("Button", nil, buffs.perm)
+				shown:SetSize(Bf.SIZE, Bf.ROW_H)
+				local spare = _G.CreateFrame("Button", nil, buffs.perm)
+				spare:SetSize(Bf.SIZE, Bf.ROW_H)
+				spare:Hide()
+				local other = _G.CreateFrame("Frame", nil, buffs.perm)
+				other:SetSize(200, 4)
+				local hadKids = buffs.perm.GetChildren
+				buffs.perm.GetChildren = function() return shown, spare, other end
+				Bf.Update()
+				assert(buffs.permCount == 1, "one permanent drawn, so one counted: " .. tostring(buffs.permCount))
+				assert(Bf.enchants[1]._points.TOPRIGHT.x == -Bf.STEP, "the enchant just past it")
+				-- none found is no answer: the count read from your auras stands
+				shown:Hide()
+				Bf.Update()
+				assert(buffs.permCount == 2, "no buttons found, the count read stands: " .. tostring(buffs.permCount))
+				-- SECRET, THEN NO ANSWER (Josh 2026-11-05, at login: "BeebMod
+				-- couldn't make the buff tray"): a button whose shown state is a
+				-- secret makes no count, and nothing throws
+				shown:Show()
+				shown.IsShown = function() return Strict.Secret(true) end
+				local hadWidth = buffs.perm.GetWidth
+				buffs.perm.GetWidth = function() return Strict.Secret(Bf.SIZE) end
+				assert(Bf.Drawn(buffs.perm) == nil, "a secret shown state, and a secret width, are no count")
+				-- the container's width says it where the buttons will not
+				buffs.perm.GetWidth = function() return Bf.SIZE end
+				assert(Bf.Drawn(buffs.perm) == 1, "one icon wide is one: " .. tostring(Bf.Drawn(buffs.perm)))
+				buffs.perm.GetWidth = function() return 3 * Bf.STEP - Bf.GAP end
+				assert(Bf.Drawn(buffs.perm) == 3, "three wide is three: " .. tostring(Bf.Drawn(buffs.perm)))
+				buffs.perm.GetWidth = function() return Strict.Secret(Bf.SIZE) end
+				local okU, errU = pcall(Bf.Update)
+				assert(okU, "and the tray's update runs to its end: " .. tostring(errU))
+				assert(buffs.permCount == 2, "with the count read standing: " .. tostring(buffs.permCount))
+				shown.IsShown = nil
+				buffs.perm.GetWidth = hadWidth
+				buffs.perm.GetChildren = hadKids
+				_G.C_UnitAuras = auras
+				Bf.Update()
+			end
 			-- A SLOT AT A TIME, ON THIS CLIENT (Josh 2026-10-04: "Weapon enchants
 			-- (rockbiter) aren't showing on the buff bar"): C_Item's list, as the
 			-- game's own buff frame reads it, with the enchant's own picture
@@ -7677,6 +7741,32 @@ if ok then
 				"one we have a name for keeps it: " .. mod.Shorten("[4. LookingForGroup]"))
 			assert(mod.Shorten("[9. Weatherwatchers]") == "[9.Wea]",
 				"one we have not gets its first three letters")
+			-- TWO TRADES ARE TOLD APART (Josh 2026-11-05: "Are we able to do
+			-- anything about the duplicate channel abbreviations?"): a channel
+			-- whose short name another one you are in also has keeps a word of
+			-- what came after its dash
+			do
+				local hadName = _G.GetChannelName
+				local joined = { [1] = "General - Darnassus", [2] = "Trade - City", [4] = "Trade - Darnassus",
+					[5] = "Trade (Services) - City" }
+				_G.GetChannelName = function(k)
+					if joined[k] then return k, joined[k] end
+					return 0, nil
+				end
+				mod.ForgetTwins()
+				assert(mod.Shorten("[2. Trade - City]") == "[2.Trd·City]"
+					and mod.Shorten("[4. Trade - Darnassus]") == "[4.Trd·Darn]",
+					"two Trades, each with a word of its own: " .. mod.Shorten("[2. Trade - City]") .. " "
+						.. mod.Shorten("[4. Trade - Darnassus]"))
+				assert(mod.Shorten("[1. General - Darnassus] hi") == "[1.Gen] hi", "one with no twin stays short")
+				assert(mod.Shorten("[5. Trade (Services) - City]") == "[5.Svc]",
+					"Trade (Services) is the services channel: " .. mod.Shorten("[5. Trade (Services) - City]"))
+				joined[4] = nil
+				mod.ForgetTwins()
+				assert(mod.Shorten("[2. Trade - City]") == "[2.Trd]", "the twin left, it is short again")
+				_G.GetChannelName = hadName
+				mod.ForgetTwins()
+			end
 			assert(mod.Shorten("[Guild] someone: hi") == "[Guild] someone: hi",
 				"a channel with no number is left alone")
 			-- the words themselves are never touched
@@ -8704,6 +8794,33 @@ if ok then
 			assert(said:find("bag1: inv=31 now=31 gameID=31 tex=nil id=22976 picture=133644", 1, true)
 				and said:find("bag1: icon=[^ ]+ iconShown=true") and said:find("reagent: ", 1, true),
 				"the record names each slot's numbers:\n" .. said)
+			-- OURS, SO THE WINDOW'S RESTYLE LEAVES IT BE (Josh 2026-11-05, What
+			-- loaded: "shown=true drawn=true a=0"): the row lives in the window
+			-- the restyle takes the client's art off. A slot with no bag in it
+			-- has a picture with nothing in it, which the restyle took for art
+			-- and faded out for good; the bag put on later never showed
+			do
+				local host = S.frame:GetParent()
+				assert(host, "the row is in its window")
+				local wasID, wasItem = _G.GetInventoryItemID, _G.C_Item
+				_G.GetInventoryItemID = function() return nil end
+				S.Refresh("test")
+				assert(not bs[1].icon:IsShown(), "the slot is empty")
+				local dresser = BT.Furniture.New({})
+				dresser:DressTree(S.frame, 1, host)
+				_G.GetInventoryItemID, _G.C_Item = wasID, wasItem
+				S.Refresh("test")
+				assert(bs[1].icon:IsShown() and bs[1].icon:GetAlpha() == 1,
+					"a bag put on after the window's restyle is seen: " .. tostring(bs[1].icon:GetAlpha()))
+				dresser:DressTree(S.frame, 1, host)
+				assert(bs[1].icon:GetAlpha() == 1, "and stays seen through the next restyle")
+				dresser:Undress()
+			end
+			-- and What loaded says them in one line (Josh 2026-11-05)
+			local brief = mod.Status()
+			assert(type(brief) == "string" and brief:find("bag slots up", 1, true)
+				and brief:find("1:31 tex=nil id=22976 icon=133644 chose=133644", 1, true),
+				"What loaded names each slot's numbers: " .. tostring(brief))
 			-- AND AGAIN A MOMENT LATER (Josh 2026-11-04: after a /reload "the bag
 			-- icon appears"): a bag just put on has no picture when the event
 			-- comes, and has one half a second on
@@ -8727,6 +8844,35 @@ if ok then
 				"the record says when the row looked and what it got:\n" .. looked)
 			hear(S.events, "UNIT_INVENTORY_CHANGED", "target")
 			assert(#waits == 1, "another unit's change is not ours")
+			-- A SECRET PICTURE IS STILL A PICTURE (Josh 2026-11-05: "Bag icons
+			-- are still not showing"): a secret is handed on, never tested, and
+			-- a plain picture is preferred when there is one
+			do
+				local errs = #(BT.moduleErrors or {})
+				_G.GetInventoryItemTexture = function(_, inv) return inv == 31 and Strict.Secret(133639) or nil end
+				_G.C_Item = setmetatable({ GetItemIconByID = function() return nil end }, { __index = hadItem })
+				S.Refresh("test")
+				assert(bs[1].icon:IsShown() and Strict.IsSecret(bs[1].icon._texture),
+					"a secret picture, with no plain one, is shown as it is")
+				assert(#(BT.moduleErrors or {}) == errs, "and nothing threw: " .. tostring((BT.moduleErrors or {})[errs + 1]))
+				_G.C_Item = setmetatable({ GetItemIconByID = function(id) return id == 22976 and 133644 or nil end },
+					{ __index = hadItem })
+				S.Refresh("test")
+				assert(bs[1].icon._texture == 133644 and bs[1].icon:IsShown(),
+					"a plain picture of the item is preferred to a secret: " .. tostring(bs[1].icon._texture))
+				-- the slot's tooltip asks the same without testing a secret
+				_G.GetInventoryItemID = function(_, inv) return inv == 31 and Strict.Secret(22976) or nil end
+				local okTip, errTip = pcall(S.Tip, bs[1])
+				assert(okTip, "a secret item in the slot does not end its tooltip: " .. tostring(errTip))
+				_G.GetInventoryItemID = function(_, inv) return inv == 31 and 22976 or nil end
+				-- an error in the pass is said, not silent
+				local hadPicture = S.Picture
+				S.Picture = function() error("boom at BagSlots.lua:1", 0) end
+				S.Refresh("test")
+				S.Picture = hadPicture
+				local last = (BT.moduleErrors or {})[#(BT.moduleErrors or {})]
+				assert(last == "bagslots: boom at BagSlots.lua:1", "an error in the pass goes to What loaded: " .. tostring(last))
+			end
 			_G.C_Timer.After = hadAfter
 			_G.GetInventoryItemID, _G.C_Item = hadID, hadItem
 			_G.CharacterBag0Slot, _G.GetInventoryItemTexture = nil, hadTex
@@ -10297,6 +10443,13 @@ if ok then
 			_G.UnitPowerMax = function(_, kind) return kind == 4 and 0 or 100 end
 			mod.Pips(mod.Combo())
 			assert(not pips:IsShown(), "and a warrior has no row")
+			-- ROGUES AND DRUIDS ONLY (Josh 2026-11-05: "Should my mage show the
+			-- combo points on personal resource?"): this client says five for a
+			-- mage too, and still no row
+			_G.UnitClass = function() return "Mage", "MAGE" end
+			_G.UnitPowerMax = function(_, kind) return kind == 4 and 5 or 100 end
+			mod.Pips(mod.Combo())
+			assert(not pips:IsShown(), "a mage the client gives five points to has no row")
 
 			-- the client takes the plate back: everything goes with it
 			_G.UnitClass = function() return "Rogue", "ROGUE" end
@@ -19920,6 +20073,7 @@ local CAUGHT_ON_PURPOSE = {
 		"gamemenu: GameMenu.lua:999: attempt to index a nil value" },
 	-- a buff tray that cannot be made leaves the game's own buffs
 	{ "the unit frames' auras are the client's, in containers we describe", "buffs: boom at Buffs.lua:1" },
+	{ "the bag window wears the toolkit's clothes, and takes them off again", "bagslots: boom at BagSlots.lua:1" },
 	-- a tooltip of a kind nobody planned for is left alone
 	{ "every tooltip in the game, not the ones we thought of", "tips.dress OddTooltip: not that kind of tooltip" },
 }

@@ -33,10 +33,10 @@
 -- them all; the client sorts the permanent ones after the timed, which from
 -- the right is against the dock.
 --
--- THE SURFACE follows the timed container where the client lets it (a
--- container sizes itself to its icons, in a fight too, where the addon cannot
--- count them); where it will not, it is as wide as a count taken out of a
--- fight. The containers and the enchants are placed from counts taken out of
+-- THE SURFACE is as wide as the counts out of a fight, which are read the
+-- moment an aura changes; in a fight, where the addon cannot count them, it
+-- follows the timed container where the client lets it (a container sizes
+-- itself to its icons, a beat late). See B.Surface. The containers and the enchants are placed from counts taken out of
 -- a fight, which is the one thing that can be out of step until it ends.
 --
 -- WEAPON ENCHANTS - poisons, stones, a shaman's weapon - are not auras and no
@@ -73,6 +73,8 @@ B.EDGE = 8 -- from the dock
 B.ROW_H = B.SIZE + B.TEXT_H
 B.STEP = B.SIZE + B.GAP
 B.PERM_MAX = 12
+-- how long after a change the tray is placed again, once the client has drawn
+B.AGAIN = 0.2
 -- a duration cap no aura reaches: the client's filter then passes every aura
 -- that has a duration and none that has not (the unit frames' buff rows use it
 -- too)
@@ -349,13 +351,7 @@ function B.Build()
 		if row.timed then
 			row.follows = pcall(row.surface.SetPoint, row.surface, "TOPLEFT", row.timed, "TOPLEFT", -B.PAD, B.PAD)
 		end
-		if row.follows then
-			row.surface:SetPoint("BOTTOMRIGHT", real, "TOPRIGHT", B.PAD, top - B.ROW_H - B.PAD)
-		else
-			row.surface:ClearAllPoints()
-			row.surface:SetPoint("TOPRIGHT", real, "TOPRIGHT", B.PAD, top + B.PAD)
-			row.surface:SetHeight(B.ROW_H + 2 * B.PAD)
-		end
+		B.Surface(row, inCombat(), 0)
 		B.rows[i] = row
 		B.rows[spec.key] = row
 	end
@@ -463,6 +459,54 @@ function B.Read(filter)
 	return out
 end
 
+-- WHAT THE CLIENT DREW, NOT WHAT WAS COUNTED (Josh 2026-11-05: "We had an
+-- alignment issue here", a weapon enchant a slot too far left, half off the
+-- tray, with an empty slot between it and the one permanent buff). The
+-- enchants are placed after the permanent ones, by a count read from your
+-- auras; the permanent container draws only what its filter lets through,
+-- so the two can disagree. How many icons the container shows is counted
+-- instead, where it can be: its shown buttons, each an icon wide.
+-- SECRET, THEN NO ANSWER (Josh 2026-11-05, at login: "Buffs: BeebMod couldn't
+-- make the buff tray", What loaded: "attempt to compare local 'shown' (a
+-- secret boolean value"). Whether one of the client's aura buttons is shown
+-- can be a secret, and comparing it threw and took the tray with it. A secret
+-- anywhere makes this say nothing, and the count read from your auras stands.
+function B.Drawn(c)
+	if not (c and c.GetChildren) then
+		return nil
+	end
+	local ok, kids = pcall(function() return { c:GetChildren() } end)
+	if not ok then
+		return nil
+	end
+	local function secret(v)
+		return issecretvalue and issecretvalue(v)
+	end
+	-- or by its width, where the buttons will not say: the container sizes
+	-- itself to its icons, each a step and the last without its gap
+	local function byWidth()
+		local okC, cw = pcall(c.GetWidth, c)
+		cw = okC and plainNumber(cw) or nil
+		if not cw then
+			return nil
+		end
+		return math.max(0, math.floor((cw + B.GAP) / B.STEP + 0.5))
+	end
+	local n = 0
+	for _, f in ipairs(kids) do
+		local okS, shown = pcall(f.IsShown, f)
+		local okW, w = pcall(f.GetWidth, f)
+		if secret(shown) or secret(w) then
+			return byWidth()
+		end
+		w = okW and plainNumber(w) or nil
+		if okS and shown == true and w and math.abs(w - B.SIZE) < 1 then
+			n = n + 1
+		end
+	end
+	return n
+end
+
 B.longest = {}
 
 -- a row's permanent spells, learned: the container told when there are new ones
@@ -515,6 +559,21 @@ function B.Update(enchantsOnly)
 			end
 		end
 	end
+	-- the permanent ones as the client drew them, once it has (B.Drawn); on
+	-- the ticker's pass too, so a count read before the client laid its
+	-- icons out is put right within the second
+	for _, row in ipairs(B.rows) do
+		-- none found is no answer: the buttons may hang somewhere this does
+		-- not look, and the count read from your auras stands
+		-- and a count that fails is no answer either: it never takes the tray
+		-- down with it
+		local okD, drawn = pcall(function()
+			return row.perm and not inCombat() and B.Drawn(row.perm)
+		end)
+		if okD and type(drawn) == "number" and drawn > 0 then
+			row.permCount = math.min(drawn, B.PERM_MAX)
+		end
+	end
 	-- right to left: the permanent ones, the enchants (buffs only), the timed
 	for _, row in ipairs(B.rows) do
 		local lead = row.permCount
@@ -553,15 +612,46 @@ function B.Update(enchantsOnly)
 			row.timedPin:ClearAllPoints()
 			row.timedPin:SetPoint("TOPRIGHT", B.real, "TOPRIGHT", -lead * B.STEP, row.top)
 		end
-		-- a row with nothing in it puts its surface away; one that cannot hang
-		-- off its container is as wide as its count
+		-- a row with nothing in it puts its surface away; out of a fight it is
+		-- as wide as its count, in one it hangs off its container (B.Surface)
 		local n = lead + row.timedCount
-		if not inCombat() then
+		if inCombat() then
+			B.Surface(row, true)
+		else
 			row.surface:SetShown(n > 0)
+			B.Surface(row, false, n)
 		end
-		if not row.follows and n > 0 then
-			row.surface:SetWidth(n * B.STEP - B.GAP + 2 * B.PAD)
+	end
+end
+
+-- THE SURFACE BY ITS COUNT, OUT OF A FIGHT (Josh 2026-11-05: "Still a delay
+-- on buffs and debuffs going inside the border"). It hung off the timed
+-- container's left edge, so it grew only when the client laid that container
+-- out again, a beat after the icons and the enchants had moved: for that beat
+-- they sat outside it. Out of a fight the counts are read the moment an aura
+-- changes, so the surface is as wide as they say, at once. In a fight they
+-- cannot be read, and it hangs off the container as before, which keeps up
+-- with what the client draws however late.
+function B.Surface(row, follow, n)
+	local s = row.surface
+	if follow and row.follows then
+		if row.following then
+			return
 		end
+		s:ClearAllPoints()
+		local ok = pcall(s.SetPoint, s, "TOPLEFT", row.timed, "TOPLEFT", -B.PAD, B.PAD)
+		if ok then
+			s:SetPoint("BOTTOMRIGHT", B.real, "TOPRIGHT", B.PAD, row.top - B.ROW_H - B.PAD)
+			row.following = true
+			return
+		end
+	end
+	row.following = false
+	s:ClearAllPoints()
+	s:SetPoint("TOPRIGHT", B.real, "TOPRIGHT", B.PAD, row.top + B.PAD)
+	s:SetHeight(B.ROW_H + 2 * B.PAD)
+	if n and n > 0 then
+		s:SetWidth(n * B.STEP - B.GAP + 2 * B.PAD)
 	end
 end
 
@@ -597,6 +687,19 @@ function B.Watch()
 			B.Place()
 		end
 		B.Update()
+		-- AND AGAIN ONCE THE CLIENT HAS DRAWN (Josh 2026-11-05: "It looks like
+		-- the buffs and debuffs are just slow to update in the container").
+		-- The containers lay their icons out after this event, so what is
+		-- placed by what they show (B.Drawn) is placed again a moment later.
+		if not B.again and C_Timer and C_Timer.After then
+			B.again = true
+			C_Timer.After(B.AGAIN, function()
+				B.again = false
+				if M.live then
+					B.Update()
+				end
+			end)
+		end
 	end)
 	-- the enchants' time runs down on its own; the auras are read when they
 	-- change
@@ -789,3 +892,46 @@ function M:OnDisable()
 	B.SetShown(false)
 	M.Stow()
 end
+
+-- THE TRAY, FOR THE RECORD (Josh 2026-11-05: "We had an alignment issue
+-- here"). Each row's counts and where its pieces are, in pixels from the
+-- tray's right edge: the Testing page's Record writes it.
+function B.Dump()
+	local lines = {}
+	local real = B.real
+	local okR, edge = pcall(function() return real:GetRight() end)
+	local right = okR and plainNumber(edge) or nil
+	local function from(f)
+		if not (f and right) then
+			return "?"
+		end
+		local ok, l, r = pcall(function() return f:GetLeft(), f:GetRight() end)
+		l, r = ok and plainNumber(l), ok and plainNumber(r)
+		if not (l and r) then
+			return "no place"
+		end
+		return ("%.0f..%.0f"):format(l - right, r - right)
+	end
+	for _, row in ipairs(B.rows or {}) do
+		local r = B.Read(row.spec.filter)
+		lines[#lines + 1] = ("%s: perm=%s timed=%s lead=%s read=%s/%s drawn=%s/%s follows=%s"):format(
+			row.spec.key, tostring(row.permCount), tostring(row.timedCount), tostring(row.lead),
+			tostring(r and r.perm), tostring(r and r.timed), tostring(B.Drawn(row.perm)), tostring(B.Drawn(row.timed)),
+			tostring(row.follows))
+		lines[#lines + 1] = ("%s: permBox=%s timedBox=%s pin=%s surface=%s"):format(row.spec.key, from(row.perm),
+			from(row.timed), from(row.timedPin), from(row.surface))
+	end
+	for i, f in ipairs(B.enchants or {}) do
+		lines[#lines + 1] = ("enchant%d: shown=%s slot=%s at=%s"):format(i, tostring(f:IsShown()), tostring(f.slot),
+			from(f))
+	end
+	for i, e in ipairs(B.ReadEnchants()) do
+		lines[#lines + 1] = ("read%d: slot=%s left=%s icon=%s"):format(i, tostring(e.slot), tostring(e.left),
+			tostring(e.icon))
+	end
+	BT.EnsureBound()
+	BeebModDB.buffsDump = { at = U.Now(), lines = lines }
+	return #lines
+end
+
+BT.Record("buffsDump", B.Dump, "buffs")

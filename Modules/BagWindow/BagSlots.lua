@@ -156,11 +156,14 @@ function S.Tip(b)
 	local bagID = call(_G.GetInventoryItemID, "player", b.inv)
 	local link = call(_G.GetInventoryItemLink, "player", b.inv)
 	local drawn = false
-	if bagID or link then
+	-- (secrets first: one may not be tested, see S.Picture)
+	local hidID, hidLink = S.Secret(bagID), S.Secret(link)
+	if hidID or hidLink or bagID ~= nil or link ~= nil then
 		call(tip.SetInventoryItem, tip, "player", b.inv)
 		drawn = (tonumber(call(tip.NumLines, tip)) or 0) > 0
 		if not drawn then
-			local name = BT.Util.ItemInfo(link or bagID)
+			local plain = (not hidLink and link) or (not hidID and bagID) or nil
+			local name = plain and BT.Util.ItemInfo(plain)
 			call(tip.SetText, tip, type(name) == "string" and name or slot, 1, 1, 1)
 			drawn = true
 		end
@@ -303,6 +306,15 @@ function S.Build()
 		return S.frame
 	end
 	local f = CreateFrame("Frame", "BeebModBagSlots", UIParent)
+	-- OURS, SO THE WINDOW'S RESTYLE LEAVES IT BE (Josh 2026-11-05, What
+	-- loaded: the pouch's slot "tex=133636 ... shown=true drawn=true a=0").
+	-- The row lives in the backpack's window, and the restyle that takes the
+	-- client's art off that window (Core/Furniture.lua) went through it too,
+	-- each time the bags changed: it took each slot's picture for art and set
+	-- it to nothing. After a /reload the row came after the restyle, which is
+	-- why the picture was back until the next bag went on. A frame marked
+	-- `beebs` is skipped.
+	f.beebs = true
 	f.buttons = {}
 	for bag = 1, S.BAGS do
 		f.buttons[bag] = make(f, bag)
@@ -355,19 +367,42 @@ end
 -- Mining Pack, so the item was readable, but the slot stayed empty. The
 -- picture is asked of the slot first, as the game's own bag bar asks it, and
 -- then of the item in it.
+-- A SECRET PICTURE IS STILL A PICTURE (Josh 2026-11-05: "Bag icons are still
+-- not showing", a Small Blue Pouch named in its slot's tooltip, the slot
+-- empty until a /reload). The client can answer with a secret value, and a
+-- secret may be handed on but not tested: `if tex` on one throws, which ended
+-- the row's pass before the icon was shown, with no error in sight (the
+-- buffs tray hit the same on 2026-11-05). So nothing here tests a secret: a
+-- plain picture is preferred, the slot's or else its item's, and a secret one
+-- is handed back only when there is no plain one.
+local function secret(v)
+	return (issecretvalue and issecretvalue(v)) and true or false
+end
+S.Secret = secret
+
 function S.Picture(inv)
 	if not inv then
 		return nil
 	end
 	local tex = call(_G.GetInventoryItemTexture, "player", inv)
-	if tex then
+	local hidden = nil
+	if secret(tex) then
+		hidden = tex
+	elseif tex then
 		return tex
 	end
 	local id = call(_G.GetInventoryItemID, "player", inv)
-	if not id then
-		return nil
+	if id ~= nil and not secret(id) then
+		local icon = call(C_Item and C_Item.GetItemIconByID, id)
+		if icon ~= nil and not secret(icon) then
+			return icon
+		end
+		icon = call(_G.GetItemIcon, id)
+		if icon ~= nil and not secret(icon) then
+			return icon
+		end
 	end
-	return call(C_Item and C_Item.GetItemIconByID, id) or call(_G.GetItemIcon, id)
+	return hidden
 end
 
 -- the last few times the row looked, and what each slot got, for the record
@@ -388,7 +423,7 @@ local function note(why, bags)
 end
 
 -- every slot's picture as it stands, faded while the game holds the bag
-function S.Refresh(why)
+local function refresh(why)
 	local f = S.frame
 	if not (f and f:IsShown()) then
 		if why then
@@ -413,19 +448,39 @@ function S.Refresh(why)
 	end
 	for _, b in ipairs(bags) do
 		local tex = S.Picture(b.inv)
-		b.seen = tex
-		b.icon:SetTexture(tex)
-		b.icon:SetShown(tex ~= nil)
+		local hidden = secret(tex)
+		b.seen = hidden and "secret" or tex
+		local okT = pcall(b.icon.SetTexture, b.icon, tex)
+		-- and seen, whatever faded it before the row was marked as ours
+		b.icon:SetAlpha(1)
+		-- a secret is there by being secret; only a plain one is asked
+		local has = okT and (hidden or tex ~= nil)
+		b.icon:SetShown(has and true or false)
 		local locked = call(_G.IsInventoryItemLocked, b.inv)
+		if secret(locked) then
+			locked = false
+		end
 		if b.icon.SetDesaturated then
 			b.icon:SetDesaturated(locked and true or false)
 		end
-		if tex then
+		if has then
 			n = n + 1
 		end
 	end
 	note(why or "?", bags)
 	return n
+end
+
+-- AND AN ERROR IS SAID (2026-11-05): the pass runs from events, where an
+-- error is silent unless the game's script errors are on. One goes to the log
+-- What loaded prints, on the Testing page.
+function S.Refresh(why)
+	local ok, r = pcall(refresh, why)
+	if not ok then
+		BT.Err("bagslots: " .. tostring(r))
+		return 0
+	end
+	return r
 end
 
 -- WHAT EACH SLOT READS, FOR THE RECORD (Josh 2026-11-04: "Small brown pouch
@@ -478,6 +533,36 @@ function S.Dump()
 		lines[#lines + 1] = "looked: " .. line
 	end
 	return lines
+end
+
+-- the same, short enough for one line of What loaded: per slot its inventory
+-- slot, what the client gives (slot picture, item, item's icon), what the row
+-- chose and what the icon holds, shown and drawn; then the last three passes
+S.BRIEF_PASSES = 3
+function S.Brief()
+	local f = S.frame
+	if not f then
+		return "bag slots: not built"
+	end
+	local parts = { ("bag slots %s"):format(f:IsShown() and "up" or "down") }
+	local list = {}
+	for i, b in ipairs(f.buttons) do
+		list[#list + 1] = { tostring(i), b }
+	end
+	list[#list + 1] = { "r", f.reagent }
+	for _, row in ipairs(list) do
+		local b, inv = row[2], row[2].inv
+		local id = inv and call(_G.GetInventoryItemID, "player", inv)
+		parts[#parts + 1] = ("%s:%s tex=%s id=%s icon=%s chose=%s has=%s shown=%s drawn=%s a=%s"):format(row[1],
+			said(inv), said(inv and call(_G.GetInventoryItemTexture, "player", inv)), said(id),
+			said(id and not secret(id) and call(C_Item and C_Item.GetItemIconByID, id)), said(b.seen),
+			said(call(b.icon.GetTexture, b.icon)), said(b.icon:IsShown()), said(call(b.icon.IsVisible, b.icon)),
+			said(call(b.icon.GetAlpha, b.icon)))
+	end
+	for i = math.max(1, #S.log - S.BRIEF_PASSES + 1), #S.log do
+		parts[#parts + 1] = "pass " .. S.log[i]
+	end
+	return table.concat(parts, " · ")
 end
 
 -- in the backpack while it is open, the module on and the row wanted
