@@ -56,21 +56,45 @@ T.SPELLS = {
 		MAGE = { "Fireball", "Pyroblast" },
 		SHAMAN = { "Flame Shock" },
 	},
+	-- YOUR CROWD CONTROL TOO (Josh 2026-11-05: "Can we do the same for CC
+	-- spells as well (sap, polymorph, etc)? It should use a different
+	-- colour"). A lane each, in the same stack as your damage and under it,
+	-- nearest the plate, all in one colour. A spell you can cast on one enemy
+	-- at a time, or on a few at once (Frost Nova, Psychic Scream), and none of
+	-- the short stuns. Bosses get none: they can't be held.
+	cc = {
+		ROGUE = { "Sap", "Blind", "Gouge" },
+		MAGE = { "Polymorph", "Polymorph: Pig", "Polymorph: Turtle", "Frost Nova" },
+		WARLOCK = { "Fear", "Banish", "Howl of Terror", "Death Coil" },
+		PRIEST = { "Shackle Undead", "Psychic Scream" },
+		DRUID = { "Hibernate", "Entangling Roots" },
+		HUNTER = { "Freezing Trap", "Scatter Shot", "Wyvern Sting", "Scare Beast" },
+		PALADIN = { "Hammer of Justice", "Repentance", "Turn Undead" },
+	},
 }
 
--- a colour a lane, by its place in the class's list
+-- THE SPELL ON THE ENEMY IS NOT ALWAYS THE ONE IN YOUR BOOK. A trap you lay
+-- holds the enemy with a spell of its own, "Freezing Trap Effect", a rank
+-- each; the lane looks for those too, once the trap is in your book.
+T.AURA_IDS = {
+	["Freezing Trap"] = { 3355, 14308, 14309 },
+}
+
+-- a colour a lane, by its place in the class's list; crowd control has one
 T.COLOURS = {
 	hot = { { 0.36, 0.90, 0.46 }, { 0.30, 0.72, 1.00 }, { 1.00, 0.84, 0.36 } },
 	dot = { { 0.76, 0.46, 1.00 }, { 1.00, 0.56, 0.22 }, { 1.00, 0.32, 0.30 }, { 0.40, 0.90, 0.80 } },
+	cc = { { 0.62, 0.84, 1.00 } },
 }
 
--- which frames carry which, and how tall a lane is on them
+-- which frames carry which, and how tall a lane is on them. Crowd control
+-- comes before damage, so its lanes are the stack's lowest.
 T.KINDS = {
 	party = { "hot" }, raid = { "hot" }, tank = { "hot" },
-	target = { "hot", "dot" }, focus = { "dot" }, boss = { "dot" },
+	target = { "hot", "cc", "dot" }, focus = { "cc", "dot" }, boss = { "dot" },
 	-- OVER EVERY ENEMY (Josh 2026-10-03: "a way for multi dot classes to track
 	-- their debuffs on all mobs"), on its nameplate (Modules/Nameplates)
-	plate = { "dot" },
+	plate = { "cc", "dot" },
 }
 
 -- YOUR TARGET'S, ON ITS PLATE (Josh 2026-10-03: "Remove the DoT bar from the
@@ -121,7 +145,7 @@ T.ICON_MORE = 4
 -- which is its bar (T.Height)
 function T.LaneHeight(kind, which)
 	local h = T.Height(kind, which)
-	return which == "dot" and (h + T.ICON_MORE) or h
+	return T.Above(which) and (h + T.ICON_MORE) or h
 end
 
 -- how tall a lane's bar is: a heal's by the frame's size, damage's thicker
@@ -129,7 +153,7 @@ function T.Height(kind, which)
 	if kind == "plate" then
 		return T.PLATE_H
 	end
-	if which == "dot" then
+	if T.Above(which) then
 		return T.DOT_H
 	end
 	return T.LANE_H[kind] or 3
@@ -149,7 +173,7 @@ local function laneX(b)
 	end
 	return 2
 end
-T.MAX_LANES = { hot = 1, dot = 4 }
+T.MAX_LANES = { hot = 1, dot = 4, cc = 4 }
 -- the last seconds, counted down; a blink gets shorter the nearer the end.
 -- DAMAGE FROM THREE (Josh 2026-10-03: "I think we should start the dot
 -- blinker at 3 seconds"), AND HEALS (2026-10-04: "make heals also 3
@@ -269,6 +293,13 @@ local function readBook()
 					local ok, _, _, _, _, _, _, sid = pcall(GetSpellInfo, name)
 					id = ok and sid or nil
 				end
+				add(out, name, id)
+			end
+		end
+	end
+	for name, extra in pairs(T.AURA_IDS) do
+		if out[name] then
+			for _, id in ipairs(extra) do
 				add(out, name, id)
 			end
 		end
@@ -509,7 +540,7 @@ end
 -- inside they reach the name; stacked upwards from the frame's top edge
 -- they cover nothing.
 function T.Above(which)
-	return which == "dot"
+	return which == "dot" or which == "cc"
 end
 
 -- how far above a frame its damage starts: a pixel clear of it, and over a
@@ -664,8 +695,8 @@ function T.Build(b, remake)
 	local want = {}
 	local dots = {}
 	for _, lane in ipairs(T.Lanes(set.kind)) do
-		if lane.which == "dot" then
-			-- your damage goes in one stack (dotStack, below)
+		if T.Above(lane.which) then
+			-- your crowd control and damage go in one stack (dotStack, below)
 			dots[#dots + 1] = lane
 		else
 			T.BuildLane(b, set, lane, want, remake)
@@ -771,7 +802,7 @@ end
 function T.Report()
 	local class = myClass()
 	say(("Over-time bars: %s"):format(tostring(class)))
-	for _, which in ipairs({ "hot", "dot" }) do
+	for _, which in ipairs({ "hot", "cc", "dot" }) do
 		for _, name in ipairs(T.Spells(which, class)) do
 			local list = {}
 			for id in pairs(T.Ids(name) or {}) do
@@ -837,10 +868,12 @@ function T.Show(b, kind, d)
 	if d and d.reaction then
 		friendly = d.reaction == "friendly"
 	end
-	local mine = {}
+	-- and one lane of crowd control at most: an enemy is seldom held twice
+	local mine, held = {}, false
 	for _, lane in ipairs(lanes) do
-		if (lane.which == "hot") == friendly then
+		if (lane.which == "hot") == friendly and not (lane.which == "cc" and held) then
 			mine[#mine + 1] = lane
+			held = held or lane.which == "cc"
 		end
 	end
 	local n = 0

@@ -1004,6 +1004,77 @@ if ok then
 			assert(p and p.guid == nil, "a secret GUID is filed without its GUID")
 			_G.GetUnitName, _G.UnitGUID = wasName, wasGuid
 		end },
+		{ "somebody with no guild line, still none a moment later, has no guild", function()
+			-- NO GUILD, LOOKED AT TWICE (Josh 2026-11-05: "Can we add a 'no
+			-- guild' or 'unguilded' row?")
+			local C = BT.Collect
+			local names = { "GetUnitName", "UnitGUID", "GetGuildInfo", "GetTime" }
+			local had = {}
+			for _, n in ipairs(names) do
+				had[n] = rawget(_G, n)
+			end
+			local hadAfter = _G.C_Timer.After
+			local waits = {}
+			_G.C_Timer.After = function(_, fn) waits[#waits + 1] = fn end
+			local clock, guild = 500, nil
+			local who, ids = {}, {}
+			_G.GetTime = function() return clock end
+			_G.GetUnitName = function(unit) return who[unit] end
+			_G.UnitGUID = function(unit) return ids[unit] end
+			_G.GetGuildInfo = function() return guild end
+			C.again, C.waiting = {}, false
+			local function see(name, id, unit)
+				unit = unit or "mouseover"
+				who[unit], ids[unit] = name, id
+				C.FromUnit(unit)
+			end
+			local function later()
+				clock = clock + C.GUILD_WAIT
+				local run = waits
+				waits = {}
+				for _, fn in ipairs(run) do
+					fn()
+				end
+			end
+			-- no guild, then still none
+			see("Lone Wolfe", "Player-4372-00GL0001")
+			assert(BT.DB.Get(BT.db, "Lone Wolfe").guild == nil, "at first sight, not known")
+			assert(#waits == 1, "and looked at again a moment later")
+			later()
+			assert(BT.DB.Get(BT.db, "Lone Wolfe").guild == "", "still none: no guild")
+			-- the guild line comes in the meantime
+			see("Late Linesman", "Player-4372-00GL0002")
+			guild = "Nightwatch"
+			later()
+			assert(BT.DB.Get(BT.db, "Late Linesman").guild == nil, "a guild line that came late is no 'no guild'")
+			guild = nil
+			-- the token is someone else by then
+			see("Gone Byman", "Player-4372-00GL0003")
+			ids.mouseover = "Player-4372-00GL0099"
+			later()
+			assert(BT.DB.Get(BT.db, "Gone Byman").guild == nil, "nor is somebody else in the same token")
+			-- a guild on file stays
+			guild = "Nightwatch"
+			see("Old Member", "Player-4372-00GL0004")
+			assert(BT.DB.Get(BT.db, "Old Member").guild == "Nightwatch", "seen in a guild")
+			guild = nil
+			clock = clock + 120
+			see("Old Member", "Player-4372-00GL0004")
+			later()
+			assert(BT.DB.Get(BT.db, "Old Member").guild == "Nightwatch", "and a unit never records a leave")
+			-- many waiting, one timer
+			see("Ann Onemous", "Player-4372-00GL0005", "nameplate1")
+			see("Bea Onemous", "Player-4372-00GL0006", "nameplate2")
+			assert(#waits == 1, "two waiting share one timer: " .. #waits)
+			later()
+			assert(BT.DB.Get(BT.db, "Ann Onemous").guild == "" and BT.DB.Get(BT.db, "Bea Onemous").guild == "",
+				"and both are looked at")
+			_G.C_Timer.After = hadAfter
+			C.again, C.waiting = {}, false
+			for _, n in ipairs(names) do
+				_G[n] = had[n]
+			end
+		end },
 		{ "the search window", function()
 			BT.Window.Toggle()
 			assert(_G.BeebModWindow and _G.BeebModWindow:IsShown(), "the FIRST /bt must open the window")
@@ -4594,9 +4665,13 @@ if ok then
 			-- the card: one dungeon's levels; a place of several, each
 			shownMap = 1436
 			mod.Draw()
+			local copied = false
+			mod.pins[1].icon.GetTexture = function() copied = true return "atlas-sheet" end
 			mod.pins[1]:GetScript("OnEnter")(mod.pins[1])
 			assert(BT.Tip.lastError == nil and BT.Tip.LineOf("The Deadmines") and BT.Tip.LineOf("Levels 17-26"),
 				"hovering the Deadmines names it with its levels")
+			assert(not copied, "the card leaves the pin's picture off, which it drew from the wrong part of its sheet")
+			mod.pins[1].icon.GetTexture = nil
 			shownMap = 1427
 			mod.Draw()
 			mod.pins[1]:GetScript("OnEnter")(mod.pins[1])
@@ -6500,7 +6575,7 @@ if ok then
 			end
 			local wasClass, wasSpell, wasEnum, wasCurve = _G.UnitClass, _G.C_Spell, _G.Enum, _G.C_CurveUtil
 			_G.UnitClass = function() return "Druid", "DRUID" end
-			local IDS = { Rejuvenation = 774, Regrowth = 8936, Moonfire = 8921, ["Insect Swarm"] = 5570 }
+			local IDS = { Rejuvenation = 774, Regrowth = 8936, Moonfire = 8921, ["Insect Swarm"] = 5570, Hibernate = 2637 }
 			_G.C_Spell = { GetSpellInfo = function(name) return IDS[name] and { spellID = IDS[name] } or nil end }
 			_G.Enum = setmetatable({ StatusBarTimerDirection = { ElapsedTime = 0, RemainingTime = 1 },
 				LuaCurveType = { Step = 2 } }, { __index = wasEnum })
@@ -6625,8 +6700,55 @@ if ok then
 				"your debuffs on an enemy, in one stack from just above the frame")
 			local ml, il = moonGroup.opts.layout, stack.groups["Insect Swarm"].opts.layout
 			assert(ml.forceNewLine and il.forceNewLine and moonGroup.opts.maxFrameCount == 1
-				and ml.layoutIndex == 1 and il.layoutIndex == 2,
+				and ml.layoutIndex < il.layoutIndex,
 				"a line each, in the class's order, one aura to a line")
+			-- YOUR CROWD CONTROL TOO (Josh 2026-11-05: "Can we do the same for CC
+			-- spells as well (sap, polymorph, etc)? It should use a different
+			-- colour"): a line each in the same stack, under your damage, in a
+			-- colour no damage has
+			do
+				local hib = stack.groups.Hibernate
+				assert(hib and hib.filter == "HARMFUL|PLAYER" and hib.opts.candidateFilters.includeSpellIDs[2637]
+					and hib.opts.layout.forceNewLine and hib.opts.maxFrameCount == 1,
+					"Hibernate has a line of its own, your own and only that spell")
+				assert(hib.opts.layout.layoutIndex < ml.layoutIndex, "under your damage, nearest the frame")
+				assert(stack.groups["Entangling Roots"] == nil, "a spell you don't know has no line")
+				local ccButton = realCF("Button")
+				ccButton.SetDurationBar = function() end
+				ccButton.SetDurationText = function() end
+				hib.opts.initializeFrame(ccButton)
+				local bc = ccButton.bmBar._barColor or {}
+				local r, g, b = bc[1], bc[2], bc[3]
+				local cc = T.COLOURS.cc[1]
+				assert(r == cc[1] and g == cc[2] and b == cc[3], "in crowd control's colour")
+				for _, d in ipairs(T.COLOURS.dot) do
+					assert(not (d[1] == cc[1] and d[2] == cc[2] and d[3] == cc[3]), "which no damage has")
+				end
+				assert(ccButton:GetHeight() == T.LaneHeight("target", "dot") and ccButton.bmIcon,
+					"as tall as a lane of damage, with the spell's picture")
+				assert(T.Colour("cc", "Hibernate") == T.Colour("cc", "Entangling Roots"), "one colour for all of it")
+				assert(T.KINDS.plate[1] == "cc" and T.KINDS.focus[1] == "cc", "on every enemy's plate and the focus")
+				local bossHas = false
+				for _, which in ipairs(T.KINDS.boss) do
+					bossHas = bossHas or which == "cc"
+				end
+				assert(not bossHas, "and not on a boss, which can't be held")
+				-- A TRAP HOLDS WITH A SPELL OF ITS OWN: Freezing Trap Effect,
+				-- looked for once the trap is in your book
+				_G.UnitClass = function() return "Hunter", "HUNTER" end
+				T.Rebuild()
+				assert(T.Ids("Freezing Trap") == nil, "no trap in the book, no lane for it")
+				IDS["Freezing Trap"] = 1499
+				T.Rebuild()
+				local trap = T.Ids("Freezing Trap")
+				assert(trap and trap[1499] and trap[3355] and trap[14308] and trap[14309],
+					"the trap and every rank of what it holds an enemy with")
+				IDS["Freezing Trap"] = nil
+				_G.UnitClass = function() return "Druid", "DRUID" end
+				T.Rebuild()
+				stack = target.bmAuras.timers.dot
+				moonGroup = stack.groups.Moonfire
+			end
 			assert(target.bmAuras.timers["dot:Moonfire"] == nil, "and no container a spell any more")
 			local dotButton = realCF("Button")
 			dotButton.SetDurationBar = function() end
@@ -6724,8 +6846,12 @@ if ok then
 			-- THE MADE-UP TARGET BY ITS REACTION (2026-10-17, audit): the hostile
 			-- Defias Blackguard wore your heal
 			local fakeTarget = F.Build(_G.UIParent, "target", nil, false)
-			assert(T.Show(fakeTarget, "target", { reaction = "hostile" }) == 4 and fakeTarget.bmFakeTimers[1].icon,
-				"a made-up enemy target wears your damage")
+			assert(T.Show(fakeTarget, "target", { reaction = "hostile" }) == 5 and fakeTarget.bmFakeTimers[1].icon,
+				"a made-up enemy target wears your damage, and one lane of crowd control")
+			do
+				local c, cc = fakeTarget.bmFakeTimers[1]._barColor or {}, T.COLOURS.cc[1]
+				assert(c[1] == cc[1] and c[2] == cc[2] and c[3] == cc[3], "the crowd control lowest, in its colour")
+			end
 			assert(T.Show(fakeTarget, "target", { reaction = "friendly" }) == 1, "a made-up friend your heal")
 
 			-- a spell the book had not got yet is looked for again, not
@@ -6754,13 +6880,20 @@ if ok then
 				if kind == "AuraContainer" then
 					assert(template == "CustomAuraContainerTemplate", "the template made for addons")
 					local c = realCF("Frame", name, parent)
-					c.groups, c.slots = {}, {}
+					c.groups, c.slots, c.enchants = {}, {}, {}
 					c.AddAuraGroup = function(self, key, filter, opts) self.groups[key] = { filter = filter, opts = opts } end
 					c.AddAuraSlot = function(self, key, filter, opts)
 						local b = realCF("Button", nil, self)
 						self.slots[key] = { filter = filter, opts = opts, button = b }
 						return b
 					end
+					c.AddItemEnchantment = function(self, slot, opts)
+						assert(not self.enchants[slot], "an enchant slot added once")
+						local b = realCF("Button", nil, self)
+						self.enchants[slot] = { opts = opts, button = b }
+						return b
+					end
+					c.SetItemEnchantmentLayout = function(self, layout) self.enchantLayout = layout end
 					c.SetUnit = function(self, u) self.unit = u end
 					c.SetEnabled = function(self, on) self.enabled = on end
 					return c
@@ -6820,12 +6953,16 @@ if ok then
 			set.debuffs.groups.debuffs.opts.initializeFrame(btn)
 			assert(btn._width == 16 and btn._height == 16, "sixteen square")
 
-			-- YOUR BUFFS: a tray of two rows, buffs over debuffs. Each row is a
-			-- timed container (longest first from the right, so the soonest is at
-			-- the far left) and a permanent one against the dock, A to Z
+			-- YOUR BUFFS: a tray of two rows, buffs over debuffs. ONE CONTAINER A
+			-- ROW (Josh 2026-11-05: "It looks like there is a space for it, but
+			-- it is offset"): the client lays the whole row out, from the right
+			-- the permanent ones A to Z, your weapon enchants, then the timed
+			-- ones longest first, so the soonest is at the far left
 			local Bf = F.Buffs
 			_G.AuraContainerSortMethod = { Default = 0, ExpirationOnly = 7, NameOnly = 5 }
 			_G.AuraContainerSortDirection = { Normal = 0, Reverse = 1 }
+			local wasSlots = _G.AuraContainerItemEnchantmentSlot
+			_G.AuraContainerItemEnchantmentSlot = { MainHand = 0, OffHand = 1, Ranged = 2 }
 			local wasEnchant, wasAuras = _G.GetWeaponEnchantInfo, _G.C_UnitAuras
 			_G.GetWeaponEnchantInfo = function() return true, 1440000, 0, 2630, false end
 			-- three timed buffs, and a campfire that never runs out
@@ -6836,149 +6973,67 @@ if ok then
 			Bf.holder, Bf.rows, Bf.watch = nil, nil, nil
 			Bf.Build()
 			local buffs, debuffs = Bf.rows.buffs, Bf.rows.debuffs
-			assert(buffs.timed.groups.buffs.filter == "HELPFUL" and debuffs.timed.groups.debuffs.filter == "HARMFUL",
+			assert(buffs.box.groups.buffs.filter == "HELPFUL" and debuffs.box.groups.debuffs.filter == "HARMFUL",
 				"your buffs on one line, your debuffs on the other")
-			local go = buffs.timed.groups.buffs.opts
+			local go = buffs.box.groups.buffs.opts
 			assert(go.sortMethod == 7 and go.sortDirection == 1, "timed: longest first from the right")
 			assert(go.candidateFilters.maxDuration == Bf.TIMED_MAX, "and only those with a duration")
-			local po = buffs.perm.groups.perm.opts
+			local po = buffs.box.groups.perm.opts
 			assert(po.sortMethod == 5 and po.sortDirection == 1, "permanent: by name, A to Z reading left to right")
 			assert(po.candidateFilters.includeSpellIDs[1784], "stealth is known to be permanent from the start")
-			assert(buffs.timed.unit == "player" and buffs.timed.enabled and buffs.perm.enabled, "yours, and on")
-			-- THE DEBUFFS' ROW IS ONE (2026-10-17, audit): the client will not
-			-- filter your debuffs by spell, so there is no permanent container
-			-- on that row, and its one container has no duration cap
-			assert(debuffs.perm == nil and debuffs.timed.groups.debuffs.opts.candidateFilters == nil,
-				"the debuffs in one container, permanent ones too")
+			assert(buffs.box.enchants[0] and buffs.box.enchants[1] and buffs.box.enchants[2] and buffs.enchantSlots == 3,
+				"a weapon enchant a weapon slot, read by the container itself")
+			local el = buffs.box.enchantLayout
+			assert(po.layout.layoutIndex < el.layoutIndex and el.layoutIndex < go.layout.layoutIndex,
+				"in one row: the permanent ones against the dock, the enchants, then the timed")
+			assert(po.layout.elementSpacing == Bf.GAP and el.elementSpacing == Bf.GAP and go.layout.elementSpacing == Bf.GAP
+				and (el.groupSpacing or 0) == 0 and (go.layout.groupSpacing or 0) == 0,
+				"each a step apart, the parts too, with no gap of their own")
+			assert(buffs.box.unit == "player" and buffs.box.enabled, "yours, and on")
+			-- THE DEBUFFS' ROW IS ONE PART (2026-10-17, audit): the client will
+			-- not filter your debuffs by spell, so there is no permanent part on
+			-- that row, and its one part has no duration cap
+			assert(debuffs.box.groups.perm == nil and debuffs.box.groups.debuffs.opts.candidateFilters == nil
+				and next(debuffs.box.enchants) == nil, "the debuffs in one part, permanent ones too")
 			-- and off with the tray: a hidden container still reads your auras
 			Bf.SetShown(false)
-			assert(buffs.timed.enabled == false and debuffs.timed.enabled == false, "the tray put away stops reading")
+			assert(buffs.box.enabled == false and debuffs.box.enabled == false, "the tray put away stops reading")
 			Bf.SetShown(true)
-			assert(buffs.timed.enabled and debuffs.timed.enabled, "and reads again when it is back")
-			assert(debuffs.timedPin._points.TOPRIGHT.y < buffs.timedPin._points.TOPRIGHT.y, "the debuffs under the buffs")
-			-- THE SURFACE BY ITS COUNT, OUT OF A FIGHT (Josh 2026-11-05: "Still a
-			-- delay on buffs and debuffs going inside the border"): as wide as
-			-- the counts at once; in a fight it hangs off the timed container,
-			-- which keeps up with what the client draws
+			assert(buffs.box.enabled and debuffs.box.enabled, "and reads again when it is back")
+			assert(debuffs.box._points.TOPRIGHT.y < buffs.box._points.TOPRIGHT.y, "the debuffs under the buffs")
+			-- NO BACKGROUND (Josh 2026-11-05: "Maybe we should just remove the
+			-- buff and debuff backgrounds, since we cant really control that in
+			-- combat"): nothing of ours behind a row but the icons
 			do
-				local s = buffs.surface
-				local n = (buffs.lead or 0) + buffs.timedCount
-				assert(s._points.TOPRIGHT and s._points.TOPRIGHT.rel == Bf.real and not s._points.TOPLEFT
-					and s._width == n * Bf.STEP - Bf.GAP + 2 * Bf.PAD,
-					"out of a fight, the tray is as wide as its count: " .. tostring(s._width))
-				local hadCombat = _G.InCombatLockdown
-				_G.InCombatLockdown = function() return true end
-				Bf.Update()
-				assert(s._points.TOPLEFT and s._points.TOPLEFT.rel == buffs.timed,
-					"in a fight, it hangs off the row, so it grows and shrinks with it unmeasured")
-				_G.InCombatLockdown = hadCombat
-				Bf.Update()
-				assert(s._points.TOPRIGHT.rel == Bf.real and not s._points.TOPLEFT, "and by its count again after")
+				local kids = { Bf.real:GetChildren() }
+				for _, k in ipairs(kids) do
+					assert(k == buffs.box or k == debuffs.box, "only the two rows' containers in the tray")
+				end
+				assert(buffs.surface == nil and debuffs.surface == nil, "and no background on either row")
 			end
 			-- the campfire, seen out of a fight, is learned as permanent
 			assert(Bf.perm.HELPFUL[7353], "a permanent aura, learned")
-			-- right to left: the campfire, the poison, then the timed three
-			assert(buffs.permCount == 1 and buffs.timedCount == 3, "one permanent, three timed")
-			assert(Bf.enchants[1]._shown ~= false and Bf.enchants[2]._shown == false, "one weapon enchant")
-			assert(Bf.enchants[1]._points.TOPRIGHT.x == -Bf.STEP, "past the campfire")
-			assert(Bf.enchants[1].words._text == "24 m", "with its time: " .. tostring(Bf.enchants[1].words._text))
-			-- WHAT THE CLIENT DREW, NOT WHAT WAS COUNTED (Josh 2026-11-05: "We had
-			-- an alignment issue here"): two permanent auras read, one drawn; the
-			-- enchant goes past the one drawn, not a slot further on
+			-- NOTHING PLACED BY A COUNT: an enchant that runs out in a fight, or
+			-- a permanent buff the container does not draw, leaves no slot
+			-- behind. The row stays where it was put, against the dock
 			do
-				local auras = _G.C_UnitAuras
+				local x, y = buffs.box._points.TOPRIGHT.x, buffs.box._points.TOPRIGHT.y
+				local hadCombat = _G.InCombatLockdown
+				_G.InCombatLockdown = function() return true end
 				_G.C_UnitAuras = { GetAuraDataByIndex = function(_, i, filter)
 					if filter == "HELPFUL" and i <= 2 then return { duration = 0, spellId = 7353 + i } end
 				end }
-				local shown = _G.CreateFrame("Button", nil, buffs.perm)
-				shown:SetSize(Bf.SIZE, Bf.ROW_H)
-				local spare = _G.CreateFrame("Button", nil, buffs.perm)
-				spare:SetSize(Bf.SIZE, Bf.ROW_H)
-				spare:Hide()
-				local other = _G.CreateFrame("Frame", nil, buffs.perm)
-				other:SetSize(200, 4)
-				local hadKids = buffs.perm.GetChildren
-				buffs.perm.GetChildren = function() return shown, spare, other end
 				Bf.Update()
-				assert(buffs.permCount == 1, "one permanent drawn, so one counted: " .. tostring(buffs.permCount))
-				assert(Bf.enchants[1]._points.TOPRIGHT.x == -Bf.STEP, "the enchant just past it")
-				-- none found is no answer: the count read from your auras stands
-				shown:Hide()
+				assert(not Bf.perm.HELPFUL[7354], "in a fight nothing is read")
+				_G.InCombatLockdown = hadCombat
 				Bf.Update()
-				assert(buffs.permCount == 2, "no buttons found, the count read stands: " .. tostring(buffs.permCount))
-				-- SECRET, THEN NO ANSWER (Josh 2026-11-05, at login: "BeebMod
-				-- couldn't make the buff tray"): a button whose shown state is a
-				-- secret makes no count, and nothing throws
-				shown:Show()
-				shown.IsShown = function() return Strict.Secret(true) end
-				local hadWidth = buffs.perm.GetWidth
-				buffs.perm.GetWidth = function() return Strict.Secret(Bf.SIZE) end
-				assert(Bf.Drawn(buffs.perm) == nil, "a secret shown state, and a secret width, are no count")
-				-- the container's width says it where the buttons will not
-				buffs.perm.GetWidth = function() return Bf.SIZE end
-				assert(Bf.Drawn(buffs.perm) == 1, "one icon wide is one: " .. tostring(Bf.Drawn(buffs.perm)))
-				buffs.perm.GetWidth = function() return 3 * Bf.STEP - Bf.GAP end
-				assert(Bf.Drawn(buffs.perm) == 3, "three wide is three: " .. tostring(Bf.Drawn(buffs.perm)))
-				buffs.perm.GetWidth = function() return Strict.Secret(Bf.SIZE) end
-				local okU, errU = pcall(Bf.Update)
-				assert(okU, "and the tray's update runs to its end: " .. tostring(errU))
-				assert(buffs.permCount == 2, "with the count read standing: " .. tostring(buffs.permCount))
-				shown.IsShown = nil
-				buffs.perm.GetWidth = hadWidth
-				buffs.perm.GetChildren = hadKids
-				_G.C_UnitAuras = auras
-				Bf.Update()
-			end
-			-- A SLOT AT A TIME, ON THIS CLIENT (Josh 2026-10-04: "Weapon enchants
-			-- (rockbiter) aren't showing on the buff bar"): C_Item's list, as the
-			-- game's own buff frame reads it, with the enchant's own picture
-			do
-				local hadItem, hadOld = _G.C_Item, _G.GetWeaponEnchantInfo
-				_G.GetWeaponEnchantInfo = nil
-				_G.C_Item = setmetatable({ GetWeaponEnchantInfo = function(slot)
-					if slot == 0 then
-						return { { hasEnchant = true, enchantType = 0, timeLeft = 3600000, charges = 0, enchantID = 29,
-							enchantIconID = 136086 } }
-					end
-					return {}
-				end }, { __index = hadItem })
-				local read = Bf.ReadEnchants()
-				assert(#read == 1 and read[1].slot == 16 and read[1].left == 3600 and read[1].icon == 136086,
-					"Rockbiter on the main hand, an hour left, its own picture")
-				Bf.Update()
-				-- (an hour is "60 m", as the client writes an aura's: 2026-10-17, audit)
-				assert(Bf.enchants[1]._shown ~= false and Bf.enchants[1].icon._texture == 136086
-					and Bf.enchants[1].words._text == "60 m",
-					"in the tray, with the enchant's picture: " .. tostring(Bf.enchants[1].icon._texture)
-						.. " " .. tostring(Bf.enchants[1].words._text))
-				-- and the old call, where a client answers 1 for yes
-				_G.C_Item = hadItem and setmetatable({ GetWeaponEnchantInfo = false }, { __index = hadItem }) or nil
-				_G.GetWeaponEnchantInfo = function() return 1, 600000, 0, 29, nil end
-				read = Bf.ReadEnchants()
-				assert(#read == 1 and read[1].left == 600, "an old client's 1 for yes counts too")
-				_G.C_Item, _G.GetWeaponEnchantInfo = hadItem, hadOld
-				Bf.Update()
-			end
-			assert(buffs.timedPin._points.TOPRIGHT.x == -2 * Bf.STEP, "and the timed ones start past both")
-			-- no debuffs, out of a fight: that row's tray is put away
-			assert(debuffs.surface._shown == false and buffs.surface._shown ~= false,
-				"an empty row has no tray; a full one does")
-			-- A DEBUFF WITH NO DURATION (2026-10-17, audit): drawn with the
-			-- rest, and no gap left for it
-			do
-				local hadGet = _G.C_UnitAuras.GetAuraDataByIndex
-				_G.C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)
-					if filter == "HARMFUL" then
-						if i == 1 then return { duration = 0, spellId = 26013 } end
-						if i == 2 then return { duration = 30, spellId = 772 } end
-						return nil
-					end
-					return hadGet(unit, i, filter)
-				end
-				Bf.Update()
-				assert(debuffs.permCount == 0 and debuffs.timedCount == 2 and debuffs.timedPin._points.TOPRIGHT.x == 0
-					and debuffs.surface._shown ~= false, "a permanent debuff counts with the timed one, from the edge")
-				_G.C_UnitAuras.GetAuraDataByIndex = hadGet
+				assert(Bf.perm.HELPFUL[7354] and Bf.perm.HELPFUL[7355], "and after it the new permanent ones are learned")
+				assert(buffs.box._points.TOPRIGHT.x == x and buffs.box._points.TOPRIGHT.y == y,
+					"the row is where it was")
+				_G.C_UnitAuras = { GetAuraDataByIndex = function(_, i, filter)
+					if filter == "HELPFUL" and i <= 3 then return { duration = 600, spellId = 1000 + i } end
+					if filter == "HELPFUL" and i == 4 then return { duration = 0, spellId = 7353 } end
+				end }
 				Bf.Update()
 			end
 			-- THE CLIENT'S OWN BANDS (2026-10-17, audit): seconds up to 90,
@@ -6986,12 +7041,12 @@ if ok then
 			local tw = Bf.TimeWords
 			assert(tw(59.5) == "59 s" and tw(80) == "80 s" and tw(90.5) == "90 s" and tw(91) == "1 m"
 				and tw(3570) == "59 m" and tw(5400) == "90 m" and tw(5401) == "1 h" and tw(-2) == "0 s",
-				"an enchant's time as the client writes an aura's: " .. tw(59.5) .. ", " .. tw(80) .. ", " .. tw(3570))
+				"a made-up enchant's time as the client writes an aura's: " .. tw(59.5) .. ", " .. tw(80) .. ", " .. tw(3570))
 			-- a new permanent spell tells the container, while it is live
 			local told
-			buffs.perm.SetAuraGroupCandidateFilters = function(_, key, cf) told = { key = key, cf = cf } end
+			buffs.box.SetAuraGroupCandidateFilters = function(_, key, cf) told = { key = key, cf = cf } end
 			Bf.Learn(buffs, { [2457] = true, [99999] = true })
-			assert(told and told.key == "perm" and told.cf.includeSpellIDs[99999], "a newly seen one joins the permanent row")
+			assert(told and told.key == "perm" and told.cf.includeSpellIDs[99999], "a newly seen one joins the permanent part")
 			-- a button: no clock face, a bar and the time the client keeps, and a
 			-- right-click that takes the buff off
 			local tb, got = realCF("Button"), {}
@@ -7001,34 +7056,17 @@ if ok then
 			go.initializeFrame(tb)
 			assert(got.bar and got.text and got.cancel == "RightButtonUp", "bar, time and right-click, the client's")
 			assert(tb._width == Bf.SIZE, "an icon the tray's size")
+			-- an enchant's button is the same, and a right-click takes it off too
+			local eb, egot = realCF("Button"), {}
+			eb.SetDurationText = function(_, fs) egot.text = fs end
+			eb.SetCancelAuraButtons = function(_, token) egot.cancel = token end
+			buffs.box.enchants[0].opts.initializeFrame(eb)
+			assert(egot.text and egot.cancel == "RightButtonUp" and eb._width == Bf.SIZE, "an enchant dressed as a buff")
 			local db = realCF("Button")
 			db.SetCancelAuraButtons = function(_, token) got.debuffCancel = token end
-			debuffs.timed.groups.debuffs.opts.initializeFrame(db)
+			debuffs.box.groups.debuffs.opts.initializeFrame(db)
 			assert(got.debuffCancel == nil, "a debuff cannot be clicked off")
-			-- A CLIENT THAT WILL NOT LET ANYTHING HANG OFF ITS CONTAINER: the
-			-- surface is sized from the count instead, and nothing throws
-			local realPanel = BT.Widgets.Panel
-			BT.Widgets.Panel = function(f, ...)
-				local sp = f.SetPoint
-				f.SetPoint = function(self, point, rel, ...)
-					if type(rel) == "table" and rel.groups then
-						error("Cannot anchor to a restricted region")
-					end
-					return sp(self, point, rel, ...)
-				end
-				return realPanel(f, ...)
-			end
-			local keepRows, keepHolder, keepEnchants = Bf.rows, Bf.holder, Bf.enchants
-			Bf.holder, Bf.rows = nil, nil
-			local okBuild = pcall(Bf.Build)
-			BT.Widgets.Panel = realPanel
-			assert(okBuild, "a refused anchor does not stop the tray")
-			local refused = Bf.rows.buffs
-			assert(not refused.follows and refused.surface._points.TOPRIGHT, "the surface stands on its own")
-			assert(refused.surface._width == 5 * Bf.STEP - Bf.GAP + 2 * Bf.PAD,
-				"as wide as the campfire, the poison and three buffs: " .. tostring(refused.surface._width))
-			Bf.holder:Hide()
-			Bf.rows, Bf.holder, Bf.enchants = keepRows, keepHolder, keepEnchants
+			_G.AuraContainerItemEnchantmentSlot = wasSlots
 
 			-- made up, for the preview: the soonest at the far left, the
 			-- permanent ones against the dock, A to Z

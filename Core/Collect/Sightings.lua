@@ -93,6 +93,9 @@ function C.FromUnit(unit)
 	local _, race = UnitRace(unit)
 	local level = UnitLevel(unit)
 	local guild = GetGuildInfo(unit)
+	if guid and not secret(guild) and guild == nil then
+		C.LookAgain(unit, guid, name, realm)
+	end
 	return DB.Note(BT.db, name, realm, {
 		src = "unit:" .. tostring(unit),
 		class = class,
@@ -108,6 +111,69 @@ function C.FromUnit(unit)
 		zone = zone(),
 		guid = guid,
 	})
+end
+
+-- NO GUILD, LOOKED AT TWICE (Josh 2026-11-05: "Can we add a 'no guild' or
+-- 'unguilded' row?"). The census's No guild row only ever filled from /who,
+-- since a unit with no guild line may only be waiting for it: 1,797 of
+-- 2,172 were "Guild unknown". The line comes within a moment, so a unit
+-- without one is looked at again GUILD_WAIT seconds later, by the same token
+-- if it still names the same GUID. Still none, and no guild on file for
+-- them, and they are written down as having none. One with a guild on file
+-- keeps it, as before: a unit never records a leave.
+C.GUILD_WAIT = 3
+C.again = {}
+
+function C.Guildless(unit, guid, name, realm)
+	if not enabled() then
+		return false
+	end
+	local okG, now = pcall(UnitGUID or error, unit)
+	if not okG or secret(now) or now ~= guid then
+		return false
+	end
+	local ok, guild = pcall(GetGuildInfo or error, unit)
+	if not ok or secret(guild) or guild ~= nil then
+		return false
+	end
+	local key = U.Key(name, realm)
+	local p = key and DB.Get(BT.db, key)
+	if not p or p.guild ~= nil then
+		return false
+	end
+	DB.Note(BT.db, name, realm, { src = "unit:guildless", guild = "", listed = true })
+	return true
+end
+
+-- every look due, then the next one waits; one timer however many are waiting
+function C.LookDue()
+	C.waiting = false
+	local clock = GetTime and GetTime() or 0
+	local later = {}
+	for _, a in ipairs(C.again) do
+		if clock >= a.at then
+			local ok, err = pcall(C.Guildless, a.unit, a.guid, a.name, a.realm)
+			if not ok then
+				BT.Err("census.guildless: " .. tostring(err))
+			end
+		else
+			later[#later + 1] = a
+		end
+	end
+	C.again = later
+	if #later > 0 and C_Timer and C_Timer.After then
+		C.waiting = true
+		C_Timer.After(later[1].at - clock, C.LookDue)
+	end
+end
+
+function C.LookAgain(unit, guid, name, realm)
+	local clock = GetTime and GetTime() or 0
+	C.again[#C.again + 1] = { at = clock + C.GUILD_WAIT, unit = unit, guid = guid, name = name, realm = realm }
+	if not C.waiting and C_Timer and C_Timer.After then
+		C.waiting = true
+		C_Timer.After(C.GUILD_WAIT, C.LookDue)
+	end
 end
 
 -- A GUID is not just an identity: the client knows who it belongs to

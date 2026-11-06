@@ -261,13 +261,16 @@ function M.Tip(pin)
 	if not (spot and BT.Tip) then
 		return
 	end
+	-- NO PICTURE ON THE CARD (Josh 2026-11-05, a green smudge beside
+	-- "Scholomance"). The card takes the hovered frame's `icon`, and the pin's
+	-- is a piece of an atlas: the card drew the wrong piece of the sheet.
 	BT.Tip.Show(pin, { near = true, build = function(t)
 		local list = M.Dungeons(spot)
 		if #list == 1 then
-			t:Header({ name = list[1].name, sub = M.Sub(list[1]) })
+			t:Header({ name = list[1].name, sub = M.Sub(list[1]), icon = false })
 			return
 		end
-		t:Header({ name = spot[1], sub = #list > 1 and ("%d dungeons"):format(#list) or nil })
+		t:Header({ name = spot[1], sub = #list > 1 and ("%d dungeons"):format(#list) or nil, icon = false })
 		for _, d in ipairs(list) do
 			t:ListRow(d.name, ("%d-%d"):format(d.lo, d.hi), nil, M.Colour(d))
 		end

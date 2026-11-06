@@ -3,8 +3,8 @@
 -- "A cleaner more consolidated look ... buffs on one line, and debuffs on a
 -- different line ... the tray would work best for that, and sort them by
 -- duration." The game's bar was a loose row of big icons with a time under
--- each and a collapse arrow; this is two rows on the toolkit's surface, to
--- the left of the dock: your buffs on the top line, your debuffs under them.
+-- each and a collapse arrow; this is two rows of the toolkit's icons, to the
+-- left of the dock: your buffs on the top line, your debuffs under them.
 --
 -- THE ORDER, LEFT TO RIGHT (Josh 2026-09-23: "the perma buffs/debuffs should
 -- always be furthest to the right, in ABC order"): the soonest to run out at
@@ -12,43 +12,51 @@
 -- against the dock - the ones that never run out, A to Z.
 --
 -- DRAWN BY THE CLIENT, as the unit frames' auras are (Modules/UnitFrames/Auras.lua):
--- in a fight an addon may not read an aura at all, so each row is the client's
--- aura containers, told "player", a filter and an order, filling buttons we
--- describe - the unit frames' icon, with the time left as a thin bar inside it
--- and as words under it, both kept by the client. The buffs' row is two
--- containers:
+-- in a fight an addon may not read an aura at all, so each row is one of the
+-- client's aura containers, told "player" and what to show, filling buttons
+-- we describe - the unit frames' icon, with the time left as a thin bar inside
+-- it and as words under it, both kept by the client.
+--
+-- ONE CONTAINER A ROW (Josh 2026-11-05: "It looks like there is a space for
+-- it, but it is offset", an empty slot between the permanent buff and the
+-- timed ones, the last timed one outside the border). The buffs' row was two
+-- containers and weapon enchant icons of our own, each placed by a count of
+-- what stood before it. Counts are read out of a fight only, so a change in
+-- one - an enchant that ran out - left a slot empty until the fight ended.
+-- Now one container lays out the whole row, in and out of a fight, in parts
+-- from the right (B.PART):
+--   * permanent: named by spell, A to Z reading left to right. No filter says
+--     "no duration", so which spells those are is learned out of a fight, when
+--     auras can be read, and a few that are always permanent (stances, forms,
+--     stealth, aspects, auras) are known from the start
+--   * your weapon enchants - poisons, stones, a shaman's weapon - which the
+--     container reads for itself (AddItemEnchantment, Blizzard_AuraContainer)
 --   * timed: every aura with a duration (a duration cap keeps permanent ones
 --     out - the client's own filter), longest first from the right, so the
 --     soonest ends up at the far left
---   * permanent: named by spell, A to Z from the left. No filter says "no
---     duration", so which spells those are is learned out of a fight, when
---     auras can be read, and a few that are always permanent (stances, forms,
---     stealth, aspects, auras) are known from the start
--- THE DEBUFFS' ROW IS ONE (2026-10-17, audit). The client will not filter
+-- THE DEBUFFS' ROW IS ONE PART (2026-10-17, audit). The client will not filter
 -- your debuffs by spell (Blizzard_AuraContainerUtil.lua,
 -- CanApplyIdentityCandidateFilters: no spell filter for a harmful aura on a
--- unit you can help), so a permanent container there showed nothing, the
--- timed one's cap kept a debuff with no duration out as well, and the count
--- of them still moved the timed ones left. One container with no cap holds
--- them all; the client sorts the permanent ones after the timed, which from
--- the right is against the dock.
+-- unit you can help), so a permanent part there showed nothing, and the timed
+-- one's cap kept a debuff with no duration out as well. One part with no cap
+-- holds them all; the client sorts the permanent ones after the timed, which
+-- from the right is against the dock.
 --
--- THE SURFACE is as wide as the counts out of a fight, which are read the
--- moment an aura changes; in a fight, where the addon cannot count them, it
--- follows the timed container where the client lets it (a container sizes
--- itself to its icons, a beat late). See B.Surface. The containers and the enchants are placed from counts taken out of
--- a fight, which is the one thing that can be out of step until it ends.
+-- NO BACKGROUND (Josh 2026-11-05: "Maybe we should just remove the buff and
+-- debuff backgrounds, since we cant really control that in combat"). Each row
+-- had a panel behind it, as wide as a count read out of a fight or hung off
+-- the container's edge. In a fight neither could follow what the client drew,
+-- so icons sat outside it. The icons stand on their own now, each with its
+-- black edge and its time under it.
 --
--- WEAPON ENCHANTS - poisons, stones, a shaman's weapon - are not auras and no
--- container shows them, so they are ours, from GetWeaponEnchantInfo, with the
--- same bar and time. A right-click on a buff cancels it (the client allows
--- that out of a fight only).
+-- A right-click on a buff or an enchant cancels it (the client allows that
+-- out of a fight only).
 --
 -- A MODULE OF ITS OWN (Josh 2026-09-23: "buffs aren't a part of unit frames"):
 -- its own page in the Game frames group and its own switch, and switched off,
 -- the game's own buff bar is back.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/UnitFrames/Buffs.lua")
+local CreateFrame = BT.Cpu.For("Modules/UnitFrames/Buffs.lua")
 
 local U = BT.Util
 local F = BT.UnitFrames
@@ -66,15 +74,16 @@ B.module = M
 
 B.SIZE = 26 -- an icon
 B.GAP = 3 -- between icons
-B.PAD = 4 -- the surface around a row
+-- the room the rows' backgrounds took, kept so the icons stay where they were
+B.PAD = 4 -- around a row
 B.TEXT_H = 11 -- the time under an icon
-B.ROW_GAP = 5 -- between the two rows' surfaces
+B.ROW_GAP = 5 -- between the two rows
 B.EDGE = 8 -- from the dock
 B.ROW_H = B.SIZE + B.TEXT_H
 B.STEP = B.SIZE + B.GAP
 B.PERM_MAX = 12
--- how long after a change the tray is placed again, once the client has drawn
-B.AGAIN = 0.2
+-- the parts of the buffs' row, from the right
+B.PART = { perm = 1, enchants = 2, timed = 3 }
 -- a duration cap no aura reaches: the client's filter then passes every aura
 -- that has a duration and none that has not (the unit frames' buff rows use it
 -- too)
@@ -199,8 +208,16 @@ function B.PermFilter(filter)
 	return { includeSpellIDs = ids }
 end
 
--- one of a row's containers: flowing left from its right edge
-local function trayContainer(parent, key, filter, max, candidate, sortMethod, sortDirection, harmful)
+-- how each part of a row is laid out: icons a step apart, and the next part a
+-- step on. The client adds no gap of its own between parts: the last icon's
+-- spacing is the gap (Blizzard_SharedXMLBase/AnchorUtil.lua, ApplyFlowLayout).
+function B.Layout(part)
+	return { elementSpacing = B.GAP, lineSpacing = 2, elementWidth = B.SIZE, elementHeight = B.ROW_H,
+		layoutIndex = part }
+end
+
+-- a row's container: flowing left from its right edge, on one line
+local function trayContainer(parent, lineMax)
 	local ok, c = pcall(CreateFrame, "AuraContainer", nil, parent, "CustomAuraContainerTemplate")
 	if not (ok and c and c.AddAuraGroup) then
 		return nil
@@ -214,21 +231,48 @@ local function trayContainer(parent, key, filter, max, candidate, sortMethod, so
 		pcall(c.SetFlowLayoutGrowthDirection, c, dir.Left, dir.Down)
 	end
 	if c.SetFlowLayoutMaximumLineSize then
-		pcall(c.SetFlowLayoutMaximumLineSize, c, max * B.STEP)
+		pcall(c.SetFlowLayoutMaximumLineSize, c, lineMax)
 	end
 	pcall(c.SetUnit, c, "player")
-	local okG = pcall(c.AddAuraGroup, c, key, filter, {
+	return c
+end
+
+-- one part of a row's auras; true when the client took it
+local function addPart(c, key, filter, max, candidate, sortMethod, sortDirection, harmful, part)
+	return (pcall(c.AddAuraGroup, c, key, filter, {
 		maxFrameCount = max,
 		initializeFrame = trayButton(B.SIZE, harmful),
 		candidateFilters = candidate,
 		sortMethod = sortMethod,
 		sortDirection = sortDirection,
-		layout = { elementSpacing = B.GAP, lineSpacing = 2, elementWidth = B.SIZE, elementHeight = B.ROW_H },
-	})
-	if not okG then
-		return nil
+		layout = B.Layout(part),
+	}))
+end
+
+-- your weapon enchants, one button a weapon slot, read and timed by the
+-- container itself; how many slots it took
+local function addEnchants(c)
+	local slots = _G.AuraContainerItemEnchantmentSlot
+	if not (c.AddItemEnchantment and type(slots) == "table") then
+		return 0
 	end
-	return c
+	local ids = {}
+	for _, id in pairs(slots) do
+		if type(id) == "number" then
+			ids[#ids + 1] = id
+		end
+	end
+	table.sort(ids)
+	local n = 0
+	for _, id in ipairs(ids) do
+		if pcall(c.AddItemEnchantment, c, id, { initializeFrame = trayButton(B.SIZE, false) }) then
+			n = n + 1
+		end
+	end
+	if n > 0 and c.SetItemEnchantmentLayout then
+		pcall(c.SetItemEnchantmentLayout, c, B.Layout(B.PART.enchants))
+	end
+	return n
 end
 
 -- ---------------------------------------------------------------------------
@@ -256,45 +300,6 @@ function B.Place()
 	end
 end
 
--- one weapon enchant's icon, in the buffs row
-local function enchantIcon(parent, slot)
-	local f = CreateFrame("Button", nil, parent)
-	f:SetSize(B.SIZE, B.SIZE)
-	f.edge = f:CreateTexture(nil, "BACKGROUND")
-	f.edge:SetAllPoints()
-	f.edge:SetColorTexture(0, 0, 0, 1)
-	f.icon = f:CreateTexture(nil, "ARTWORK")
-	f.icon:SetPoint("TOPLEFT", 1, -1)
-	f.icon:SetPoint("BOTTOMRIGHT", -1, 1)
-	f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	f.bar, f.words = timePieces(f)
-	f.slot = slot
-	f:SetScript("OnEnter", function(self)
-		if GameTooltip then
-			GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-			if GameTooltip.SetInventoryItem then
-				pcall(GameTooltip.SetInventoryItem, GameTooltip, "player", self.slot)
-			end
-			GameTooltip:Show()
-		end
-	end)
-	f:SetScript("OnLeave", function()
-		if GameTooltip then
-			GameTooltip:Hide()
-		end
-	end)
-	f:Hide()
-	return f
-end
-
--- a frame of ours a container's right edge is pinned to, moved as counts change
-local function pin(parent, top)
-	local p = CreateFrame("Frame", nil, parent)
-	p:SetSize(1, 1)
-	p:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, top)
-	return p
-end
-
 function B.Build()
 	if B.holder then
 		return B.holder
@@ -317,45 +322,34 @@ function B.Build()
 	local byTime = methods and (methods.ExpirationOnly or methods.Expiration)
 	local reverse = dirs and dirs.Reverse
 	for i, spec in ipairs(B.ROWS) do
-		local row = { spec = spec, permCount = 0, timedCount = 0 }
+		local row = { spec = spec, enchantSlots = 0 }
 		local top = B.RowTop(i)
 		row.top = top
-		row.permPin = pin(real, top)
-		row.timedPin = pin(real, top)
-		row.surface = CreateFrame("Frame", nil, real)
-		row.surface:SetFrameLevel((real:GetFrameLevel() or 1) + 1)
-		BT.Widgets.Panel(row.surface)
-		-- the permanent ones, A to Z reading left to right: from the right
-		-- edge that is Z first (buffs only: see the top of this file)
-		if not spec.harmful then
-			row.perm = trayContainer(real, "perm", spec.filter, B.PERM_MAX, B.PermFilter(spec.filter), byName, reverse,
-				spec.harmful)
-		end
-		-- the timed ones, longest first from the right: the soonest far left;
-		-- the debuffs' permanent ones with them, against the dock
-		row.timed = trayContainer(real, spec.key, spec.filter, spec.max,
-			not spec.harmful and { maxDuration = B.TIMED_MAX } or nil, byTime, reverse, spec.harmful)
-		for _, pair in ipairs({ { row.perm, row.permPin }, { row.timed, row.timedPin } }) do
-			local c = pair[1]
-			if c then
-				c:ClearAllPoints()
-				c:SetPoint("TOPRIGHT", pair[2], "TOPRIGHT", 0, 0)
-				c:SetFrameLevel((row.surface:GetFrameLevel() or 1) + 2)
-				pcall(c.SetEnabled, c, true)
+		local box = trayContainer(real, (B.PERM_MAX + 3 + spec.max) * B.STEP)
+		if box then
+			if not spec.harmful then
+				-- the permanent ones, A to Z reading left to right: from the
+				-- right edge that is Z first (buffs only: see the top of this file)
+				addPart(box, "perm", spec.filter, B.PERM_MAX, B.PermFilter(spec.filter), byName, reverse, false,
+					B.PART.perm)
+				row.enchantSlots = addEnchants(box)
+			end
+			-- the timed ones, longest first from the right: the soonest far
+			-- left; the debuffs' permanent ones with them, against the dock
+			if addPart(box, spec.key, spec.filter, spec.max, not spec.harmful and { maxDuration = B.TIMED_MAX } or nil,
+				byTime, reverse, spec.harmful, B.PART.timed) then
+				box:ClearAllPoints()
+				box:SetPoint("TOPRIGHT", real, "TOPRIGHT", 0, top)
+				pcall(box.SetEnabled, box, true)
+				row.box = box
+			else
+				pcall(box.SetEnabled, box, false)
+				box:Hide()
 			end
 		end
-		-- the surface: from the timed container's left to the holder's right.
-		-- A CLIENT MAY REFUSE THIS (Josh 2026-09-23: "seeing double buffs"):
-		-- anchoring to its container threw, and took the rest of a setup with
-		-- it. Refused, the surface is as wide as a count (see B.Update).
-		if row.timed then
-			row.follows = pcall(row.surface.SetPoint, row.surface, "TOPLEFT", row.timed, "TOPLEFT", -B.PAD, B.PAD)
-		end
-		B.Surface(row, inCombat(), 0)
 		B.rows[i] = row
 		B.rows[spec.key] = row
 	end
-	B.enchants = { enchantIcon(real, 16), enchantIcon(real, 17) }
 	B.Update()
 	B.Watch()
 	return h
@@ -364,64 +358,6 @@ end
 -- ---------------------------------------------------------------------------
 -- What is on you, out of a fight
 -- ---------------------------------------------------------------------------
-
--- the enchants on your weapons now: { slot, left (seconds), charges, icon }
---
--- A SLOT AT A TIME, ON THIS CLIENT (Josh 2026-10-04: "Weapon enchants
--- (rockbiter) aren't showing on the buff bar"). The game's own buff frame
--- here reads them with C_Item.GetWeaponEnchantInfo(slot), each weapon slot's
--- enchants as a list, and nothing in it calls the old GetWeaponEnchantInfo()
--- this read; so a shaman's Rockbiter never reached the tray. The list also
--- carries the enchant's own picture, which stands in for the weapon's. The old
--- call is kept for a client that has only it, its "yes" a true or a 1.
--- the game's weapon slots (Enum.WeaponSlot) to inventory slots, as its buff
--- frame maps them
-B.WEAPON_SLOT = { [0] = 16, [1] = 17, [2] = 18 }
-local function present(v)
-	return not (issecretvalue and issecretvalue(v)) and (v == true or v == 1)
-end
-function B.ReadEnchants()
-	local out = {}
-	local get = C_Item and C_Item.GetWeaponEnchantInfo
-	if type(get) == "function" then
-		local slots = {}
-		if Enum and type(Enum.WeaponSlot) == "table" then
-			for _, id in pairs(Enum.WeaponSlot) do
-				slots[#slots + 1] = id
-			end
-			table.sort(slots)
-		else
-			slots = { 0, 1, 2 }
-		end
-		for _, id in ipairs(slots) do
-			local ok, list = pcall(get, id)
-			if ok and type(list) == "table" then
-				for _, e in pairs(list) do
-					if type(e) == "table" and present(e.hasEnchant) then
-						local ms, icon = plainNumber(e.timeLeft), plainNumber(e.enchantIconID)
-						out[#out + 1] = { slot = B.WEAPON_SLOT[id] or 16, left = ms and ms / 1000 or nil,
-							charges = plainNumber(e.charges), icon = icon and icon > 0 and icon or nil }
-					end
-				end
-			end
-		end
-		return out
-	end
-	if type(GetWeaponEnchantInfo) ~= "function" then
-		return out
-	end
-	local r = { pcall(GetWeaponEnchantInfo) }
-	if not r[1] then
-		return out
-	end
-	for _, w in ipairs({ { slot = 16, at = 2 }, { slot = 17, at = 6 } }) do
-		if present(r[w.at]) then
-			local ms = plainNumber(r[w.at + 1])
-			out[#out + 1] = { slot = w.slot, left = ms and ms / 1000 or nil, charges = plainNumber(r[w.at + 2]) }
-		end
-	end
-	return out
-end
 
 -- your auras of a kind, out of a fight: how many are permanent and how many
 -- timed, and the permanent ones' spells; nil when they cannot be read
@@ -459,56 +395,6 @@ function B.Read(filter)
 	return out
 end
 
--- WHAT THE CLIENT DREW, NOT WHAT WAS COUNTED (Josh 2026-11-05: "We had an
--- alignment issue here", a weapon enchant a slot too far left, half off the
--- tray, with an empty slot between it and the one permanent buff). The
--- enchants are placed after the permanent ones, by a count read from your
--- auras; the permanent container draws only what its filter lets through,
--- so the two can disagree. How many icons the container shows is counted
--- instead, where it can be: its shown buttons, each an icon wide.
--- SECRET, THEN NO ANSWER (Josh 2026-11-05, at login: "Buffs: BeebMod couldn't
--- make the buff tray", What loaded: "attempt to compare local 'shown' (a
--- secret boolean value"). Whether one of the client's aura buttons is shown
--- can be a secret, and comparing it threw and took the tray with it. A secret
--- anywhere makes this say nothing, and the count read from your auras stands.
-function B.Drawn(c)
-	if not (c and c.GetChildren) then
-		return nil
-	end
-	local ok, kids = pcall(function() return { c:GetChildren() } end)
-	if not ok then
-		return nil
-	end
-	local function secret(v)
-		return issecretvalue and issecretvalue(v)
-	end
-	-- or by its width, where the buttons will not say: the container sizes
-	-- itself to its icons, each a step and the last without its gap
-	local function byWidth()
-		local okC, cw = pcall(c.GetWidth, c)
-		cw = okC and plainNumber(cw) or nil
-		if not cw then
-			return nil
-		end
-		return math.max(0, math.floor((cw + B.GAP) / B.STEP + 0.5))
-	end
-	local n = 0
-	for _, f in ipairs(kids) do
-		local okS, shown = pcall(f.IsShown, f)
-		local okW, w = pcall(f.GetWidth, f)
-		if secret(shown) or secret(w) then
-			return byWidth()
-		end
-		w = okW and plainNumber(w) or nil
-		if okS and shown == true and w and math.abs(w - B.SIZE) < 1 then
-			n = n + 1
-		end
-	end
-	return n
-end
-
-B.longest = {}
-
 -- a row's permanent spells, learned: the container told when there are new ones
 local function learn(row, ids)
 	local known = B.perm[row.spec.filter]
@@ -519,139 +405,26 @@ local function learn(row, ids)
 			fresh = true
 		end
 	end
-	if fresh and row.perm and row.perm.SetAuraGroupCandidateFilters then
-		pcall(row.perm.SetAuraGroupCandidateFilters, row.perm, "perm", B.PermFilter(row.spec.filter))
+	if fresh and row.box and row.box.SetAuraGroupCandidateFilters then
+		pcall(row.box.SetAuraGroupCandidateFilters, row.box, "perm", B.PermFilter(row.spec.filter))
 	end
 	return fresh
 end
 B.Learn = learn
 
--- `enchantsOnly`: the ticker's pass, which only counts the enchants down
--- (the auras are read when they change, not every second - Josh 2026-09-23,
--- audit)
-function B.Update(enchantsOnly)
-	if not (B.holder and B.rows) then
+-- what the tray does itself, out of a fight: learn which of your buffs are
+-- permanent. Where everything goes is the client's.
+function B.Update()
+	if not (B.holder and B.rows) or inCombat() then
 		return
 	end
-	local enchants = B.ReadEnchants()
-	-- a slot with nothing on it forgets how long its last enchant lasted,
-	-- or a new one's bar starts measured against the old one
-	local on = {}
-	for _, e in ipairs(enchants) do
-		on[e.slot] = true
-	end
-	for slot in pairs(B.longest) do
-		if not on[slot] then
-			B.longest[slot] = nil
-		end
-	end
-	if not enchantsOnly then
-		for _, row in ipairs(B.rows) do
+	for _, row in ipairs(B.rows) do
+		if not row.spec.harmful then
 			local r = B.Read(row.spec.filter)
-			if r and row.spec.harmful then
-				-- one container, permanent and timed together
-				row.permCount = 0
-				row.timedCount = math.min(r.perm + r.timed, row.spec.max)
-			elseif r then
+			if r then
 				learn(row, r.ids)
-				row.permCount = math.min(r.perm, B.PERM_MAX)
-				row.timedCount = math.min(r.timed, row.spec.max)
 			end
 		end
-	end
-	-- the permanent ones as the client drew them, once it has (B.Drawn); on
-	-- the ticker's pass too, so a count read before the client laid its
-	-- icons out is put right within the second
-	for _, row in ipairs(B.rows) do
-		-- none found is no answer: the buttons may hang somewhere this does
-		-- not look, and the count read from your auras stands
-		-- and a count that fails is no answer either: it never takes the tray
-		-- down with it
-		local okD, drawn = pcall(function()
-			return row.perm and not inCombat() and B.Drawn(row.perm)
-		end)
-		if okD and type(drawn) == "number" and drawn > 0 then
-			row.permCount = math.min(drawn, B.PERM_MAX)
-		end
-	end
-	-- right to left: the permanent ones, the enchants (buffs only), the timed
-	for _, row in ipairs(B.rows) do
-		local lead = row.permCount
-		if row.spec.key == "buffs" then
-			for i, f in ipairs(B.enchants) do
-				local e = enchants[i]
-				if e then
-					f.slot = e.slot
-					local tex = GetInventoryItemTexture and GetInventoryItemTexture("player", e.slot)
-					f.icon:SetTexture(e.icon or tex or 134400)
-					f:ClearAllPoints()
-					f:SetPoint("TOPRIGHT", B.real, "TOPRIGHT", -(lead + i - 1) * B.STEP, row.top)
-					if e.left then
-						-- how long it lasts is not said; the longest seen stands in
-						local longest = math.max(B.longest[e.slot] or 0, e.left)
-						B.longest[e.slot] = longest
-						f.bar:SetValue(longest > 0 and e.left / longest or 0)
-						f.bar:Show()
-						f.words:SetText(timeWords(e.left))
-					else
-						f.bar:Hide()
-						f.words:SetText("")
-					end
-					f:Show()
-				else
-					f:Hide()
-				end
-			end
-			lead = lead + math.min(#enchants, #B.enchants)
-		end
-		-- the timed container moved along only when what is before it
-		-- changed, and never in a fight: the client's container hangs off
-		-- this pin
-		if row.lead ~= lead and not inCombat() then
-			row.lead = lead
-			row.timedPin:ClearAllPoints()
-			row.timedPin:SetPoint("TOPRIGHT", B.real, "TOPRIGHT", -lead * B.STEP, row.top)
-		end
-		-- a row with nothing in it puts its surface away; out of a fight it is
-		-- as wide as its count, in one it hangs off its container (B.Surface)
-		local n = lead + row.timedCount
-		if inCombat() then
-			B.Surface(row, true)
-		else
-			row.surface:SetShown(n > 0)
-			B.Surface(row, false, n)
-		end
-	end
-end
-
--- THE SURFACE BY ITS COUNT, OUT OF A FIGHT (Josh 2026-11-05: "Still a delay
--- on buffs and debuffs going inside the border"). It hung off the timed
--- container's left edge, so it grew only when the client laid that container
--- out again, a beat after the icons and the enchants had moved: for that beat
--- they sat outside it. Out of a fight the counts are read the moment an aura
--- changes, so the surface is as wide as they say, at once. In a fight they
--- cannot be read, and it hangs off the container as before, which keeps up
--- with what the client draws however late.
-function B.Surface(row, follow, n)
-	local s = row.surface
-	if follow and row.follows then
-		if row.following then
-			return
-		end
-		s:ClearAllPoints()
-		local ok = pcall(s.SetPoint, s, "TOPLEFT", row.timed, "TOPLEFT", -B.PAD, B.PAD)
-		if ok then
-			s:SetPoint("BOTTOMRIGHT", B.real, "TOPRIGHT", B.PAD, row.top - B.ROW_H - B.PAD)
-			row.following = true
-			return
-		end
-	end
-	row.following = false
-	s:ClearAllPoints()
-	s:SetPoint("TOPRIGHT", B.real, "TOPRIGHT", B.PAD, row.top + B.PAD)
-	s:SetHeight(B.ROW_H + 2 * B.PAD)
-	if n and n > 0 then
-		s:SetWidth(n * B.STEP - B.GAP + 2 * B.PAD)
 	end
 end
 
@@ -660,18 +433,16 @@ function B.Watch()
 		return
 	end
 	local w = CreateFrame("Frame")
-	for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "WEAPON_ENCHANT_CHANGED" }) do
+	for _, event in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD" }) do
 		pcall(w.RegisterEvent, w, event)
 	end
-	-- yours alone: an aura or an item change of anybody else's is no news
-	for _, event in ipairs({ "UNIT_AURA", "UNIT_INVENTORY_CHANGED" }) do
-		local ok = w.RegisterUnitEvent and pcall(w.RegisterUnitEvent, w, event, "player")
-		if not ok then
-			pcall(w.RegisterEvent, w, event)
-		end
+	-- yours alone: an aura of anybody else's is no news
+	local ok = w.RegisterUnitEvent and pcall(w.RegisterUnitEvent, w, "UNIT_AURA", "player")
+	if not ok then
+		pcall(w.RegisterEvent, w, "UNIT_AURA")
 	end
 	w:SetScript("OnEvent", function(_, event, unit)
-		if (event == "UNIT_AURA" or event == "UNIT_INVENTORY_CHANGED") and unit ~= "player" then
+		if event == "UNIT_AURA" and unit ~= "player" then
 			return
 		end
 		-- a switch made in the fight, made now it is over (B.Enable)
@@ -687,29 +458,7 @@ function B.Watch()
 			B.Place()
 		end
 		B.Update()
-		-- AND AGAIN ONCE THE CLIENT HAS DRAWN (Josh 2026-11-05: "It looks like
-		-- the buffs and debuffs are just slow to update in the container").
-		-- The containers lay their icons out after this event, so what is
-		-- placed by what they show (B.Drawn) is placed again a moment later.
-		if not B.again and C_Timer and C_Timer.After then
-			B.again = true
-			C_Timer.After(B.AGAIN, function()
-				B.again = false
-				if M.live then
-					B.Update()
-				end
-			end)
-		end
 	end)
-	-- the enchants' time runs down on its own; the auras are read when they
-	-- change
-	if C_Timer and C_Timer.NewTicker then
-		B.ticker = C_Timer.NewTicker(1, function()
-			if M.live and B.holder and B.holder:IsShown() and not B.previewing then
-				B.Update(true)
-			end
-		end)
-	end
 	B.watch = w
 end
 
@@ -728,11 +477,8 @@ function B.Enable(on)
 	end
 	B.enableAfter = nil
 	for _, row in ipairs(B.rows) do
-		if row.perm then
-			pcall(row.perm.SetEnabled, row.perm, on)
-		end
-		if row.timed then
-			pcall(row.timed.SetEnabled, row.timed, on)
+		if row.box then
+			pcall(row.box.SetEnabled, row.box, on)
 		end
 	end
 	return true
@@ -829,16 +575,9 @@ function B.Preview(on)
 	for i, spec in ipairs(B.ROWS) do
 		local top = B.RowTop(i)
 		local list = B.PREVIEW[spec.key]
-		local surface = CreateFrame("Frame", nil, fake)
-		surface:SetPoint("TOPRIGHT", fake, "TOPRIGHT", B.PAD, top + B.PAD)
-		surface:SetSize(#list * B.STEP - B.GAP + 2 * B.PAD, B.ROW_H + 2 * B.PAD)
-		BT.Widgets.Panel(surface)
-		local layer = CreateFrame("Frame", nil, fake)
-		layer:SetAllPoints(fake)
-		layer:SetFrameLevel((surface:GetFrameLevel() or 1) + 2)
 		-- laid from the right, the last of the list first
 		for k = #list, 1, -1 do
-			fake.icons[#fake.icons + 1] = fakeTimed(layer, list[k], -(#list - k) * B.STEP, top)
+			fake.icons[#fake.icons + 1] = fakeTimed(fake, list[k], -(#list - k) * B.STEP, top)
 		end
 	end
 	fake:Show()
@@ -894,8 +633,8 @@ function M:OnDisable()
 end
 
 -- THE TRAY, FOR THE RECORD (Josh 2026-11-05: "We had an alignment issue
--- here"). Each row's counts and where its pieces are, in pixels from the
--- tray's right edge: the Testing page's Record writes it.
+-- here"). What each row holds and where its container is, in pixels from
+-- the tray's right edge: the Testing page's Record writes it.
 function B.Dump()
 	local lines = {}
 	local real = B.real
@@ -914,20 +653,8 @@ function B.Dump()
 	end
 	for _, row in ipairs(B.rows or {}) do
 		local r = B.Read(row.spec.filter)
-		lines[#lines + 1] = ("%s: perm=%s timed=%s lead=%s read=%s/%s drawn=%s/%s follows=%s"):format(
-			row.spec.key, tostring(row.permCount), tostring(row.timedCount), tostring(row.lead),
-			tostring(r and r.perm), tostring(r and r.timed), tostring(B.Drawn(row.perm)), tostring(B.Drawn(row.timed)),
-			tostring(row.follows))
-		lines[#lines + 1] = ("%s: permBox=%s timedBox=%s pin=%s surface=%s"):format(row.spec.key, from(row.perm),
-			from(row.timed), from(row.timedPin), from(row.surface))
-	end
-	for i, f in ipairs(B.enchants or {}) do
-		lines[#lines + 1] = ("enchant%d: shown=%s slot=%s at=%s"):format(i, tostring(f:IsShown()), tostring(f.slot),
-			from(f))
-	end
-	for i, e in ipairs(B.ReadEnchants()) do
-		lines[#lines + 1] = ("read%d: slot=%s left=%s icon=%s"):format(i, tostring(e.slot), tostring(e.left),
-			tostring(e.icon))
+		lines[#lines + 1] = ("%s: permanent=%s timed=%s enchant slots=%s box=%s"):format(row.spec.key,
+			tostring(r and r.perm), tostring(r and r.timed), tostring(row.enchantSlots), from(row.box))
 	end
 	BT.EnsureBound()
 	BeebModDB.buffsDump = { at = U.Now(), lines = lines }

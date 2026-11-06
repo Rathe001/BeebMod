@@ -3,6 +3,32 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **No smudge on the dungeon entrance card.** Hovering over an entrance pin
+  showed a green smudge beside the dungeon's name. The card leaves the
+  picture off now.
+
+- **The census counts people with no guild.** Its guild chart had a "No
+  guild" row that only a `/who` filled, so most people sat under "Guild
+  unknown". Someone you see with no guild line is looked at again 3 seconds
+  later. If they still have none, they go under "No guild". Someone whose
+  guild BeebMod already knows keeps it.
+
+- **No empty slot in the buff tray.** A slot could stay empty between your
+  permanent buffs and your timed ones. The game now places every icon in the
+  row, weapon enchants too.
+
+- **Crowd control timers on nameplates.** Your Sap, Polymorph, Fear and
+  other crowd control now show above the enemy's plate as a light blue bar
+  with the spell's icon. They sit under your damage over time, nearest the
+  plate. They also show over your target and focus frames. Bosses don't
+  get them.
+
+- **The buff tray has no background.** In a fight the background couldn't
+  change size with your buffs, so icons sat outside it. The icons now stand
+  on their own, each with its black edge and its time under it.
+
 ## 1.2.0
 
 - **Dungeon entrances on the world map.** Each dungeon's entrance has a pin
