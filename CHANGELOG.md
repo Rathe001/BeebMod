@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.4.1
 
 - **Raid marks on friendly nameplates.** A skull or other mark on a friendly
   NPC or player now shows over their name. Only enemy nameplates showed one.
