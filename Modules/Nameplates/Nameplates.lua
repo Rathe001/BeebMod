@@ -318,6 +318,15 @@ function M.Friend(token)
 	f.under:SetHeight(1)
 	f.under:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -1)
 	f.under:SetPoint("TOPRIGHT", f.name, "BOTTOMRIGHT", 0, -1)
+	-- A RAID MARK OVER THE NAME (Josh 2026-11-06: "Adding markers to targets
+	-- does not seem to work with the nameplates"): only an enemy's plate had
+	-- one, so a skull on a friendly NPC or a player showed nowhere. Above the
+	-- name, where the game puts its own.
+	f.marker = f:CreateTexture(nil, "OVERLAY")
+	f.marker:SetSize(M.MARK_SIZE, M.MARK_SIZE)
+	f.marker:SetPoint("BOTTOM", f.name, "TOP", 0, 3)
+	f.marker:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+	f.marker:Hide()
 	f:Hide()
 	f.bmUnit = token
 	M.friends[token] = f
@@ -958,7 +967,24 @@ function M.Learn(kind)
 end
 
 -- the whole name where the game gives it; nothing tested that may be hidden
+-- a friend's raid mark: drawn by the client from what it gives, a secret
+-- mark included, and never read
+M.MARK_SIZE = 18
+function M.PaintFriendMark(f, src)
+	if not f.marker then
+		return false
+	end
+	local mark = src and src.Marker and src:Marker() or nil
+	local shown = false
+	if mark ~= nil and (F.Secret(mark) or (type(mark) == "number" and mark >= 1 and mark <= 8)) then
+		shown = F.DrawMarker(f.marker, mark) and true or false
+	end
+	f.marker:SetShown(shown)
+	return shown
+end
+
 function M.PaintFriend(f, src)
+	M.PaintFriendMark(f, src)
 	local name = src:FullName()
 	if not F.Secret(name) and name == nil then
 		name = src:Name()
@@ -1459,6 +1485,12 @@ M.events:SetScript("OnEvent", function(_, event, token)
 		for t, s in pairs(M.skins) do
 			if s:IsShown() then
 				F.PaintMarker(s, F.Source(t))
+			end
+		end
+		-- and on the friends' names
+		for t, f in pairs(M.friends) do
+			if f:IsShown() then
+				M.PaintFriendMark(f, F.Source(t))
 			end
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then

@@ -392,6 +392,9 @@ function F.PartyNumbers()
 end
 -- the mana's number in a light blue, so it is not read as health
 F.POWER_INK = { 0.56, 0.71, 1.00 }
+-- how far up a party cell's numbers sit: over its row of aura icons (16 high,
+-- 3 from the bottom), with a pixel or two between
+F.NUMBERS_Y = 21
 -- the power type that is mana, and how tall a druid's mana line is in form
 F.MANA_TYPE = (Enum and Enum.PowerType and Enum.PowerType.Mana) or 0
 F.DRUID_MANA_H = 2
@@ -994,11 +997,15 @@ function F.Dress(b, kind)
 		end
 		-- a party cell's numbers, made always and shown by the switch
 		-- (F.PartyNumbers), so switching it needs no new cells
+		-- ABOVE THE ICONS (a player on CurseForge, 2026-11-06: "the buff
+		-- icon covers the mana number"): a cell's debuffs sit in its bottom
+		-- left corner and your buffs in its bottom right (Auras.lua), so the
+		-- numbers sit on the line over them, under the name
 		if k.numbers then
 			b.hpText = text(b.over, 11, "LEFT", "num")
-			b.hpText:SetPoint("BOTTOMLEFT", b.health, "BOTTOMLEFT", 5, 5)
+			b.hpText:SetPoint("BOTTOMLEFT", b.health, "BOTTOMLEFT", 5, F.NUMBERS_Y)
 			b.powerNum = text(b.over, 11, "RIGHT", "num")
-			b.powerNum:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", -5, 5)
+			b.powerNum:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", -5, F.NUMBERS_Y)
 			local c = F.POWER_INK
 			b.powerNum:SetTextColor(c[1], c[2], c[3])
 		end

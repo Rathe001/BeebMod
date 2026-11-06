@@ -3,6 +3,15 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Raid marks on friendly nameplates.** A skull or other mark on a friendly
+  NPC or player now shows over their name. Only enemy nameplates showed one.
+
+- **Party numbers clear of the buff icons.** With health and mana numbers
+  on, the numbers now sit above the row of buff and debuff icons. A buff
+  such as Lightning Shield covered the mana number.
+
 ## 1.4.0
 
 - **Druid mana in cat and bear form.** Your frame shows your mana as a thin

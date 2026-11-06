@@ -5673,7 +5673,9 @@ if ok then
 				assert(part.get() and cell.hpText._text == "2K" and cell.powerNum._text == "1.5K",
 					"on: health bottom left, mana bottom right: " .. tostring(cell.hpText._text) .. " / "
 						.. tostring(cell.powerNum._text))
-				assert(cell.hpText._points.BOTTOMLEFT and cell.powerNum._points.BOTTOMRIGHT, "in the bottom corners")
+				assert(cell.hpText._points.BOTTOMLEFT and cell.powerNum._points.BOTTOMRIGHT
+					and cell.hpText._points.BOTTOMLEFT.y == F.NUMBERS_Y and cell.powerNum._points.BOTTOMRIGHT.y == F.NUMBERS_Y,
+					"left and right, over the row of aura icons in the bottom corners")
 				F.Paint(cell, F.Fake({ name = "Grak", class = "WARRIOR", level = 35, hp = 50, max = 3000 }))
 				assert(shown(cell.hpText) and not shown(cell.powerNum), "a warrior's rage is not shown on a party cell")
 				F.Paint(cell, F.Fake({ name = "Ysolde", class = "MAGE", hp = 0, dead = true }))
@@ -14695,6 +14697,22 @@ if ok then
 					mod.PaintFriend(f, F.Source("nameplate2"))
 					assert(f.sub._text == "", "no guild, no line: " .. tostring(f.sub._text))
 					_G.GetGuildInfo = hadGuild
+				end
+				-- A RAID MARK ON A FRIEND (Josh 2026-11-06: "Adding markers to
+				-- targets does not seem to work with the nameplates"): over the
+				-- name, and gone with the mark
+				do
+					local hadIndex, hadIcon = _G.GetRaidTargetIndex, _G.SetRaidTargetIconTexture
+					local drawn
+					_G.SetRaidTargetIconTexture = function(_, i) drawn = i end
+					_G.GetRaidTargetIndex = function(unit) return unit == "nameplate2" and 8 or nil end
+					fire(mod.events, "RAID_TARGET_UPDATE")
+					assert(f.marker:IsShown() and drawn == 8 and f.marker._points.BOTTOM.rel == f.name,
+						"a skull over a friend's name")
+					_G.GetRaidTargetIndex = function() return nil end
+					fire(mod.events, "RAID_TARGET_UPDATE")
+					assert(not f.marker:IsShown(), "and gone when the mark is")
+					_G.GetRaidTargetIndex, _G.SetRaidTargetIconTexture = hadIndex, hadIcon
 				end
 				-- AN ENEMY PLAYER'S GUILD (Josh 2026-10-17: "Enemy players should
 				-- also show guild"): under their bar, in the same green, where
