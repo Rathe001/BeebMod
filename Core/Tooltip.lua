@@ -401,7 +401,7 @@ end
 
 -- a note is set in the italic the Expedition's lore is (Expedition/Card.lua)
 T.QUOTE_FACE = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\Alegreya-Italic.ttf"
-T.INK = { 0.91, 0.93, 0.92 }
+T.INK = BT.TEXT.ink
 
 -- the rows' pictures, one sheet of eight (scripts/make-tip-icons.py)
 T.ICONS = "Interface\\AddOns\\BeebMod\\Art\\tipicons"

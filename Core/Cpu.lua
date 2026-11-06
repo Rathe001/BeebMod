@@ -230,7 +230,7 @@ function P.Report(list, secs)
 	lines[#lines + 1] = ("Time measured · %.1f s · %.2f ms a second · %d things"):format(secs, total / secs, #list)
 	local game = P.GameFigure()
 	if game then
-		lines[#lines + 1] = ("The game's own figure for BeebMod · %.3f ms a frame"):format(game)
+		lines[#lines + 1] = ("The game's own number for BeebMod · %.3f ms a frame"):format(game)
 	end
 	for i = 1, math.min(12, #list) do
 		local e = list[i]

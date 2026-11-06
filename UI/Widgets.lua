@@ -20,8 +20,8 @@ BT.Widgets = W
 -- colours, and every button in the window was the same grey-green whatever
 -- the theme was. They are read when a button is painted now, from tables the
 -- theme writes into.
-local IDLE_TEXT = { 0.70, 0.72, 0.72 }
-local ON_TEXT = { 0.92, 0.94, 0.94 }
+local IDLE_TEXT = BT.TEXT.soft
+local ON_TEXT = BT.TEXT.ink
 -- a ghost button has no block behind it: just the rim and the word
 local CLEAR = { 0, 0, 0, 0 }
 
@@ -613,7 +613,7 @@ W.FIELD_LIT = { fill = { 0.07, 0.09, 0.09, 0.85 } }
 -- the width of a page of the settings window, for anything measured before
 -- the client has laid the page out (see UI/Window.lua)
 W.PAGE_W = 566
-local SUB = { 0.50, 0.55, 0.53 }
+local SUB = BT.TEXT.dim
 local HEAD_H, SECTION_GAP, CONTROL_W = 18, 14, 150
 
 -- every switch row that knows how to read its own setting, so a page can be

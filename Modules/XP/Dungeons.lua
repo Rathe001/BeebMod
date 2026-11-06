@@ -14,9 +14,8 @@
 -- PC Games prints as 35-45, the Cathedral's; 32-42 is the wing's usual
 -- range. Guides disagree on a few. THE DEADMINES (2026-10-17, audit) is
 -- 17-26, Blizzard's own Classic range, where guides give 15-22 to 18-23; at
--- 17-24 levels 24 and 25 never saw it. The client's group finder
--- (C_LFGList) can carry Blizzard's own suggested levels, but this client has
--- no group finder of its own, and it was not checked.
+-- 17-24 levels 24 and 25 never saw it. These ranges are used only where the
+-- game's group finder doesn't give its own (D.FromFinder, 2026-11-06).
 --
 -- NOT YET WHICH HAVE QUESTS FOR YOU: nothing in the game or BeebMod's data
 -- says which quests a dungeon holds.
@@ -131,8 +130,75 @@ function D.RangeColour(entry, level, kind)
 	return BT.Util.DIFFICULTY[steps[i]]
 end
 
+-- THE GROUP FINDER'S OWN RANGES (Josh 2026-11-06: "Our level ranges for
+-- dungeons don't quite match the group finder ranges", The Hall of Thanes at
+-- 13-20 in the game's Looking For Group window and 13-18 here). Forever has a
+-- group finder now (Blizzard_GroupFinder_VanillaStyle), and each of its
+-- activities carries the level range it suggests (C_LFGList,
+-- minLevelSuggestion and maxLevelSuggestion: the numbers its window shows).
+-- Those replace the ones written above, matched by name with "The" and the
+-- punctuation left out, so "Hall of Thanes" is The Hall of Thanes and
+-- "Scarlet Monastery - Graveyard" the Graveyard. A dungeon the finder doesn't
+-- list for you - the other side's - keeps its written range. Read once the
+-- finder answers, then not again this session.
+function D.Key(name)
+	if type(name) ~= "string" then
+		return nil
+	end
+	local k = name:lower():gsub("^the%s+", ""):gsub("[^%w]", "")
+	return k ~= "" and k or nil
+end
+
+function D.FromFinder()
+	if D.fromFinder then
+		return D.fromFinder
+	end
+	local L = rawget(_G, "C_LFGList")
+	if not (type(L) == "table" and type(L.GetAvailableCategories) == "function"
+		and type(L.GetAvailableActivities) == "function" and type(L.GetActivityInfoTable) == "function") then
+		return 0
+	end
+	local byKey = {}
+	for _, d in ipairs(D.LIST) do
+		byKey[D.Key(d.name)] = d
+	end
+	local okC, cats = pcall(L.GetAvailableCategories)
+	if not (okC and type(cats) == "table") then
+		return 0
+	end
+	local n = 0
+	for _, cat in ipairs(cats) do
+		local okA, acts = pcall(L.GetAvailableActivities, cat)
+		for _, id in ipairs((okA and type(acts) == "table") and acts or {}) do
+			local okI, info = pcall(L.GetActivityInfoTable, id)
+			if okI and type(info) == "table" then
+				local lo, hi = tonumber(info.minLevelSuggestion), tonumber(info.maxLevelSuggestion)
+				local group
+				if type(L.GetActivityGroupInfo) == "function" and info.groupFinderActivityGroupID then
+					local okG, g = pcall(L.GetActivityGroupInfo, info.groupFinderActivityGroupID)
+					group = okG and type(g) == "string" and g or nil
+				end
+				local d
+				for _, name in ipairs({ info.fullName, info.shortName,
+					group and type(info.shortName) == "string" and (group .. " " .. info.shortName) or false }) do
+					d = d or (name and byKey[D.Key(name)])
+				end
+				if d and lo and hi and lo > 0 and hi >= lo then
+					d.lo, d.hi, d.finder = lo, hi, true
+					n = n + 1
+				end
+			end
+		end
+	end
+	if n > 0 then
+		D.fromFinder = n
+	end
+	return n
+end
+
 -- the dungeons for a level and a side
 function D.For(level, side, limit)
+	D.FromFinder()
 	return D.Pick(D.LIST, level, side, limit)
 end
 
@@ -143,6 +209,7 @@ end
 -- at the same level both, by name.
 D.SOON = 5
 function D.Next(level, side, within)
+	D.FromFinder()
 	local out = {}
 	if type(level) ~= "number" then
 		return out

@@ -2325,6 +2325,19 @@ if ok then
 					("male and female fill the bar between them: %s + %s of %s"):format(m, f, w))
 				BT.Census.PaintTiles(view, view.census)
 			end
+			-- THE BARS IN THE ACCENT (2026-11-06, audit): a level bar follows the
+			-- accent you pick, a little darker
+			do
+				local key, b = next(view.bandButtons)
+				local A, was = BT.Widgets.ACCENT, { BT.Widgets.ACCENT[1], BT.Widgets.ACCENT[2], BT.Widgets.ACCENT[3] }
+				A[1], A[2], A[3] = 1, 0.5, 0.25
+				BT.Census.PaintTiles(view, { sexes = {}, sides = {}, level = { { key = key, n = 5 } } })
+				local c = b.bar._color or {}
+				assert(math.abs(c[1] - 0.8) < 1e-6 and math.abs(c[2] - 0.4) < 1e-6 and math.abs(c[3] - 0.2) < 1e-6,
+					"a level bar in the accent, a little darker: " .. tostring(c[1]) .. "," .. tostring(c[2]))
+				A[1], A[2], A[3] = was[1], was[2], was[3]
+				BT.Census.PaintTiles(view, view.census)
+			end
 			assert(view.modeButtons.guild and view.modeButtons.zone, "guild and zone have charts")
 			view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
 			local row = view.rows[1]
@@ -4693,6 +4706,22 @@ if ok then
 			assert(mod.Draw() == 0 and not mod.pins[1]._shown, "and takes them off the map")
 			box.set()
 			assert(box.get() and mod.Draw() == 1, "ticking it puts them back")
+			-- A SWITCH IN BEEBMOD'S WINDOW TOO (2026-11-06, audit): a part of
+			-- Interface, on its page, gone with it, and its map line with it
+			assert(BT.FeatureOf("entrances") == "interface", "a part of Interface")
+			local onPage = false
+			for _, k in ipairs(BT.Window.PAGE_MODULES.interface) do
+				onPage = onPage or k == "entrances"
+			end
+			assert(onPage and BT.Window.LABELS.entrances, "with a row and a line on its page")
+			BT.SetFeature("interface", false)
+			box = nil
+			filter(nil, { CreateCheckbox = function(_, text, get, set)
+				box = { text = text, get = get, set = set }
+			end })
+			assert(not BT.Enabled("entrances") and box == nil, "Interface off: no pins and no map line")
+			BT.SetFeature("interface", true)
+			assert(BT.Enabled("entrances"), "and back with it")
 
 			mod.layer, mod.pins, mod.mapHooked, mod.menuHooked = nil, {}, nil, nil
 			for _, n in ipairs(names) do
@@ -5146,6 +5175,32 @@ if ok then
 				"party off: the game's player frame is back where it was")
 			mod.SetOpt("party", true)
 			assert(_G.PlayerFrame.bmStowed and _G.PlayerFrame:GetParent() ~= home, "and away again with it on")
+			-- A SHAMAN'S TOTEMS (CurseForge, 2026-11-06: "as a shaman it removes
+			-- the icon u click to despawn the totem"): the game's totem frame
+			-- hangs under its player frame. It is moved out while that is away,
+			-- off the frame's managed row, and put back when it returns
+			do
+				local totems = _G.CreateFrame("Frame", "TotemFrame", _G.PlayerFrame)
+				_G.TotemFrame = totems
+				local row, added = _G.CreateFrame("Frame", nil, _G.PlayerFrame), 0
+				row.AddManagedFrame = function(_, f) if f == totems then added = added + 1 end end
+				_G.PlayerBottomManagedFrameContainer = row
+				mod.Stow()
+				assert(totems:GetParent() == _G.UIParent and totems.ignoreFramePositionManager == true,
+					"the totems are out on the screen, and the player frame's row leaves them alone")
+				local at = totems._points.BOTTOMLEFT
+				assert(at and at.rel == mod.Holder("party") and at.relPoint == "TOPLEFT",
+					"just above your frame in the party column")
+				mod.SetOpt("party", false)
+				assert(totems:GetParent() == _G.PlayerFrame and not totems.ignoreFramePositionManager and added == 1,
+					"party off: back on the game's player frame and its row")
+				mod.SetOpt("party", true)
+				assert(totems:GetParent() == _G.UIParent, "and out again with it on")
+				-- no totem frame on a client without one: nothing happens
+				_G.TotemFrame = nil
+				assert(mod.KeepTotems(true) == false, "no totem frame, nothing to keep")
+				_G.TotemFrame, _G.PlayerBottomManagedFrameContainer = nil, nil
+			end
 			-- the game's combo points go with its target frame (Josh 2026-09-24)
 			_G.ComboFrame = _G.CreateFrame("Frame", "ComboFrame", _G.UIParent)
 			mod.Stow()
@@ -5596,6 +5651,63 @@ if ok then
 			local raidCell = F.Build(_G.UIParent, "raid", nil, false)
 			F.Paint(raidCell, F.Fake({ name = "Ysolde", class = "MAGE", level = 35, hp = 80 }))
 			assert(not tostring(raidCell.name._text or ""):find("35", 1, true), "a raid cell has no room for it")
+			-- NUMBERS IF YOU WANT THEM (a player on CurseForge, 2026-11-06: "Is
+			-- there anyway to add HP or Mana text to the Party frames?"): off by
+			-- default, the cell as it was; on, its health bottom left and its
+			-- mana bottom right
+			do
+				local cell = cells[3]
+				local function shown(fs) return fs._shown ~= false and (fs._text or "") ~= "" end
+				local mage = { name = "Ysolde", class = "MAGE", level = 35, hp = 80, max = 2500, mana = 1500 }
+				assert(not F.PartyNumbers(), "off unless you turn it on")
+				F.Paint(cell, F.Fake(mage))
+				assert(not shown(cell.hpText) and not shown(cell.powerNum), "off: no numbers on the cell")
+				local part
+				for _, p in ipairs(mod:Parts()) do
+					if p.field == "partyNumbers" then part = p end
+				end
+				assert(part and part.sub and part.label == "Health and mana numbers" and not part.get(),
+					"a switch under Party on the Unit frames page, off")
+				part.set(true)
+				F.Paint(cell, F.Fake(mage))
+				assert(part.get() and cell.hpText._text == "2K" and cell.powerNum._text == "1.5K",
+					"on: health bottom left, mana bottom right: " .. tostring(cell.hpText._text) .. " / "
+						.. tostring(cell.powerNum._text))
+				assert(cell.hpText._points.BOTTOMLEFT and cell.powerNum._points.BOTTOMRIGHT, "in the bottom corners")
+				F.Paint(cell, F.Fake({ name = "Grak", class = "WARRIOR", level = 35, hp = 50, max = 3000 }))
+				assert(shown(cell.hpText) and not shown(cell.powerNum), "a warrior's rage is not shown on a party cell")
+				F.Paint(cell, F.Fake({ name = "Ysolde", class = "MAGE", hp = 0, dead = true }))
+				assert(not shown(cell.hpText) and not shown(cell.powerNum) and cell.status._text == "Dead",
+					"Dead in place of both")
+				F.Paint(cell, F.Fake({ name = "Ysolde", class = "MAGE", hp = 80, max = 2500, mana = 1500, charmed = true }))
+				assert(cell.status._text == "Charmed" and not shown(cell.powerNum), "Charmed in the mana's corner, alone")
+				part.set(false)
+				F.Paint(cell, F.Fake(mage))
+				assert(not shown(cell.hpText) and not shown(cell.powerNum), "and gone when switched off")
+			end
+			-- A DRUID'S MANA IN FORM (Josh 2026-11-06: "Let's add the druid
+			-- mana"): a thin blue line on your own cell while the power bar
+			-- shows the form's energy or rage
+			do
+				local cell = cells[3]
+				local wasUnit = cell.bmUnit
+				local function seen(f) return f and f._shown ~= false end
+				assert(cell.druidMana and cell.druidMana._height == F.DRUID_MANA_H, "your cell has the line, unseen")
+				cell.bmUnit = "player"
+				F.Paint(cell, F.Fake({ name = "Beeb", class = "DRUID", level = 30, power = "ENERGY", druidMana = 40 }))
+				assert(seen(cell.druidMana) and cell.druidMana._points.BOTTOMLEFT.rel == cell.power,
+					"a cat: your mana just over the power bar")
+				F.Paint(cell, F.Fake({ name = "Beeb", class = "DRUID", level = 30, power = "RAGE", druidMana = 40 }))
+				assert(seen(cell.druidMana), "a bear too")
+				F.Paint(cell, F.Fake({ name = "Beeb", class = "DRUID", level = 30, power = "MANA" }))
+				assert(not seen(cell.druidMana), "in caster form the power bar is the mana: no line")
+				F.Paint(cell, F.Fake({ name = "Beeb", class = "ROGUE", level = 30 }))
+				assert(not seen(cell.druidMana), "a rogue's energy has no mana under it")
+				cell.bmUnit = "party2"
+				F.Paint(cell, F.Fake({ name = "Ysolde", class = "DRUID", level = 30, power = "ENERGY", druidMana = 40 }))
+				assert(not seen(cell.druidMana), "only on your own cell")
+				cell.bmUnit = wasUnit
+			end
 			local voidwalker, aims = nil, 0
 			for _, f in ipairs(mod.previews) do
 				if f.bmKind == "gpet" then voidwalker = f end
@@ -7013,6 +7125,32 @@ if ok then
 			end
 			-- the campfire, seen out of a fight, is learned as permanent
 			assert(Bf.perm.HELPFUL[7353], "a permanent aura, learned")
+			-- ONLY WHEN ONE WAS ADDED (2026-11-06, audit): a change that adds no
+			-- aura is not a reason to read all forty
+			do
+				local reads, hadGet, hadLive = 0, _G.C_UnitAuras.GetAuraDataByIndex, Bf.module.live
+				_G.C_UnitAuras.GetAuraDataByIndex = function(...)
+					reads = reads + 1
+					return hadGet(...)
+				end
+				Bf.module.live = true
+				local on = Bf.watch:GetScript("OnEvent")
+				on(Bf.watch, "UNIT_AURA", "player", { isFullUpdate = false, removedAuraInstanceIDs = { 7 } })
+				on(Bf.watch, "UNIT_AURA", "player", { isFullUpdate = false, updatedAuraInstanceIDs = { 7 } })
+				assert(reads == 0, "one running out or refreshed reads nothing: " .. reads)
+				on(Bf.watch, "UNIT_AURA", "player", { isFullUpdate = false, addedAuras = { {} } })
+				assert(reads > 0, "one added is read")
+				reads = 0
+				on(Bf.watch, "UNIT_AURA", "player", { isFullUpdate = true })
+				assert(reads > 0, "a whole new list is read")
+				reads = 0
+				on(Bf.watch, "UNIT_AURA", "player", nil)
+				assert(reads > 0, "and so is a change the game says nothing about")
+				reads = 0
+				on(Bf.watch, "UNIT_AURA", "player", { isFullUpdate = Strict.Secret(false) })
+				assert(reads > 0, "or one it keeps secret")
+				_G.C_UnitAuras.GetAuraDataByIndex, Bf.module.live = hadGet, hadLive
+			end
 			-- NOTHING PLACED BY A COUNT: an enchant that runs out in a fight, or
 			-- a permanent buff the container does not draw, leaves no slot
 			-- behind. The row stays where it was put, against the dock
@@ -13675,6 +13813,50 @@ if ok then
 				"at 10, the first dungeon each side gets, at 13")
 			assert(#D.Next(5, "Horde") == 0, "but not eight levels off")
 			assert(names(D.Next(10, nil)) == "Ragefire Chasm,The Hall of Thanes", "two that start together, both")
+			-- THE GROUP FINDER'S OWN RANGES (Josh 2026-11-06: "Our level ranges
+			-- for dungeons don't quite match the group finder ranges", The Hall
+			-- of Thanes 13-20 in its window): its numbers replace ours, matched
+			-- by name, "The" and the punctuation aside
+			do
+				local kept = {}
+				for _, d in ipairs(D.LIST) do kept[d] = { d.lo, d.hi, d.finder } end
+				local hadLFG = _G.C_LFGList
+				local acts = {
+					[1] = { fullName = "Hall of Thanes", shortName = "", minLevelSuggestion = 13, maxLevelSuggestion = 20 },
+					[2] = { fullName = "Graveyard", shortName = "Graveyard", groupFinderActivityGroupID = 7,
+						minLevelSuggestion = 27, maxLevelSuggestion = 36 },
+					[3] = { fullName = "The Deadmines", shortName = "Deadmines", minLevelSuggestion = 0, maxLevelSuggestion = 0 },
+					[4] = { fullName = "Somewhere New", shortName = "", minLevelSuggestion = 30, maxLevelSuggestion = 35 },
+				}
+				_G.C_LFGList = {
+					GetAvailableCategories = function() return { 2 } end,
+					GetAvailableActivities = function(cat) return cat == 2 and { 1, 2, 3, 4 } or {} end,
+					GetActivityInfoTable = function(id) return acts[id] end,
+					GetActivityGroupInfo = function(g) return g == 7 and "Scarlet Monastery" or nil end,
+				}
+				D.fromFinder = nil
+				local found = D.FromFinder()
+				local function find(name)
+					for _, d in ipairs(D.LIST) do if d.name == name then return d end end
+				end
+				local thanes, yard, vc = find("The Hall of Thanes"), find("Scarlet Monastery Graveyard"), find("The Deadmines")
+				assert(found == 2 and thanes.lo == 13 and thanes.hi == 20 and thanes.finder,
+					"The Hall of Thanes takes the finder's 13-20: " .. thanes.lo .. "-" .. thanes.hi)
+				assert(yard.lo == 27 and yard.hi == 36, "a wing found by its group's name and its own")
+				assert(vc.lo == 17 and vc.hi == 26 and not vc.finder, "a range of 0-0 is no range: ours stays")
+				assert(names(D.For(19, "Alliance", 9)):find("The Hall of Thanes", 1, true),
+					"at 19 it is still for you, as the finder says")
+				acts[1].maxLevelSuggestion = 99
+				assert(D.FromFinder() == 2 and thanes.hi == 20, "read once a session")
+				-- no finder at all: nothing read, nothing changed
+				D.fromFinder = nil
+				_G.C_LFGList = nil
+				thanes.lo, thanes.hi = 13, 18
+				assert(D.FromFinder() == 0 and thanes.hi == 18, "with no finder, the written ranges")
+				_G.C_LFGList = hadLFG
+				D.fromFinder = nil
+				for d, v in pairs(kept) do d.lo, d.hi, d.finder = v[1], v[2], v[3] end
+			end
 			do
 				local hadLevel, hadMap = _G.UnitLevel, _G.C_Map
 				_G.C_Map = nil
@@ -14043,14 +14225,36 @@ if ok then
 			assert(mod.Best(r) == nil and asked[1] == 5374, "an item not loaded yet has no name, and is asked for")
 			_G.GetItemInfo, _G.C_Item = global, hadC
 
-			-- A RIGHT-CLICK ON ITS CELL CLEARS IT (the settings canvas moved the
-			-- Reset there from the Metrics page, 2026-10-04)
+			-- CLEARED ON A SECOND CLICK (2026-11-06, audit): a right-click starts
+			-- a new session, as on the XP and Gold lines; all time takes two
+			-- Shift-right-clicks, the tooltip saying so after the first
 			local chip = mod.Build()
+			local clock, hadTime, hadShift = 500, _G.GetTime, _G.IsShiftKeyDown
+			_G.GetTime = function() return clock end
+			local shift = false
+			_G.IsShiftKeyDown = function() return shift end
 			chip:GetScript("OnMouseUp")(chip, "LeftButton")
 			assert(select(1, mod.Worth(mod.Record())) > 0, "a plain click leaves the record")
+			mod.session.picks = 3
+			chip:GetScript("OnMouseUp")(chip, "RightButton")
+			assert(select(1, mod.Worth(mod.Record())) > 0 and (mod.session.picks or 0) == 0,
+				"a right-click starts a new session and keeps all time")
+			shift = true
+			assert(mod.Click("RightButton", true) == "armed" and select(1, mod.Worth(mod.Record())) > 0,
+				"one Shift-right-click clears nothing")
+			mod.Tip()
+			assert(BT.Tip.Says("SHIFT-RIGHT-CLICK AGAIN") and not BT.Tip.Says("reset session"),
+				"the tooltip says to click again: "
+				.. table.concat(BT.Tip.Texts(), " | "))
+			BT.Tip.Hide()
+			clock = clock + mod.ARM_WAIT + 1
+			assert(mod.Click("RightButton", true) == "armed" and select(1, mod.Worth(mod.Record())) > 0,
+				"a second one too late starts over")
+			clock = clock + 1
 			chip:GetScript("OnMouseUp")(chip, "RightButton")
 			assert(select(1, mod.Worth(mod.Record())) == 0 and select(2, mod.Worth(mod.Record())) == 0,
-				"a right-click on the cell clears the record")
+				"a second one in time clears the record")
+			_G.GetTime, _G.IsShiftKeyDown = hadTime, hadShift
 			_G.UnitClass = wasClass
 			BT.Window.Rebuild()
 			mod.Update()
@@ -17982,6 +18186,27 @@ if ok then
 			BT.SetEnabled("tracker", true)
 			mod.Update()
 			assert(row.item:IsShown(), "switched on again, the item is back")
+			-- ONE WHOSE ROW ONLY MOVED STAYS SEEN (2026-11-06, audit): see-through,
+			-- it still took clicks, so a click on what looked like nothing used
+			-- the item
+			do
+				mod.PlaceItems()
+				local hadTop, hadLeft = row.item.GetTop, row.item.GetLeft
+				row.item.GetTop = function() return 400 end
+				row.item.GetLeft = function() return 300 end
+				mod.PlaceItems()
+				b:SetAlpha(1)
+				_G.InCombatLockdown = function() return true end
+				row.item.GetTop = function() return 380 end
+				mod.PlaceItems()
+				assert(b._alpha ~= 0 and mod.itemsPending, "in a fight a moved row's button stays seen: "
+					.. tostring(b._alpha))
+				_G.InCombatLockdown = function() return false end
+				mod.PlaceItems()
+				row.item.GetTop, row.item.GetLeft = hadTop, hadLeft
+				mod.itemsPending = false
+				mod.PlaceItems()
+			end
 
 			-- an item for handing the quest in waits until the quest is complete
 			_G.GetQuestLogSpecialItemInfo = function(i)

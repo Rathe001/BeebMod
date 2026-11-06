@@ -54,6 +54,9 @@ Card.RATIO = 1.62
 
 -- the card's own colour: the ground, and the mount over the model's corners
 local GROUND = { 0.071, 0.055, 0.043 }
+-- the brown of a card's and a page's smaller words (2026-11-06, audit: two
+-- browns a shade apart, one on the card and one in the window)
+Card.PARCHMENT = { 0.79, 0.72, 0.58 }
 
 -- the metals, by tier: the lines and ornaments, the darker third line of
 -- platinum, and the tier's word. The colours are the masteries' own
@@ -715,7 +718,7 @@ function Card.Dress(c, d)
 	local nc = d.nameColor or { 0.95, 0.90, 0.80 }
 	c.name:SetTextColor(nc[1], nc[2], nc[3])
 	c.kind:SetText(d.kind or "")
-	c.kind:SetTextColor(0.79, 0.72, 0.58)
+	c.kind:SetTextColor(Card.PARCHMENT[1], Card.PARCHMENT[2], Card.PARCHMENT[3])
 	-- its category, in the category's colour (the window's V.CATEGORY)
 	c.cat:SetText((d.category or ""):upper())
 	local cc = d.categoryColor or { 0.62, 0.58, 0.50 }

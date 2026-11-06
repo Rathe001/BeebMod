@@ -55,6 +55,34 @@ BT.DEV = false
 BT.DEV = true
 --@end-debug@
 
+-- THE TEXT COLOURS, ONCE (2026-11-06, audit). Every module picked its own
+-- greys: five near-copies of the quiet one, three golds. These are the
+-- shades text comes in, brightest first, and every panel takes them from
+-- here. A colour that means something - a class, a quality, a warning, the
+-- journal's parchment, a note's ink - is not one of these and keeps its own.
+-- Nothing writes into them: they are shared.
+BT.TEXT = {
+	ink = { 0.91, 0.93, 0.92 }, -- what a panel is about: names, values
+	body = { 0.86, 0.88, 0.92 }, -- running text on the game's own windows
+	soft = { 0.76, 0.80, 0.78 }, -- a second line, a value beside a name
+	quiet = { 0.62, 0.68, 0.65 }, -- a label, a row that steps back
+	muted = { 0.55, 0.62, 0.60 }, -- a tab or a heading not chosen
+	dim = { 0.50, 0.55, 0.53 }, -- a small heading, something absent
+	faint = { 0.42, 0.48, 0.45 }, -- a hint, a thing switched off
+	ghost = { 0.35, 0.40, 0.38 }, -- nearly gone: there, but not about this
+	lit = { 0.88, 0.96, 0.92 }, -- the chosen tab
+	gold = { 1.00, 0.82, 0.00 }, -- the game's own gold, for its titles
+	goldSoft = { 1.00, 0.82, 0.25 }, -- a lighter gold, for a heading of ours
+}
+
+-- a font string in one of BT.TEXT's shades
+function BT.Ink(fs, shade)
+	local c = BT.TEXT[shade]
+	if fs and fs.SetTextColor and c then
+		fs:SetTextColor(c[1], c[2], c[3])
+	end
+end
+
 BT.SETTINGS = {
 	modules = {},          -- module key -> false when you switch one off
 	tooltip = true,        -- show notes and tags on unit tooltips

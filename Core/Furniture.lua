@@ -62,8 +62,8 @@ local function N(v, fallback)
 end
 
 local FLAT = "Interface\\Buttons\\WHITE8X8"
-F.INK = { 0.62, 0.68, 0.66 }
-F.TEXT = { 0.86, 0.88, 0.92 }
+F.INK = BT.TEXT.quiet
+F.TEXT = BT.TEXT.body
 F.CHROME = { NineSlice = true, Border = true, Bg = true, Background = true, BackgroundOverlay = true }
 
 local Dresser = {}

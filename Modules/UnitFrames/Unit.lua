@@ -300,6 +300,10 @@ function Live:PowerType()
 end
 function Live:PowerMax() return raw(UnitPowerMax, self.unit) end
 function Live:Power() return raw(UnitPower, self.unit) end
+-- the mana, whatever power the bar shows: a druid's in cat or bear form
+-- (F.MANA_TYPE, Enum.PowerType.Mana)
+function Live:ManaMax() return raw(UnitPowerMax, self.unit, F.MANA_TYPE) end
+function Live:Mana() return raw(UnitPower, self.unit, F.MANA_TYPE) end
 function Live:PercentText()
 	if not (UnitHealthPercent and SCALE100) then
 		return nil
@@ -379,10 +383,25 @@ end
 -- settings canvas (2026-10-04).
 F.HEALTH_KIND = { party = "party", raid = "raid", tank = "raid", target = "target", focus = "focus", boss = "boss" }
 F.HEALTH_DEFAULT = { party = "none", raid = "none", target = "both", focus = "percent", boss = "percent" }
+
+-- whether the party cells, yours among them, show their health and mana as
+-- numbers: the one switch the health text has (Unit frames page, "Health and
+-- mana numbers"), off unless you turn it on
+function F.PartyNumbers()
+	return F.Opt("partyNumbers", false) and true or false
+end
+-- the mana's number in a light blue, so it is not read as health
+F.POWER_INK = { 0.56, 0.71, 1.00 }
+-- the power type that is mana, and how tall a druid's mana line is in form
+F.MANA_TYPE = (Enum and Enum.PowerType and Enum.PowerType.Mana) or 0
+F.DRUID_MANA_H = 2
 function F.HealthMode(kind, k)
 	local key = F.HEALTH_KIND[kind or ""]
 	if not key then
 		return (k and k.text == "percent") and "percent" or "none"
+	end
+	if key == "party" and F.PartyNumbers() then
+		return "value"
 	end
 	return F.HEALTH_DEFAULT[key]
 end
@@ -599,6 +618,8 @@ end
 function Fake:PowerType() return self.d.power or (self.d.class == "WARRIOR" and "RAGE") or (self.d.class == "ROGUE" and "ENERGY") or "MANA" end
 function Fake:PowerMax() return 100 end
 function Fake:Power() return self.d.mana or 70 end
+function Fake:ManaMax() return 100 end
+function Fake:Mana() return self.d.druidMana or self.d.mana or 70 end
 function Fake:PercentText() return ("%d%%"):format(self.d.hp or 100) end
 local function abbreviate(n)
 	n = math.floor((n or 0) + 0.5)
@@ -777,8 +798,20 @@ F.KINDS = {
 	-- at the top in its size - laid out as a stacked cell
 	-- THE LEVEL IN FRONT OF THE NAME (Josh 2026-09-24: "can you add player
 	-- level to the frame?"), as the target wears it; a raid cell is too narrow
+	-- NUMBERS IF YOU WANT THEM (a player on CurseForge, 2026-11-06: "Is there
+	-- anyway to add HP or Mana text to the Party frames? it has it on the
+	-- Target but not personal or Party frames"; Josh: "add it behind a
+	-- setting"). Off, the cell stays as it was. On, the health as a number
+	-- in the bottom left corner and the mana in the bottom right: the power
+	-- bar is too thin to carry it, as the target's does (F.PartyNumbers).
+	-- A DRUID'S MANA IN FORM (Josh 2026-11-06: "Let's add the druid mana"):
+	-- the game's player frame shows it as a second bar while you are a cat or
+	-- a bear, and that frame is put away. On your own cell it is a thin blue
+	-- line over the power bar, shown only while that bar shows energy or rage
+	-- (paintPower). The resource display has the game's own copy, but only
+	-- with the game's personal resource display on.
 	party = { w = 160, h = 60, power = 5, manaOnly = true, name = 12, text = "none", group = true, stack = true,
-		overheal = true, level = true },
+		overheal = true, level = true, numbers = true, druidMana = true },
 	raid = { w = 70, h = 40, power = 0, name = 10, text = "none", group = true, short = true },
 	-- a main tank: a smaller cell than a party member's, with its target beside
 	-- it, in a column of their own in a raid (Josh 2026-09-23)
@@ -923,6 +956,20 @@ function F.Dress(b, kind)
 		b.power:SetPoint("BOTTOMLEFT", inset, inset)
 		b.power:SetPoint("BOTTOMRIGHT", -inset, inset)
 		b.power:SetHeight(powerH)
+		-- a druid's mana in form, along the bottom of the health, just over
+		-- the power bar (F.DRUID_MANA_H tall, a level over the health)
+		if k.druidMana then
+			b.druidMana = bar(b, 3)
+			b.druidMana:SetPoint("BOTTOMLEFT", b.power, "TOPLEFT", 0, 1)
+			b.druidMana:SetPoint("BOTTOMRIGHT", b.power, "TOPRIGHT", 0, 1)
+			b.druidMana:SetHeight(F.DRUID_MANA_H)
+			local c = POWER.MANA
+			b.druidMana:SetStatusBarColor(c[1], c[2], c[3], 1)
+			b.druidMana.track = b.druidMana:CreateTexture(nil, "BACKGROUND")
+			b.druidMana.track:SetAllPoints()
+			b.druidMana.track:SetColorTexture(0, 0, 0, 0.6)
+			b.druidMana:Hide()
+		end
 	end
 
 	-- the words sit over the bars, on a frame of their own so no bar covers them
@@ -945,6 +992,16 @@ function F.Dress(b, kind)
 			b.power.text = text(b.over, 10, "RIGHT", "num")
 			b.power.text:SetPoint("RIGHT", b.power, "RIGHT", -4, 0)
 		end
+		-- a party cell's numbers, made always and shown by the switch
+		-- (F.PartyNumbers), so switching it needs no new cells
+		if k.numbers then
+			b.hpText = text(b.over, 11, "LEFT", "num")
+			b.hpText:SetPoint("BOTTOMLEFT", b.health, "BOTTOMLEFT", 5, 5)
+			b.powerNum = text(b.over, 11, "RIGHT", "num")
+			b.powerNum:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", -5, 5)
+			local c = F.POWER_INK
+			b.powerNum:SetTextColor(c[1], c[2], c[3])
+		end
 	elseif k.group then
 		b.name:SetPoint("TOPLEFT", b.health, "TOPLEFT", 3, -3)
 		b.name:SetPoint("RIGHT", b.health, "RIGHT", -3, 0)
@@ -961,7 +1018,7 @@ function F.Dress(b, kind)
 		b.status:ClearAllPoints()
 		b.status:SetPoint("RIGHT", b.health, "RIGHT", -(k.textInset or 6), 0)
 	end
-	b.status:SetTextColor(0.80, 0.84, 0.82)
+	BT.Ink(b.status, "soft")
 
 	-- the level in its tab, in the colour of how hard the enemy is
 	if k.levelTab then
@@ -1506,6 +1563,27 @@ local function paintPower(b, src, gone, ease)
 		b.power.text:SetText((not gone and b.power:IsShown()) and (src:PowerText() or "") or "")
 		b.power.text:SetShown(not gone)
 	end
+	-- your mana as a druid in cat or bear form, while the bar shows the
+	-- form's energy or rage
+	if b.druidMana then
+		local want = not gone and b.bmUnit == "player" and pt ~= nil and pt ~= "MANA" and src:Class() == "DRUID"
+		if want then
+			local mmax = src:ManaMax()
+			if mmax ~= nil then
+				b.druidMana:SetMinMaxValues(0, mmax)
+			end
+			setBar(b.druidMana, src:Mana() or 0, ease)
+		end
+		b.druidMana:SetShown(want and true or false)
+	end
+	-- a party cell's: only with the switch on, and only for the power its
+	-- bar shows (mana, or anything of yours); not while the corner says
+	-- Charmed (statusOf)
+	if b.powerNum then
+		local on = F.PartyNumbers() and not gone and b.power:IsShown() and not src:Charmed()
+		b.powerNum:SetText(on and (src:PowerText() or "") or "")
+		b.powerNum:SetShown(on and true or false)
+	end
 end
 
 -- the name, with the level in front of it where there is room
@@ -1526,7 +1604,7 @@ local function paintName(b, src, gone)
 		end
 		writeName(b.name, line)
 		if gone then
-			b.name:SetTextColor(0.60, 0.64, 0.62)
+			BT.Ink(b.name, "quiet")
 		elseif src:Charmed() then
 			b.name:SetTextColor(1, 0.80, 0.78)
 		else

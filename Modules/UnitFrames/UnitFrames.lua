@@ -1063,6 +1063,54 @@ function F.Unstow(name)
 	return true
 end
 
+-- A SHAMAN'S TOTEMS (a player on CurseForge, 2026-11-06: "as a shaman it
+-- removes the icon u click to despawn the totem"). The game's TotemFrame
+-- hangs under its player frame, which is put away with the rest
+-- (M.STANDS_FOR), so the totems went with it, and the right-click that
+-- destroys one. Only the game's own buttons may destroy a totem, so the
+-- game's frame is kept and moved out: off the player frame's bottom row (its
+-- manager skips a frame marked ignoreFramePositionManager:
+-- Blizzard_ManagedFrameSystem, AddManagedFrame) and onto the screen, just
+-- above your frame in the party column. It is not a secure frame, so it may
+-- move in a fight too.
+M.TOTEM_SCALE = 0.8
+-- above the party block, clear of the time under each button
+M.TOTEM_AT = { -12, 12 }
+function M.KeepTotems(on)
+	local t = rawget(_G, "TotemFrame")
+	if type(t) ~= "table" or type(t.SetParent) ~= "function" then
+		return false
+	end
+	if on then
+		if not t.bmKept then
+			local ok, home = pcall(t.GetParent, t)
+			t.bmHome = ok and home or nil
+			t.bmKept = true
+		end
+		t.ignoreFramePositionManager = true
+		pcall(t.SetParent, t, UIParent)
+		pcall(t.SetScale, t, M.TOTEM_SCALE)
+		t:ClearAllPoints()
+		t:SetPoint("BOTTOMLEFT", holder("party"), "TOPLEFT", M.TOTEM_AT[1], M.TOTEM_AT[2])
+		return true
+	end
+	if not t.bmKept then
+		return false
+	end
+	t.bmKept = false
+	t.ignoreFramePositionManager = nil
+	pcall(t.SetScale, t, 1)
+	t:ClearAllPoints()
+	pcall(t.SetParent, t, t.bmHome or UIParent)
+	-- back on the player frame's bottom row, if it is up now; otherwise the
+	-- row takes it the next time it shows (ManagedFrameMixin:OnShow)
+	local container = rawget(_G, "PlayerBottomManagedFrameContainer")
+	if type(container) == "table" and type(container.AddManagedFrame) == "function" then
+		pcall(container.AddManagedFrame, container, t)
+	end
+	return true
+end
+
 -- every one of the game's frames away or back, as the switches say; how many
 -- were put away and how many brought back
 function M.Stow()
@@ -1077,6 +1125,9 @@ function M.Stow()
 			end
 		end
 	end
+	-- the totems stay out while the player frame is away (M.KeepTotems)
+	local pf = rawget(_G, "PlayerFrame")
+	M.KeepTotems(type(pf) == "table" and pf.bmStowed == true)
 	return away, back
 end
 
@@ -2032,6 +2083,16 @@ function M:Parts()
 		out[#out + 1] = { label = p[2], field = key,
 			get = function() return opt(key, true) and true or false end,
 			set = function(on) setOpt(key, on) end }
+		-- under Party: the numbers on your cell and your party's (F.PartyNumbers)
+		if key == "party" then
+			out[#out + 1] = { label = "Health and mana numbers", blurb = "On your frame and your party's",
+				field = "partyNumbers", sub = true,
+				get = function() return opt("partyNumbers", false) and true or false end,
+				set = function(on)
+					setOpt("partyNumbers", on and true or false)
+					M.PaintAll()
+				end }
+		end
 	end
 	return out
 end

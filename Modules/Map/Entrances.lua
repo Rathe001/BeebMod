@@ -27,6 +27,7 @@ local CreateFrame = BT.Cpu.For("Modules/Map/Entrances.lua")
 
 local M = BT.Module({
 	key = "entrances",
+	feature = "interface",
 	title = "Dungeon entrances",
 	order = 99,
 })
@@ -106,6 +107,9 @@ end
 
 -- the dungeons a spot leads to, from the XP tooltip's list, in its order
 function M.Dungeons(spot)
+	if BT.Dungeons and BT.Dungeons.FromFinder then
+		BT.Dungeons.FromFinder()
+	end
 	local list = BT.Dungeons and BT.Dungeons.LIST or {}
 	local wanted = {}
 	for _, name in ipairs(spot.wings or { spot[1] }) do
@@ -376,6 +380,12 @@ end
 -- the line in the map's filter menu: on and off for the module itself
 function M.AddFilter(_, root)
 	if not (root and root.CreateCheckbox) then
+		return
+	end
+	-- A SWITCH IN BEEBMOD'S WINDOW TOO (2026-11-06, audit): the pins are a part
+	-- of Interface. With Interface off they are gone, and so is this line,
+	-- which would show a tick for pins that aren't there.
+	if not BT.FeatureOn(BT.FeatureOf("entrances") or "interface") then
 		return
 	end
 	local box = root:CreateCheckbox(M.FILTER,

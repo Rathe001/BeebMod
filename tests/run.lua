@@ -10,6 +10,41 @@ local function check(ok, what)
 	if not ok then failures = failures + 1 end
 end
 
+-- 0b. THE TEXT COLOURS, ONCE (2026-11-06, audit): text takes its shade from
+-- BT.TEXT (Core/Init.lua). A grey written out by hand is a new near-copy of
+-- one already there. White, black and the colours that mean something are
+-- the ones allowed, each where it is.
+do
+	local ALLOWED = {
+		["1, 1, 1"] = true, ["0, 0, 0"] = true,
+		["0.03, 0.06, 0.05"] = true, -- a dark word on a light button (UI/Welcome.lua)
+		["0.95, 0.72, 0.30"] = true, -- a warning (Modules/Ledger/Find.lua)
+		["0.86, 0.82, 0.58"] = true, -- a buff's time, in the timers' gold (Modules/UnitFrames/Buffs.lua)
+		["1, 0.80, 0.78"] = true, -- a charmed name (Modules/UnitFrames/Unit.lua)
+		["0.95, 0.90, 0.80"] = true, -- a card's name (Modules/Expedition/Card.lua)
+		["0.66, 0.59, 0.49"] = true, -- a card's faded line (Modules/Expedition/Card.lua)
+	}
+	local hits = {}
+	for line in io.lines("BeebMod.toc") do
+		line = line:gsub("%s+$", "")
+		if line ~= "" and not line:match("^#") then
+			local path = line:gsub("\\", "/")
+			local n = 0
+			for src in io.lines(path) do
+				n = n + 1
+				local code = src:gsub("%-%-.*$", "")
+				for args in code:gmatch("SetTextColor%(%s*([%d%.]+%s*,%s*[%d%.]+%s*,%s*[%d%.]+)") do
+					if not ALLOWED[args] then
+						hits[#hits + 1] = ("%s:%d (%s)"):format(path, n, args)
+					end
+				end
+			end
+		end
+	end
+	check(#hits == 0, "no text colour picked by hand where BT.TEXT has its shade"
+		.. (#hits > 0 and (":\n     " .. table.concat(hits, "\n     ")) or ""))
+end
+
 -- 0. WHAT LUA 5.1 HAS NOT GOT (2026-10-17, audit). The tests run on 5.4 and
 -- the game on 5.1, so a `//`, a `goto` or a bare table.unpack runs here and
 -- breaks there. Every file the TOC lists is read for them.
@@ -2132,6 +2167,23 @@ do
 	check(gave == 2 and gs.lore and gs.lore.quest == "Pride of the Isle", "a quest that names an enemy in its objectives gives it lore")
 	check(pc.lore and pc.lore.line == "The prideclaws stalk the ridge at dusk.", "and one that names it in the story, plural and all")
 	check(J.LoreLine(pc) == "The prideclaws stalk the ridge at dusk.", "the card's line is the quest's")
+	-- THE QUEST'S TEXT ONCE, NOT ONCE AN ENEMY (2026-11-06, audit): two
+	-- enemies from one quest, one copy of its story, read by both
+	check(pc.lore.text == nil and gs.lore.text == nil and J.Store().loreTexts[900]
+		and J.LoreText(pc) == J.Store().loreTexts[900] and J.LoreText(gs) == J.LoreText(pc),
+		"one copy of the story, read by every enemy it names")
+	do
+		-- an older book, the story on each enemy, is moved over once
+		local old = { enemies = {
+			[1] = { lore = { questID = 77, text = "Old story.", line = "Old story." } },
+			[2] = { lore = { questID = 77, text = "Old story.", line = "Old story." } },
+			[3] = { lore = { text = "No number.", line = "No number." } },
+		} }
+		check(J.PackLore(old) == 2 and old.loreTexts[77] == "Old story." and old.enemies[1].lore.text == nil
+			and old.enemies[2].lore.text == nil and old.enemies[3].lore.text == "No number.",
+			"an older book's stories move to one place; one with no quest number stays")
+		check(J.LoreText(old.enemies[3]) == "No number.", "and is still read where it is")
+	end
 	-- A NAME AT THE START OF A WORD (2026-10-17, audit): a rat is not in a
 	-- pirate's quest, nor a cow in a coward's
 	J.Learn({ npc = 5004, name = "Rat", kind = "Critter" })

@@ -379,12 +379,12 @@ function B.Read(filter)
 		if type(a) ~= "table" then
 			break
 		end
-		local okD, duration = pcall(function() return a.duration end)
-		local okS, spell = pcall(function() return a.spellId end)
-		duration = okD and plainNumber(duration) or nil
+		-- both fields in one call: a closure an aura, not two
+		local ok, duration, spell = pcall(function() return a.duration, a.spellId end)
+		duration = ok and plainNumber(duration) or nil
 		if duration == 0 then
 			out.perm = out.perm + 1
-			spell = okS and plainNumber(spell) or nil
+			spell = ok and plainNumber(spell) or nil
 			if spell then
 				out.ids[spell] = true
 			end
@@ -414,6 +414,25 @@ B.Learn = learn
 
 -- what the tray does itself, out of a fight: learn which of your buffs are
 -- permanent. Where everything goes is the client's.
+-- ONLY WHEN ONE WAS ADDED (2026-11-06, audit): every change to your auras -
+-- a stack, a refresh, one running out - read all forty, to learn of
+-- permanent buffs that only an added aura can bring. The game says what
+-- changed; a change it sends whole, or one that can't be read, is read in
+-- full. Auras added in a fight are read when it ends (PLAYER_REGEN_ENABLED).
+function B.Added(info)
+	if type(info) ~= "table" then
+		return true
+	end
+	local ok, full, added = pcall(function() return info.isFullUpdate, info.addedAuras end)
+	if not ok or (issecretvalue and (issecretvalue(full) or issecretvalue(added))) then
+		return true
+	end
+	if full then
+		return true
+	end
+	return type(added) == "table" and next(added) ~= nil
+end
+
 function B.Update()
 	if not (B.holder and B.rows) or inCombat() then
 		return
@@ -441,8 +460,8 @@ function B.Watch()
 	if not ok then
 		pcall(w.RegisterEvent, w, "UNIT_AURA")
 	end
-	w:SetScript("OnEvent", function(_, event, unit)
-		if event == "UNIT_AURA" and unit ~= "player" then
+	w:SetScript("OnEvent", function(_, event, unit, info)
+		if event == "UNIT_AURA" and (unit ~= "player" or not B.Added(info)) then
 			return
 		end
 		-- a switch made in the fight, made now it is over (B.Enable)

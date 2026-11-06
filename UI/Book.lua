@@ -45,13 +45,13 @@ Bk.COL_Y = Bk.TOOL_H + 8
 Bk.RAIL_ROW_H = 26
 
 local PAD = Bk.PAD
-local DIM = { 0.50, 0.55, 0.53 }
+local DIM = BT.TEXT.dim
 local GOLD = { 1, 0.82, 0.30 }
 local FONT_NAME = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\JosefinSans-Bold.ttf"
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local CHECK_TEX = "Interface\\RaidFrame\\ReadyCheck-Ready"
 -- a tab you are not on, and the words of one you are
-local TAB_DIM = { 0.55, 0.62, 0.60 }
+local TAB_DIM = BT.TEXT.muted
 local TAB_ON = { 1, 1, 1 }
 -- the rank strip: the title's column, the gap between the book's numbers
 local NAME_W = 150
@@ -485,10 +485,10 @@ function Bk.RailRows(rail, entries)
 			local w = BT.Widgets.WASH
 			r.lit:SetColorTexture(w[1], w[2], w[3], w[4])
 			r.lit:Show()
-			r.label:SetTextColor(0.92, 0.96, 0.94)
+			BT.Ink(r.label, "ink")
 		else
 			r.lit:Hide()
-			r.label:SetTextColor(0.62, 0.68, 0.65)
+			BT.Ink(r.label, "quiet")
 		end
 		r.mark:SetShown(r.chosen)
 		r:Show()
@@ -974,21 +974,21 @@ function Bk.DrawCommendations(a, d)
 					-- bar. A tier somebody is at wears its metal.
 					r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
 					if it.have < it.need then
-						r.title:SetTextColor(0.62, 0.66, 0.64)
+						BT.Ink(r.title, "quiet")
 					elseif c then
 						r.title:SetTextColor(c[1], c[2], c[3])
 					else
 						r.title:SetTextColor(1, 1, 1)
 					end
 					r.right:SetText(it.right or "")
-					r.right:SetTextColor(0.75, 0.78, 0.77)
+					BT.Ink(r.right, "soft")
 					r.track:Hide()
 					r.fill:Hide()
 				else
 					r.points:SetTextColor(DIM[1], DIM[2], DIM[3])
-					r.title:SetTextColor(0.62, 0.66, 0.64)
+					BT.Ink(r.title, "quiet")
 					r.right:SetText(("%s / %s"):format(big(it.have), big(it.need)))
-					r.right:SetTextColor(0.75, 0.78, 0.77)
+					BT.Ink(r.right, "soft")
 					r.track:SetColorTexture(1, 1, 1, 0.07)
 					r.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
 					local share = math.min(1, it.have / math.max(1, it.need))

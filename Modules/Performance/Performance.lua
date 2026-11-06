@@ -33,7 +33,7 @@ local EVERY = 1
 -- Art/net.tga, a sheet of marks a quarter wide each, in the same quiet grey
 -- the words were.
 local NET = "Interface\\AddOns\\BeebMod\\Art\\net"
-local QUIET = { 0.54, 0.60, 0.58, 1 }
+local QUIET = BT.TEXT.muted
 M.HOUSE = { icon = NET, coords = { 0, 0.25, 0, 1 }, tint = QUIET }
 M.GLOBE = { icon = NET, coords = { 0.25, 0.5, 0, 1 }, tint = QUIET }
 

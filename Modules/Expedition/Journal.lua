@@ -522,8 +522,48 @@ local function loreFrom(q, m)
 	-- whether the line itself names the enemy, or is only the quest's first
 	-- sentence: only the first kind goes on a card
 	local named = lowerFind(line, m.name)
-	m.lore = { line = line, text = q.text, quest = q.title, questID = q.id, named = named or nil }
+	m.lore = { line = line, quest = q.title, questID = q.id, named = named or nil }
+	-- THE QUEST'S TEXT ONCE, NOT ONCE AN ENEMY (2026-11-06, audit: 121 copies
+	-- of 87 texts in the saved file). Every enemy a quest names took a copy
+	-- of its whole story. The story is kept once, by the quest's number
+	-- (J.LoreText reads it); a quest with no number keeps it on the enemy.
+	local s = q.id and J.Store()
+	if s then
+		s.loreTexts = s.loreTexts or {}
+		s.loreTexts[q.id] = q.text
+	else
+		m.lore.text = q.text
+	end
 	return true
+end
+
+-- the story of the quest an enemy's lore came from
+function J.LoreText(m)
+	local l = m and type(m.lore) == "table" and m.lore or nil
+	if not l then
+		return nil
+	end
+	if type(l.text) == "string" then
+		return l.text
+	end
+	local s = l.questID and J.Store()
+	local t = s and s.loreTexts and s.loreTexts[l.questID]
+	return type(t) == "string" and t or nil
+end
+
+-- an older book's quest stories, moved off its enemies into one place
+function J.PackLore(s)
+	local n = 0
+	for _, m in pairs(s.enemies or {}) do
+		local l = type(m) == "table" and m.lore or nil
+		if type(l) == "table" and l.questID and type(l.text) == "string" then
+			s.loreTexts = s.loreTexts or {}
+			s.loreTexts[l.questID] = s.loreTexts[l.questID] or l.text
+			l.text = nil
+			n = n + 1
+		end
+	end
+	return n
 end
 
 -- the quests kept so far, as a count that moves whenever one is kept
@@ -673,6 +713,10 @@ function J.Store()
 		J.PackAll(s)
 		s.spotsPacked = true
 	end
+	if not s.lorePacked then
+		J.PackLore(s)
+		s.lorePacked = true
+	end
 	return s
 end
 
@@ -783,6 +827,24 @@ function J.DropRealms(gone)
 	end
 	if not next(s.chars) then
 		s.quests, s.questOrder = nil, nil
+	end
+	-- the stories no enemy's lore comes from any more
+	if s.loreTexts then
+		local used = {}
+		for _, m in pairs(s.enemies or {}) do
+			local l = type(m) == "table" and m.lore or nil
+			if type(l) == "table" and l.questID then
+				used[l.questID] = true
+			end
+		end
+		for id in pairs(s.loreTexts) do
+			if not used[id] then
+				s.loreTexts[id] = nil
+			end
+		end
+		if not next(s.loreTexts) then
+			s.loreTexts = nil
+		end
 	end
 	return chars, enemies
 end
@@ -2044,7 +2106,7 @@ function J.SearchFields(m)
 	end
 	if type(m.lore) == "table" then
 		add(m.lore.quest, 1)
-		add(m.lore.text, 1)
+		add(J.LoreText(m), 1)
 	end
 	return fields
 end

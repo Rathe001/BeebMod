@@ -143,7 +143,7 @@ function Fo.Apply()
 			elseif not Fo.broken then
 				Fo.broken = face.key
 				if BT.Util and BT.Util.Print then
-					BT.Util.Print(("%s would not load. Restart the game, because a /reload does not find new files. Until then, BeebMod uses the game's font.")
+					BT.Util.Print(("%s would not load. Restart the game. A /reload doesn't load new files. Until then, BeebMod uses the game's font.")
 						:format(face.label))
 				end
 				return Fo.Apply()

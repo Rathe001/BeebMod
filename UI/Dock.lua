@@ -386,11 +386,11 @@ function B.SlimLine(f, icon)
 	f:SetHeight(S.h)
 	local text = BT.Widgets.Label(f, "", "small")
 	text:SetJustifyH("LEFT")
-	text:SetTextColor(0.79, 0.83, 0.81)
+	BT.Ink(text, "soft")
 	local eta = BT.Widgets.Label(f, "", "small")
 	eta:SetPoint("TOPRIGHT", f, "TOPRIGHT", -S.right, -S.top)
 	eta:SetJustifyH("RIGHT")
-	eta:SetTextColor(0.76, 0.82, 0.80)
+	BT.Ink(eta, "soft")
 	-- as tall as the left words, so both sit on one line (Josh 2026-09-29)
 	eta:SetHeight(S.textH - 2)
 	-- A LONG NAME STOPS SHORT OF THE RIGHT-HAND TEXT (Josh 2026-09-22): the
@@ -520,7 +520,7 @@ end
 -- a row is its cell and the one-pixel line under it; the column lines stop
 -- this far short of the lines above and below the grid
 local ROW_H, COLUMN_GAP = CHIP_H + 1, 2
-local CHIP_TEXT = { 0.86, 0.88, 0.92 }
+local CHIP_TEXT = BT.TEXT.body
 local CHIP_STATE = { warn = { 0.95, 0.78, 0.35 }, alert = { 0.95, 0.40, 0.35 } }
 
 -- what a cell shows, as one comparable string; nil when it cannot be said

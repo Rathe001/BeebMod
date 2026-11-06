@@ -73,6 +73,16 @@ function C.RaceName(key)
 	return RACE_NAMES[key] or (key:gsub("(%l)(%u)", "%1 %2"))
 end
 
+-- THE BARS IN THE ACCENT (2026-11-06, audit): a fixed green, so with the
+-- class colour as accent the chart stayed green while every other panel
+-- changed. A bar is the accent a little darker, as the green was; the bar
+-- you picked is the accent itself.
+local BAR_SHADE = 0.8
+local function barColour()
+	local a = BT.Widgets.ACCENT
+	return a[1] * BAR_SHADE, a[2] * BAR_SHADE, a[3] * BAR_SHADE
+end
+
 local function rowColor(mode, key)
 	local S = BT.Stats
 	if key == S.UNKNOWN or key == S.UNGUILDED or key == S.OTHER then
@@ -87,7 +97,7 @@ local function rowColor(mode, key)
 			return f.color[1], f.color[2], f.color[3]
 		end
 	end
-	return 0.18, 0.62, 0.48
+	return barColour()
 end
 
 -- Builds into a parent frame the Census window owns; returns a table with
@@ -622,10 +632,10 @@ function C.Refresh(view, census)
 			row.pickEdge:SetShown(row.picked)
 			if muted(r) then
 				row.bar:SetColorTexture(0.35, 0.4, 0.38, 0.5)
-				row.name:SetTextColor(0.42, 0.47, 0.45)
+				BT.Ink(row.name, "faint")
 			else
 				row.bar:SetColorTexture(rowColor(view.mode, r.key))
-				row.name:SetTextColor(0.91, 0.93, 0.92)
+				BT.Ink(row.name, "ink")
 			end
 			-- share of everyone counted in THIS chart, not of the whole book:
 			-- percentages that do not add to 100 are worse than no percentages
@@ -739,9 +749,9 @@ function C.PaintTiles(view, census)
 				if chosen == k then
 					b.words:SetTextColor(accent[1], accent[2], accent[3])
 				elseif b.hovered and b.live then
-					b.words:SetTextColor(0.93, 0.95, 0.94)
+					BT.Ink(b.words, "ink")
 				else
-					b.words:SetTextColor(0.72, 0.76, 0.74)
+					BT.Ink(b.words, "soft")
 				end
 			end
 			t.none:SetShown(not any)
@@ -773,7 +783,8 @@ function C.PaintTiles(view, census)
 			elseif on then
 				b.bar:SetColorTexture(accent[1], accent[2], accent[3], 1)
 			else
-				b.bar:SetColorTexture(0.18, 0.62, 0.48, filtering and 0.45 or 1)
+				local cr, cg, cb = barColour()
+				b.bar:SetColorTexture(cr, cg, cb, filtering and 0.45 or 1)
 			end
 		end
 	end

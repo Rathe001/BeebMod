@@ -551,7 +551,7 @@ local function headerRule(f)
 		return
 	end
 	keepText(words)
-	words:SetTextColor(0.62, 0.68, 0.66)
+	BT.Ink(words, "quiet")
 	if not o.rule and f.CreateTexture then
 		o.rule = f:CreateTexture(nil, "ARTWORK")
 		o.rule.beebs = true
@@ -884,7 +884,7 @@ local function dressFrame(frame)
 	local title = _G.CharacterFrameTitleText
 	if title and title.SetTextColor then
 		keepText(title)
-		title:SetTextColor(0.86, 0.88, 0.92)
+		BT.Ink(title, "body")
 	end
 end
 
@@ -1323,8 +1323,8 @@ local function statRow(row)
 		for _, fs in ipairs({ row.Label, row.Value }) do
 			keepText(fs)
 		end
-		row.Label:SetTextColor(0.55, 0.62, 0.60)
-		row.Value:SetTextColor(0.86, 0.88, 0.92)
+		BT.Ink(row.Label, "muted")
+		BT.Ink(row.Value, "body")
 	end
 	if M.ResistRow then
 		M.ResistRow(row)
@@ -2179,7 +2179,7 @@ local function layoutTitle(frame)
 			justified(text, "LEFT")
 			sized(text, 11, "")
 			keepText(text)
-			text:SetTextColor(0.55, 0.62, 0.60)
+			BT.Ink(text, "muted")
 		end
 	end
 end
@@ -2378,7 +2378,7 @@ local function layoutPages(frame, left, right)
 			keepText(label)
 			local enabled = not box.IsEnabled or box:IsEnabled()
 			if enabled then
-				label:SetTextColor(0.86, 0.88, 0.92)
+				BT.Ink(label, "body")
 			end
 			sized(label, 11)
 			place(label, { { "LEFT", box, "RIGHT", 6, 0 } })

@@ -335,7 +335,7 @@ M.FRIEND_NPC = { 0.56, 0.74, 0.60 }
 M.FRIEND_SIZE = { player = 13, npc = 10, level = 12, sub = 9 }
 -- the line under an NPC's name, grey (Josh 2026-10-04: "Can you make the NPC
 -- titles gray?"): light enough to read on the ground at its small size
-M.FRIEND_SUB = { 0.66, 0.68, 0.67 }
+M.FRIEND_SUB = BT.TEXT.quiet
 -- and a player's guild under theirs, in the guild chat's green, as on their
 -- tooltip (Modules/Tooltips/Tooltips.lua, M.GUILD)
 M.FRIEND_GUILD = { 0.25, 1, 0.25 }

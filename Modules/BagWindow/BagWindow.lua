@@ -39,7 +39,7 @@ local M = BT.Module({
 local FILL = BT.Widgets.FILL
 local RIM = BT.Widgets.RIM
 local CROP = 0.08
-local MUTED = { 0.55, 0.60, 0.58 }
+local MUTED = BT.TEXT.muted
 
 -- ---------------------------------------------------------------------------
 -- Which frames

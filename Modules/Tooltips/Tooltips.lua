@@ -38,7 +38,7 @@ local M = BT.Module({
 -- dressHeader); none where the furniture kit is not loaded (the headless tests)
 M.Headers = BT.Furniture and BT.Furniture.New({ panelAlpha = 0.96 }) or nil
 
-local DIM = { 0.62, 0.68, 0.65 }
+local DIM = BT.TEXT.quiet
 
 -- THE TOOLKIT'S OWN SKIN, ON THE TOOLTIP (Josh 2026-09-19). The compact
 -- tooltip was the right shape in the wrong clothes: two tight lines inside
@@ -549,7 +549,7 @@ M.RANK_TAG = {
 	rare = { "Rare", "rare" }, worldboss = { "Boss", "elite" },
 }
 -- a dead unit's name and level, greyed
-M.DEAD_INK = { 0.56, 0.61, 0.58 }
+M.DEAD_INK = BT.TEXT.muted
 
 -- the classification, or "normal" when the client will not say
 local function classOf(unit)
@@ -794,7 +794,7 @@ end
 -- were an objective (Josh 2026-09-19).
 local NOT_A_QUEST = { "Press F6", "Right click", "Frame Settings" }
 
-local QUEST_TITLE = { 1.00, 0.83, 0.25 }
+local QUEST_TITLE = BT.TEXT.goldSoft
 local QUEST_DONE = { 0.36, 0.70, 0.48 }
 
 -- EVERYTHING ELSE THE CLIENT SAID (Josh 2026-09-19). Rebuilding a tooltip
@@ -1217,8 +1217,8 @@ end
 -- The quest rows are in the tooltip's bright ink. This row is in grey, its
 -- paw and its metal toned down by M.HUSH, and a row with no kills greyer still.
 M.EXPEDITION = { 0.44, 0.64, 0.80 }
-M.KILLS_INK = { 0.62, 0.68, 0.65 }
-M.NO_KILLS = { 0.50, 0.55, 0.53 }
+M.KILLS_INK = BT.TEXT.quiet
+M.NO_KILLS = BT.TEXT.dim
 M.HUSH = 0.7
 
 -- AND SMALLER, SET APART (Josh 2026-11-05: "Maybe make the text slightly
@@ -1930,9 +1930,9 @@ local function quietFooter(tip)
 		if kind and fs.SetTextColor then
 			BT.UnitTip.SizeLine(tip, i, FOOT)
 			if kind == "beta" then
-				fs:SetTextColor(0.34, 0.39, 0.37) -- nearly gone; it is not about the item
+				BT.Ink(fs, "ghost") -- nearly gone; it is not about the item
 			else
-				fs:SetTextColor(0.55, 0.60, 0.58)
+				BT.Ink(fs, "muted")
 			end
 		end
 	end
@@ -2198,13 +2198,13 @@ M.ITEM = {
 local function lineFor(px)
 	return px - (BT.Fonts.Size(px) - px)
 end
-local ITEM_INK = { 0.91, 0.93, 0.92 }
-local ITEM_SUB = { 0.65, 0.71, 0.68 }
-local ITEM_HEAD = { 0.49, 0.55, 0.53 }
+local ITEM_INK = BT.TEXT.ink
+local ITEM_SUB = BT.TEXT.quiet
+local ITEM_HEAD = BT.TEXT.dim
 local ITEM_GREEN = { 0.12, 1, 0 }
 local ITEM_MAKER = { 0.37, 0.68, 0.37 }
 -- a spell's description, kept where it says more than its figures: quieter
-local ITEM_QUIET = { 0.58, 0.63, 0.61 }
+local ITEM_QUIET = BT.TEXT.muted
 
 -- some words in a colour of their own, inside a line of another
 local function hex(rgb, words)
@@ -3865,7 +3865,7 @@ end
 M.FIGURE_INK = {
 	dps = { 1.00, 0.54, 0.48 }, hps = { 0.50, 0.91, 0.60 },
 	mana = { 0.56, 0.71, 1.00 }, energy = { 1.00, 0.88, 0.48 }, rage = { 1.00, 0.44, 0.53 },
-	level = { 0.76, 0.80, 0.78 },
+	level = BT.TEXT.soft,
 }
 
 -- which of mana, energy and rage the word the client wrote a cost in is,
@@ -4537,7 +4537,7 @@ M.dressed = {}
 -- <name>TextRightN, so anything else with words in it is chrome. The art
 -- behind it goes, our own surface takes its place, and the words are set in
 -- the same quiet green as every other label in the toolkit.
-local TAB_TEXT = { 0.55, 0.63, 0.59 }
+local TAB_TEXT = BT.TEXT.muted
 
 local function isOwnLine(fs, tipName)
 	if not (tipName and fs.GetName) then

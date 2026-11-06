@@ -78,7 +78,7 @@ W.ABOUT = {
 		tag = "Group, target and nameplates",
 		line = "Player, party, target and raid frames, plus nameplates.",
 		adds = { "Player, party, pet and raid frames", "Target, focus, main tank and boss frames",
-			"Red rim on casts you should interrupt", "Your DoTs above each nameplate",
+			"Red rim on casts you should interrupt", "Your DoTs and crowd control above each nameplate",
 			"Buff and debuff tray next to the dock", "Personal resource bar with a range icon" },
 		slides = {
 			{ file = "Interface\\AddOns\\BeebMod\\Art\\Features\\unitframes1", caption = "Party, target and nameplates" },
@@ -272,9 +272,9 @@ local ART_U = 455 / 512
 
 -- the design's colours
 local WELL = { 0.05, 0.075, 0.067, 0.95 }
-local GREY = { 0.49, 0.55, 0.53 }
-local SOFT = { 0.73, 0.78, 0.76 }
-local BRIGHT = { 0.93, 0.95, 0.94 }
+local GREY = BT.TEXT.dim
+local SOFT = BT.TEXT.soft
+local BRIGHT = BT.TEXT.ink
 -- a square while its feature is off (the settings rail's), an add's, and a dot
 local OFF_SQUARE = { 0.23, 0.27, 0.25 }
 local OFF_ADD = { 0.29, 0.35, 0.33 }
@@ -559,7 +559,7 @@ function W.Build()
 	-- the header: the title, the question under it, and how many are on
 	frame.title = frame:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightLarge")
 	frame.title:SetPoint("TOPLEFT", PAD, -TOP)
-	frame.title:SetTextColor(0.91, 0.93, 0.92)
+	BT.Ink(frame.title, "ink")
 	frame.title:SetText("Welcome to |cff74c0fcBeeb|rMod")
 	frame.question = Wd.Label(frame, "Pick the parts you want. Click one to see what it does.", "small",
 		0.60, 0.66, 0.64)

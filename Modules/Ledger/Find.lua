@@ -24,6 +24,8 @@ local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Ledger/Find.lua")
 
 local U, N = BT.Util, BT.Notes
+-- the warm ink a note is written in, in the panel and on its card
+local NOTE_INK = { 0.90, 0.88, 0.80 }
 
 -- THE LEDGER'S OWN BOOK, AND THE CENSUS'S WHEN THERE IS ONE (Josh
 -- 2026-09-26). What you wrote is on the Ledger's rows (Modules/Ledger/
@@ -214,7 +216,7 @@ local function buildEditor(parent, anchor, label, paint)
 		local c = BT.Widgets.ACCENT
 		self.text:SetTextColor(c[1], c[2], c[3])
 	end)
-	e.newTag:SetScript("OnLeave", function(self) self.text:SetTextColor(0.42, 0.48, 0.45) end)
+	e.newTag:SetScript("OnLeave", function(self) BT.Ink(self.text, "faint") end)
 	e.newTag:SetScript("OnClick", function() B.ShowTagMaker(true) end)
 
 	e.maker = CreateFrame("Frame", nil, e)
@@ -281,7 +283,7 @@ local function buildEditor(parent, anchor, label, paint)
 			pcall(e.note.SetFont, e.note, face, 11, flags)
 		end
 	end
-	e.note:SetTextColor(0.90, 0.88, 0.80)
+	e.note:SetTextColor(NOTE_INK[1], NOTE_INK[2], NOTE_INK[3])
 	e.note:SetScript("OnEnterPressed", function(self)
 		B.Timed("Enter in the note panel", function()
 			B.SaveNote()
@@ -327,7 +329,7 @@ local function buildEditor(parent, anchor, label, paint)
 			e.left:SetTextColor(0.95, 0.72, 0.30)
 		else
 			e.left:SetText(near and (left == 1 and "1 left" or ("%d left"):format(left)) or "")
-			e.left:SetTextColor(0.50, 0.56, 0.53)
+			BT.Ink(e.left, "dim")
 		end
 		e.left:SetShown(near)
 		e.note:SetTextInsets(2, near and 46 or 2, 0, 0)
@@ -612,13 +614,13 @@ local function refreshEditor()
 			row.hollow:Hide()
 			row.bg:SetColorTexture(c[1], c[2], c[3], 0.14)
 			row.bg:Show()
-			row.text:SetTextColor(0.92, 0.96, 0.94)
+			BT.Ink(row.text, "ink")
 		else
 			row.swatch:SetColorTexture(c[1], c[2], c[3], 0.45)
 			row.hollow:SetColorTexture(0.05, 0.07, 0.06, 1)
 			row.hollow:Show()
 			row.bg:Hide()
-			row.text:SetTextColor(0.42, 0.48, 0.45)
+			BT.Ink(row.text, "faint")
 		end
 		row.text:SetText(f and f.label or row.tagKey)
 	end
@@ -902,13 +904,13 @@ local function layTags(card, p, open)
 				t.hollow:Hide()
 				t.bg:SetColorTexture(c[1], c[2], c[3], 0.14)
 				t.bg:Show()
-				t.text:SetTextColor(0.92, 0.96, 0.94)
+				BT.Ink(t.text, "ink")
 			else
 				t.swatch:SetColorTexture(c[1], c[2], c[3], 0.45)
 				t.hollow:SetColorTexture(0.07, 0.10, 0.09, 1)
 				t.hollow:Show()
 				t.bg:Hide()
-				t.text:SetTextColor(0.42, 0.48, 0.45)
+				BT.Ink(t.text, "faint")
 			end
 			t:SetWidth(w)
 			t:ClearAllPoints()
@@ -1411,7 +1413,7 @@ function B.Build(parent, shell)
 		card.note:SetWordWrap(false)
 		-- a shade warmer than the interface around it, the way a quotation
 		-- sits apart from the page
-		card.note:SetTextColor(0.90, 0.88, 0.80)
+		card.note:SetTextColor(NOTE_INK[1], NOTE_INK[2], NOTE_INK[3])
 		card.note:SetJustifyH("RIGHT")
 		card.credit = label(card, "", "small", 0.42, 0.48, 0.45)
 		card.credit:SetPoint("TOPRIGHT", card, "TOPRIGHT", -14, -46)

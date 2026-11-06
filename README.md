@@ -1,131 +1,150 @@
 # BeebMod
 
-Small utilities for WoW: Forever. You set them all in one window. Click the
-cog in the dock or type `/bt` to open it.
+A UI addon for WoW: Forever. Click the cog in the dock or type `/bt` to open
+its settings.
 
 ## Features
 
-BeebMod is opinionated. It asks whether you want each part. It decides how
-each part looks. It has five features in two groups:
+BeebMod has five features in two groups:
 
 - **Interface:** the Dock, Unit frames and Game frames
 - **Journals:** the Ravenholdt Ledger and Nesingwary's Expedition
 
-On your first login BeebMod asks which features you want. Its window lists
-the five under the same two headings, each with a few words on it and its
-switch. Click a feature to see pictures of it, a line on what it does and
-what it adds. The settings window's rail lists
-General, then the features under their headings. Each feature has one page:
-its switch at the top right, then a switch for each of its parts, a part of a
-part indented under it. Switch a feature off and everything in it goes off.
-Each part keeps its own setting while the feature is off. No feature needs
-another.
+On your first login BeebMod asks which features you want. Click a feature in
+that window to see pictures of it and what it adds.
 
-The window's title bar has a search box. Type a word, such as pets or gold,
-and BeebMod lists every row with that word in its name or its line, under its
-feature's name. Each row has its switch, the same one as on its page. A part
-comes with the row it is a part of, and a feature's name brings its whole
-page. Press Escape, click the cross in the box, or click a page on the rail
-to go back.
+The settings window lists General first, then the features under their
+headings. Each feature has one page. Its switch is at the top right. Under it
+is a switch for each of its parts, with a part's options indented under it.
+Switch a feature off and everything in it goes off. Each part keeps its own
+setting while the feature is off. No feature needs another.
 
-The **core** is what every feature would otherwise build for itself: the
-settings window, the dock's header, the look of a button and a pill, and
-**General**. General holds the colours of every panel, one Size for every
-panel (the dock, the frames, the buffs and the tooltips), and a Positions
-button that puts the dock, the main tanks, the bag windows and the character
-sheet back where they start. Shift-drag any of them to move it. The other
-unit frames go where the game's Edit Mode puts the frames they replace. When
-you move those in Edit Mode, BeebMod's follow. The typeface
-is Google Sans. The dock's logo and cog are always on screen. With the Dock
-off, or every feature off, they are all that BeebMod shows. Click the cog to
-get back to the settings.
+The search box in the title bar finds any row by name. Type a word, such as
+pets or gold, to list every row with that word in its name or its line. Each
+row in the list has its own switch. Press Escape, click the cross in the box,
+or click a page on the rail to go back.
 
-**Dock** is the panel at the side of the screen and what is in it. Its page
-lists the dock's rows from top to bottom, and dragging a row moves it in the
-dock.
+### General
 
-| row | what it is |
+- Panel colours
+- One Size for the dock, unit frames, buffs and tooltips
+- **Positions** puts the dock, main tanks, bag window and character sheet
+  back where they started. Shift-drag any of them to move it.
+- **Double-click to fish:** with a fishing pole equipped, double right-click
+  the world to cast Fishing. It doesn't work in combat or on a player or NPC.
+
+The other unit frames follow Edit Mode. Move the default frames there and
+BeebMod's go with them.
+
+The typeface is Google Sans. The dock's logo and cog always stay on screen.
+With the Dock off, or every feature off, they are all BeebMod shows. Click
+the cog to open the settings.
+
+### Dock
+
+A panel at the side of your screen. Its page lists the rows from top to
+bottom. Drag a row on that page to move it in the dock.
+
+| Row | What it shows |
 |---|---|
-| **Clock** | In the dock's header. It shows local or server time; click it to switch. |
-| **Minimap** | The client's map, square, moved into the dock. |
-| **Addon buttons** | Other addons' minimap buttons, in one line. |
-| **Experience** | The first and largest row: a shield with your level on it, the time to the next level at your XP per hour, the XP bar with rested XP ahead of it, and how much XP is left. Its tooltip lists zones and dungeons for your level. Right-click it for a new session. |
-| **PvP**, **Reputation** | Slim lines under Experience: your PvP rank with its insignia and how far to the next, and your standing with the faction you watch. |
-| **Expedition**, **Ledger** | Each journal's slim line: your rank's badge, your rank and your points. Click it to open the journal. |
-| **Metrics** | A grid of readouts, three to a row, each with its own switch: gold, bag space and your class's reagents, durability, average item level, pick-pocket takings (rogues), movement speed, frame rate and latency. Right-click the gold for a new session, or Pick Pocket to clear its record. |
-| **Quest tracker** | BeebMod hides the client's tracker and draws your quests in the dock, under their zones, lowest level first. |
-| **Micro menu** | The game's menu buttons, in the dock. |
+| **Clock** | Local or server time, in the dock's header. Click it to switch. |
+| **Minimap** | Square minimap with coordinates. |
+| **Addon buttons** | Other addons' minimap buttons in one row. |
+| **Experience** | Your level on a shield. The XP bar with rested XP. Time to level at your XP per hour. Its tooltip lists zones and dungeons for your level. Right-click it to reset the session. |
+| **PvP**, **Reputation** | Your PvP rank with its insignia and progress to the next. Your standing with the faction you watch. |
+| **Expedition**, **Ledger** | Each journal's rank badge, rank and points. Click a line to open its journal. |
+| **Metrics** | Small stats in rows of three, each with its own switch: gold, bag space with your class's reagents, durability, item level, Pick Pocket takings (rogues), movement speed, FPS and latency. Right-click the gold or Pick Pocket to reset its session. Shift-right-click Pick Pocket twice to clear its all-time record. |
+| **Quest tracker** | Your quests grouped by zone, lowest level first. The game's tracker is hidden. |
+| **Micro menu** | The game's menu buttons. |
 
-The Dock's page has one more switch. **Fade in combat** fades the dock to 70%
-in a fight until you point at it.
+**Fade in combat**, on the Dock's page, fades the dock to 70% in a fight
+until you point at it.
 
-**Unit frames** are what you watch in a fight.
+### Unit frames
 
-| part | what it is |
+| Part | What it is |
 |---|---|
-| **Unit frames** | You at the top of the party column, even alone, and each member with a pet slot and their target beside them. Target, focus, raid, main tank and boss frames, and your own cast bar, with a switch each for party, raid, main tanks, bosses and your cast bar. Icons for resurrection, summons and master looter, your threat on the target, and a hunter pet's happiness. The target, focus and boss frames fade when none of your class's skills reaches them, such as a hunter's Auto Shot or Raptor Strike, and the party and raid fade when the game says they are out of range. Switch them off, or one type of frame off, and the game's own frames come back. |
-| **Buffs** | Your buffs, debuffs and weapon enchants in a tray beside the dock, in two lines. The soonest to run out are at the left, and the permanent ones sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
-| **Nameplates** | Enemy nameplates in BeebMod's look, with the enemy's level, name and health. A ring means it is attacking you, and a white outline marks your target; the others step back while you have one. Casts show under the plate with the spell's icon and name, and a red rim marks a cast the game says to interrupt. An enemy player's guild sits under their bar in green, out of the way while they cast. Your damage over time shows above the plate, with your crowd control, such as Sap or Polymorph, under it in light blue. Friendly nameplates show a name and no bar. A player's name is in class colour, with their level before it and their guild under it in green. An NPC's is smaller and green, with a picture for what it does, such as selling, training or flying you, and its title under it. Another player's pet has its owner's name under it, and totems have no name. Friendly nameplates, and pets and minions, have a switch each. The game has at most 40 plates out at once, so in a crowded city some players have none. |
-| **Resource display** | Your own nameplate, flat, with combo points under it (rogues, cat druids). An icon to its left says how near your target is: green crossed swords in melee range, a green crosshair in reach of your ranged attack or spells (Throw or Shoot for a warrior or rogue, Auto Shot for a hunter, your furthest-reaching spell for a caster), a red no-action sign when it is too close to shoot and too far to hit, and a red crosshair out of reach. With no target it is a grey, faint crosshair. |
-| **Damage meter** | The client's own meter, flat, with each row's amount per second and the fight's length. |
+| **Unit frames** | Player, party, pet, target, focus, raid, main tank and boss frames, plus your cast bar. You are at the top of the party column, even alone. Each party member has a pet slot, with their target next to them. Party, raid, main tanks, bosses and the cast bar have a switch each. **Health and mana numbers**, under Party, adds them to your frame and your party's. Icons show resurrections, summons, the master looter, your threat on the target and a hunter pet's happiness. Target, focus and boss frames fade when none of your class's skills reach them, such as a hunter's Auto Shot or Raptor Strike. Party and raid frames fade when the game says they are out of range. Switch a frame off and the game's own comes back. |
+| **Buffs** | Your buffs, debuffs and weapon enchants next to the dock. Buffs are on the top line, debuffs under them. The soonest to run out are at the left. Permanent buffs sit against the dock, A to Z. Switch it off and the game's buff bar comes back. |
+| **Nameplates** | Enemy nameplates with the enemy's level, name and health. A ring means it is attacking you. A white outline marks your target. The other plates fade while you have one. Casts show under the plate with the spell's icon and name. A red rim marks casts you should interrupt. An enemy player's guild is under their bar in green. Your DoTs show above the plate. Your crowd control, such as Sap or Polymorph, shows under them in light blue. |
+| **Friendly nameplates** | A name and no bar. A player's name is in class colour, with their level before it and their guild under it. An NPC's name is smaller and green, with an icon for what it does, such as selling, training or flying you. Another player's pet shows its owner's name. Totems have no name. Friendly nameplates have a switch. So do pets and minions. The game shows at most 40 plates at once, so in a crowded city some players have none. |
+| **Resource display** | Your personal resource bar, restyled, with combo points for rogues and cat druids. An icon on its left shows how far your target is. Green crossed swords: in melee range. Green crosshair: in range of your ranged attack or spells. Red no-action sign: too close to shoot and too far to hit. Red crosshair: out of range. With no target it is a faint grey crosshair. Warriors and rogues use Throw or Shoot as their ranged attack, hunters Auto Shot, casters their longest-range spell. |
+| **Damage meter** | The game's damage meter, restyled, with per-second numbers and the fight's length. |
 
-**Game frames** are the game's own windows and menus, drawn to match BeebMod.
+### Game frames
 
-| part | what it is |
+The game's own windows and menus, restyled to match. Every button works as
+before.
+
+| Part | What it is |
 |---|---|
-| **Action bars**, **Bag window**, **Chat** | The client's own, flat like the rest of BeebMod. Every button works as before. You drag the bag window by its title and it stays where you leave it. Your four bag slots, the reagent bag's and the keyring sit in a row along the bottom of the backpack. Drag a bag onto a slot to equip it, or off one to take it out. The game's bag bar is hidden while the bag window or the Bags readout is on. The chat window sits flush in the bottom-left corner. Move it in Edit Mode and it stays where you leave it; let go of it near the corner and it goes flush into it. In chat, guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a chat window's corner opens that window's chat in a large window, where Select text lets you copy lines. |
-| **Character sheet** | Item level on every slot, and BeebMod's look. |
-| **Tooltips** | Unit tooltips rebuilt in BeebMod's look: the name and level, then small tags for what they are and what state they are in, then a row each for a quest objective, your kills of an enemy, and your note. Elites and rares get a gold or silver border. Item tooltips, and the Equipped tooltips beside them, are written again in the spell tooltips' look: the item's icon beside its name, its DPS or armor at the right with its item level (ILVL) under it, how it binds (BoE, BoP, Soulbound) and whether it is unique as small tags under its kind, a row of cells for its damage, speed and the level it needs, then its stats and effects as plain lines, and durability as a bar beside the sell price. A potion's cells say what it restores and its cooldown. An item with none of those has no cells. |
-| **Game menu**, **Dropdown menus** | The menu Escape opens, and every dropdown and right-click menu. The game doesn't let addons restyle some menu buttons, so those keep the game's look. |
+| **Action bars** | Restyled buttons with their hotkeys. |
+| **Bag window** | All bags in one window. Drag it by its title. Your four bag slots, the reagent bag slot and the keyring sit in a row along the bottom. Drag a bag onto a slot to equip it, or off a slot to take it off. The game's bag bar is hidden while the bag window or the Bags stat is on. |
+| **Chat** | Restyled windows with short channel names, flush in the bottom-left corner. Move a window in Edit Mode and it stays where you leave it. Let go of it near the corner and it goes flush into it. Guild names such as <New Horizon> are green. Click one to put its /who in the chat box. Click a web address to copy it. The expand mark in a window's corner opens its chat in a large window. Select text there lets you copy lines. |
+| **Character sheet** | Item level on every slot. |
+| **Tooltips** | Unit tooltips show the name and level, small tags for what the unit is, then rows for quest objectives, your kills of an enemy and your note. Elites have a gold border, rares a silver one. Item tooltips and the Equipped tooltips next to them look like the spell tooltips. The icon is next to the name, with DPS or armor at the right and item level under it. Small tags say how it binds (BoE, BoP, Soulbound) and whether it is unique. A row of cells holds damage, speed and required level. Stats and effects follow as plain lines, with durability as a bar next to the sell price. A potion's cells show what it restores and its cooldown. Spell tooltips show DPS or HPS, plus damage or healing per point of mana, energy or rage. |
+| **Game menu**, **Dropdown menus** | The menu Escape opens. Every dropdown and right-click menu. Some menu buttons keep the game's look because the game doesn't let addons restyle them. |
+| **Dungeon entrances** | Pins on the world map with each dungeon's level range. Hover over a pin for its name. Untick "Dungeon Entrances" in the map's filter menu to hide them. |
 
-**The journals** are the Ledger and the Expedition. Their windows are the
-same shape. The top row has the journal's name and its tabs. Under it is your
-rank, with a bar to the next one and three numbers for the journal; click it
-to see the commendations. Each tab has a list on the left that picks what the
-page shows. A new rank shows a
-toast with its badge, and a sound. A commendation or a mastery shows
-on the journal's line in the dock for a few seconds; with the line off, a
-small bar at the top of the screen shows it. Several at once are one notice.
-Rank toasts and their sound have a switch each on the journal's page.
+### The journals
 
-**The Ravenholdt Ledger** (the Ledger, for short) keeps a record of everyone
-you see, and notes, tags and a rating on the people you meet. Its window has
-three tabs. **Charts** shows your
-realm by class, race, level, guild and zone; pick the chart on the left.
-Tiles across the top show the faction, gender and level split, and a click on
-any part of one narrows every chart to it. **Find people** searches by name,
-guild or a word you wrote, and the list on the left shows everyone, your
-notes, or the people with one tag. **Commendations** lists what the Ledger
-rewards: characters recorded, notes, tags, groups and duels. Every 100 characters you record is
-worth 1 point, a note 2 and a tag 1, and each commendation its own. The
-points set your rank, from Fledgling to Eye of Ravenholdt, and your
-characters on one realm share it. Open the window from the Ledger's line in
-the dock. BeebMod never shares any of it. It holds only the people you saw, in one book for
-each realm, and so for each ruleset, with both factions in it.
-Recording everyone you see is a part with its own switch. Your notes,
-tags and ratings are kept in a book of their own (`BeebModDB.ledger`), so
-they work with it off. To write them, right-click a player's frame, or their
-name in chat or a list, and point at **Ledger** at the foot of the menu. Tick
-a tag, or choose **Write a note**, which opens a small box under the frame.
-A click on **Ledger** itself opens the same box, with every tag in it.
-Your note and tags show on the person's tooltip, and as a mark at the top
-right of the target frame. The Ledger also remembers the people you grouped
-with: a group counts once you've been together 5 minutes, or straight away in
-a dungeon. It keeps your duel scores too: how many duels you won and lost
-against each player.
+The Ledger and the Expedition have windows of the same shape. The top row has
+the journal's name and its tabs. Under it is your rank, a bar to the next
+one and three numbers. Click it to see the commendations. Each tab has a list
+on the left that picks what the page shows.
 
-**Nesingwary's Expedition** is a journal of every enemy you have
-killed. Each has a card with its model, its
-lore from the Warcraft Wiki and its mastery. On its page, a Model · Map switch shows the zone's map with
-a dot for each place you killed it, or a dungeon's loading screen. The page also lists
-the enemy's abilities, from the VMaNGOS database. Every unique kill and every commendation is worth points. The
-points set your rank, from Greenhorn to Expedition Leader. A line in the
-dock shows your points and rank. Click it to open the journal.
+A new rank shows a toast with its badge and a sound. A commendation or a
+mastery shows on the journal's line in the dock for a few seconds. With the
+line off, a small bar at the top of the screen shows it. Several at once show
+as one notice. Rank toasts and their sound have a switch each on the
+journal's page.
 
-**Made-up data** is for screenshots, and its switch is on the Testing page.
-It shows a made-up realm, notes, a journal and a full buff tray in every
-feature at once. BeebMod saves none of it. **Made-up people** on the same page shows the
-unit frames as a party or a raid.
+**The Ravenholdt Ledger** (the Ledger, for short) is a record of every player
+you see, with notes, tags and a rating on the people you meet. BeebMod never
+shares any of it. It keeps one book for each realm, so one for each ruleset,
+with both factions in it.
+
+- **Charts:** your realm by class, race, level, guild and zone. Pick the
+  chart on the left. Tiles across the top show the faction, gender and level
+  split. Click any part of one to narrow every chart to it.
+- **Find people:** search by name, guild or a word you wrote. The list on the
+  left shows everyone, your notes, or the people with one tag.
+- **Commendations:** characters recorded, notes, tags, groups and duels.
+
+Every 100 characters you record is worth 1 point. A note is worth 2 and a tag
+1. Each commendation has its own points. Points set your rank, from Fledgling
+to Eye of Ravenholdt. Your characters on one realm share a rank. Open the
+window from the Ledger's line in the dock.
+
+Recording everyone you see is a part with its own switch. Your notes, tags
+and ratings are kept in a book of their own (`BeebModDB.ledger`), so they
+work with it off. To write them, right-click a player's frame or their name
+in chat or a list. Point at **Ledger** at the bottom of the menu. Tick a tag,
+or choose **Write a note** to open a small box under the frame. Click
+**Ledger** itself for the same box with every tag in it. Your note and tags
+show on the player's tooltip. They also show as a mark at the top right of
+the target frame.
+
+The Ledger remembers who you grouped with. A group counts after 5 minutes
+together, or at once in a dungeon. It keeps your duel record against each
+player too.
+
+**Nesingwary's Expedition** is a journal of every enemy you have killed. Each
+enemy has a card with its model, its lore from the Warcraft Wiki and its
+mastery. On its page, the Model · Map switch shows the zone's map with a dot
+for each place you killed it, or a dungeon's loading screen. The page also
+lists the enemy's abilities, from the VMaNGOS database.
+
+Every unique kill and every commendation is worth points. Points set your
+rank, from Greenhorn to Expedition Leader. The Expedition's line in the dock
+shows your points and rank. Click it to open the journal.
+
+### Made-up data
+
+**Made-up data** is for screenshots. Its switch is on the Testing page. It
+fills every feature at once with a made-up realm, notes, journal and buff
+tray. BeebMod saves none of it. **Made-up people**, on the same page, shows
+the unit frames as a party or a raid.
 
 **The Testing page** is also where the debug tools are. Its buttons show
 sample notices and rank toasts, print BeebMod's reports to chat (What loaded, Over-time

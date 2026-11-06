@@ -277,7 +277,7 @@ function S.ResetPositions()
 			pcall(reset)
 		end
 	end
-	BT.Util.Print("Positions: the dock, unit frames, bags and character sheet are back where they started.")
+	BT.Util.Print("Positions: the dock, main tanks, bags and character sheet are back where they started.")
 end
 
 -- the tests want the rows without going through frames

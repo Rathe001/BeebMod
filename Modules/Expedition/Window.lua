@@ -30,7 +30,7 @@ local Bk = BT.Book
 local PAD = Bk.PAD
 local WIDTH, HEIGHT = Bk.WIDTH, Bk.HEIGHT
 
-local DIM = { 0.50, 0.55, 0.53 }
+local DIM = BT.TEXT.dim
 local WORDS = "|cff8a9894%s|r"
 -- the rank's mark, the tooltip's colours: a gold elite, a silver rare
 local RANK = {
@@ -52,7 +52,7 @@ V.CATEGORY = {
 	elite = { 1, 0.82, 0.30 },
 	dungeonelite = { 0.90, 0.72, 0.40 },
 	normal = { 0.58, 0.55, 0.48 },
-	critter = { 0.50, 0.55, 0.53 },
+	critter = BT.TEXT.dim,
 }
 
 -- an enemy's category: its key, its word and its colour
@@ -453,7 +453,7 @@ function V.LorePiece(page, i)
 	p.text:SetJustifyH("LEFT")
 	p.text:SetJustifyV("TOP")
 	p.text:SetWordWrap(true)
-	p.text:SetTextColor(0.80, 0.73, 0.60)
+	p.text:SetTextColor(Card.PARCHMENT[1], Card.PARCHMENT[2], Card.PARCHMENT[3])
 	page.lorePieces[i] = p
 	return p
 end
@@ -871,8 +871,9 @@ function V.Facts(npc, kills)
 		f.lore[#f.lore + 1] = { head = head, text = (e.text:gsub("%[(.-)%]", "%1")) }
 	end
 	local q = type(m.lore) == "table" and m.lore or nil
-	if q and q.text then
-		f.lore[#f.lore + 1] = { head = ("From the quest \"%s\""):format(q.quest or "?"), text = q.text }
+	local story = q and J.LoreText(m)
+	if story then
+		f.lore[#f.lore + 1] = { head = ("From the quest \"%s\""):format(q.quest or "?"), text = story }
 	end
 	if #f.lore == 0 then
 		f.lore[1] = { text = f.loreLine }
@@ -1830,7 +1831,7 @@ local function listRow(i)
 		pcall(fs.SetFont, fs, c.key == "name" and Card.FONT_NAME or Card.FONT_TYPE, c.key == "name" and 13 or 12, "")
 		fs:SetJustifyH(c.right and "RIGHT" or "LEFT")
 		fs:SetWordWrap(false)
-		fs:SetTextColor(0.79, 0.72, 0.58)
+		fs:SetTextColor(Card.PARCHMENT[1], Card.PARCHMENT[2], Card.PARCHMENT[3])
 		r.cells[c.key] = fs
 	end
 	r.cells.name:SetTextColor(1, 1, 1)

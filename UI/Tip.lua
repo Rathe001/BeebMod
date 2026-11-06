@@ -41,13 +41,13 @@ T.STATE = {
 	good = { 0.37, 0.76, 0.55 },
 	warn = { 0.89, 0.66, 0.29 },
 	bad = { 0.89, 0.38, 0.35 },
-	dim = { 0.49, 0.55, 0.53 },
+	dim = BT.TEXT.dim,
 	rested = { 0.55, 0.47, 0.96 },
 }
-local INK = { 0.91, 0.93, 0.92 }
+local INK = BT.TEXT.ink
 local INK2 = { 0.73, 0.78, 0.76 }
-local DIM = { 0.49, 0.55, 0.53 }
-local FAINT = { 0.36, 0.41, 0.39 }
+local DIM = BT.TEXT.dim
+local FAINT = BT.TEXT.ghost
 
 local N = function(v, fallback)
 	return BT.Pill.Number(v, fallback)

@@ -418,8 +418,16 @@ function M.PlaceItems()
 			local same = where and p and math.abs(p[1] - where[1]) < 0.5 and math.abs(p[2] - where[2]) < 0.5
 				and math.abs(p[3] - where[3]) < 0.5
 			if inCombatNow() then
-				-- nothing secure moves in a fight: seen only where it still is
-				pcall(b.SetAlpha, b, (want and same) and 1 or 0)
+				-- NOTHING SECURE MOVES IN A FIGHT. A button whose row is gone
+				-- (the quest left the list, the tracker was switched off: Josh
+				-- 2026-09-30) goes see-through where it stands. ONE WHOSE ROW
+				-- ONLY MOVED STAYS SEEN (2026-11-06, audit): see-through, the
+				-- game still sent it clicks, so a click on what looked like
+				-- an empty spot used a quest item. It goes to its row when the
+				-- fight ends.
+				if not want then
+					pcall(b.SetAlpha, b, 0)
+				end
 				if not same then
 					M.itemsPending = true
 				end

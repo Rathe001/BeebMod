@@ -177,15 +177,15 @@ local function styleTab(tab, plain, selected)
 	local text = tab.Text or (name and _G[name .. "Text"])
 	if text and text.SetTextColor then
 		if plain then
-			text:SetTextColor(1, 0.82, 0)
+			BT.Ink(text, "gold")
 		elseif selected then
-			text:SetTextColor(0.90, 0.98, 0.94)
+			BT.Ink(text, "lit")
 		else
 			-- DIM IS NOT UNREADABLE (Josh 2026-09-20). The unselected tabs
 			-- were 0.48 grey on a near-black fill, which is the contrast of a
 			-- disabled control - and a tab you cannot read is a tab you cannot
 			-- choose. Told apart by weight of colour, not by being hidden.
-			text:SetTextColor(0.70, 0.77, 0.74)
+			BT.Ink(text, "soft")
 		end
 	end
 	-- SHORTER THAN THE CLIENT MAKES THEM (Josh 2026-09-20). A chat tab is
@@ -783,7 +783,7 @@ end
 -- strip of the panel's own fill so a line of chat under them does not show
 -- through.
 local CONTROL, CONTROL_GAP = 14, 4
-local MARK = { 0.80, 0.84, 0.82 }
+local MARK = BT.TEXT.soft
 
 local function controlButton(holder, i, coord, flip, onClick, tip)
 	local b = holder.list[i]

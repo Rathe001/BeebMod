@@ -77,9 +77,9 @@ local function tabTint(tab, on, hot)
 		tab.fill:SetColorTexture(w[1], w[2], w[3], w[4])
 		tab.mark:Show()
 		if tab.off then
-			tab.label:SetTextColor(0.60, 0.66, 0.63)
+			BT.Ink(tab.label, "quiet")
 		else
-			tab.label:SetTextColor(0.85, 0.95, 0.90)
+			BT.Ink(tab.label, "lit")
 		end
 	else
 		tab.fill:SetColorTexture(0.06, 0.08, 0.07, hot and 0.9 or 0)
@@ -227,7 +227,7 @@ W.LABELS = {
 	micro = { "Micro menu", "The game's menu buttons" },
 	unitframes = { "Unit frames", "Player, target, focus and target of target frames" },
 	buffs = { "Buffs", "Buff and debuff tray next to the dock" },
-	nameplates = { "Nameplates", "Enemy nameplates with your DoTs and casts you should interrupt. "
+	nameplates = { "Nameplates", "Enemy nameplates with your DoTs, crowd control and casts you should interrupt. "
 		.. "Needs the game's nameplates on." },
 	resourcedisplay = { "Resource display", "Personal resource bar with combo points and a range icon" },
 	damagemeter = { "Damage meter", "The game's damage meter with per-second numbers" },
@@ -238,6 +238,7 @@ W.LABELS = {
 	tooltips = { "Tooltips", "Tags on players and NPCs. DPS on items and spells." },
 	gamemenu = { "Game menu", "The menu Escape opens" },
 	dropdowns = { "Dropdown menus", "Dropdown and right-click menus" },
+	entrances = { "Dungeon entrances", "Pins on the world map with each dungeon's level range" },
 	census = { "Record everyone you see", "Saves each player's class, race, level, guild and zone for the charts" },
 }
 
@@ -245,7 +246,7 @@ W.LABELS = {
 -- worked out in dockModules)
 W.PAGE_MODULES = {
 	unitframes = { "unitframes", "buffs", "nameplates", "resourcedisplay", "damagemeter" },
-	interface = { "bars", "bagwindow", "charsheet", "chat", "tooltips", "gamemenu", "dropdowns" },
+	interface = { "bars", "bagwindow", "charsheet", "chat", "tooltips", "gamemenu", "dropdowns", "entrances" },
 	-- the Ledger's rank toasts are its line's (Modules/Ledger/Line.lua)
 	ledger = { "census", "ledger", "ledgerline" },
 	expedition = { "expedition" },
@@ -1018,7 +1019,7 @@ local function testingPanel()
 	panel:SetAllPoints()
 	panel:Hide()
 	panels.testing = panel
-	header(panel, "Testing", "Made-up data to look at when you are alone, and BeebMod's own reports and records")
+	header(panel, "Testing", "Made-up data for when you are alone. BeebMod's own reports and records.")
 	testingPage(panel.body)
 	return panel
 end
@@ -1336,7 +1337,7 @@ local function searchField(parent)
 			end
 		end
 	end
-	f.box:SetTextColor(0.90, 0.92, 0.90)
+	BT.Ink(f.box, "ink")
 	f.ghost = f:CreateFontString(nil, "OVERLAY", "BeebModFontDisableSmall")
 	f.ghost:SetPoint("LEFT", 24, 0)
 	f.ghost:SetText("Search")

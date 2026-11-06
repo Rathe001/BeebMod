@@ -3,10 +3,59 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Druid mana in cat and bear form.** Your frame shows your mana as a thin
+  blue line over the energy or rage bar while you are in form.
+
+- **Shaman totems are back.** The game's totem buttons went away with its
+  player frame, and with them the right-click that destroys a totem. They now
+  sit just above your frame in the party column. Right-click one to destroy
+  that totem.
+
+- **Dungeon level ranges from the group finder.** The XP tooltip and the
+  dungeon entrance pins now use the ranges the game's Looking For Group
+  window shows. The Hall of Thanes is 13-20, for example, where BeebMod said
+  13-18. A dungeon the group finder doesn't list for you keeps BeebMod's
+  range.
+
+- **Health and mana numbers on party frames.** A new switch under Party on
+  the Unit frames page. With it on, your frame and your party's show health
+  as a number in the bottom left and mana in the bottom right. Your own frame
+  shows rage or energy too. It's off unless you turn it on.
+
+- **Pick Pocket's right-click resets the session.** It used to clear the
+  all-time record in one click. To clear that, Shift-right-click twice
+  within 5 seconds. The tooltip says when the first click took.
+
+- **A switch for dungeon entrances.** The pins have a row on the Game frames
+  page. Switching Game frames off hides them and their line in the map's
+  filter menu.
+
+- **Quest item buttons stay visible in a fight.** When the quest list moved
+  during a fight, a quest item's button went invisible but still worked. A
+  click on what looked like an empty spot used the item. The button now stays
+  where you can see it until the fight ends.
+
+- **The census chart follows your accent colour.** Its level bars stayed
+  green whatever colour you picked.
+
+- **Text colours match across panels.** Greys and golds that were a shade
+  apart from one panel to the next are now the same.
+
+- **The buff tray reads your buffs less often.** It reads them only when you
+  gain one, not every time one ticks or ends.
+
+- **A smaller saved file.** A quest's text was saved once for every enemy it
+  names. It is saved once now. Older records move over at your next login.
+
+- **Wording.** The Nameplates line and the welcome window mention crowd
+  control. The README lists dungeon entrances and double-click fishing.
+
 ## 1.3.0
 
 - **No smudge on the dungeon entrance card.** Hovering over an entrance pin
-  showed a green smudge beside the dungeon's name. The card leaves the
+  showed a green smudge next to the dungeon's name. The card leaves the
   picture off now.
 
 - **The census counts people with no guild.** Its guild chart had a "No

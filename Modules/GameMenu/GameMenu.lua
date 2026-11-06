@@ -110,12 +110,12 @@ end
 -- A button
 -- ---------------------------------------------------------------------------
 
-M.TEXT = { 0.90, 0.91, 0.88 }
+M.TEXT = BT.TEXT.ink
 -- every button dressed, wherever it was found (a list, a pool), so switching
 -- off reaches them all (Josh 2026-09-23, audit: only the window's own
 -- children were undressed, and the rest kept our surface)
 M.buttons = setmetatable({}, { __mode = "k" })
-M.DIM = { 0.50, 0.53, 0.50 }
+M.DIM = BT.TEXT.dim
 
 function M.DressButton(b)
 	if type(b) ~= "table" or objectType(b) ~= "Button" then
