@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.5.0
 
 - **Encounter notes.** In a dungeon, a new part of the dock under your
   quests shows notes for each boss. Some lines are for everyone. Others are
