@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.3.0
 
 - **No smudge on the dungeon entrance card.** Hovering over an entrance pin
   showed a green smudge beside the dungeon's name. The card leaves the
