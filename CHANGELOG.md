@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.4.0
 
 - **Druid mana in cat and bear form.** Your frame shows your mana as a thin
   blue line over the energy or rage bar while you are in form.
