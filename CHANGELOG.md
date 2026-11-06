@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.5.1
 
 - **Encounter notes switch on General.** The switch for the boss notes is
   now on the General page, under Dungeons. It's gone from the Dock page.
