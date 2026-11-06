@@ -3,6 +3,19 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Encounter notes switch on General.** The switch for the boss notes is
+  now on the General page, under Dungeons. It's gone from the Dock page.
+  The notes stay right under your quests wherever you drag the quest
+  tracker.
+- **Questie's icons stay on the map.** The addon buttons line took
+  Questie's quest icons from the minimap. Map pins from Questie, GatherMate
+  or HandyNotes are now left where they are.
+- **One quest tracker with Questie.** Questie's tracker sat over the dock,
+  showing the same quests as BeebMod's. While BeebMod's quest tracker is on,
+  Questie's is hidden. Switch BeebMod's off and Questie's comes back.
+
 ## 1.5.0
 
 - **Encounter notes.** In a dungeon, a new part of the dock under your

@@ -78,6 +78,9 @@ function M.IsAddonButton(f)
 	if name:find("^LibDBIcon10_") then
 		return true
 	end
+	if M.IsMapPin(f) then
+		return false
+	end
 	local ok, kind = pcall(function() return f:GetObjectType() end)
 	if not (ok and kind == "Button") then
 		return false
@@ -92,6 +95,33 @@ function M.IsAddonButton(f)
 	-- for an addon's and given a line of its own. An addon's minimap button is
 	-- a picture: a texture that is not the ring or the disc behind it.
 	return M.HasIcon(f)
+end
+
+-- NOT A MAP PIN (a CurseForge comment, 2026-11-06: Questie's quest icons were
+-- in the line, not on the map). Questie, GatherMate and HandyNotes put their
+-- pins on the minimap through HereBeDragons, as named buttons with a picture.
+-- The library keeps every pin it has placed in its minimapPins. Questie
+-- carries its own copy under another name, and names its pins QuestieFrame<n>.
+local PIN_LIBS = { "HereBeDragons-Pins-2.0", "HereBeDragonsQuestie-Pins-2.0" }
+local PIN_NAMES = { "^QuestieFrame" }
+
+function M.IsMapPin(f)
+	local stub = _G.LibStub
+	if type(stub) == "table" and stub.GetLibrary then
+		for _, major in ipairs(PIN_LIBS) do
+			local ok, lib = pcall(stub.GetLibrary, stub, major, true)
+			if ok and type(lib) == "table" and type(lib.minimapPins) == "table" and lib.minimapPins[f] ~= nil then
+				return true
+			end
+		end
+	end
+	local name = nameOf(f) or ""
+	for _, pattern in ipairs(PIN_NAMES) do
+		if name:find(pattern) then
+			return true
+		end
+	end
+	return false
 end
 
 -- a texture on it that is an actual picture, not the ring and not nothing

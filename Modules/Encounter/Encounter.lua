@@ -37,14 +37,14 @@ local CreateFrame, C_Timer = BT.Cpu.For("Modules/Encounter/Encounter.lua")
 local E = BT.Encounter or {}
 BT.Encounter = E
 
+-- ITS SWITCH IS ON GENERAL (Josh 2026-11-06: "We will need to have an
+-- option to enable/disable the encounter note switch in our general
+-- options"), with Fishing's: no feature, and no row on the Dock's page to
+-- drag. The section follows the quest tracker instead (`follows`, UI/Dock.lua).
 local M = BT.Module({
 	key = "encounter",
-	feature = "dock",
 	title = "Encounter notes",
-	-- right under the quest tracker, so the notes take the room the
-	-- dungeon's short quest list leaves
 	order = 40.5,
-	dock = true,
 })
 E.module = M
 
@@ -555,6 +555,8 @@ function M.Build()
 		return frame
 	end
 	frame = BT.Dock.Section("encounter", 11)
+	-- right under the quests, wherever they are in the dock
+	frame.follows = "tracker"
 	frame.wantWidth = nil
 	-- it may be cut short to stay on the screen, after the quests are
 	frame.shrinks = true

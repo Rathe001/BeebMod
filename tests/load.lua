@@ -2536,9 +2536,13 @@ if ok then
 			-- button are the Dock's page's, the target row the Ledger's
 			-- AND FISHING (Josh 2026-11-05: "Should be in the general settings
 			-- probably"): a utility with no page of its own
+			-- AND ENCOUNTER NOTES (Josh 2026-11-06: "an option to enable/disable the
+			-- encounter note switch in our general options"), with no row on the Dock
 			local switches = generalSwitches()
-			assert(#switches == 1 and switches[1] == BT.Settings.fishingRow,
-				"on General, only the look and double-click fishing: " .. #switches)
+			local found = {}
+			for _, r in ipairs(switches) do found[r] = true end
+			assert(#switches == 2 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow],
+				"on General, only the look, double-click fishing and encounter notes: " .. #switches)
 			-- the target row's switch went with the row (Josh 2026-10-05)
 			local function rowFor(page, field)
 				BT.Window.SetView(page)
@@ -13548,7 +13552,7 @@ if ok then
 			BT.SortModules()
 			BT.Window.Reorder(dockPage)
 			BT.Dock.Relayout()
-			assert(pageKeys() == "minimap,buttons,xp,pvp,rep,expedition,ledgerline,metrics,tracker,encounter,micro",
+			assert(pageKeys() == "minimap,buttons,xp,pvp,rep,expedition,ledgerline,metrics,tracker,micro",
 				"no order is the default order: " .. pageKeys())
 			-- ANOTHER FEATURE'S ROW (Josh 2026-09-27): the Expedition's tab in the
 			-- Dock's block moves its line, and is gone while the Expedition is
@@ -14306,6 +14310,22 @@ if ok then
 			zero.GetObjectType = function() return "FontString" end
 			zero:SetText("0")
 			assert(not mod.IsAddonButton(counter), "a button with only a number on it is not an addon's")
+			table.remove(map._children)
+			-- NOT A MAP PIN (CurseForge, 2026-11-06): Questie's quest icons went
+			-- into the line. A pin HereBeDragons placed, or a Questie pin by name,
+			-- stays on the map.
+			local questie = button("QuestieFrame12")
+			local gather = button("GatherMatePin3")
+			local stub, pins = _G.LibStub, { minimapPins = { [gather] = {} } }
+			_G.LibStub = { GetLibrary = function(_, major)
+				return major == "HereBeDragons-Pins-2.0" and pins or nil
+			end }
+			assert(not mod.IsAddonButton(questie), "a Questie pin is not an addon button")
+			assert(not mod.IsAddonButton(gather), "nor a pin HereBeDragons placed")
+			pins.minimapPins[gather] = nil
+			assert(mod.IsAddonButton(gather), "(the library is how it was known)")
+			_G.LibStub = stub
+			table.remove(map._children)
 			table.remove(map._children)
 
 			local n = mod.Layout()
@@ -18287,6 +18307,26 @@ if ok then
 			assert(not otf:IsShown() and otf._alpha == 1, "and is hidden for real when the fight ends")
 			otf.IsProtected, _G.InCombatLockdown = nil, wasLock
 
+			-- QUESTIE'S TRACKER TOO (Josh 2026-11-06): built after login, found
+			-- at the next update, hidden while ours is on and put back after
+			local qf = _G.CreateFrame("Frame", "Questie_BaseFrame")
+			_G.Questie_BaseFrame = qf
+			qf:Show()
+			mod.Update()
+			assert(not qf:IsShown(), "Questie's tracker is hidden while ours is on")
+			qf:Show()
+			qf._scripts.OnShow(qf)
+			assert(not qf:IsShown(), "and stays hidden when Questie shows it again")
+			BT.SetEnabled("tracker", false)
+			assert(qf:IsShown(), "ours off, Questie's comes back")
+			qf:Hide()
+			BT.SetEnabled("tracker", true)
+			BT.SetEnabled("tracker", false)
+			assert(not qf:IsShown(), "but not one the player had turned off in Questie")
+			BT.SetEnabled("tracker", true)
+			_G.Questie_BaseFrame = nil
+			assert(not otf:IsShown(), "(the client's is hidden again)")
+
 			-- ONE COLUMN: the level and the counts read at the start of the
 			-- line, not down a column of their own on the right
 			local rows = mod.Rows()
@@ -18496,7 +18536,30 @@ if ok then
 			assert(f.body.where._text == "Boss 1 of 6", "with where it is in the run: " .. tostring(f.body.where._text))
 			local ranks = {}
 			for n, item in ipairs(BT.Dock.stack or {}) do ranks[item.s.key] = n end
-			assert(ranks.tracker and ranks.encounter and ranks.tracker < ranks.encounter, "right under the quests")
+			assert(ranks.tracker and ranks.encounter == ranks.tracker + 1, "right under the quests")
+			-- and still there with the quests dragged to the top of the dock
+			do
+				local hadOrder = BT.settings.order
+				local keys = { "tracker" }
+				for _, m in ipairs(BT.Modules()) do
+					if m.key ~= "tracker" then keys[#keys + 1] = m.key end
+				end
+				BT.settings.order = keys
+				BT.SortModules()
+				BT.Dock.Relayout()
+				local at = {}
+				for n, item in ipairs(BT.Dock.stack or {}) do at[item.s.key] = n end
+				assert(at.encounter == at.tracker + 1, "the notes follow the quests: " .. tostring(at.tracker) .. ", " .. tostring(at.encounter))
+				BT.settings.order = hadOrder
+				BT.SortModules()
+				BT.Dock.Relayout()
+			end
+			-- its switch is General's
+			BT.Settings.encounterRow.switch:SetOn(true)
+			BT.Settings.encounterRow.switch:GetScript("OnClick")(BT.Settings.encounterRow.switch)
+			assert(not BT.Enabled("encounter") and not f:IsShown(), "switched off on General, the notes go")
+			BT.SetEnabled("encounter", true)
+			enc:OnEnable()
 			-- squeezed, the quests give their room first
 			local stack = { { s = { frame = tracker.Frame() }, tall = 300 }, { s = { frame = f }, tall = 200 } }
 			BT.Dock.Squeeze(stack, 20, 420)

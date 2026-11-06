@@ -224,7 +224,6 @@ W.LABELS = {
 	speed = { "Movement speed" },
 	performance = { "Performance" },
 	tracker = { "Quest tracker", "Tracked quests grouped by zone. In a dungeon, its own quests." },
-	encounter = { "Encounter notes", "Notes for each boss, under your quests in a dungeon" },
 	micro = { "Micro menu", "The game's menu buttons" },
 	unitframes = { "Unit frames", "Player, target, focus and target of target frames" },
 	buffs = { "Buffs", "Buff and debuff tray next to the dock" },

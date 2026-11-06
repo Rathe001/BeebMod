@@ -163,44 +163,77 @@ local function locked(f)
 		and f.IsProtected and f:IsProtected() and true or false
 end
 
+-- QUESTIE'S TRACKER TOO (Josh 2026-11-06: "let beebmod handle it"). Questie
+-- turns its own tracker on by default and puts it over the dock, so a player
+-- had two lists of the same quests on top of each other. While ours is on,
+-- Questie's is put away as the client's is. Questie builds it some seconds
+-- after login, so each update looks for it again. Switched off, ours gives it
+-- back only if it was showing: a player who turned it off in Questie keeps it
+-- off.
+local OTHER_NAMES = { "Questie_BaseFrame" }
+
+function M.OtherFrames()
+	local out = {}
+	for _, name in ipairs(OTHER_NAMES) do
+		local f = _G[name]
+		if type(f) == "table" and f.GetObjectType then
+			out[#out + 1] = f
+		end
+	end
+	return out
+end
+
+local faded = setmetatable({}, { __mode = "k" }) -- frame -> went see-through in a fight
+local hooked = setmetatable({}, { __mode = "k" })
+local hid = setmetatable({}, { __mode = "k" }) -- another addon's frame -> was showing when hidden
+
 local function hideNow(f)
 	if locked(f) then
 		pcall(f.SetAlpha, f, 0)
-		M.clientFaded, M.clientLater = true, true
+		faded[f], M.clientLater = true, true
 		return
 	end
 	f:Hide()
-	if M.clientFaded then
-		M.clientFaded = nil
+	if faded[f] then
+		faded[f] = nil
 		f:SetAlpha(1)
 	end
 end
 
+local function hideOne(f, other)
+	if not hooked[f] and f.HookScript then
+		-- it puts itself back whenever a quest changes, so we have to mean it
+		f:HookScript("OnShow", function(self)
+			if BT.Enabled("tracker") then
+				if other then
+					hid[self] = true
+				end
+				hideNow(self)
+			end
+		end)
+		hooked[f] = true
+	end
+	if other and f:IsShown() and not faded[f] then
+		hid[f] = true
+	end
+	hideNow(f)
+end
+
 local function hideClient()
+	for _, f in ipairs(M.OtherFrames()) do
+		hideOne(f, true)
+	end
 	local f = M.ClientFrame()
 	if not f then
 		return false
 	end
-	if not M.clientHooked and f.HookScript then
-		-- it puts itself back whenever a quest changes, so we have to mean it
-		f:HookScript("OnShow", function(self)
-			if BT.Enabled("tracker") then
-				hideNow(self)
-			end
-		end)
-		M.clientHooked = true
-	end
-	hideNow(f)
+	hideOne(f, false)
 	return true
 end
 
-local function showClient()
-	local f = M.ClientFrame()
-	if not f then
-		return
-	end
-	if M.clientFaded then
-		M.clientFaded = nil
+local function showOne(f)
+	if faded[f] then
+		faded[f] = nil
 		pcall(f.SetAlpha, f, 1)
 	end
 	if locked(f) then
@@ -208,6 +241,19 @@ local function showClient()
 		return
 	end
 	f:Show()
+end
+
+local function showClient()
+	for _, f in ipairs(M.OtherFrames()) do
+		if hid[f] then
+			hid[f] = nil
+			showOne(f)
+		end
+	end
+	local f = M.ClientFrame()
+	if f then
+		showOne(f)
+	end
 end
 
 -- what a fight held back, done when it ends: the client's tracker hidden
@@ -1000,6 +1046,12 @@ function M.Update()
 			BT.Dock.Relayout()
 		end
 		return 0
+	end
+	-- another addon's tracker built since the last look (Questie's, after login)
+	for _, f in ipairs(M.OtherFrames()) do
+		if not hooked[f] then
+			hideOne(f, true)
+		end
 	end
 	local here = hereZone()
 	-- IN A DUNGEON, ITS OWN QUESTS (Josh 2026-11-06): every quest the log

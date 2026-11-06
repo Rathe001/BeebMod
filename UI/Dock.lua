@@ -866,6 +866,15 @@ function B.Relayout()
 	-- the modules in your order, worked out once for the sections, the
 	-- readouts and the stack
 	local rank = moduleRank()
+	-- A SECTION THAT FOLLOWS ANOTHER (`follows`, a module's key): right under
+	-- it, wherever that one was dragged. The encounter notes under the quests
+	-- (Modules/Encounter/Encounter.lua) have no row of their own to drag.
+	for _, s in ipairs(ordered) do
+		local after = s.frame.follows
+		if after and rank[after] then
+			rank[s.key] = rank[after] + 0.5
+		end
+	end
 	sortSections(rank)
 	-- the dock's own width; only a header that could not fit in it makes it
 	-- wider

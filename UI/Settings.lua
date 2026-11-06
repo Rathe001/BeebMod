@@ -95,6 +95,16 @@ function S.Build(parent)
 	-- DOUBLE-CLICK TO FISH (Josh 2026-11-05: "Should be in the general settings
 	-- probably"). The one utility here: it has no panel and no page of its own
 	-- (Modules/Fishing/Fishing.lua).
+	-- ENCOUNTER NOTES (Josh 2026-11-06: "an option to enable/disable the
+	-- encounter note switch in our general options"): its part of the dock
+	-- follows the quests and has no row of its own on the Dock's page
+	-- (Modules/Encounter/Encounter.lua)
+	local dungeons = stack:Section("Dungeons")
+	S.encounterRow = W.SwitchRow(dungeons, "Encounter notes",
+		"Notes for each boss, under your quests in a dungeon",
+		function() return BT.Switched("encounter") end,
+		function(on) BT.SetEnabled("encounter", on) end)
+
 	local fishing = stack:Section("Fishing")
 	S.fishingRow = W.SwitchRow(fishing, "Double-click to fish",
 		"Double right-click to cast Fishing while you have a fishing pole equipped",

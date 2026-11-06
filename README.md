@@ -32,6 +32,8 @@ or click a page on the rail to go back.
   back where they started. Shift-drag any of them to move it.
 - **Double-click to fish:** with a fishing pole equipped, double right-click
   the world to cast Fishing. It doesn't work in combat or on a player or NPC.
+- **Encounter notes:** the boss notes under your quests in a dungeon. They
+  are on unless you switch them off here.
 
 The other unit frames follow Edit Mode. Move the default frames there and
 BeebMod's go with them.
@@ -55,7 +57,7 @@ bottom. Drag a row on that page to move it in the dock.
 | **Expedition**, **Ledger** | Each journal's rank badge, rank and points. Click a line to open its journal. |
 | **Metrics** | Small stats in rows of three, each with its own switch: gold, bag space with your class's reagents, durability, item level, Pick Pocket takings (rogues), movement speed, FPS and latency. Right-click the gold or Pick Pocket to reset its session. Shift-right-click Pick Pocket twice to clear its all-time record. |
 | **Quest tracker** | Your quests grouped by zone, lowest level first. In a dungeon or raid it lists the quests filed under that place, followed or not. Your other quests fold under one line. The game's tracker is hidden. |
-| **Encounter notes** | In a dungeon, notes for each boss under your quests. Some lines are for everyone. Others are for your role, or for a skill such as a kick, with the classes that have it. The notes open on the next boss alive. They switch to a boss when its fight starts and move on after a kill. The arrows show the others. Your role comes from your group or the group finder. Click Tank, Healer or DPS to pick another. The notes cover every dungeon that starts below level 30, from Ragefire Chasm to Razorfen Kraul. |
+| **Encounter notes** | In a dungeon, notes for each boss under your quests. Some lines are for everyone. Others are for your role, or for a skill such as a kick, with the classes that have it. The notes open on the next boss alive. They switch to a boss when its fight starts and move on after a kill. The arrows show the others. Your role comes from your group or the group finder. Click Tank, Healer or DPS to pick another. The notes cover every dungeon that starts below level 30, from Ragefire Chasm to Razorfen Kraul. Their switch is on the General page. |
 | **Micro menu** | The game's menu buttons. |
 
 **Fade in combat**, on the Dock's page, fades the dock to 70% in a fight
@@ -547,7 +549,10 @@ collapsing headers, and a panel the height of the screen whether it held four
 quests or none. Restyling can't fix a layout.
 
 So BeebMod hides the client's tracker and draws the quests itself, in one
-column, in its own typeface.
+column, in its own typeface. It hides Questie's tracker too, which Questie
+turns on by default and places over the dock. Switch BeebMod's tracker off on
+the Dock page and Questie's comes back, unless you had turned it off in
+Questie.
 
     * [7] Evershine              the mark, the level, the name
         Get a cask of Evershine
