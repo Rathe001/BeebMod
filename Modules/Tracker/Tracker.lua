@@ -340,7 +340,7 @@ local function rowFrame(i)
 	row.hot.beebsTint = 0.10
 	row.hot:Hide()
 	row:SetScript("OnEnter", function(self)
-		if self.quest or self.isHeader then
+		if self.quest or self.isHeader or self.isFold then
 			local c = BT.Widgets.RIM
 			self.hot:SetColorTexture(c[1], c[2], c[3], self.hot.beebsTint)
 			self.hot:Show()
@@ -358,6 +358,12 @@ local function rowFrame(i)
 	row:SetScript("OnClick", function(self, click)
 		if self.isHeader then
 			setOpt("collapsed", not opt("collapsed", false))
+			return
+		end
+		-- a dungeon's other quests, opened and shut for this visit only
+		if self.isFold then
+			M.othersOpen = not M.othersOpen
+			M.Update()
 			return
 		end
 		if not self.quest then
@@ -702,7 +708,11 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 
 	row.kind = kind
 	row.isHeader = (kind == "head")
-	row.chevron:SetShown(row.isHeader)
+	row.isFold = (kind == "fold")
+	row.chevron:SetShown(row.isHeader or row.isFold)
+	if row.isFold then
+		BT.Dock.ChevronCoord(row.chevron, not M.othersOpen)
+	end
 	-- A HANDLE ONLY WHILE IT IS THE HEADER (2026-10-05, cleanup). Rows are
 	-- reused, and a quest row that kept the header's drag would move the dock
 	-- on a Shift-drag, where Shift-click on a quest means untrack.
@@ -762,7 +772,7 @@ local function setRow(i, y, kind, text, mark, colour, quest)
 	row.markKind = mark
 
 	row.quest = quest
-	row:EnableMouse(quest ~= nil or row.isHeader)
+	row:EnableMouse(quest ~= nil or row.isHeader or row.isFold)
 	row:Show()
 	return y + row.tall + (kind == "title" and 1 or 0)
 end
@@ -820,6 +830,28 @@ local function hereZone()
 	local get = _G.GetRealZoneText or _G.GetZoneText
 	local ok, z = pcall(function() return get and get() end)
 	return ok and type(z) == "string" and z ~= "" and z or nil
+end
+
+-- the dungeon or raid you are in, as a zone key, and every key its quests
+-- may be filed under; nil outside one (Modules/Encounter/Encounter.lua,
+-- which answers whether its notes are on or not)
+local function dungeonHere()
+	local E = BT.Encounter
+	if not (E and E.Here) then
+		return nil
+	end
+	local key, _, _, keys = E.Here()
+	return key, keys
+end
+
+-- the line between a dungeon's quests and the rest, in the list
+local FOLD = {}
+-- "7 other quests", and what it says while they show
+function M.OthersLabel(n, open)
+	if open then
+		return "Hide other quests"
+	end
+	return ("%d other %s"):format(n, n == 1 and "quest" or "quests")
 end
 
 -- A QUEST'S OWN TOOLTIP (Josh 2026-09-27, the dock's tooltips redrawn; the
@@ -970,9 +1002,23 @@ function M.Update()
 		return 0
 	end
 	local here = hereZone()
-	local quests = M.Sort(Q.Watched(), here)
-	M.lastCount = #quests
-	if #quests == 0 then
+	-- IN A DUNGEON, ITS OWN QUESTS (Josh 2026-11-06): every quest the log
+	-- files under it, followed or not, and the rest folded under one line
+	-- that opens them. Shut again each time you go into a dungeon.
+	local dungeon, keys = dungeonHere()
+	if dungeon ~= M.dungeon then
+		M.dungeon, M.othersOpen = dungeon, false
+	end
+	local quests, others
+	if dungeon then
+		quests, others = Q.Split(keys or dungeon)
+		M.Sort(quests, nil)
+		M.Sort(others, here)
+	else
+		quests, others = M.Sort(Q.Watched(), here), {}
+	end
+	M.lastCount, M.otherCount = #quests, #others
+	if #quests == 0 and #others == 0 then
 		band(nil)
 		stopClocks()
 		frame:Hide()
@@ -991,78 +1037,102 @@ function M.Update()
 	y = setRow(i, y, "head", string.upper("Quests") .. "   " .. tint(MUTED, tostring(#quests)), nil, MUTED, nil)
 	y = y + GAP
 
+	-- the dungeon's quests, then the line that opens the others, then those
+	local list = {}
+	if not shut then
+		for _, q in ipairs(quests) do
+			list[#list + 1] = q
+		end
+		if dungeon and #others > 0 then
+			list[#list + 1] = FOLD
+			if M.othersOpen then
+				for _, q in ipairs(others) do
+					list[#list + 1] = q
+				end
+			end
+		end
+	end
+
 	local bandTop, bandFoot = nil, nil
 	local zone = false
-	for _, quest in ipairs(shut and {} or quests) do
-		-- a heading where the zone changes (a quest filed under none has none)
-		if quest.zone ~= zone then
-			zone = quest.zone
-			if zone then
-				i = i + 1
-				y = setRow(i, y, "zone", zone:upper(), nil, MUTED, nil)
-			end
-		end
-		i = i + 1
-		local active = tracked ~= nil and quest.questID ~= nil and tracked == quest.questID
-		local mark = "dot"
-		if quest.failed then
-			mark = "failed"
-		elseif quest.complete then
-			mark = "check"
-		elseif active then
-			mark = "tracking"
-		end
-		if active then
-			bandTop = y
-		end
-		local level = ""
-		if quest.level and quest.level > 0 then
-			level = tint(levelColour(quest.level), ("[%d] "):format(quest.level))
-		end
-		-- HOW HARD IT IS, IN THE TITLE (Josh 2026-09-19). Every quest was the
-		-- same off-white, so a grey quest five levels below you and one that
-		-- will kill you read identically - and the client's own log has told
-		-- people this in colour for twenty years. The level in front of the
-		-- title already wore the difficulty colour; the title wears it too.
-		--
-		-- Complete no longer means gold: the tick at the start of the line
-		-- says that, and spending the title's colour on it threw away the more
-		-- useful fact. Failed still overrides everything.
-		local titleColour = quest.failed and FAILED or levelColour(quest.level)
-		-- what kind of quest, after its name, as the client's tracker writes
-		-- it: "[24] A Quest (Dungeon)" (Q.Tag)
-		local name = quest.tag and ("%s (%s)"):format(quest.title, quest.tag) or quest.title
-		y = setRow(i, y, "title", level .. name, mark, titleColour, quest)
-		-- its clock, first under the title while it runs (Q.Timers)
-		-- DONE IS NOT DELIVERED (Josh 2026-09-29: "Time limit is still not
-		-- showing" - Iverron's Antidote): a quest that asks you only to carry
-		-- something reads as complete the moment it is taken, and its clock
-		-- is still running until you hand it in. Only a failed one has none.
-		if quest.endsAt and not quest.failed then
+	for _, quest in ipairs(list) do
+		if quest == FOLD then
 			i = i + 1
-			local now = (type(GetTime) == "function" and GetTime()) or 0
-			y = setRow(i, y, "clock", M.TimeLeft(quest.endsAt, now), nil, clockColour(quest.endsAt, now), quest)
-			rows[i].endsAt = quest.endsAt
-			if not M.clockTicker and C_Timer and C_Timer.NewTicker then
-				M.clockTicker = C_Timer.NewTicker(1, M.TickClocks)
-			end
-		end
-		-- a failed quest's objectives are no longer worth reading
-		if not quest.failed and not folded(quest) then
-			for _, o in ipairs(quest.objectives) do
-				i = i + 1
-				local count = ""
-				if o.need and o.need > 1 then
-					count = tint(o.done and DONE or MUTED, ("%d/%d "):format(o.have or 0, o.need))
+			y = setRow(i, y, "fold", M.OthersLabel(#others, M.othersOpen), nil, MUTED, nil)
+			y = y + GAP
+			-- the first of the others gets its zone's heading
+			zone = false
+		else
+			-- a heading where the zone changes (a quest filed under none has none)
+			if quest.zone ~= zone then
+				zone = quest.zone
+				if zone then
+					i = i + 1
+					y = setRow(i, y, "zone", zone:upper(), nil, MUTED, nil)
 				end
-				y = setRow(i, y, "line", count .. (o.text or ""), o.done and "strike" or nil,
-					o.done and DONE or DIM, quest)
 			end
+			i = i + 1
+			local active = tracked ~= nil and quest.questID ~= nil and tracked == quest.questID
+			local mark = "dot"
+			if quest.failed then
+				mark = "failed"
+			elseif quest.complete then
+				mark = "check"
+			elseif active then
+				mark = "tracking"
+			end
+			if active then
+				bandTop = y
+			end
+			local level = ""
+			if quest.level and quest.level > 0 then
+				level = tint(levelColour(quest.level), ("[%d] "):format(quest.level))
+			end
+			-- HOW HARD IT IS, IN THE TITLE (Josh 2026-09-19). Every quest was the
+			-- same off-white, so a grey quest five levels below you and one that
+			-- will kill you read identically - and the client's own log has told
+			-- people this in colour for twenty years. The level in front of the
+			-- title already wore the difficulty colour; the title wears it too.
+			--
+			-- Complete no longer means gold: the tick at the start of the line
+			-- says that, and spending the title's colour on it threw away the more
+			-- useful fact. Failed still overrides everything.
+			local titleColour = quest.failed and FAILED or levelColour(quest.level)
+			-- what kind of quest, after its name, as the client's tracker writes
+			-- it: "[24] A Quest (Dungeon)" (Q.Tag)
+			local name = quest.tag and ("%s (%s)"):format(quest.title, quest.tag) or quest.title
+			y = setRow(i, y, "title", level .. name, mark, titleColour, quest)
+			-- its clock, first under the title while it runs (Q.Timers)
+			-- DONE IS NOT DELIVERED (Josh 2026-09-29: "Time limit is still not
+			-- showing" - Iverron's Antidote): a quest that asks you only to carry
+			-- something reads as complete the moment it is taken, and its clock
+			-- is still running until you hand it in. Only a failed one has none.
+			if quest.endsAt and not quest.failed then
+				i = i + 1
+				local now = (type(GetTime) == "function" and GetTime()) or 0
+				y = setRow(i, y, "clock", M.TimeLeft(quest.endsAt, now), nil, clockColour(quest.endsAt, now), quest)
+				rows[i].endsAt = quest.endsAt
+				if not M.clockTicker and C_Timer and C_Timer.NewTicker then
+					M.clockTicker = C_Timer.NewTicker(1, M.TickClocks)
+				end
+			end
+			-- a failed quest's objectives are no longer worth reading
+			if not quest.failed and not folded(quest) then
+				for _, o in ipairs(quest.objectives) do
+					i = i + 1
+					local count = ""
+					if o.need and o.need > 1 then
+						count = tint(o.done and DONE or MUTED, ("%d/%d "):format(o.have or 0, o.need))
+					end
+					y = setRow(i, y, "line", count .. (o.text or ""), o.done and "strike" or nil,
+						o.done and DONE or DIM, quest)
+				end
+			end
+			if active then
+				bandFoot = y
+			end
+			y = y + GAP
 		end
-		if active then
-			bandFoot = y
-		end
-		y = y + GAP
 	end
 
 	for j = i + 1, #rows do

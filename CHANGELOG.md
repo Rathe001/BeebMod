@@ -3,6 +3,27 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Encounter notes.** In a dungeon, a new part of the dock under your
+  quests shows notes for each boss. Some lines are for everyone. Others are
+  for tanks, healers or DPS, or for a skill such as a kick or a curse
+  removal, with the classes that have it. The notes open on the next boss
+  alive. They switch to a boss when its fight starts and move on after a
+  kill. The arrows show the others. Your role comes from your group or the
+  group finder. Click Tank, Healer or DPS to pick another. The notes cover
+  the 14 dungeons that start below level 30, from Ragefire Chasm to
+  Razorfen Kraul and the Scarlet Monastery's Graveyard and Library. Switch
+  them off on the Dock page.
+
+- **A dungeon's own quests.** In a dungeon or raid, the quest tracker lists
+  the quests the quest log files under that place, including ones you don't
+  follow. Your other quests fold under a line such as "7 other quests".
+  Click it to show them.
+
+- **Smaller party numbers.** The health and mana numbers on party frames
+  are a size smaller.
+
 ## 1.4.1
 
 - **Raid marks on friendly nameplates.** A skull or other mark on a friendly

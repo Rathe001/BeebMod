@@ -3465,6 +3465,71 @@ do
 	check(#stale == 0, "and each made on purpose was made" .. (#stale > 0 and (": " .. table.concat(stale, " | ")) or ""))
 end
 
+-- THE BOSS NOTES (Josh 2026-11-06): every line a known role or skill, and
+-- written the way the rest of BeebMod is (docs/writing-style.md). Each
+-- dungeon is keyed the way the quest log and the instance are matched.
+do
+	local notesBT = {}
+	assert(loadfile("Modules/Encounter/Data.lua"))("BeebMod", notesBT)
+	assert(loadfile("Modules/Encounter/Classes.lua"))("BeebMod", notesBT)
+	local E, all = notesBT.Encounter, notesBT.EncounterNotes
+	local function key(name)
+		local k = name:lower():gsub("^the%s+", ""):gsub("[^%w]", "")
+		return k
+	end
+	local bad, lines, dungeons = {}, 0, 0
+	for k, d in pairs(all) do
+		dungeons = dungeons + 1
+		if type(d.name) ~= "string" or key(d.name) ~= k then
+			bad[#bad + 1] = ("%s is keyed apart from its name %s"):format(k, tostring(d.name))
+		end
+		if type(d.bosses) ~= "table" or #d.bosses == 0 then
+			bad[#bad + 1] = k .. " has no bosses"
+		end
+		for _, b in ipairs(d.bosses or {}) do
+			if type(b.name) ~= "string" or type(b.lines) ~= "table" or #b.lines == 0 then
+				bad[#bad + 1] = ("%s: a boss with no name or no lines (%s)"):format(k, tostring(b.name))
+			end
+			for _, id in ipairs(b.npc or {}) do
+				if type(id) ~= "number" then
+					bad[#bad + 1] = ("%s: %s has an npc id that is not a number"):format(k, tostring(b.name))
+				end
+			end
+			for _, l in ipairs(b.lines or {}) do
+				lines = lines + 1
+				local t = l[1]
+				local where = ("%s, %s: %s"):format(k, tostring(b.name), tostring(t))
+				if type(t) ~= "string" or not t:find("%.$") then
+					bad[#bad + 1] = where .. " (a full sentence, with its full stop)"
+				elseif #t > 140 then
+					bad[#bad + 1] = where .. " (too long for the dock)"
+				end
+				if l.role and l.need then
+					bad[#bad + 1] = where .. " (a role or a skill, not both)"
+				end
+				if l.role and not E.ROLES[l.role] then
+					bad[#bad + 1] = where .. " (no role called " .. tostring(l.role) .. ")"
+				end
+				if l.need and not E.SKILLS[l.need] then
+					bad[#bad + 1] = where .. " (no skill called " .. tostring(l.need) .. ")"
+				end
+				if type(t) == "string" then
+					-- (a spell named with a colon, "Shadow Word: Pain", is a name, not a reveal)
+					local plainT = t:lower():gsub("shadow word: ", "shadow word ")
+					for _, smudge in ipairs({ ", and ", " — ", " - ", "!", ": ", "?", "simply", "just " }) do
+						if plainT:find(smudge, 1, true) then
+							bad[#bad + 1] = ("%s (dirty glass: %q)"):format(where, smudge)
+						end
+					end
+				end
+			end
+		end
+	end
+	check(#bad == 0 and dungeons > 0 and lines > 0,
+		("every boss note is a known role or skill, in plain words (%d dungeons, %d lines)"):format(dungeons, lines)
+			.. (#bad > 0 and (":\n     " .. table.concat(bad, "\n     ")) or ""))
+end
+
 print("")
 if failures == 0 then
 	print("ALL TESTS PASSED")

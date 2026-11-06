@@ -7457,9 +7457,12 @@ if ok then
 			local G, N = BT.LedgerGroups, BT.Notes
 			BT.SetEnabled("ledger", true)
 			local keep = {}
-			for _, k in ipairs({ "GetNumGroupMembers", "IsInRaid", "UnitIsUnit", "UnitExists", "UnitIsPlayer",
+			-- by name, so a global that was not there goes again: a stub left
+			-- behind kept every later step inside The Deadmines
+			local stubbed = { "GetNumGroupMembers", "IsInRaid", "UnitIsUnit", "UnitExists", "UnitIsPlayer",
 				"GetUnitName", "UnitClass", "UnitRace", "UnitLevel", "GetGuildInfo", "UnitGUID",
-				"IsInInstance", "GetInstanceInfo", "GetRealZoneText" }) do
+				"IsInInstance", "GetInstanceInfo", "GetRealZoneText" }
+			for _, k in ipairs(stubbed) do
 				keep[k] = _G[k]
 			end
 			local party = { party1 = "Brakka Stonefist", party2 = "Lila Brightwhistle" }
@@ -7550,8 +7553,8 @@ if ok then
 			end
 			assert(said, "and the tooltip says it: " .. table.concat(lines, " / "))
 
-			for k, v in pairs(keep) do
-				_G[k] = v
+			for _, k in ipairs(stubbed) do
+				_G[k] = keep[k]
 			end
 			BeebModDB.ledger.group = nil
 		end },
@@ -13545,7 +13548,7 @@ if ok then
 			BT.SortModules()
 			BT.Window.Reorder(dockPage)
 			BT.Dock.Relayout()
-			assert(pageKeys() == "minimap,buttons,xp,pvp,rep,expedition,ledgerline,metrics,tracker,micro",
+			assert(pageKeys() == "minimap,buttons,xp,pvp,rep,expedition,ledgerline,metrics,tracker,encounter,micro",
 				"no order is the default order: " .. pageKeys())
 			-- ANOTHER FEATURE'S ROW (Josh 2026-09-27): the Expedition's tab in the
 			-- Dock's block moves its line, and is gone while the Expedition is
@@ -18405,6 +18408,219 @@ if ok then
 			assert(not mod.Frame():IsShown(), "and ours goes away")
 			BT.SetEnabled("tracker", true)
 		end },
+		{ "in a dungeon, its own quests, and the boss notes under them", function()
+			-- ENCOUNTER NOTES (Josh 2026-11-06, the canvas's third board): in a
+			-- dungeon the tracker lists the quests filed under it, followed or
+			-- not, and folds the rest under one line; the notes sit below
+			local names = { "C_QuestLog", "GetNumQuestLogEntries", "GetQuestLogTitle", "IsQuestWatched",
+				"GetNumQuestLeaderBoards", "GetQuestLogLeaderBoard", "IsInInstance", "GetInstanceInfo",
+				"GetRealZoneText", "UnitGUID", "UnitName", "UnitClassification", "UnitClass", "IsInGroup",
+				"UnitGroupRolesAssigned", "C_LFGListRoles" }
+			local keep = {}
+			for _, k in ipairs(names) do keep[k] = rawget(_G, k) end
+			local E, Q = BT.Encounter, BT.Quests
+			local inside, place = false, "The Deadmines"
+			-- { title, heading?, level, followed? }
+			local log = {
+				{ "Westfall", true }, { "The Defias Brotherhood", false, 22, true },
+				{ "The Deadmines", true }, { "Oh Brother. . .", false, 20, false }, { "Underground Assault", false, 20, true },
+				{ "Redridge Mountains", true }, { "Blackrock Menace", false, 21, true }, { "Underbelly Scales", false, 18, false },
+			}
+			_G.C_QuestLog = nil
+			_G.GetNumQuestLogEntries = function() return #log end
+			_G.GetQuestLogTitle = function(i)
+				local e = log[i]
+				return e[1], e[3] or 0, nil, e[2], nil, nil, nil, (not e[2]) and (1000 + i) or nil
+			end
+			_G.IsQuestWatched = function(i) return log[i] ~= nil and log[i][4] == true end
+			_G.GetNumQuestLeaderBoards = function() return 0 end
+			_G.GetQuestLogLeaderBoard = function() return nil end
+			_G.IsInInstance = function() return inside, inside and "party" or "none" end
+			_G.GetInstanceInfo = function() return inside and place or "Westfall" end
+			_G.GetRealZoneText = function() return inside and place or "Westfall" end
+			local guids, unitNames = { player = "Player-1-0000ABCD" }, {}
+			_G.UnitGUID = function(u) return guids[u] end
+			_G.UnitName = function(u) return unitNames[u] end
+			_G.UnitClassification = function() return "elite" end
+			_G.UnitClass = function() return "Priest", "PRIEST" end
+			_G.IsInGroup = function() return false end
+			_G.UnitGroupRolesAssigned = function() return "NONE" end
+			_G.C_LFGListRoles = nil
+			E.run = { killed = {}, at = 1, held = false }
+
+			-- the log split: the dungeon's, followed or not, and the rest followed
+			local here, others = Q.Split("deadmines")
+			assert(#here == 2 and here[1].title == "Oh Brother. . ." and #others == 2,
+				("two quests filed under it, one not followed, and two others (%d, %d)"):format(#here, #others))
+
+			local tracker = BT.GetModule("tracker")
+			BT.SetEnabled("tracker", true)
+			local function shown(kind)
+				local out = {}
+				for _, r in ipairs(tracker.Rows()) do
+					if r:IsShown() and r.kind == kind then
+						out[#out + 1] = r
+					end
+				end
+				return out
+			end
+			-- outside, the tracker as it always was
+			tracker.Update()
+			assert(#shown("title") == 3 and #shown("fold") == 0, "outside, every quest you follow and no fold")
+			-- inside, the dungeon's two and a line for the others
+			inside = true
+			tracker.Update()
+			local titles = shown("title")
+			assert(#titles == 2 and titles[1].text._text:find("Oh Brother", 1, true),
+				"inside, its own quests, the one you don't follow too")
+			assert(tracker.Rows()[1].text._text:find("2", 1, true), "the header counts the dungeon's quests")
+			local fold = shown("fold")[1]
+			assert(fold and fold.text._text == "2 other quests", "and one line for the rest: " .. tostring(fold and fold.text._text))
+			fold:GetScript("OnClick")(fold, "LeftButton")
+			assert(#shown("title") == 4 and shown("fold")[1].text._text == "Hide other quests",
+				"a click opens the others under their zones")
+			-- out and in again: shut
+			inside = false
+			tracker.Update()
+			inside = true
+			tracker.Update()
+			assert(#shown("title") == 2, "going into a dungeon shuts the others again")
+
+			-- THE NOTES, under the quests
+			local enc = BT.GetModule("encounter")
+			BT.SetEnabled("encounter", true)
+			enc:OnEnable()
+			local f = enc.Frame()
+			assert(f:IsShown() and f.body.boss._text == "Rhahk'Zor", "the notes open on the first boss: "
+				.. tostring(f.body.boss._text))
+			assert(f.body.where._text == "Boss 1 of 6", "with where it is in the run: " .. tostring(f.body.where._text))
+			local ranks = {}
+			for n, item in ipairs(BT.Dock.stack or {}) do ranks[item.s.key] = n end
+			assert(ranks.tracker and ranks.encounter and ranks.tracker < ranks.encounter, "right under the quests")
+			-- squeezed, the quests give their room first
+			local stack = { { s = { frame = tracker.Frame() }, tall = 300 }, { s = { frame = f }, tall = 200 } }
+			BT.Dock.Squeeze(stack, 20, 420)
+			assert(stack[2].tall == 200 and stack[1].tall == 200, "the quests shrink before the notes: "
+				.. stack[1].tall .. ", " .. stack[2].tall)
+
+			local fire = enc.events:GetScript("OnEvent")
+			-- a nameplate by its npc id, a target by its name, a fight by its name
+			guids.nameplate3 = "Creature-0-1-2-3-1763-00001"
+			fire(enc.events, "NAME_PLATE_UNIT_ADDED", "nameplate3")
+			assert(f.body.boss._text == "Gilnid", "a boss's nameplate shows its notes")
+			unitNames.target = "Mr. Smite"
+			fire(enc.events, "PLAYER_TARGET_CHANGED")
+			assert(f.body.boss._text == "Mr. Smite", "and so does targeting it")
+			fire(enc.events, "ENCOUNTER_START", 1094, "Edwin VanCleef", 1, 5)
+			assert(f.body.boss._text == "Edwin VanCleef" and E.run.at == 7, "and its fight starting")
+			-- killed: the next boss alive
+			fire(enc.events, "BOSS_KILL", 1094, "Edwin VanCleef")
+			assert(f.body.boss._text == "Rhahk'Zor" and E.run.killed[7], "a kill moves on to the next one alive")
+			-- the arrows hold until a different boss is seen
+			f.body.next:GetScript("OnClick")(f.body.next)
+			assert(f.body.boss._text == "Sneed's Shredder", "an arrow shows the next")
+			unitNames.target = "Edwin VanCleef"
+			fire(enc.events, "PLAYER_TARGET_CHANGED")
+			assert(f.body.boss._text == "Sneed's Shredder", "the boss seen last doesn't take it back")
+			unitNames.target = "Sneed"
+			fire(enc.events, "PLAYER_TARGET_CHANGED")
+			assert(f.body.boss._text == "Sneed's Shredder" and not E.run.held, "a different one does (Sneed is the Shredder's)")
+			unitNames.target = nil
+
+			-- THE ROLE: the group's, then the finder's one tick, then a class that
+			-- can only deal damage (the talents answered nothing on Forever)
+			local R = E.Role
+			assert(select(2, R.Current()) == "none", "a priest with nothing to go on: DPS, and asked")
+			_G.UnitClass = function() return "Rogue", "ROGUE" end
+			assert(R.Current() == "dps" and select(2, R.Current()) == "class", "a rogue deals damage")
+			_G.UnitClass = function() return "Priest", "PRIEST" end
+			_G.C_LFGListRoles = { GetRoles = function() return { tank = true, healer = false, dps = false } end }
+			assert(R.Current() == "tank" and select(2, R.Current()) == "finder", "one box ticked in the finder")
+			_G.C_LFGListRoles = { GetRoles = function() return { tank = true, healer = true, dps = false } end }
+			assert(select(2, R.Current()) == "none", "two ticked say nothing")
+			_G.IsInGroup = function() return true end
+			_G.UnitGroupRolesAssigned = function() return "HEALER" end
+			assert(R.Current() == "healer" and select(2, R.Current()) == "group", "the group's role first")
+			-- the lines for a healer at Mr. Smite
+			E.Step(BT.EncounterNotes.deadmines, 2)
+			enc.Update()
+			local words = {}
+			for _, row in ipairs(enc.Rows()) do
+				if row:IsShown() then words[#words + 1] = row.words._text end
+			end
+			local said = table.concat(words, " / ")
+			assert(f.body.boss._text == "Mr. Smite" and said:find("Save your mana", 1, true)
+				and not said:find("Save your defensives", 1, true), "a healer reads the healer's line: " .. said)
+			-- and it stands out in the healer's colour, with the healer's icon
+			local lit = 0
+			for _, row in ipairs(enc.Rows()) do
+				if row:IsShown() and row.band:IsShown() and row.icon.what == "healer" then lit = lit + 1 end
+			end
+			assert(lit == 1, "one line washed in the healer's colour: " .. lit)
+			assert(select(2, R.Current()) == "group" and f.body.roles.buttons[2].on, "the healer button lit")
+			-- a click beats it, kept for the character
+			local dps
+			for _, b in ipairs(f.body.roles.buttons) do if b.key == "dps" then dps = b end end
+			dps:GetScript("OnClick")(dps)
+			assert(R.Current() == "dps" and select(2, R.Current()) == "pick"
+				and BT.settings.encounter.roles["Player-1-0000ABCD"] == "dps", "a click picks, for this character")
+			-- a skill line says who can do it
+			E.Step(BT.EncounterNotes.deadmines, 1)
+			enc.Update()
+			local cookie
+			for _, row in ipairs(enc.Rows()) do
+				if row:IsShown() and row.icon.what == "kick" then cookie = row end
+			end
+			assert(f.body.boss._text == "Cookie" and cookie.icon.what == "kick"
+				and cookie.who._text == "Kick · Warrior, Rogue, Mage, Shaman", "Cookie's kick, and who can")
+			assert(f.body.where._text == "Optional · lower deck", "an optional boss says so")
+
+			-- A DUNGEON WITH NO NOTES: its quests still, and no notes
+			place = "Uldaman"
+			tracker.Update()
+			enc.Update()
+			assert(not f:IsShown(), "no notes, no section")
+			assert(#shown("title") == 0 and shown("fold")[1], "the quests narrowed all the same")
+			-- A WING (Scarlet Monastery): the instance goes by the monastery's
+			-- name, so the wing is the one whose boss is seen
+			place = "Scarlet Monastery"
+			enc.Update()
+			assert(f:IsShown() and f.body.boss._text == "Interrogator Vishas", "the first wing until a boss says otherwise: "
+				.. tostring(f.body.boss._text))
+			unitNames.target = "Arcanist Doan"
+			fire(enc.events, "PLAYER_TARGET_CHANGED")
+			assert(f.body.boss._text == "Arcanist Doan" and f.body.where._text == "Boss 2 of 2" and E.wing == "scarletmonasterylibrary",
+				"Doan seen: the Library: " .. tostring(f.body.where._text))
+			unitNames.target = nil
+			E.wing = nil
+			place = "The Deadmines"
+
+			-- THE RECORD: a run written down, and done on the way out
+			E.Record()
+			guids.nameplate4 = "Creature-0-1-2-3-646-00002"
+			fire(enc.events, "NAME_PLATE_UNIT_ADDED", "nameplate4")
+			local rec = BeebModDB.encounterDump
+			local lines = table.concat(rec.lines, "\n")
+			assert(lines:find("instance | The Deadmines", 1, true) and lines:find("unit | nameplate4 | elite", 1, true),
+				"the dungeon and an elite's plate: " .. lines)
+			inside = false
+			E.NoteWhere()
+			assert(not E.recording and rec.lines[#rec.lines]:find("done", 1, true), "and done once you leave it")
+			BeebModDB.encounterDump = nil
+
+			-- made-up data: The Deadmines, wherever you are
+			E.demo = "deadmines"
+			enc.Update()
+			assert(f:IsShown(), "made-up data shows the notes outside")
+			E.demo = nil
+
+			for _, k in ipairs(names) do _G[k] = keep[k] end
+			E.run = { killed = {}, at = 1, held = false }
+			BT.settings.encounter = nil
+			enc.Update()
+			tracker.Update()
+			assert(not f:IsShown(), "and gone again outside")
+		end },
 		{ "one panel: the header and the tracker in the same dock", function()
 			local dock = _G.BeebModDock
 			local mod = BT.GetModule("tracker")
@@ -20249,6 +20465,7 @@ if ok then
 				CHAT_MSG_TEXT_EMOTE = chat("Corwin Bob waves at you."),
 				EDIT_MODE_LAYOUTS_UPDATED = { { layouts = {}, activeLayout = 1 }, false },
 				ENCOUNTER_END = { 1094, "Edwin VanCleef", 1, 5, 1, {} },
+				ENCOUNTER_START = { 1094, "Edwin VanCleef", 1, 5 }, BOSS_KILL = { 1094, "Edwin VanCleef" },
 				GET_ITEM_INFO_RECEIVED = { 2589, true }, GUILD_ROSTER_UPDATE = { false },
 				INCOMING_RESURRECT_CHANGED = { "party1" }, INCOMING_SUMMON_CHANGED = { "party1" },
 				ITEM_LOCK_CHANGED = { 0, 1 }, LOOT_OPENED = { false, false }, LOOT_READY = { false },

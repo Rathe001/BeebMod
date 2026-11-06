@@ -79,6 +79,10 @@ Modules\Census\Demo.lua
 Modules\Tooltips\Tooltips.lua
 Modules\Tracker\Quests.lua
 Modules\Tracker\Tracker.lua
+Modules\Encounter\Data.lua
+Modules\Encounter\Classes.lua
+Modules\Encounter\Role.lua
+Modules\Encounter\Encounter.lua
 Modules\Bars\Bars.lua
 Modules\Micro\Micro.lua
 Modules\BagWindow\BagWindow.lua

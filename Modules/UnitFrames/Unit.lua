@@ -395,6 +395,9 @@ F.POWER_INK = { 0.56, 0.71, 1.00 }
 -- how far up a party cell's numbers sit: over its row of aura icons (16 high,
 -- 3 from the bottom), with a pixel or two between
 F.NUMBERS_Y = 21
+-- and their size, under the name's 12 (Josh 2026-11-06: "reduce the hp
+-- and mana number font size a bit")
+F.NUMBERS_SIZE = 10
 -- the power type that is mana, and how tall a druid's mana line is in form
 F.MANA_TYPE = (Enum and Enum.PowerType and Enum.PowerType.Mana) or 0
 F.DRUID_MANA_H = 2
@@ -1002,9 +1005,9 @@ function F.Dress(b, kind)
 		-- left corner and your buffs in its bottom right (Auras.lua), so the
 		-- numbers sit on the line over them, under the name
 		if k.numbers then
-			b.hpText = text(b.over, 11, "LEFT", "num")
+			b.hpText = text(b.over, F.NUMBERS_SIZE, "LEFT", "num")
 			b.hpText:SetPoint("BOTTOMLEFT", b.health, "BOTTOMLEFT", 5, F.NUMBERS_Y)
-			b.powerNum = text(b.over, 11, "RIGHT", "num")
+			b.powerNum = text(b.over, F.NUMBERS_SIZE, "RIGHT", "num")
 			b.powerNum:SetPoint("BOTTOMRIGHT", b.health, "BOTTOMRIGHT", -5, F.NUMBERS_Y)
 			local c = F.POWER_INK
 			b.powerNum:SetTextColor(c[1], c[2], c[3])

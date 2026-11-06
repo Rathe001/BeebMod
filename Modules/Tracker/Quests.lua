@@ -264,8 +264,8 @@ function Q.Tag(questID)
 	return nil
 end
 
--- Every quest you are following, in the order the client keeps them. (The
--- zone each sits under is read too; the tracker does not group by it.)
+-- Every quest you are following, in the order the client keeps them, with
+-- the zone each sits under (Q.Watched, below).
 -- A TIMED QUEST'S CLOCK (Josh 2026-09-28: "timed quests don't have a timer on
 -- the quest log"). The client counts down an escort or a delivery, and its
 -- own tracker showed the time; ours never asked. GetQuestTimers gives the
@@ -306,6 +306,26 @@ local function timeLeft(index, questID, timers)
 	return nil
 end
 
+-- one quest as the tracker draws it
+local function build(i, title, level, questID, zone, timers, clock)
+	local done = complete(i, questID)
+	local left = timeLeft(i, questID, timers)
+	return {
+		index = i,
+		questID = questID,
+		title = title,
+		level = tonumber(level) or 0,
+		tag = Q.Tag(questID),
+		zone = zone,
+		complete = done,
+		failed = failed(i, questID),
+		objectives = objectives(i, questID),
+		item = Q.Item(i, done),
+		-- when its clock runs out, on GetTime's clock
+		endsAt = left and (clock + left) or nil,
+	}
+end
+
 function Q.Watched()
 	local out, zone = {}, nil
 	local timers = Q.Timers()
@@ -315,25 +335,52 @@ function Q.Watched()
 		if isHeader then
 			zone = title
 		elseif title and watched(i, questID) then
-			local done = complete(i, questID)
-			local left = timeLeft(i, questID, timers)
-			out[#out + 1] = {
-				index = i,
-				questID = questID,
-				title = title,
-				level = tonumber(level) or 0,
-				tag = Q.Tag(questID),
-				zone = zone,
-				complete = done,
-				failed = failed(i, questID),
-				objectives = objectives(i, questID),
-				item = Q.Item(i, done),
-				-- when its clock runs out, on GetTime's clock
-				endsAt = left and (clock + left) or nil,
-			}
+			out[#out + 1] = build(i, title, level, questID, zone, timers, clock)
 		end
 	end
 	return out
+end
+
+-- a zone's name as a key: "The Deadmines" and "Deadmines" are one place
+-- (the same rule as the dungeon list's, Modules/XP/Dungeons.lua)
+function Q.ZoneKey(name)
+	local D = BT.Dungeons
+	if D and D.Key then
+		return D.Key(name)
+	end
+	if type(name) ~= "string" then
+		return nil
+	end
+	local k = name:lower():gsub("^the%s+", ""):gsub("[^%w]", "")
+	return k ~= "" and k or nil
+end
+
+-- A DUNGEON'S OWN QUESTS (Josh 2026-11-06: "in dungeons/raids to only show
+-- the quests that are in that zone"). Every quest under the log's heading
+-- for the place, followed or not: those are the ones you went in for. Then
+-- the quests you follow everywhere else, which the tracker folds away under
+-- one line. Two lists, from one pass over the log. `keys` is one zone key,
+-- or a set of them: a dungeon's instance and its zone may be spelled apart.
+function Q.Split(keys)
+	if type(keys) ~= "table" then
+		keys = keys and { [keys] = true } or {}
+	end
+	local here, others, zone, inside = {}, {}, nil, false
+	local timers = Q.Timers()
+	local clock = (type(GetTime) == "function" and GetTime()) or 0
+	for i = 1, numEntries() do
+		local title, level, isHeader, questID = entry(i)
+		if isHeader then
+			zone = title
+			local k = Q.ZoneKey(title)
+			inside = k ~= nil and keys[k] == true
+		elseif title and inside then
+			here[#here + 1] = build(i, title, level, questID, zone, timers, clock)
+		elseif title and watched(i, questID) then
+			others[#others + 1] = build(i, title, level, questID, zone, timers, clock)
+		end
+	end
+	return here, others
 end
 
 -- Opening one, and stopping following one. Both go through whichever call
