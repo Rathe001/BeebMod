@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.7.0
 
 - **Encounter notes for every dungeon from the original game.** The notes
   now reach Scholomance. The new ones are Scarlet Monastery's Armory and
