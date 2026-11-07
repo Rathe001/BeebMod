@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.6.1
 
 - **Encounter notes move on with each kill.** The notes follow the bosses
   as they die, in order. A kill moves them on even when the game's name for
