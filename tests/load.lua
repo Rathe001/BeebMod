@@ -18654,28 +18654,52 @@ if ok then
 				.. stack[1].tall .. ", " .. stack[2].tall)
 
 			local fire = enc.events:GetScript("OnEvent")
-			-- a nameplate by its npc id, a target by its name, a fight by its name
+			-- a boss's nameplate and your target don't choose (Josh 2026-11-07)
 			guids.nameplate3 = "Creature-0-1-2-3-1763-00001"
 			fire(enc.events, "NAME_PLATE_UNIT_ADDED", "nameplate3")
-			assert(f.body.boss._text == "Gilnid", "a boss's nameplate shows its notes")
 			unitNames.target = "Mr. Smite"
 			fire(enc.events, "PLAYER_TARGET_CHANGED")
-			assert(f.body.boss._text == "Mr. Smite", "and so does targeting it")
+			assert(f.body.boss._text == "Rhahk'Zor", "a plate or a target leaves the boss shown: " .. tostring(f.body.boss._text))
+			unitNames.target = nil
+			-- a fight starting does, by its name
 			fire(enc.events, "ENCOUNTER_START", 1094, "Edwin VanCleef", 1, 5)
-			assert(f.body.boss._text == "Edwin VanCleef" and E.run.at == 7, "and its fight starting")
-			-- killed: the next boss alive
+			assert(f.body.boss._text == "Edwin VanCleef" and E.run.at == 7, "a fight starting shows its boss")
+			-- killed: the next boss alive, once for the two events a kill sends
+			fire(enc.events, "ENCOUNTER_END", 1094, "Edwin VanCleef", 1, 5, 1)
 			fire(enc.events, "BOSS_KILL", 1094, "Edwin VanCleef")
-			assert(f.body.boss._text == "Rhahk'Zor" and E.run.killed[7], "a kill moves on to the next one alive")
+			assert(f.body.boss._text == "Rhahk'Zor" and E.run.killed[7] and not E.run.killed[1],
+				"a kill moves on to the next one alive, once")
 			-- the arrows hold until a different boss is seen
 			f.body.next:GetScript("OnClick")(f.body.next)
 			assert(f.body.boss._text == "Sneed's Shredder", "an arrow shows the next")
-			unitNames.target = "Edwin VanCleef"
-			fire(enc.events, "PLAYER_TARGET_CHANGED")
+			fire(enc.events, "ENCOUNTER_START", 1094, "Edwin VanCleef", 1, 5)
 			assert(f.body.boss._text == "Sneed's Shredder", "the boss seen last doesn't take it back")
-			unitNames.target = "Sneed"
-			fire(enc.events, "PLAYER_TARGET_CHANGED")
+			fire(enc.events, "ENCOUNTER_START", 1091, "Sneed", 1, 5)
 			assert(f.body.boss._text == "Sneed's Shredder" and not E.run.held, "a different one does (Sneed is the Shredder's)")
-			unitNames.target = nil
+			-- a kill by a name none of ours has: the boss shown, and on to the next
+			fire(enc.events, "ENCOUNTER_END", 9999, "Somebody Else", 1, 5, 1)
+			fire(enc.events, "BOSS_KILL", 9999, "Somebody Else")
+			assert(E.run.killed[2] and not E.run.killed[3] and f.body.boss._text == "Gilnid",
+				"a kill by another name is the boss shown: " .. tostring(f.body.boss._text))
+			-- a wipe moves nothing
+			fire(enc.events, "ENCOUNTER_END", 9998, "Gilnid", 1, 5, 0)
+			assert(f.body.boss._text == "Gilnid" and not E.run.killed[3], "a wipe moves nothing")
+			-- kept through a reload: the same bosses dead, the same one shown
+			E.run, E.loaded = { killed = {}, at = 1, held = false }, false
+			enc.Update()
+			assert(f.body.boss._text == "Gilnid" and E.run.killed[2] and E.run.killed[7],
+				"a reload keeps the run: " .. tostring(f.body.boss._text))
+			-- but not a run the next evening
+			do
+				local wasNow = BT.Util.Now
+				local runs = BT.settings.encounter.runs["Player-1-0000ABCD"]
+				runs.seen = wasNow() - 2 * E.FRESH_AFTER
+				E.run, E.loaded = { killed = {}, at = 1, held = false }, false
+				enc.Update()
+				assert(f.body.boss._text == "Rhahk'Zor" and not E.run.killed[2], "a run the next evening starts clean")
+				-- back as it was for what follows: Sneed's Shredder shown
+				E.run.at = 2
+			end
 
 			-- THE ROLE: the group's, then the finder's one tick, then a class that
 			-- can only deal damage (the talents answered nothing on Forever)
@@ -18737,22 +18761,19 @@ if ok then
 			enc.Update()
 			assert(f:IsShown() and f.body.boss._text == "Interrogator Vishas", "the first wing until a boss says otherwise: "
 				.. tostring(f.body.boss._text))
-			unitNames.target = "Arcanist Doan"
-			fire(enc.events, "PLAYER_TARGET_CHANGED")
+			fire(enc.events, "ENCOUNTER_START", 1000, "Arcanist Doan", 1, 5)
 			assert(f.body.boss._text == "Arcanist Doan" and f.body.where._text == "Boss 2 of 2" and E.wing == "scarletmonasterylibrary",
-				"Doan seen: the Library: " .. tostring(f.body.where._text))
-			unitNames.target = nil
+				"Doan's fight: the Library: " .. tostring(f.body.where._text))
 			E.wing = nil
 			place = "The Deadmines"
 
 			-- THE RECORD: a run written down, and done on the way out
 			E.Record()
-			guids.nameplate4 = "Creature-0-1-2-3-646-00002"
-			fire(enc.events, "NAME_PLATE_UNIT_ADDED", "nameplate4")
+			fire(enc.events, "ENCOUNTER_START", 1094, "Edwin VanCleef", 1, 5)
 			local rec = BeebModDB.encounterDump
 			local lines = table.concat(rec.lines, "\n")
-			assert(lines:find("instance | The Deadmines", 1, true) and lines:find("unit | nameplate4 | elite", 1, true),
-				"the dungeon and an elite's plate: " .. lines)
+			assert(lines:find("instance | The Deadmines", 1, true) and lines:find("ENCOUNTER_START | 1094", 1, true),
+				"the dungeon and a fight: " .. lines)
 			inside = false
 			E.NoteWhere()
 			assert(not E.recording and rec.lines[#rec.lines]:find("done", 1, true), "and done once you leave it")

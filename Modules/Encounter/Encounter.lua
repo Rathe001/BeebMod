@@ -23,11 +23,12 @@
 -- one whose fight starts (ENCOUNTER_START). A kill (ENCOUNTER_END, BOSS_KILL)
 -- moves it to the next one alive. The arrows look at another, and it stays
 -- there until a different boss is seen.
--- NOT BY ITS NAMEPLATE, IN THERE (the Dungeon run record, 2026-11-06, The
--- Hall of Thanes): inside a dungeon an enemy's GUID and name are both
--- secret, on its plate and as your target. The plate and the target are
--- still asked, by npc id and by name, for the day the client says; a
--- secret is never compared.
+-- BY THE KILLS, IN ORDER (Josh 2026-11-07: "TrueParse just loads them
+-- sequentially as they are killed"). Nameplates and targets don't choose:
+-- inside a dungeon an enemy's GUID and name are both secret (the Dungeon run
+-- record, 2026-11-06, The Hall of Thanes), and a later boss's plate seen
+-- across a room would have jumped ahead. A kill whose name matches no boss
+-- is the boss shown. The run is kept through a /reload.
 --
 -- WHERE THE NOTES COME FROM: Modules/Encounter/Data.lua, and the research
 -- behind each in docs/encounters/.
@@ -214,6 +215,67 @@ local function now()
 	return (type(GetTime) == "function" and GetTime()) or 0
 end
 
+-- the wall clock, for time away: it goes on through a reload and a restart
+local function clock()
+	return BT.Util.Now()
+end
+
+-- KEPT THROUGH A RELOAD (Josh 2026-11-07: the notes went back to the first
+-- boss). The run is this character's, in the saved settings: the dungeon,
+-- the bosses killed, the one shown, and when it was last looked at.
+local function saved()
+	local guid = plain(rawget(_G, "UnitGUID"), "player")
+	if type(guid) ~= "string" or type(BT.settings) ~= "table" then
+		return nil, nil
+	end
+	BT.settings.encounter = BT.settings.encounter or {}
+	BT.settings.encounter.runs = BT.settings.encounter.runs or {}
+	return BT.settings.encounter.runs, guid
+end
+
+function E.Save()
+	local r = E.run
+	local key = r.key or r.lastKey
+	if not key then
+		return
+	end
+	local all, me = saved()
+	if not all then
+		return
+	end
+	local killed = {}
+	for i in pairs(r.killed) do
+		killed[#killed + 1] = i
+	end
+	table.sort(killed)
+	all[me] = { key = key, killed = killed, at = r.at, left = r.leftAt, seen = clock() }
+end
+
+-- once a session: the run as it was saved. Inside the same dungeon within
+-- half an hour, Enter keeps it.
+function E.Load()
+	if E.loaded then
+		return
+	end
+	local all, me = saved()
+	if not all then
+		return
+	end
+	E.loaded = true
+	local s = all[me]
+	if type(s) ~= "table" or type(s.key) ~= "string" then
+		return
+	end
+	local killed = {}
+	for _, i in ipairs(type(s.killed) == "table" and s.killed or {}) do
+		if type(i) == "number" then
+			killed[i] = true
+		end
+	end
+	E.run = { lastKey = s.key, killed = killed, at = tonumber(s.at) or 1, held = false,
+		leftAt = tonumber(s.left) or tonumber(s.seen) or 0 }
+end
+
 -- a name to match by: "Mr. Smite" and "Mr Smite" are one boss
 local function lower(s)
 	if type(s) ~= "string" or secret(s) then
@@ -223,7 +285,7 @@ local function lower(s)
 	return k ~= "" and k or nil
 end
 
--- the boss a nameplate, a target or a fight is, by npc id or by name: its
+-- the boss a fight is, by npc id or by name: its
 -- place in the dungeon's list, or nil
 function E.Find(notes, npc, name)
 	if not notes then
@@ -273,7 +335,7 @@ function E.Enter(key, notes)
 		r.leftAt = nil
 		return false
 	end
-	local away = r.leftAt and (now() - r.leftAt) or math.huge
+	local away = r.leftAt and (clock() - r.leftAt) or math.huge
 	if r.lastKey == key and away < E.FRESH_AFTER then
 		r.key, r.leftAt = key, nil
 		return false
@@ -285,7 +347,7 @@ end
 function E.Leave()
 	local r = E.run
 	if r.key then
-		r.lastKey, r.key, r.leftAt = r.key, nil, now()
+		r.lastKey, r.key, r.leftAt = r.key, nil, clock()
 	end
 end
 
@@ -666,11 +728,13 @@ function M.Update()
 	end
 	local wasShown = frame:IsShown()
 	local key, _, notes = E.Here()
+	E.Load()
 	if key then
 		E.Enter(key, notes)
 	else
 		E.Leave()
 	end
+	E.Save()
 	E.live = BT.Enabled("encounter") and notes ~= nil and #notes.bosses > 0
 	if not E.live then
 		frame:Hide()
@@ -806,12 +870,7 @@ end
 -- What the game says
 -- ---------------------------------------------------------------------------
 
-local function npcOf(guid)
-	return type(guid) == "string" and not secret(guid)
-		and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)")) or nil
-end
-
--- the boss a unit or a fight is: in these notes, or in another wing of the
+-- the boss a fight is: in these notes, or in another wing of the
 -- same instance, which then becomes the wing you are in (a fresh run of
 -- it). Its place, and the notes it is in.
 function E.Match(key, notes, npc, name)
@@ -829,41 +888,19 @@ function E.Match(key, notes, npc, name)
 	return at, other
 end
 
--- the elites a record writes down: a boss is one of them
-local ELITE = { elite = true, rareelite = true, worldboss = true }
+-- ONE KILL, TWO EVENTS: the game sends ENCOUNTER_END and BOSS_KILL for the
+-- same kill. The second comes within a few seconds of the first, for the
+-- same fight (when the game says which).
+E.SAME_KILL = 5
 
--- a unit that may be a boss: its nameplate, or your target
-function E.Look(unit)
-	if not (E.live or E.recording) then
-		return false
-	end
-	local npc = npcOf(plain(rawget(_G, "UnitGUID"), unit))
-	local name = plain(rawget(_G, "UnitName"), unit)
-	-- in a dungeon both are secret (the Dungeon run record, 2026-11-06):
-	-- nothing to match, so nothing more to ask
-	if npc == nil and name == nil and not E.recording then
-		return false
-	end
-	local key, _, notes = E.Here()
-	local i
-	i, notes = E.Match(key, notes, npc, name)
-	if E.recording and key then
-		local rank = plain(rawget(_G, "UnitClassification"), unit)
-		if i or ELITE[rank] then
-			-- as the game gave them, secret or not
-			local okG, guid = pcall(rawget(_G, "UnitGUID") or error, unit)
-			local okN, raw = pcall(rawget(_G, "UnitName") or error, unit)
-			E.Note("unit", unit, rank, okG and guid or nil, okN and raw or nil, npc, i)
-		end
-	end
-	if not E.live then
-		return false
-	end
-	if i and E.Seen(i) then
-		M.Update()
-		return true
-	end
-	return false
+local function sameKill(id)
+	local r = E.run
+	local t = now()
+	local plainId = (id ~= nil and not secret(id)) and id or nil
+	local same = r.lastKill ~= nil and t - r.lastKill < E.SAME_KILL
+		and (plainId == nil or r.lastKillId == nil or plainId == r.lastKillId)
+	r.lastKill, r.lastKillId = t, plainId
+	return same
 end
 
 function E.Fight(event, id, name, a, b, success)
@@ -872,14 +909,28 @@ function E.Fight(event, id, name, a, b, success)
 	if not E.live then
 		return false
 	end
+	local kill = event == "BOSS_KILL" or (event == "ENCOUNTER_END" and tonumber(success) == 1)
+	if kill and sameKill(id) then
+		return false
+	end
 	local i
 	i, notes = E.Match(key, notes, nil, name)
 	if not i then
-		return false
+		-- A KILL BY ANOTHER NAME: the game's name for the fight matches none
+		-- of ours. The boss shown is the one killed, or with the arrows
+		-- looking elsewhere, the first one still alive.
+		if not kill then
+			return false
+		end
+		local r = E.run
+		i = (not r.held and notes.bosses[r.at]) and r.at or E.NextLive(notes, nil)
+		if not i then
+			return false
+		end
 	end
 	if event == "ENCOUNTER_START" then
 		E.Seen(i)
-	elseif event == "BOSS_KILL" or (event == "ENCOUNTER_END" and tonumber(success) == 1) then
+	elseif kill then
 		E.Killed(notes, i)
 	else
 		return false
@@ -892,11 +943,7 @@ local function onEvent(_, event, ...)
 	if not BT.Enabled("encounter") then
 		return
 	end
-	if event == "NAME_PLATE_UNIT_ADDED" then
-		E.Look((...))
-	elseif event == "PLAYER_TARGET_CHANGED" then
-		E.Look("target")
-	elseif event == "ENCOUNTER_START" or event == "ENCOUNTER_END" or event == "BOSS_KILL" then
+	if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" or event == "BOSS_KILL" then
 		local id, name, a, b, success = ...
 		if event == "BOSS_KILL" then
 			id, name = ...
@@ -933,7 +980,6 @@ function M.Watch()
 	M.events = CreateFrame("Frame")
 	for _, event in ipairs({
 		"PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
-		"NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED",
 		"ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL",
 		-- your role: the group's and the finder's
 		"GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED",
