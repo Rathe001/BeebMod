@@ -76,10 +76,27 @@ local function isSlot(f)
 		and (f.icon ~= nil or f.Icon ~= nil)
 end
 
--- the money line: pictures of coins, never inked or taken away
-local function isMoney(f)
+-- the coins: pictures of gold, silver and copper, never inked or taken away
+-- THE COINS, NOT THE MONEY LINE (Josh 2026-11-07: the coins were all grey,
+-- then "add some padding inside that rail"). The combined backpack's money
+-- line has no name, so a rule by name dressed its coins grey. Its coin box
+-- is the game's art and goes like the rest; ours is the rail under the bag
+-- slots (Modules/BagWindow/BagSlots.lua).
+local COINS = { GoldButton = true, SilverButton = true, CopperButton = true }
+local function isCoin(f, parent)
+	if type(f) ~= "table" then
+		return false
+	end
+	if type(parent) == "table" then
+		for key in pairs(COINS) do
+			if parent[key] == f then
+				return true
+			end
+		end
+	end
 	local name = BT.Furniture.Call(f, "GetName")
-	return type(name) == "string" and name:find("Money", 1, true) ~= nil
+	return type(name) == "string" and (name:find("GoldButton$") or name:find("SilverButton$")
+		or name:find("CopperButton$")) ~= nil
 end
 
 -- every slot a window has made, however it keeps them
@@ -111,7 +128,7 @@ end
 
 local dresser = BT.Furniture.New({
 	panelAlpha = 0.96,
-	skip = function(f) return isSlot(f) or isMoney(f) end,
+	skip = function(f, parent) return isSlot(f) or isCoin(f, parent) end,
 })
 
 local function piece(f, key, suffix)
@@ -422,6 +439,11 @@ function M.StyleAll(plain, force)
 			local ok, err = pcall(function()
 				n = n + (dresser:DressRoot(w) or 0)
 				dressClose(piece(w, "CloseButton", "CloseButton"))
+				-- the game's coin box: the rail under the bag slots is ours
+				local money = piece(w, "MoneyFrame", "MoneyFrame")
+				if type(money) == "table" and type(money.Border) == "table" then
+					dresser:Hide(money.Border)
+				end
 				for _, b in ipairs(M.Slots(w)) do
 					if M.StyleSlot(b, false, force) then
 						n = n + 1

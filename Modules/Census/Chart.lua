@@ -134,6 +134,15 @@ local function tile(view, i, title)
 	return t
 end
 
+-- how wide a label's words are, or nil when the client won't say plainly
+local function width(fs)
+	local ok, w = pcall(fs.GetStringWidth, fs)
+	if not ok or type(w) ~= "number" or (issecretvalue and issecretvalue(w)) then
+		return nil
+	end
+	return w
+end
+
 -- a bar of shares, and the words under its two ends; each half of the tile
 -- is the click for its side
 local function splitTile(view, i, title, keys, colours, onPick)
@@ -739,19 +748,34 @@ function C.PaintTiles(view, census)
 			x = x + share * w
 		end
 		local any = known > 0
+		local function pct(k)
+			return any and math.floor((counts[k] or 0) / known * 100 + 0.5) or 0
+		end
 		t.paint = function()
 			for _, k in ipairs(t.keys) do
 				local b = t.buttons[k]
 				local n = counts[k] or 0
 				b.live = n > 0 or chosen == k
-				b.words:SetText(("%d%% %s"):format(any and math.floor(n / known * 100 + 0.5) or 0, words[k]))
-				b.words:SetShown(any)
+				b.words:SetText(("%d%% %s"):format(pct(k), words[k]))
+				-- A SIDE WITH NO ONE SAYS NOTHING (Josh 2026-11-07: "100%
+				-- Alliance" ran into "0% Horde"). The bar shows it, and a
+				-- click on it does nothing.
+				b.words:SetShown(any and b.live)
 				if chosen == k then
 					b.words:SetTextColor(accent[1], accent[2], accent[3])
 				elseif b.hovered and b.live then
 					BT.Ink(b.words, "ink")
 				else
 					BT.Ink(b.words, "soft")
+				end
+			end
+			-- and two that would still meet: the smaller share keeps its number
+			local a, b = t.buttons[t.keys[1]].words, t.buttons[t.keys[2]].words
+			if a:IsShown() and b:IsShown() then
+				local wa, wb = width(a), width(b)
+				if wa and wb and wa + wb + 8 > t.w - 18 then
+					local small = pct(t.keys[1]) < pct(t.keys[2]) and t.keys[1] or t.keys[2]
+					t.buttons[small].words:SetText(("%d%%"):format(pct(small)))
 				end
 			end
 			t.none:SetShown(not any)

@@ -34,8 +34,13 @@ S.BAGS = 4
 -- IN A ROW ACROSS THE FOOT (Josh 2026-09-28: "Maybe align them horizontally
 -- across the bottom left?"), in the window's own line with the money: small
 -- enough for that line, and placed by its corner
-S.SIZE, S.GAP = 18, 3
-S.LEFT, S.BOTTOM = 8, 6
+-- ON A RAIL WITH ROOM INSIDE IT (Josh 2026-11-07: "Can we add some padding
+-- inside that rail?"). The game puts its items 4 above the money line, which
+-- sits 8 up and is 13 tall, so the foot of the window is 25 tall. The rail
+-- fills 4 to 24 of it. The slots are 14 so a few pixels show round them.
+S.SIZE, S.GAP = 14, 3
+S.LEFT, S.BOTTOM = 8, 7
+S.RAIL_SIDE, S.RAIL_BOTTOM, S.RAIL_H = 4, 4, 20
 local CROP = 0.08
 
 -- always (the settings canvas, Josh 2026-10-04, cut their switch)
@@ -338,6 +343,20 @@ function S.Build()
 	return f
 end
 
+-- the rail the row and the coins sit on, ours (`beebs`) so the restyle
+-- leaves it be
+function S.Rail()
+	if S.rail then
+		return S.rail
+	end
+	local r = CreateFrame("Frame", nil, UIParent)
+	r.beebs = true
+	r.surface = BT.Pill.Surface(r, "BACKGROUND", -8)
+	r:Hide()
+	S.rail = r
+	return r
+end
+
 -- the slots it shows, left to right, and the row as wide as they are
 local function fit(f, reagentInv, keyring)
 	f.reagent.inv = reagentInv
@@ -568,9 +587,11 @@ end
 -- in the backpack while it is open, the module on and the row wanted
 function S.Attach()
 	local f = S.Build()
+	local rail = S.Rail()
 	local host = BT.Enabled("bagwindow") and S.On() and S.Host() or nil
 	if not host then
 		f:Hide()
+		rail:Hide()
 		return false
 	end
 	f:SetParent(host)
@@ -581,6 +602,20 @@ function S.Attach()
 		f:SetFrameLevel((host:GetFrameLevel() or 1) + 5)
 	end
 	f:Show()
+	-- the rail under the row and the coins: at the window's own level, so
+	-- the money line (one up) and the row draw over it
+	rail:SetParent(host)
+	rail:ClearAllPoints()
+	rail:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", S.RAIL_SIDE, S.RAIL_BOTTOM)
+	rail:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -S.RAIL_SIDE, S.RAIL_BOTTOM)
+	rail:SetHeight(S.RAIL_H)
+	if host.GetFrameLevel and rail.SetFrameLevel then
+		rail:SetFrameLevel(host:GetFrameLevel() or 1)
+	end
+	local W = BT.Widgets
+	BT.Pill.PaintSurface(rail.surface, rail, { W.FILL[1] * 0.6, W.FILL[2] * 0.6, W.FILL[3] * 0.6, 1 }, W.RIM)
+	BT.Pill.ShowSurface(rail.surface, true)
+	rail:Show()
 	S.Refresh("attach")
 	return true
 end

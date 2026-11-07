@@ -3,7 +3,7 @@
 - **Keys:** `scarletmonasterygraveyard`, `scarletmonasterylibrary`, both with `instance = "scarletmonastery"`
 - **Sources:** W and K. Method has no Scarlet Monastery pages yet. Npc ids V.
 - **The wings.** The game may call every wing "Scarlet Monastery". If so, BeebMod shows the Graveyard's notes until a boss of another wing is seen, then that wing's.
-- **Left out:** Ironspire, Fallen Champion and Azshir the Sleepless (Graveyard rares). The Armory and the Cathedral start at level 32 and 35, so they come with a later batch.
+- **Left out:** Ironspire, Fallen Champion and Azshir the Sleepless (Graveyard rares). The Armory and the Cathedral are in `scarlet-monastery-armory-cathedral.md`.
 
 ## Graveyard
 

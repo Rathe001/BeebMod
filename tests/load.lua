@@ -2386,6 +2386,11 @@ if ok then
 			-- (the stubs' units are all Horde and male: those halves have people)
 			assert(view.census.sides.Horde > 0 and view.census.sexes.male > 0, "the tiles count each side and sex")
 			assert(view.countTile.num:GetText() == BT.Util.Commas(view.census.book), "and the whole book")
+			-- a side with no one says nothing, so the two don't run together
+			-- (Josh 2026-11-07: "100% Alliance" over "0% Horde")
+			assert(view.census.sides.Alliance == nil or view.census.sides.Alliance == 0, "the stubs have no Alliance")
+			assert(not view.factionButtons.Alliance.words:IsShown()
+				and view.factionButtons.Horde.words:GetText() == "100% Horde", "only Horde's share is said")
 			view.factionButtons.Horde:GetScript("OnClick")(view.factionButtons.Horde)
 			view.sexButtons[2]:GetScript("OnClick")(view.sexButtons[2])
 			local f = BT.Census.Filter(view)
@@ -8927,9 +8932,22 @@ if ok then
 			asTheClientBuilds(bare)
 			bare:SyncAppearanceWithHasItem()
 			local money = _G.CreateFrame("Frame", "ContainerFrameCombinedBagsMoneyFrame", win)
-			local coin = money:CreateTexture()
+			local coinButton = _G.CreateFrame("Button", "ContainerFrameCombinedBagsMoneyFrameGoldButton", money)
+			local coin = coinButton:CreateTexture()
 			coin.GetAtlas = function() return "coin-gold" end
 			coin._width, coin._height = 12, 12
+			-- the combined backpack's has no name (Josh 2026-11-07: grey coins)
+			local purse = _G.CreateFrame("Frame", nil, win)
+			win.MoneyFrame = purse
+			purse.GoldButton = _G.CreateFrame("Button", nil, purse)
+			local gold = purse.GoldButton:CreateTexture()
+			gold.GetAtlas = function() return "coin-gold" end
+			gold._width, gold._height = 13, 13
+			-- and its coin box, the game's art
+			purse.Border = _G.CreateFrame("Frame", nil, purse)
+			local box = purse.Border:CreateTexture()
+			box.GetAtlas = function() return "_common-coinbox-center" end
+			box._width, box._height = 100, 17
 
 			BT.SetEnabled("bagwindow", true)
 			mod.StyleAll()
@@ -8940,6 +8958,9 @@ if ok then
 			assert(normal._alpha == 0 and slot.IconBorder._alpha == 0, "a slot's art and quality glow see-through")
 			assert(slot.icon._texCoord and slot.icon._texCoord[1] > 0, "the picture cropped of its own border")
 			assert(coin._alpha ~= 0 and coin._vertex == nil, "and the coins left exactly as they are")
+			assert(gold._alpha ~= 0 and gold._vertex == nil and not gold._desaturated,
+				"a money line with no name too")
+			assert(purse.Border._alpha == 0, "its coin box off, as the rest of the game's art")
 			-- THE CLIENT CLEARS THE CROP (build 70707): it sets the picture and
 			-- then the whole of it, every time
 			assert(slot.icon._mask == nil, "the picture square, the client's mask off")
@@ -9078,6 +9099,14 @@ if ok then
 			local at = S.frame._points and S.frame._points.BOTTOMLEFT
 			assert(at and at.rel == win and at.x == S.LEFT and at.y == S.BOTTOM,
 				"in a row across the window's bottom left (Josh 2026-09-28)")
+			-- on a rail with room inside it (Josh 2026-11-07)
+			local rail = S.rail
+			local rl, rr = rail._points and rail._points.BOTTOMLEFT, rail._points and rail._points.BOTTOMRIGHT
+			assert(rail:IsShown() and rail:GetParent() == win and rl and rr and rl.x == S.RAIL_SIDE
+				and rr.x == -S.RAIL_SIDE, "a rail across the window's foot")
+			assert(S.BOTTOM - S.RAIL_BOTTOM >= 3 and S.RAIL_BOTTOM + S.RAIL_H - (S.BOTTOM + S.SIZE) >= 3
+				and S.LEFT - S.RAIL_SIDE >= 3, "with room round the slots")
+			assert(S.RAIL_BOTTOM + S.RAIL_H <= 25, "and under the game's items, 25 up")
 			local bs = S.frame.buttons
 			assert(#bs == 4 and bs[1].inv == 20 and bs[4].inv == 23, "four slots, for inventory slots 20 to 23")
 			assert(bs[1].icon._texture == 133633 and not bs[2].icon:IsShown(), "a bag shows its picture, an empty slot none")
@@ -18750,7 +18779,7 @@ if ok then
 			assert(f.body.where._text == "Optional · lower deck", "an optional boss says so")
 
 			-- A DUNGEON WITH NO NOTES: its quests still, and no notes
-			place = "Uldaman"
+			place = "The Drowned City"
 			tracker.Update()
 			enc.Update()
 			assert(not f:IsShown(), "no notes, no section")
@@ -18765,6 +18794,24 @@ if ok then
 			assert(f.body.boss._text == "Arcanist Doan" and f.body.where._text == "Boss 2 of 2" and E.wing == "scarletmonasterylibrary",
 				"Doan's fight: the Library: " .. tostring(f.body.where._text))
 			E.wing = nil
+			-- DIRE MAUL'S THREE WINGS (the second batch, 2026-11-07): East until
+			-- a boss of another is fought
+			place = "Dire Maul"
+			enc.Update()
+			assert(f.body.boss._text == "Pusillin", "Dire Maul opens on East: " .. tostring(f.body.boss._text))
+			fire(enc.events, "ENCOUNTER_START", 1001, "Cho'Rush the Observer", 1, 5)
+			assert(f.body.boss._text == "King Gordok" and E.wing == "diremaulnorth",
+				"Cho'Rush's fight is the King's, in North: " .. tostring(f.body.boss._text))
+			E.wing = nil
+			-- a kill moves on past the optional bosses
+			do
+				local notes = BT.EncounterNotes.deadmines
+				E.run = { killed = { [1] = true, [2] = true, [3] = true, [4] = true }, at = 4, held = false }
+				assert(notes.bosses[E.NextLive(notes, 4)].name == "Captain Greenskin", "past Cookie to Greenskin")
+				E.run.killed[6], E.run.killed[7] = true, true
+				assert(notes.bosses[E.NextLive(notes, 7)].name == "Cookie", "and to Cookie when nothing else is left")
+				E.run = { killed = {}, at = 1, held = false }
+			end
 			place = "The Deadmines"
 
 			-- THE RECORD: a run written down, and done on the way out

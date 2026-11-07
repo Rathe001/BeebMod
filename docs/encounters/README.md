@@ -16,7 +16,7 @@ contradicts is kept. Where guides disagree, the line is left out or both
 answers are written. Generic advice ("focus your healing on the tank") is
 left out.
 
-All read on 2026-11-06. Icy Veins and Wowhead refuse automated reads, so
+The first batch was read on 2026-11-06. The second, from level 32 up, on 2026-11-07, when Method had no guide for it and the wiki refused many reads (HTTP 429). Icy Veins and Wowhead refuse automated reads, so
 neither was used. Several Warcraft Wiki pages describe a later version of a
 boss (Cataclysm's Shadowfang Keep, Warlords' Razorfen Kraul). Those parts
 were not used. The "(Classic)" pages were read instead where they exist.

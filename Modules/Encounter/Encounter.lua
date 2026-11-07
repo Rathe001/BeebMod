@@ -132,7 +132,21 @@ function E.Wings(a, b)
 			out[#out + 1] = k
 		end
 	end
-	table.sort(out)
+	-- lowest level first, so the Graveyard leads Scarlet Monastery's four
+	local rank = {}
+	for i, d in ipairs(BT.Dungeons and BT.Dungeons.LIST or {}) do
+		local key = BT.Dungeons.Key(d.name)
+		if key then
+			rank[key] = i
+		end
+	end
+	table.sort(out, function(x, y)
+		local rx, ry = rank[x] or math.huge, rank[y] or math.huge
+		if rx ~= ry then
+			return rx < ry
+		end
+		return x < y
+	end)
 	return out
 end
 
@@ -313,19 +327,26 @@ function E.Find(notes, npc, name)
 end
 
 -- the first boss alive after `from` (or from the start), round the list once
+-- PAST THE OPTIONAL ONES (2026-11-07, the second batch): Dire Maul North's
+-- guards, Blackrock Depths' bar and the bosses a quest calls up are skipped
+-- by most runs. One shows when its fight starts, or when nothing else is left.
 function E.NextLive(notes, from)
 	local n = #notes.bosses
 	if n == 0 then
 		return nil
 	end
 	local start = from or 0
+	local spare
 	for step = 1, n do
 		local i = (start + step - 1) % n + 1
 		if not E.run.killed[i] then
-			return i
+			if not notes.bosses[i].optional then
+				return i
+			end
+			spare = spare or i
 		end
 	end
-	return nil
+	return spare
 end
 
 -- a new dungeon, or the same one after a long time away: a fresh run

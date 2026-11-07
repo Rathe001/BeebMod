@@ -3,6 +3,26 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Encounter notes for every dungeon from the original game.** The notes
+  now reach Scholomance. The new ones are Scarlet Monastery's Armory and
+  Cathedral, Razorfen Downs, Uldaman, Zul'Farrak, Maraudon, the Temple of
+  Atal'Hakkar, Blackrock Depths, both Blackrock Spires, the three wings of
+  Dire Maul and both sides of Stratholme. The five new dungeons from level
+  35 up have no notes yet. No guide has seen inside them.
+- **Optional bosses wait their turn.** After a kill the notes move to the
+  next boss most runs fight. A boss many runs skip, such as Cookie, shows
+  when its fight starts.
+- **Gold, silver and copper in the bags.** The coins under the combined
+  backpack were all grey. They show in their own colours again.
+- **A rail under the bag slots and coins.** The bag slots and the money now
+  sit on a flat rail across the foot of the backpack, with a little room
+  round them. The bag slots are a little smaller to make that room.
+- **The Ledger's faction and gender shares no longer overlap.** With
+  everyone on one side, "100% Alliance" ran into "0% Horde". A side with no
+  one now shows no words. The bar still shows the split.
+
 ## 1.6.1
 
 - **Encounter notes move on with each kill.** The notes follow the bosses
