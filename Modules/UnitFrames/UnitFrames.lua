@@ -1189,6 +1189,8 @@ local SHARED = {
 	"PARTY_LOOT_METHOD_CHANGED", "INCOMING_RESURRECT_CHANGED", "INCOMING_SUMMON_CHANGED",
 	-- into an inn or a city and out again: the Zzz on your own cell
 	"PLAYER_UPDATE_RESTING",
+	-- a role given or changed: the icon before a party member's name
+	"PLAYER_ROLES_ASSIGNED",
 }
 -- YOURS ALONE (Josh 2026-09-23, audit): these were heard for every unit in
 -- range - every cast in a raid, every mob's threat - and all but yours were
@@ -1295,8 +1297,8 @@ local function onEvent(_, event, unit, powerType)
 	if event == "PLAYER_REGEN_ENABLED" then
 		-- the queue has been drained by then (see `drain`, made first)
 		M.QueuePaint()
-	elseif event == "PLAYER_UPDATE_RESTING" then
-		-- resting or not: the Zzz on your own cell
+	elseif event == "PLAYER_UPDATE_RESTING" or event == "PLAYER_ROLES_ASSIGNED" then
+		-- resting or not: the Zzz on your own cell; a role: the icon before a name
 		M.QueuePaint()
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		-- the same token, somebody else: the client reads the auras again
@@ -1609,21 +1611,21 @@ local SKULL = { name = "Edwin VanCleef", reaction = "hostile", hp = 64, marker =
 -- a priest's white bar, and Ysolde's is on a full bar. The raid's warriors
 -- carry them too, and the made-up target one too big to fit.
 local PARTY = {
-	{ name = "Brannoc", class = "WARRIOR", level = 34, hp = 64, max = 1480, heal = 20, shield = 8, aggro = 3, leader = true, ml = true,
+	{ name = "Brannoc", class = "WARRIOR", level = 34, hp = 64, max = 1480, heal = 20, shield = 8, aggro = 3, leader = true, ml = true, role = "TANK",
 		aim = SKULL, auras = { debuffs = { { spell = SP.poison, type = "Poison", count = 3 } },
 			mine = { { spell = SP.renew }, { spell = SP.shield } }, dispel = "Poison" } },
 	-- the one with something you could remove, to show the mark
 	-- and a summon waiting for her
-	{ name = "Maelis", class = "PRIEST", level = 33, hp = 92, max = 760, mana = 58, summon = 1, heal = 20, shield = 30,
+	{ name = "Maelis", class = "PRIEST", level = 33, hp = 92, max = 760, mana = 58, summon = 1, heal = 20, shield = 30, role = "HEALER",
 		aim = { name = "Brannoc", class = "WARRIOR", hp = 64 },
 		auras = { debuffs = { { spell = SP.pain, type = "Magic" }, { spell = SP.hamstring } }, dispel = "Magic" } },
 	-- the one on the wrong target, which is what the column is for
-	{ name = "Ysolde", class = "MAGE", level = 35, hp = 100, max = 720, mana = 71, target = true, shield = 15,
+	{ name = "Ysolde", class = "MAGE", level = 35, hp = 100, max = 720, mana = 71, target = true, shield = 15, role = "DAMAGER",
 		aim = { name = "Defias Blackguard", reaction = "hostile", hp = 100 },
 		auras = { debuffs = { { spell = SP.infected, type = "Disease" } }, mine = { { spell = SP.shield } },
 			dispel = "Disease" } },
 	-- a hunter, with a boar that is only content: the happiness square
-	{ name = "Ashby", class = "HUNTER", level = 32, hp = 47, max = 1210, mana = 80, shield = 20, aim = SKULL,
+	{ name = "Ashby", class = "HUNTER", level = 32, hp = 47, max = 1210, mana = 80, shield = 20, role = "DAMAGER", aim = SKULL,
 		pet = { name = "Bristleback", reaction = "friendly", hp = 83, happy = 2, power = "FOCUS", mana = 60 },
 		auras = { debuffs = { { spell = SP.corruption, type = "Curse" } }, mine = { { spell = SP.rejuv } },
 			dispel = "Curse" } },

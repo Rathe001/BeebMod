@@ -38,6 +38,7 @@ If something breaks, please report it on GitHub (link at the bottom).
 - Positions come from Edit Mode, so you move them the same way you'd move the default frames
 - Enemy nameplates with a red rim on casts you should interrupt
 - Your DoTs and crowd control shown above each nameplate
+- Friendly nameplates that mark your group with a blue dot and your raid with an orange ring
 - Buff and debuff tray next to the dock
 - Personal resource bar with a range icon:
   - Crossed swords in melee range

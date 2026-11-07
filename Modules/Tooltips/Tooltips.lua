@@ -4965,6 +4965,11 @@ if GameTooltip and GameTooltip.HookScript then
 			local ok, _, u = pcall(tip.GetUnit, tip)
 			unit = ok and u or nil
 		end
+		-- a secret unit (inside an instance) cannot be asked about: it is
+		-- drawn as the game gives it, plainly dressed (T.Fill)
+		if unit ~= nil and issecretvalue and issecretvalue(unit) then
+			unit = nil
+		end
 		-- (not while one of ours is showing it: Compose and ComposeItem
 		-- have just dressed it, and a plain pass took an item's spine off)
 		if not M.composing and not (unit and UnitExists and UnitExists(unit)) then

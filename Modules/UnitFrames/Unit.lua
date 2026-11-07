@@ -78,6 +78,38 @@ function F.DrawMarker(tex, marker)
 	return false
 end
 
+-- THE CLASSIC ROLE ICONS: the shield, the cross and the sword on their round
+-- backs, from the sheet the group finder draws its own with
+-- (Blizzard_LFGVanilla_Listing.xml). The client says where each sits
+-- (GetTexCoordsForRole); these are its answers, for a client that does not.
+-- The encounter notes' role buttons draw from here too.
+F.ROLE_SHEET = "Interface\\LFGFrame\\UI-LFG-ICON-ROLES"
+F.ROLE_AT = {
+	TANK = { 0, 19 / 64, 22 / 64, 41 / 64 },
+	HEALER = { 20 / 64, 39 / 64, 1 / 64, 20 / 64 },
+	DAMAGER = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 },
+}
+F.ROLE_SIZE = 14
+F.ROLE_GAP = 3
+
+-- a role ("TANK", "HEALER", "DAMAGER") drawn on a texture; false for none
+function F.DrawRole(tex, role)
+	local at = F.ROLE_AT[role]
+	if not at then
+		return false
+	end
+	local ask = rawget(_G, "GetTexCoordsForRole")
+	if type(ask) == "function" then
+		local ok, a, b, c, d = pcall(ask, role)
+		if ok and type(a) == "number" and type(d) == "number" then
+			at = { a, b, c, d }
+		end
+	end
+	tex:SetTexture(F.ROLE_SHEET)
+	tex:SetTexCoord(at[1], at[2], at[3], at[4])
+	return true
+end
+
 -- a plain value from the client, or nil when it will not say or says in secret
 local function plain(fn, ...)
 	if type(fn) ~= "function" then
@@ -464,6 +496,16 @@ function Live:Marker()
 	return ok and v or nil
 end
 function Live:Leader() return plain(UnitIsGroupLeader, self.unit) and true or false end
+-- the role the group gave them: "TANK", "HEALER", "DAMAGER", or nil for none
+-- (or one the client keeps secret)
+local ROLES = { TANK = true, HEALER = true, DAMAGER = true }
+function Live:Role()
+	if not plain(_G.IsInGroup) then
+		return nil
+	end
+	local r = plain(_G.UnitGroupRolesAssigned, self.unit)
+	return ROLES[r] and r or nil
+end
 -- A RESURRECTION ON ITS WAY, A SUMMON WAITING (Josh 2026-09-23): plain answers,
 -- both. A summon is 0 none, 1 waiting, 2 taken, 3 turned down.
 function Live:Res() return plain(UnitHasIncomingResurrection, self.unit) and true or false end
@@ -644,6 +686,7 @@ function Fake:Threat() return self.d.aggro end
 function Fake:CanAttack() return self.d.reaction == "hostile" end
 function Fake:Marker() return self.d.marker end
 function Fake:Leader() return self.d.leader and true or false end
+function Fake:Role() return self.d.role end
 function Fake:Ready() return self.d.ready end
 function Fake:Res() return self.d.rez and true or false end
 function Fake:Summon() return self.d.summon or 0 end
@@ -816,8 +859,12 @@ F.KINDS = {
 	-- line over the power bar, shown only while that bar shows energy or rage
 	-- (paintPower). The resource display has the game's own copy, but only
 	-- with the game's personal resource display on.
+	-- ITS ROLE BEFORE THE NAME (Josh 2026-11-06: "Role icons are not showing
+	-- on the unit frames for party/player"): the shield, the cross or the
+	-- sword the group finder or the leader gave them, where the game's own
+	-- party frames put it
 	party = { w = 160, h = 60, power = 5, manaOnly = true, name = 12, text = "none", group = true, stack = true,
-		overheal = true, level = true, numbers = true, druidMana = true },
+		overheal = true, level = true, numbers = true, druidMana = true, role = true },
 	raid = { w = 70, h = 40, power = 0, name = 10, text = "none", group = true, short = true },
 	-- a main tank: a smaller cell than a party member's, with its target beside
 	-- it, in a column of their own in a raid (Josh 2026-09-23)
@@ -1093,6 +1140,13 @@ function F.Dress(b, kind)
 	b.leader:SetPoint("TOPLEFT", b, "TOPLEFT", -3, 4)
 	b.leader:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
 	b.leader:Hide()
+	-- the role, before the name (paintRole moves the name over for it)
+	if k.role then
+		b.role = b.over:CreateTexture(nil, "OVERLAY")
+		b.role:SetSize(F.ROLE_SIZE, F.ROLE_SIZE)
+		b.role:SetPoint("RIGHT", b.name, "LEFT", -F.ROLE_GAP, 0)
+		b.role:Hide()
+	end
 	-- RESTING (Josh 2026-09-28: "I am not seeing the resting icon. I'm in
 	-- Ironforge"): the game's own player frame showed its Zzz, and ours took
 	-- that frame's place without it. The same picture, at the top right of
@@ -1596,6 +1650,21 @@ local function paintPower(b, src, gone, ease)
 	end
 end
 
+-- the role before the name, and the name moved over for it; with no role the
+-- name goes back to the cell's edge
+local NAME_INSET = 5
+function F.PaintRole(b, src)
+	local role = src.Role and src:Role() or nil
+	local shown = role ~= nil and F.DrawRole(b.role, role) or false
+	b.role:SetShown(shown)
+	if b.bmRoleShown ~= shown then
+		b.bmRoleShown = shown
+		local x = NAME_INSET + (shown and F.ROLE_SIZE + F.ROLE_GAP or 0)
+		b.name:SetPoint("TOPLEFT", b.health, "TOPLEFT", x, -NAME_INSET)
+	end
+	return shown and role or nil
+end
+
 -- the name, with the level in front of it where there is room
 local function paintName(b, src, gone)
 	local k = b.bmSpec
@@ -1870,6 +1939,9 @@ function F.Paint(b, src)
 	-- the marks
 	paintMarker(b, src)
 	b.leader:SetShown(k.group and src:Leader() or false)
+	if b.role then
+		F.PaintRole(b, src)
+	end
 	paintLedger(b, gone)
 	if b.rest then
 		b.rest:SetShown(b.bmUnit == "player" and F.Resting() or false)

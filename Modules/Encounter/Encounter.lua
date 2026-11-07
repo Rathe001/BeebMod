@@ -419,29 +419,13 @@ end
 -- THE CLASSIC ROLE ICONS (2026-11-06): the shield, the cross and the sword
 -- on their round backs, from one sheet the group finder still draws its
 -- own role icon with (Blizzard_LFGVanilla_Listing.xml). The newer atlas
--- icons came out as grey smudges at this size. The client says where each
--- sits on the sheet (GetTexCoordsForRole); these are its answers.
-E.ROLE_SHEET = "Interface\\LFGFrame\\UI-LFG-ICON-ROLES"
-local SHEET_AT = {
-	TANK = { 0, 19 / 64, 22 / 64, 41 / 64 },
-	HEALER = { 20 / 64, 39 / 64, 1 / 64, 20 / 64 },
-	DAMAGER = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 },
-}
+-- icons came out as grey smudges at this size. The unit frames draw the
+-- same icons before a party member's name (F.DrawRole in Unit.lua).
 function E.RoleIcon(tex, role)
 	local r = E.ROLES[role]
-	if not r then
+	if not (r and BT.UnitFrames.DrawRole(tex, r.game)) then
 		return false
 	end
-	local at = SHEET_AT[r.game]
-	local ask = rawget(_G, "GetTexCoordsForRole")
-	if type(ask) == "function" then
-		local ok, a, b, c, d = pcall(ask, r.game)
-		if ok and type(a) == "number" and type(d) == "number" then
-			at = { a, b, c, d }
-		end
-	end
-	tex:SetTexture(E.ROLE_SHEET)
-	tex:SetTexCoord(at[1], at[2], at[3], at[4])
 	tex:SetVertexColor(1, 1, 1, 1)
 	tex.what = role
 	return true

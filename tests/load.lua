@@ -5442,6 +5442,39 @@ if ok then
 			assert(mod.raidCells[37].call.icon == F.CALL[1] and mod.raidCells[38].call.icon == F.CALL[2]
 				and mod.raidCells[40].call.icon == F.CALL[3], "a summon waiting, taken and turned down")
 			assert(mod.raidCells[3].ml._shown ~= false, "and the master looter's coins")
+			-- ITS ROLE BEFORE THE NAME (Josh 2026-11-06: "Role icons are not
+			-- showing on the unit frames for party/player"): the group's answer,
+			-- drawn before the name, which moves over for it
+			do
+				local cell = F.Build(_G.UIParent, "party", nil, false)
+				assert(cell.role and cell.role._points.RIGHT.rel == cell.name, "a party cell has a role icon before the name")
+				local keepGroup, keepRole = _G.IsInGroup, _G.UnitGroupRolesAssigned
+				_G.IsInGroup = function() return true end
+				_G.UnitGroupRolesAssigned = function(unit) return unit == "party1" and "HEALER" or "NONE" end
+				assert(F.Source("party1"):Role() == "HEALER" and F.Source("party2"):Role() == nil,
+					"the group's role, and none for NONE")
+				_G.UnitGroupRolesAssigned = function() return _G.SECRET_WIDTH end
+				assert(F.Source("party1"):Role() == nil, "a secret role is no role")
+				_G.IsInGroup = function() return false end
+				_G.UnitGroupRolesAssigned = function() return "TANK" end
+				assert(F.Source("player"):Role() == nil, "and none alone")
+				_G.IsInGroup, _G.UnitGroupRolesAssigned = keepGroup, keepRole
+				local inset = cell.name._points.TOPLEFT.x
+				assert(F.PaintRole(cell, { Role = function() return "HEALER" end }) == "HEALER"
+					and cell.role._shown ~= false and cell.role._texCoord[3] == F.ROLE_AT.HEALER[3],
+					"the healer's cross")
+				assert(cell.name._points.TOPLEFT.x == inset + F.ROLE_SIZE + F.ROLE_GAP, "the name moved over for it")
+				assert(F.PaintRole(cell, { Role = function() return nil end }) == nil and cell.role._shown == false
+					and cell.name._points.TOPLEFT.x == inset, "no role: no icon, and the name back at the edge")
+			end
+			-- and the made-up party has theirs
+			mod.Preview("party")
+			local roles = {}
+			for _, p in ipairs(mod.previews) do
+				if p.role and p.role._shown ~= false and p.role._texCoord then roles[#roles + 1] = p end
+			end
+			assert(#roles >= 3, "the made-up party shows its roles: " .. #roles)
+			mod.Preview("raid")
 			-- THE MAIN TANKS, beside the raid, with their targets
 			local tanks = {}
 			for _, f in ipairs(mod.previews) do
@@ -7670,6 +7703,19 @@ if ok then
 			local lines = {}
 			tip.AddLine = function(_, text) lines[#lines + 1] = text end
 			tip.NumLines = function() return #lines end
+			-- A SECRET UNIT IS NOT OURS (Josh 2026-11-06, a boss in The Hall of
+			-- Thanes): the game hands the unit over as a secret, and asking
+			-- about it is an error. The tooltip is left as the game draws it.
+			do
+				local fills, exists = BT.UnitTip.fills, _G.UnitExists
+				_G.UnitExists = function(u)
+					assert(not Strict.IsSecret(u), "a secret unit was asked about")
+					return true
+				end
+				BT.UnitTip.Fill(tip, Strict.Secret("mouseover"))
+				assert(BT.UnitTip.fills == fills and #lines == 0, "a secret unit: no fill, no error")
+				_G.UnitExists = exists
+			end
 			BT.UnitTip.Fill(tip, "mouseover")
 			BT.settings.tooltipGuild = hadGuild
 			for k, v in pairs(keep) do
@@ -14736,6 +14782,47 @@ if ok then
 					fire(mod.events, "RAID_TARGET_UPDATE")
 					assert(not f.marker:IsShown(), "and gone when the mark is")
 					_G.GetRaidTargetIndex, _G.SetRaidTargetIconTexture = hadIndex, hadIcon
+				end
+				-- YOUR GROUP AND YOUR RAID (Josh 2026-11-06, A on the canvas): a
+				-- blue dot before the level for your group, an orange ring for
+				-- the rest of your raid, nothing for anyone else
+				do
+					local stubbed = { "IsInRaid", "UnitInRaid", "UnitInParty", "GetNumGroupMembers",
+						"GetRaidRosterInfo", "UnitIsUnit" }
+					local keep = {}
+					for _, n in ipairs(stubbed) do keep[n] = _G[n] end
+					local function colour(want)
+						local c = f.group._vertex or {}
+						return c[1] == want[1] and c[2] == want[2] and c[3] == want[3]
+					end
+					assert(f.group._points.RIGHT.rel == f.level, "before the level")
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(not f.group:IsShown(), "not grouped: no dot")
+					-- a party
+					_G.IsInRaid = function() return false end
+					_G.UnitInParty = function(unit) return unit == "nameplate2" end
+					_G.UnitIsUnit = function() return false end
+					fire(mod.events, "GROUP_ROSTER_UPDATE")
+					assert(f.group:IsShown() and colour(mod.GROUP_COLOUR.group), "in your party: the blue dot")
+					-- a raid: raid1 is you in group 1, raid2 is them
+					local theirs = 1
+					_G.IsInRaid = function() return true end
+					_G.UnitInRaid = function(unit) return unit == "nameplate2" and 2 or nil end
+					_G.GetNumGroupMembers = function() return 2 end
+					_G.GetRaidRosterInfo = function(i) return "x", 0, i == 1 and 1 or theirs end
+					_G.UnitIsUnit = function(a, b2)
+						return (a == "raid1" and b2 == "player") or (a == "raid2" and b2 == "nameplate2")
+					end
+					fire(mod.events, "GROUP_ROSTER_UPDATE")
+					assert(f.group:IsShown() and colour(mod.GROUP_COLOUR.group), "in your group of the raid: the blue dot")
+					theirs = 3
+					fire(mod.events, "GROUP_ROSTER_UPDATE")
+					assert(f.group:IsShown() and colour(mod.GROUP_COLOUR.raid), "elsewhere in the raid: the orange ring")
+					_G.UnitInRaid = function() return nil end
+					fire(mod.events, "GROUP_ROSTER_UPDATE")
+					assert(not f.group:IsShown(), "out of the raid: no dot")
+					for _, n in ipairs(stubbed) do _G[n] = keep[n] end
+					mod.PaintFriend(f, F.Source("nameplate2"))
 				end
 				-- AN ENEMY PLAYER'S GUILD (Josh 2026-10-17: "Enemy players should
 				-- also show guild"): under their bar, in the same green, where

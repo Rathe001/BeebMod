@@ -299,6 +299,12 @@ function M.Friend(token)
 	f.level:SetShadowColor(0, 0, 0, 1)
 	f.level:SetShadowOffset(1, -1)
 	f.level:SetPoint("RIGHT", f.name, "LEFT", -3, 0)
+	-- your group's dot or your raid's ring, before the level (M.PaintGroup)
+	f.group = f:CreateTexture(nil, "OVERLAY")
+	f.group:SetSize(M.GROUP_DOT, M.GROUP_DOT)
+	f.group:SetPoint("RIGHT", f.level, "LEFT", -3, 0)
+	f.group:SetTexture(M.GROUP_ART)
+	f.group:Hide()
 	-- an NPC's title or a pet's owner, a size down again, under the name and
 	-- your target's line
 	f.sub = f:CreateFontString(nil, "OVERLAY")
@@ -983,8 +989,69 @@ function M.PaintFriendMark(f, src)
 	return shown
 end
 
+-- YOUR GROUP AND YOUR RAID (Josh 2026-11-06: "Is there a way we can indicate
+-- on nameplates players that belong to my group, and players that belong to
+-- my raid?"; A on the "Group and raid on nameplates" canvas). A dot before a
+-- player's level: filled in the party chat's blue for someone in your group,
+-- a ring in the raid chat's orange for someone elsewhere in your raid. In a
+-- raid, your group is your own group of five in it. The game draws friendly
+-- plates itself in dungeons, raids and battlegrounds, so this is the open
+-- world's.
+M.GROUP_DOT = 10
+M.GROUP_ART = "Interface\\AddOns\\BeebMod\\Art\\groupdots.tga"
+M.GROUP_CELL = { group = { 0, 0.5, 0, 1 }, raid = { 0.5, 1, 0, 1 } }
+M.GROUP_COLOUR = { group = { 0.67, 0.67, 1 }, raid = { 1, 0.5, 0 } }
+
+-- the group of five a raid member is in, by unit, or nil
+local function subgroupOf(unit)
+	local n = F.Plain(_G.GetNumGroupMembers)
+	if type(n) ~= "number" or type(_G.GetRaidRosterInfo) ~= "function" then
+		return nil
+	end
+	for i = 1, math.min(n, 40) do
+		if F.Plain(_G.UnitIsUnit, "raid" .. i, unit) then
+			local ok, _, _, sub = pcall(_G.GetRaidRosterInfo, i)
+			if ok and type(sub) == "number" and not F.Secret(sub) then
+				return sub
+			end
+			return nil
+		end
+	end
+	return nil
+end
+
+-- "group", "raid", or nil for a player not grouped with you (or you)
+function M.GroupOf(unit)
+	if type(unit) ~= "string" or F.Plain(_G.UnitIsUnit, unit, "player") then
+		return nil
+	end
+	if F.Plain(_G.IsInRaid) then
+		if not F.Plain(_G.UnitInRaid, unit) then
+			return nil
+		end
+		local theirs, mine = subgroupOf(unit), subgroupOf("player")
+		return theirs and theirs == mine and "group" or "raid"
+	end
+	return F.Plain(_G.UnitInParty, unit) and "group" or nil
+end
+
+function M.PaintGroup(f, src)
+	if not f.group then
+		return nil
+	end
+	local kind = src:IsPlayer() and M.GroupOf(f.bmUnit) or nil
+	if kind then
+		local cell, c = M.GROUP_CELL[kind], M.GROUP_COLOUR[kind]
+		f.group:SetTexCoord(cell[1], cell[2], cell[3], cell[4])
+		f.group:SetVertexColor(c[1], c[2], c[3])
+	end
+	f.group:SetShown(kind ~= nil)
+	return kind
+end
+
 function M.PaintFriend(f, src)
 	M.PaintFriendMark(f, src)
+	M.PaintGroup(f, src)
 	local name = src:FullName()
 	if not F.Secret(name) and name == nil then
 		name = src:Name()
@@ -1434,7 +1501,7 @@ end
 M.events = CreateFrame("Frame")
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
 	"PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "UNIT_NAME_UPDATE", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW",
-	"UNIT_LEVEL", "RAID_TARGET_UPDATE", "UNIT_FACTION", "UNIT_FLAGS" }) do
+	"UNIT_LEVEL", "RAID_TARGET_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "GROUP_ROSTER_UPDATE" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
 M.events:SetScript("OnEvent", function(_, event, token)
@@ -1491,6 +1558,13 @@ M.events:SetScript("OnEvent", function(_, event, token)
 		for t, f in pairs(M.friends) do
 			if f:IsShown() then
 				M.PaintFriendMark(f, F.Source(t))
+			end
+		end
+	elseif event == "GROUP_ROSTER_UPDATE" then
+		-- someone joined, left or changed groups: every friend's dot again
+		for t, f in pairs(M.friends) do
+			if f:IsShown() then
+				M.PaintGroup(f, F.Source(t))
 			end
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then

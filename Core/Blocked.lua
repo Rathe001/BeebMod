@@ -45,6 +45,41 @@ f:SetScript("OnEvent", function(_, event, addon, func)
 	end
 end)
 
+-- WHO LOADED THE GUILD WINDOW (Josh 2026-11-06, The Hall of Thanes). A guild
+-- rank update mid-fight ran the guild settings' own code, and the game
+-- forbade its Discord calls as BeebMod's. That code is loaded with the guild
+-- window (Blizzard_Communities lists Blizzard_GuildControlUI as a
+-- dependency), and loaded from tainted code, all of it is tainted. Opening
+-- the window from the dock's guild button loaded it clean (issecurevariable
+-- said true), so something else loaded it that night. When either loads,
+-- this writes down whether the load was clean, whose taint it carried, and
+-- the stack that loaded it.
+local WATCH_LOADS = { Blizzard_Communities = "CommunitiesFrame", Blizzard_GuildControlUI = "GuildControlUI_Setup" }
+local loads = CreateFrame("Frame")
+loads:RegisterEvent("ADDON_LOADED")
+loads:SetScript("OnEvent", function(_, _, name)
+	local probe = WATCH_LOADS[name]
+	if not (probe and BT.DEV) then
+		return
+	end
+	local secure, by = true, nil
+	if issecurevariable then
+		local ok, s, t = pcall(issecurevariable, probe)
+		if ok then
+			secure, by = s, t
+		end
+	end
+	BT.blockedLog = BT.blockedLog or {}
+	BT.blockedLog[#BT.blockedLog + 1] = ("%s loaded: %s"):format(name,
+		secure and "clean" or ("tainted by " .. tostring(by)))
+	if debugstack then
+		BT.blockedStack = debugstack(2, 20, 0)
+	end
+	if type(BeebModDB) == "table" then
+		BeebModDB.blockedDump = { at = BT.Util.Now(), lines = BT.blockedLog, stack = BT.blockedStack }
+	end
+end)
+
 -- the record is written when it happens; this only says there is one
 BT.Record("blockedDump", function()
 	return BT.blockedLog and #BT.blockedLog or nil

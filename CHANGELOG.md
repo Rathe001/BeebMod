@@ -3,6 +3,21 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Your group and raid on friendly nameplates.** A blue dot before a
+  player's level marks someone in your group. An orange ring marks someone
+  elsewhere in your raid. The colours are the game's party and raid chat
+  colours. In dungeons, raids and battlegrounds the game draws friendly
+  nameplates itself, so the dots show only outside them.
+- **Role icons on the party frames.** Your frame and your party's show the
+  role the group finder or the leader gave each of you, as the game's own
+  party frames do. A tank gets a shield before the name. A healer gets a
+  cross. Damage dealers get a sword.
+- **No tooltip errors in dungeons.** Pointing at some units inside an
+  instance raised a Lua error each time, because the game keeps who they are
+  secret there. Those tooltips are now left as the game draws them.
+
 ## 1.5.1
 
 - **Encounter notes switch on General.** The switch for the boss notes is

@@ -721,7 +721,15 @@ end
 -- different bugs. What loaded, on the Testing page, prints it.
 T.path, T.fills, T.itemFills = "none", 0, 0
 
+-- A SECRET UNIT IS NOT OURS (Josh 2026-11-06, a boss in The Hall of Thanes:
+-- "bad argument #1 to 'UnitExists' ... Secret values are only allowed during
+-- untainted execution"). Inside an instance the game can hand the tooltip's
+-- unit over as a secret, and asking anything about it from addon code is an
+-- error. That tooltip is left as the game draws it.
 function T.Fill(tip, unit)
+	if unit ~= nil and issecretvalue and issecretvalue(unit) then
+		return
+	end
 	if not (tip and unit and UnitExists and UnitExists(unit)) then
 		return
 	end
