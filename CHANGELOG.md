@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.6.0
 
 - **Your group and raid on friendly nameplates.** A blue dot before a
   player's level marks someone in your group. An orange ring marks someone
