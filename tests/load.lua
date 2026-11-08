@@ -3636,6 +3636,18 @@ if ok then
 				if b:IsShown() then shown = shown + 1 end
 			end
 			assert(n == 4 and shown == 4, "four rows, four pieces of band: " .. shown)
+			-- A SECRET HEIGHT (taint log, 2026-11-07): a line whose text is secret
+			-- has a secret height, which may not be compared
+			do
+				local fs = BT.UnitTip.LineOf(tip, tip:NumLines())
+				local hadH = fs.GetHeight
+				fs.GetHeight = function() return Strict.Secret(14) end
+				local ok, err = pcall(mod.QuestBand, tip, { tip:NumLines() })
+				assert(ok and err == 1, "a secret height is no error: " .. tostring(err))
+				assert(tip.beebsQuestBands[1]._height == mod.QUEST_SIZE + 6, "the band takes the row's size instead: "
+					.. tostring(tip.beebsQuestBands[1]._height))
+				fs.GetHeight = hadH
+			end
 			-- THE THREAT LINE IS NOT AN OBJECTIVE (Josh 2026-11-07: "Threat is
 			-- showing in the quest highlight")
 			local hadTitle, hadEntries = _G.GetQuestLogTitle, _G.GetNumQuestLogEntries

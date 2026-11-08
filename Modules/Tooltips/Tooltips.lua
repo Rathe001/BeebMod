@@ -1054,7 +1054,9 @@ function M.QuestBand(tip, lines)
 			local c = M.BAND_INK
 			b:SetColorTexture(c[1], c[2], c[3], c[4])
 			local okH, h = pcall(fs.GetHeight, fs)
-			h = (okH and type(h) == "number" and h > 0) and h or M.QUEST_SIZE
+			-- a line's height is secret when its text is (taint log, 2026-11-07)
+			h = okH and BT.Pill.Number(h, 0) or 0
+			h = h > 0 and h or M.QUEST_SIZE
 			local above = n == 1 and 3 or 1
 			local below = n == #lines and 3 or 1
 			b:ClearAllPoints()
@@ -2358,7 +2360,9 @@ end
 
 -- a line's colour as three numbers, where the client lets us read it
 local function colourOf(c)
-	if type(c) ~= "table" then
+	-- the colour itself can be secret, and then not even its fields may be
+	-- read (taint log, 2026-11-07: 46 lines)
+	if type(c) ~= "table" or (issecretvalue and issecretvalue(c)) then
 		return nil
 	end
 	local r, g, b = plainLine(c.r), plainLine(c.g), plainLine(c.b)

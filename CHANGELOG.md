@@ -3,6 +3,12 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Unit tooltips.** Some tooltip lines are hidden from addons, such as an
+  enemy's name in a dungeon. On those lines the quest band and the line
+  colours made errors the game kept quiet. Both now leave such a line alone.
+
 ## 1.8.0
 
 - **Five zones for your level.** The Experience tooltip lists up to five
