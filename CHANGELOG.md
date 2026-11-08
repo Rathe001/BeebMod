@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.8.0
 
 - **Five zones for your level.** The Experience tooltip lists up to five
   questing zones instead of three. At level 16, Redridge Mountains and
