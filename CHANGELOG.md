@@ -3,6 +3,24 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Five zones for your level.** The Experience tooltip lists up to five
+  questing zones instead of three. At level 16, Redridge Mountains and
+  Stonetalon Mountains now show beside Westfall and Loch Modan. Dungeons
+  stay at three.
+- **Quest rows stand out on unit tooltips.** An objective and its count are
+  a size larger than the other rows. A faint gold band lies behind them.
+  The "100% Threat" line in a fight is no longer read as an objective.
+- **Health on friendly nameplates.** A friend who has lost health gets a
+  thin bar under their name, in the name's colour. At full health the bar
+  is hidden. In dungeons, raids and battlegrounds the game draws friendly
+  plates itself, so the bar shows only in the open world.
+- **Character window.** Opening the Skills tab in a fight no longer gives an
+  error. The skills list keeps the game's own row spacing to allow this.
+  Each skill bar is a 3-pixel line under its own skill, in a light blue that
+  shows on the dark panel. Before, it hung thick into the row below.
+
 ## 1.7.0
 
 - **Encounter notes for every dungeon from the original game.** The notes

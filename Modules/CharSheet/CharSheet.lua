@@ -369,7 +369,8 @@ local function colourOf(which)
 	elseif which == "track" then
 		return { RIM[1] * 0.55 + 0.03, RIM[2] * 0.55 + 0.03, RIM[3] * 0.55 + 0.03, 1 }
 	elseif which == "skill" then
-		return { 0.38, 0.45, 0.78, 1 }
+		-- over the art's own blue (M.KEEP_HUE), so a light tint
+		return { 0.8, 0.86, 1, 1 }
 	elseif which == "accent" then
 		local a = BT.Widgets.ACCENT
 		return { a[1], a[2], a[3], 1 }
@@ -436,6 +437,12 @@ end
 -- theme's, so anything of the game's that asks what it is still gets an answer.
 local TINT = { well = 2.2, raised = 2.4, rim = 1.0, ink = 1, track = 1, skill = 1, accent = 1 }
 
+-- THE SKILL BAR KEEPS ITS BLUE (Josh 2026-11-07: "the bar is so small with
+-- poor contrast that I can't see it"). Drained to grey and tinted a darker
+-- blue, the fill came out near black on the panel. Its own blue stays, a
+-- little softened by a light tint.
+M.KEEP_HUE = { skill = true }
+
 local function recolour(r, atlas, which)
 	local w = keep(r)
 	if not w.vertex then
@@ -446,7 +453,7 @@ local function recolour(r, atlas, which)
 	end
 	local c, k = colourOf(which), TINT[which] or 1
 	if r.SetDesaturated then
-		pcall(r.SetDesaturated, r, true)
+		pcall(r.SetDesaturated, r, not M.KEEP_HUE[which])
 	end
 	r:SetVertexColor(math.min(1, c[1] * k), math.min(1, c[2] * k), math.min(1, c[3] * k), 1)
 end
@@ -907,6 +914,15 @@ M.W, M.H, M.PANE, M.TITLE = 452, 356, 176, 22
 -- a row with a meter: its words this far over the middle, its bar this far
 -- off the bottom (see compactRow)
 M.ROW_TEXT_Y, M.ROW_BAR_Y = 4, 2
+-- a compact row's height (compactExtent: the game's 30 less 8)
+M.ROW_H = 22
+-- a bar's thickness: a reputation's coloured hairline, a skill's a pixel
+-- more, which its taller row has room for (Josh 2026-11-07: "the bar is so
+-- small ... I can't see it")
+M.BAR_H, M.SKILL_BAR_H = 2, 3
+function M.BarThickness(content)
+	return content and content.SkillsBar and M.SKILL_BAR_H or M.BAR_H
+end
 M.SLOT, M.GAP = 32, 3
 M.TAB = 30
 
@@ -1171,7 +1187,29 @@ end
 -- in capitals, the panel's grey - and its rule (see headerRule). Rows are made
 -- and reused as a list scrolls, so this runs on every row every time the list
 -- updates.
+-- THE SKILLS LIST IS THE GAME'S TO MEASURE (Josh 2026-11-07: switching tabs
+-- in a fight gave "attempt to compare field 'modifier' (a secret number
+-- value, while execution tainted by 'BeebMod')", SkillsFrame.lua:442). A
+-- skill's bonus is secret in combat. The list measured its rows with our
+-- functions (compactList), so the game ran the whole redraw as ours, and it
+-- will not let an addon's code compare a secret. The stats list met the same
+-- thing in September (M.FOLDS). The skills keep the game's row heights; their
+-- rows are still dressed after the game draws them.
+function M.SkillsBox()
+	local page = pick(_G.CharacterFrame, "SkillsFrame")
+	return page and page.ScrollBox or nil
+end
+
+local function inSkills(row)
+	local box = M.SkillsBox()
+	local target = box and box.ScrollTarget
+	return target ~= nil and row.GetParent ~= nil and row:GetParent() == target
+end
+
 local function shorter(row)
+	if inSkills(row) then
+		return
+	end
 	resizing(row)
 	local h = placed[row].h
 	if h and h > 0 then
@@ -1234,6 +1272,13 @@ local function compactRow(row)
 	end
 	local name = content.Name
 	local bar = content.ReputationBar or content.SkillsBar
+	-- THE FILL A HAIRLINE EVERY TIME (Josh 2026-11-07: "Alignment of the
+	-- skill bars seems to be off"). The game sets a skill bar's fill picture
+	-- again each time it fills a row, at the picture's own height, so it
+	-- stood thick out of the row and into the next one.
+	if bar and bar.Fill and placed[bar] then
+		bar.Fill:SetHeight(M.BarThickness(content))
+	end
 	if not first then
 		if bar and name then
 			place(name, { { "LEFT", content, "LEFT", 6, M.ROW_TEXT_Y } })
@@ -1261,14 +1306,21 @@ local function compactRow(row)
 	-- sitting too close to the progress bars"). The words sat two above the
 	-- middle of a 22 row and the bar three off its bottom, so a "g" reached the
 	-- bar. The words go up, the bar down, and the row keeps its height.
+	-- A TALLER ROW, THE BAR AS FAR UNDER ITS WORDS: a skill row keeps the
+	-- game's 30 (M.SkillsBox), and the words sit by its middle, so the bar
+	-- comes up by half of what the row gained over a compact one.
 	local text = bar.Text
+	local okH, h = pcall(row.GetHeight, row)
+	local lift = (okH and type(h) == "number" and h > M.ROW_H)
+		and math.floor((h - M.ROW_H) / 2 + 0.5) or 0
+	local thick = M.BarThickness(content)
 	place(bar, {
-		{ "BOTTOMLEFT", content, "BOTTOMLEFT", 6, M.ROW_BAR_Y },
-		{ "BOTTOMRIGHT", content, "BOTTOMRIGHT", -6, M.ROW_BAR_Y },
-	}, nil, 2)
+		{ "BOTTOMLEFT", content, "BOTTOMLEFT", 6, M.ROW_BAR_Y + lift },
+		{ "BOTTOMRIGHT", content, "BOTTOMRIGHT", -6, M.ROW_BAR_Y + lift },
+	}, nil, thick)
 	if bar.Fill then
 		resizing(bar.Fill)
-		bar.Fill:SetHeight(2)
+		bar.Fill:SetHeight(thick)
 	end
 	if bar.Mask and bar.Fill and bar.Fill.RemoveMaskTexture and not placed[bar.Fill].mask then
 		placed[bar.Fill].mask = bar.Mask
@@ -1859,6 +1911,9 @@ function M.CompactLists()
 		if box == statBox then
 			-- the game's own, untouched (see M.FOLDS)
 			changed = M.FOLDS and tightList(box)
+		elseif box == M.SkillsBox() then
+			-- the game's own too (see M.SkillsBox)
+			changed = false
 		else
 			changed = compactList(box)
 		end
@@ -1873,7 +1928,7 @@ function M.RelayoutLists()
 	local statBox = stats and stats.ScrollBox
 	for _, box in ipairs(M.Lists()) do
 		-- never the stats: laid out by us, the game counts it as ours (M.FOLDS)
-		if box.FullUpdate and (box ~= statBox or M.FOLDS) then
+		if box.FullUpdate and (box ~= statBox or M.FOLDS) and box ~= M.SkillsBox() then
 			pcall(box.FullUpdate, box, true)
 		end
 	end

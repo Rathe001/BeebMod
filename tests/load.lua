@@ -3585,6 +3585,87 @@ if ok then
 			assert(#(BT.moduleErrors or {}) == before, "and nothing was caught on the way")
 			_G.UnitIsPlayer, _G.UnitCreatureType = wasPlayer, wasType
 		end },
+		{ "a quest row is larger than the others, on a band of gold", function()
+			-- (Josh 2026-11-07: "Are we able to highlight or make larger the
+			-- quest part of tooltips? It still blends in a bit too much")
+			BT.SetEnabled("tooltips", true)
+			local mod = BT.GetModule("tooltips")
+			local lines = {}
+			local tip = setmetatable({
+				AddLine = function(_, text) lines[#lines + 1] = tostring(text) end,
+				AddDoubleLine = function(_, l) lines[#lines + 1] = tostring(l) end,
+				ClearLines = function() lines = {} end,
+				NumLines = function() return #lines end,
+				GetName = function() return "BandTip" end,
+				GetWidth = function() return 220 end,
+			}, FAKE_TIP)
+			local holder = _G.CreateFrame("Frame")
+			tip.CreateTexture = function(_, ...) return holder:CreateTexture(...) end
+			for i = 1, 8 do
+				_G["BandTipTextLeft" .. i] = _G.CreateFrame("FontString")
+				_G["BandTipTextRight" .. i] = _G.CreateFrame("FontString")
+			end
+			tip:ClearLines()
+			tip:AddLine("Burly Rockjaw Trogg")
+			local n = mod.QuestRows(tip, {
+				{ title = true, text = "Trouble in Coldridge" },
+				{ text = "Burly Rockjaw Trogg slain", have = 1, need = 6 },
+			})
+			assert(n == 1, "one quest: its objective alone, no title row")
+			local i = tip:NumLines()
+			local size = BT.Fonts.Size(mod.QUEST_SIZE)
+			assert(select(2, BT.UnitTip.LineOf(tip, i):GetFont()) == size
+				and select(2, BT.UnitTip.LineOf(tip, i, "TextRight"):GetFont()) == size,
+				"the objective and its count a size up: " .. tostring(select(2, BT.UnitTip.LineOf(tip, i):GetFont())))
+			assert(mod.QUEST_SIZE > BT.UnitTip.ROW, "larger than the other rows")
+			local band = tip.beebsQuestBands and tip.beebsQuestBands[1]
+			assert(band and band:IsShown(), "a band behind it")
+			assert(band._points.LEFT.rel == BT.UnitTip.LineOf(tip, i) and band._points.RIGHT.rel == tip,
+				"from the line's left to the tooltip's right")
+			-- two quests: each title and objective on one band, a piece a line
+			tip:ClearLines()
+			tip:AddLine("Burly Rockjaw Trogg")
+			n = mod.QuestRows(tip, {
+				{ title = true, text = "Trouble in Coldridge" },
+				{ text = "Burly Rockjaw Trogg slain", have = 1, need = 6 },
+				{ title = true, text = "A Pilgrim's Errand" },
+				{ text = "Trogg Stone Tooth", have = 2, need = 8 },
+			})
+			local shown = 0
+			for _, b in ipairs(tip.beebsQuestBands) do
+				if b:IsShown() then shown = shown + 1 end
+			end
+			assert(n == 4 and shown == 4, "four rows, four pieces of band: " .. shown)
+			-- THE THREAT LINE IS NOT AN OBJECTIVE (Josh 2026-11-07: "Threat is
+			-- showing in the quest highlight")
+			local hadTitle, hadEntries = _G.GetQuestLogTitle, _G.GetNumQuestLogEntries
+			_G.GetNumQuestLogEntries = function() return 1, 1 end
+			_G.GetQuestLogTitle = function()
+				return "Trouble in Coldridge", 3, nil, false, nil, nil, nil, 457
+			end
+			mod.ForgetQuests()
+			tip:ClearLines()
+			for _, l in ipairs({ "Frostmane Troll Whelp", "Level 3", "Trouble in Coldridge",
+				"- 11/14 Frostmane Troll Whelp slain", "100% Threat" }) do
+				tip:AddLine(l)
+			end
+			for k = 1, 8 do
+				local k2 = k
+				_G["BandTipTextLeft" .. k].GetText = function() return lines[k2] end
+			end
+			local found = mod.QuestBlock(tip) or {}
+			local said = {}
+			for _, q in ipairs(found) do said[#said + 1] = q.text end
+			assert(#found == 2 and found[2].have == 11 and found[2].need == 14,
+				"the quest and its one objective, not the threat: " .. table.concat(said, " | "))
+			_G.GetQuestLogTitle, _G.GetNumQuestLogEntries = hadTitle, hadEntries
+			mod.ForgetQuests()
+			-- the next tooltip without quests has none
+			tip:ClearLines()
+			mod.QuestRows(tip, nil)
+			assert(not tip.beebsQuestBands[1]:IsShown(), "and a tooltip with no quests has no band")
+			tip:ClearLines()
+		end },
 		{ "the client cannot leave a band of space under the last line", function()
 			-- THE BOTTOM PADDING IS NOT OURS ALONE (Josh 2026-09-19). The
 			-- client sets the tooltip's padding itself when it puts the health
@@ -14046,10 +14127,13 @@ if ok then
 				assert(Z.fromGame == 2 and Z.list ~= nil, "kept once the game has given ranges")
 				Z.All()
 				assert(asked == 1, "read from the game once")
-				assert(zoneNames(Z.For(18, "Horde")) == "The Barrens,Silverpine Forest,Stonetalon Mountains",
-					"nearest the middle first, three at most: " .. zoneNames(Z.For(18, "Horde")))
-				assert(zoneNames(Z.For(18, "Alliance")) == "Darkshore,Loch Modan,Westfall",
+				assert(zoneNames(Z.For(18, "Horde")) == "The Barrens,Silverpine Forest,Stonetalon Mountains,Redridge Mountains,Ashenvale",
+					"nearest the middle first, five at most: " .. zoneNames(Z.For(18, "Horde")))
+				assert(zoneNames(Z.For(18, "Alliance")) == "Darkshore,Loch Modan,Westfall,Stonetalon Mountains,Redridge Mountains",
 					"and the other side's zones left out: " .. zoneNames(Z.For(18, "Alliance")))
+				-- A LEVEL 16 SAW THREE (Josh 2026-11-07): Redridge and Stonetalon too
+				assert(zoneNames(Z.For(16, "Alliance")) == "Darkshore,Loch Modan,Westfall,Stonetalon Mountains,Redridge Mountains",
+					"the zones a level 16 is ready for: " .. zoneNames(Z.For(16, "Alliance")))
 				_G.UnitLevel = function() return 18 end
 				section:GetScript("OnEnter")(section)
 				assert(BT.Tip.Says("Zones") and BT.Tip.Says("The Barrens") and BT.Tip.Says("10-25")
@@ -14790,11 +14874,56 @@ if ok then
 					mod.PaintFriend(f, F.Source("nameplate2"))
 					assert(f.sub._text == "<Codex>" and f.sub._textColor[2] == mod.FRIEND_GUILD[2]
 						and f.sub._textColor[1] == mod.FRIEND_GUILD[1], "the guild under the name, in green: " .. tostring(f.sub._text))
-					assert(f.sub._points.TOP.rel == f.name, "on the line a pet's owner is on")
+					assert(f.sub._points.TOP.rel == f.hpBack and f.hpBack._points.TOP.rel == f.name,
+						"on the line a pet's owner is on, under the health's place")
 					_G.GetGuildInfo = function() return nil end
 					mod.PaintFriend(f, F.Source("nameplate2"))
 					assert(f.sub._text == "", "no guild, no line: " .. tostring(f.sub._text))
 					_G.GetGuildInfo = hadGuild
+				end
+				-- A FRIEND'S HEALTH BELOW FULL (Josh 2026-11-07: "Possible to show
+				-- a health bar on friendly nameplates if they are below 100%?"):
+				-- the client reads the secret health through a step curve, the
+				-- name's colour below 1 and clear at 1
+				do
+					local wasCU, wasEnum, wasCC, wasPct = _G.C_CurveUtil, _G.Enum, _G.CreateColor, _G.UnitHealthPercent
+					local pct = 0.5
+					_G.CreateColor = function(r2, g2, b2, a2) return { GetRGBA = function() return r2, g2, b2, a2 end } end
+					_G.Enum = setmetatable({ LuaCurveType = { Step = 2 } }, { __index = wasEnum })
+					_G.C_CurveUtil = { CreateColorCurve = function()
+						local c = { pts = {} }
+						function c.SetType() end
+						function c.AddPoint(self2, x, col) self2.pts[#self2.pts + 1] = { x, col } end
+						return c
+					end }
+					_G.UnitHealthPercent = function(_, _, curve)
+						local pick
+						for _, p in ipairs(curve.pts) do
+							if pct >= p[1] then pick = p[2] end
+						end
+						return pick
+					end
+					mod.hpCurves = {}
+					-- the stub's status bar has no texture of its own to give
+					f.hpFill = f.hpFill or f.hp:CreateTexture()
+					assert(mod.PaintFriendHealth(f, F.Source("nameplate2")), "the client is given the bar")
+					assert(f.hpFill._vertex[4] == 1 and math.abs(f.hpFill._vertex[1] - r) < 0.01,
+						"at half health, a bar in the name's colour")
+					assert(f.hpBack._vertex[4] == mod.FRIEND_HP.edge and f.hpBack._vertex[1] == 0, "on a dark edge")
+					assert(f.hpBack._points.TOP.rel == f.name, "under the name")
+					pct = 1
+					fire(mod.events, "UNIT_HEALTH", "nameplate2")
+					assert(f.hpFill._vertex[4] == 0 and f.hpBack._vertex[4] == 0, "at full health, nothing to see")
+					pct = 0.99
+					fire(mod.events, "UNIT_MAXHEALTH", "nameplate2")
+					assert(f.hpFill._vertex[4] == 1, "a little short of full, the bar again")
+					-- a client with no curves: no bar, rather than one always up
+					_G.C_CurveUtil = nil
+					mod.hpCurves = {}
+					assert(not mod.PaintFriendHealth(f, F.Source("nameplate2")) and f.hpFill._vertex[4] == 0
+						and f.hpBack._vertex[4] == 0, "no curves, no bar")
+					_G.C_CurveUtil, _G.Enum, _G.CreateColor, _G.UnitHealthPercent = wasCU, wasEnum, wasCC, wasPct
+					mod.hpCurves = {}
 				end
 				-- A RAID MARK ON A FRIEND (Josh 2026-11-06: "Adding markers to
 				-- targets does not seem to work with the nameplates"): over the
@@ -14896,7 +15025,7 @@ if ok then
 					_G.UnitPlayerControlled = function() return true end
 					mod.PaintFriend(f, F.Source("nameplate2"))
 					assert(f.sub._text == "<Luigi's pet>", "the owner, under the name: " .. tostring(f.sub._text))
-					assert(f.sub._points.TOP.rel == f.name and f.role._shown == false, "under the name, and no picture")
+					assert(f.sub._points.TOP.rel == f.hpBack and f.role._shown == false, "under the name, and no picture")
 					assert(mod.OwnerTag("Luigi Garbaggio's Minion") == "<Luigi Garbaggio's minion>"
 						and mod.OwnerTag("Innkeeper") == nil, "a warlock's minion too, and never a title")
 					_G.UNITNAME_TITLE_PET = nil
@@ -16574,7 +16703,47 @@ if ok then
 				return size * 4
 			end
 			holder:SetHeight(48)
+			-- the skills list: its own measuring and a 30-tall skill row
+			skills.ScrollBox = _G.CreateFrame("Frame", nil, skills)
+			skills.ScrollBox.ScrollTarget = _G.CreateFrame("Frame", nil, skills.ScrollBox)
+			local skillView = { GetElementExtent = function() return 30 end }
+			local skillExtent = skillView.GetElementExtent
+			skills.ScrollBox.GetView = function() return skillView end
+			skills.ScrollBox.FullUpdate = function(self) self.fulls = (self.fulls or 0) + 1 end
+			local skillRow = _G.CreateFrame("Frame", nil, skills.ScrollBox.ScrollTarget)
+			skillRow:SetHeight(30)
+			skillRow.Content = _G.CreateFrame("Frame", nil, skillRow)
+			skillRow.Content.Name = skillRow.Content:CreateFontString()
+			skillRow.Content.SkillsBar = _G.CreateFrame("Frame", nil, skillRow.Content)
+			local skillFill = skillRow.Content.SkillsBar:CreateTexture()
+			skillRow.Content.SkillsBar.Fill = skillFill
 			BT.SetEnabled("charsheet", true)
+			-- THE BAR UNDER ITS WORDS IN A TALLER ROW, A HAIRLINE EVERY TIME
+			-- (Josh 2026-11-07: "Alignment of the skill bars seems to be off")
+			local barAt = skillRow.Content.SkillsBar._points.BOTTOMLEFT
+			assert(barAt and barAt.y == mod.ROW_BAR_Y + 4,
+				"a 30-tall row's bar comes up by half of the 8 it gained: " .. tostring(barAt and barAt.y))
+			skillFill:SetHeight(10)
+			mod.CompactRow(skillRow)
+			assert(skillFill._height == mod.SKILL_BAR_H and skillRow.Content.SkillsBar._height == mod.SKILL_BAR_H,
+				"the game's thick fill is a thin line again, a pixel thicker than a reputation's: "
+				.. tostring(skillFill._height))
+			-- ITS OWN BLUE, SEEN (Josh 2026-11-07: "the bar is so small with poor
+			-- contrast that I can't see it"): not drained to grey, a light tint
+			skillFill.GetAtlas = function() return "common-stat-bar-blue" end
+			mod.DressTree(skillRow.Content.SkillsBar, 0)
+			assert(skillFill._grey == false and skillFill._vertex and skillFill._vertex[1] >= 0.75,
+				"the skill fill keeps its blue under a light tint: " .. tostring(skillFill._grey))
+			-- THE SKILLS LIST, LEFT ALONE (Josh 2026-11-07: "attempt to compare
+			-- field 'modifier' (a secret number value, while execution tainted by
+			-- 'BeebMod')" on switching tabs in a fight): it measures its rows
+			-- itself, keeps their heights, and nothing of ours lays it out
+			assert(skillView.GetElementExtent == skillExtent and not skillView.beebsCompact,
+				"the skills list measures its rows with its own function")
+			assert(skillRow._height == 30, "a skill row keeps the game's height: " .. tostring(skillRow._height))
+			mod.RelayoutLists()
+			assert((skills.ScrollBox.fulls or 0) == 0, "and is never laid out by us")
+			assert(view.beebsCompact, "the reputation list is still compact")
 			BT.settings.charsheet = BT.settings.charsheet or {}
 			BT.settings.charsheet.theme = nil
 			assert(mod.Themed(), "on unless you turn it off")

@@ -30,7 +30,8 @@
 -- in their class colour, an NPC's in the friendly green, and a white line
 -- under your target's. A player's level stands before the name (the same
 -- day: "Can we add level to friendly players?"), and under an NPC's name its
--- title, or a pet's owner (M.OwnerTag). A plate the client keeps from addons (a
+-- title, or a pet's owner (M.OwnerTag). Below full health a thin bar shows
+-- under the name (M.PaintFriendHealth). A plate the client keeps from addons (a
 -- "forbidden" one, as a friend's in an instance) is left as the game draws it.
 local _, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Modules/Nameplates/Nameplates.lua")
@@ -312,7 +313,25 @@ function M.Friend(token)
 	f.sub:SetShadowColor(0, 0, 0, 1)
 	f.sub:SetShadowOffset(1, -1)
 	f.sub:SetWordWrap(false)
-	f.sub:SetPoint("TOP", f.name, "BOTTOM", 0, -3)
+	-- their health, under the name, seen only below full (M.PaintFriendHealth)
+	local hp = M.FRIEND_HP
+	f.hpBack = f:CreateTexture(nil, "BACKGROUND")
+	f.hpBack:SetTexture("Interface\\Buttons\\WHITE8X8")
+	f.hpBack:SetSize(hp.w + 2, hp.h + 2)
+	f.hpBack:SetPoint("TOP", f.name, "BOTTOM", 0, -hp.gap)
+	f.hpBack:SetVertexColor(0, 0, 0, 0)
+	f.hp = CreateFrame("StatusBar", nil, f)
+	f.hp:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+	f.hp:SetSize(hp.w, hp.h)
+	f.hp:SetPoint("CENTER", f.hpBack, "CENTER", 0, 0)
+	f.hp:SetMinMaxValues(0, 1)
+	f.hp:SetValue(0)
+	f.hp:EnableMouse(false)
+	f.hpFill = f.hp:GetStatusBarTexture()
+	if f.hpFill then
+		f.hpFill:SetVertexColor(0, 0, 0, 0)
+	end
+	f.sub:SetPoint("TOP", f.hpBack, "BOTTOM", 0, -2)
 	-- your target's: a white line under the name
 	-- what an NPC does, before its name (M.RoleOf)
 	f.role = f:CreateTexture(nil, "OVERLAY")
@@ -360,6 +379,70 @@ function M.FriendColour(src)
 		return BT.Util.Bright({ r, g, b })
 	end
 	return M.FRIEND_NPC[1], M.FRIEND_NPC[2], M.FRIEND_NPC[3]
+end
+
+-- A FRIEND'S HEALTH BELOW FULL (Josh 2026-11-07: "Possible to show a health
+-- bar on friendly nameplates if they are below 100%?"). A thin bar under the
+-- name in the name's colour, on a dark edge. Health is secret, so BeebMod
+-- cannot ask whether it is full. The client answers instead: UnitHealthPercent
+-- reads the health through a step curve that is the colour below 1 and clear
+-- at 1, as it picks a debuff's colour (Modules/UnitFrames/Auras.lua). The
+-- space under the name is kept either way, since nothing may move on a
+-- secret.
+M.FRIEND_HP = { w = 64, h = 3, gap = 3, edge = 0.75 }
+M.hpCurves = {}
+-- the step curve for a colour (r, g, b, a below full), or nil without curves
+function M.HealthCurve(r, g, b, a)
+	local key = ("%.3f %.3f %.3f %.3f"):format(r, g, b, a)
+	local c = M.hpCurves[key]
+	if c ~= nil then
+		return c or nil
+	end
+	M.hpCurves[key] = false
+	pcall(function()
+		local curve = C_CurveUtil.CreateColorCurve()
+		curve:SetType(Enum.LuaCurveType.Step)
+		curve:AddPoint(0, CreateColor(r, g, b, a))
+		curve:AddPoint(1, CreateColor(r, g, b, 0))
+		M.hpCurves[key] = curve
+	end)
+	return M.hpCurves[key] or nil
+end
+
+local function tintBy(tex, token, curve)
+	if not (tex and curve) then
+		return false
+	end
+	local ok, done = pcall(function()
+		local colour = _G.UnitHealthPercent(token, false, curve)
+		tex:SetVertexColor(colour:GetRGBA())
+		return true
+	end)
+	return ok and done == true
+end
+
+-- true when the client was given the bar; false leaves it unseen
+function M.PaintFriendHealth(f, src)
+	if not (f.hp and f.bmUnit) then
+		return false
+	end
+	local token, hp = f.bmUnit, M.FRIEND_HP
+	local max, now = src:HealthMax(), src:Health()
+	if max ~= nil and now ~= nil then
+		pcall(f.hp.SetMinMaxValues, f.hp, 0, max)
+		pcall(f.hp.SetValue, f.hp, now)
+	end
+	local r, g, b = M.FriendColour(src)
+	local fill = M.HealthCurve(r, g, b, 1)
+	local back = M.HealthCurve(0, 0, 0, hp.edge)
+	local shown = max ~= nil and now ~= nil and tintBy(f.hpFill, token, fill) and tintBy(f.hpBack, token, back)
+	if not shown then
+		if f.hpFill then
+			f.hpFill:SetVertexColor(0, 0, 0, 0)
+		end
+		f.hpBack:SetVertexColor(0, 0, 0, 0)
+	end
+	return shown and true or false
 end
 
 -- ---------------------------------------------------------------------------
@@ -1052,6 +1135,7 @@ end
 function M.PaintFriend(f, src)
 	M.PaintFriendMark(f, src)
 	M.PaintGroup(f, src)
+	M.PaintFriendHealth(f, src)
 	local name = src:FullName()
 	if not F.Secret(name) and name == nil then
 		name = src:Name()
@@ -1501,7 +1585,8 @@ end
 M.events = CreateFrame("Frame")
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
 	"PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "UNIT_NAME_UPDATE", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW",
-	"UNIT_LEVEL", "RAID_TARGET_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "GROUP_ROSTER_UPDATE" }) do
+	"UNIT_LEVEL", "RAID_TARGET_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "GROUP_ROSTER_UPDATE",
+	"UNIT_HEALTH", "UNIT_MAXHEALTH" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
 M.events:SetScript("OnEvent", function(_, event, token)
@@ -1525,7 +1610,13 @@ M.events:SetScript("OnEvent", function(_, event, token)
 	if not BT.Enabled("nameplates") then
 		return
 	end
-	if event == "NAME_PLATE_UNIT_ADDED" then
+	if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+		-- a friend's health bar; an enemy's frame hears its own
+		local f = type(token) == "string" and M.friends[token]
+		if f and f:IsShown() then
+			M.PaintFriendHealth(f, F.Source(token))
+		end
+	elseif event == "NAME_PLATE_UNIT_ADDED" then
 		if type(token) == "string" then
 			M.Added(token)
 		end

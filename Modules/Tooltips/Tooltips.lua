@@ -936,8 +936,12 @@ local function questBlock(tip)
 		if issecretvalue and issecretvalue(text) then
 			text = nil
 		end
-		local chrome = false
-		if type(text) == "string" then
+		-- THE THREAT LINE ENDS IT TOO (Josh 2026-11-07: "Threat is showing in
+		-- the quest highlight"). In a fight the client writes "100% Threat"
+		-- under the quest lines, and it was read as one more objective. No
+		-- objective begins with a percentage.
+		local chrome = type(text) == "string" and text:match("^%s*%d+%%") ~= nil
+		if type(text) == "string" and not chrome then
 			for _, needle in ipairs(NOT_A_QUEST) do
 				if text:find(needle, 1, true) then
 					chrome = true
@@ -966,6 +970,7 @@ local function questBlock(tip)
 	end
 	return out, used
 end
+M.QuestBlock = questBlock
 
 -- THE BAND IS A LINE (Josh 2026-09-19). Measured, finally, rather than
 -- reasoned about: the padding was ours all along (r4 b2 l4 t2) and the tooltip
@@ -1003,8 +1008,69 @@ M.SqueezeBlankTail = squeezeBlankTail
 -- each objective led by the quest's mark, its count on the right, green once
 -- it is done. The quest's own name only when there is more than one quest to
 -- tell apart, with its objectives under it.
+--
+-- LARGER, ON A BAND OF GOLD (Josh 2026-11-07: "Are we able to highlight or
+-- make larger the quest part of tooltips? It still blends in a bit too
+-- much... that is the primary thing I am looking for on these"). The rows
+-- are a size and a half up from the others, and a faint gold band lies
+-- behind them from the tooltip's left to its right.
+M.QUEST_SIZE = 12
+M.BAND_INK = { 1.00, 0.82, 0.25, 0.10 }
+-- how far the band reaches left of the words and in from the right edge
+M.BAND_LEFT, M.BAND_RIGHT = 4, 2
+
+-- A BAND A LINE, TILED. A texture can't take its top from one line and its
+-- right from the tooltip, so each line has its own: its left from the line,
+-- its right from the tooltip, as the kills rule is laid. The client leaves
+-- 2 pixels between lines; each band covers its line and 1 above and below,
+-- so they meet. The first and the last reach 2 further, for air.
+function M.QuestBand(tip, lines)
+	local pool = tip and tip.beebsQuestBands
+	if pool then
+		for _, b in ipairs(pool) do
+			b:Hide()
+		end
+	end
+	if not (tip and tip.CreateTexture and lines and #lines > 0) then
+		return 0
+	end
+	if not pool then
+		pool = {}
+		tip.beebsQuestBands = pool
+	end
+	local shown = 0
+	for n, i in ipairs(lines) do
+		local fs = BT.UnitTip.LineOf(tip, i)
+		if fs then
+			local b = pool[n]
+			if not b then
+				local ok, made = pcall(tip.CreateTexture, tip, nil, "BACKGROUND", nil, 3)
+				if not (ok and type(made) == "table" and made.SetColorTexture) then
+					return shown
+				end
+				b = made
+				pool[n] = b
+			end
+			local c = M.BAND_INK
+			b:SetColorTexture(c[1], c[2], c[3], c[4])
+			local okH, h = pcall(fs.GetHeight, fs)
+			h = (okH and type(h) == "number" and h > 0) and h or M.QUEST_SIZE
+			local above = n == 1 and 3 or 1
+			local below = n == #lines and 3 or 1
+			b:ClearAllPoints()
+			b:SetPoint("LEFT", fs, "LEFT", -M.BAND_LEFT, (above - below) / 2)
+			b:SetPoint("RIGHT", tip, "RIGHT", -M.BAND_RIGHT, 0)
+			b:SetHeight(h + above + below)
+			b:Show()
+			shown = shown + 1
+		end
+	end
+	return shown
+end
+
 function M.QuestRows(tip, quests)
 	local T = BT.UnitTip
+	local lines = {}
 	local titles = 0
 	for _, q in ipairs(quests or {}) do
 		if q.title then
@@ -1015,16 +1081,18 @@ function M.QuestRows(tip, quests)
 	for _, q in ipairs(quests or {}) do
 		if q.title then
 			if titles > 1 then
-				T.Row(tip, "quest", QUEST_TITLE, q.text, QUEST_TITLE)
+				lines[#lines + 1] = T.Row(tip, "quest", QUEST_TITLE, q.text, QUEST_TITLE,
+					nil, nil, nil, M.QUEST_SIZE)
 				n = n + 1
 			end
 		else
 			local count = (q.have and q.need) and ("%d/%d"):format(q.have, q.need) or nil
-			T.Row(tip, titles > 1 and "blank" or "quest", QUEST_TITLE, q.text, T.INK, count,
-				q.done and QUEST_DONE or QUEST_TITLE)
+			lines[#lines + 1] = T.Row(tip, titles > 1 and "blank" or "quest", QUEST_TITLE, q.text, T.INK, count,
+				q.done and QUEST_DONE or QUEST_TITLE, nil, M.QUEST_SIZE)
 			n = n + 1
 		end
 	end
+	M.QuestBand(tip, lines)
 	return n
 end
 
@@ -1408,6 +1476,7 @@ end
 BT.OnUnitTooltipHide(function(tip)
 	M.HealthLine(nil, nil)
 	M.KillsRule(tip or _G.GameTooltip, nil)
+	M.QuestBand(tip or _G.GameTooltip, nil)
 end)
 
 -- the gap between the level and the Elite tag beside it, and how much

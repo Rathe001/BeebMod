@@ -440,9 +440,9 @@ function T.Gap(tip)
 end
 
 -- One row: its picture in `tint`, its words in `rgb`, and what it says on the
--- right in `rightRgb`; `wrap` lets long words take more than one line.
--- Returns the line it went on.
-function T.Row(tip, icon, tint, text, rgb, right, rightRgb, wrap)
+-- right in `rightRgb`; `wrap` lets long words take more than one line;
+-- `size` is its words' size, T.ROW if not given. Returns the line it went on.
+function T.Row(tip, icon, tint, text, rgb, right, rightRgb, wrap, size)
 	T.Gap(tip)
 	rgb = rgb or T.INK
 	local left = T.Icon(icon, tint) .. "  " .. (text or "")
@@ -453,9 +453,9 @@ function T.Row(tip, icon, tint, text, rgb, right, rightRgb, wrap)
 		tip:AddLine(left, rgb[1], rgb[2], rgb[3], wrap and true or nil)
 	end
 	local i = BT.Pill.Number(tip:NumLines(), 1)
-	T.SizeLine(tip, i, T.ROW, nil, "text")
+	T.SizeLine(tip, i, size or T.ROW, nil, "text")
 	if right then
-		T.SizeLine(tip, i, T.ROW, "TextRight", "text")
+		T.SizeLine(tip, i, size or T.ROW, "TextRight", "text")
 	end
 	-- in line with the tags and the name's ink, on a tooltip the Tooltips
 	-- module wrote (its indentBody); on the client's own, with its lines
