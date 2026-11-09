@@ -15,7 +15,7 @@
 -- other escape in it is copied across exactly as it came, so an item link
 -- that happens to hold a dot or a bracket is never touched.
 local _, BT = ...
-local CreateFrame = BT.Cpu.For("Modules/Chat/Links.lua")
+local CreateFrame, _, hooksecurefunc = BT.Cpu.For("Modules/Chat/Links.lua")
 
 local M = BT.GetModule("chat")
 local W = BT.Widgets

@@ -2168,6 +2168,74 @@ if ok then
 			assert(BT.Cpu.on and later, "Measure starts timing")
 			later()
 			assert(not BT.Cpu.on and BeebModDB.cpuDump, "and when it ends the list is in the saved file")
+			-- STUTTERS (Josh 2026-11-09): the game's counts read at start and
+			-- stop, each frame's length read in between
+			do
+				local hadProf, hadEnum, hadTime, hadMem, hadUpd = _G.C_AddOnProfiler, _G.Enum, _G.GetTime,
+					_G.GetAddOnMemoryUsage, _G.UpdateAddOnMemoryUsage
+				local E = { RecentAverageTime = 1, LastTime = 3, PeakTime = 4, CountTimeOver5Ms = 6,
+					CountTimeOver10Ms = 7, CountTimeOver50Ms = 8, CountTimeOver100Ms = 9 }
+				_G.Enum = setmetatable({ AddOnProfilerMetric = E }, { __index = hadEnum })
+				local fig = { me = { [3] = 0.2, [4] = 3, [6] = 1, [7] = 0, [8] = 0, [9] = 0 },
+					all = { [3] = 1, [4] = 20, [6] = 4, [7] = 2, [8] = 0, [9] = 0 },
+					game = { [6] = 900, [7] = 300, [8] = 10, [9] = 2 } }
+				local others = { BeebMod = 1, OtherAddon = 3 }
+				_G.C_AddOnProfiler = {
+					GetAddOnMetric = function(name, m) return name == "BeebMod" and fig.me[m] or 0 end,
+					GetOverallMetric = function(m) return fig.all[m] or 0 end,
+					GetApplicationMetric = function(m) return fig.game[m] or 0 end,
+					GetTopKAddOnsForMetric = function()
+						local out = {}
+						for n, v in pairs(others) do out[#out + 1] = { addOnName = n, metricValue = v } end
+						return out
+					end,
+				}
+				local t = 100
+				_G.GetTime = function() return t end
+				_G.UpdateAddOnMemoryUsage = function() end
+				_G.GetAddOnMemoryUsage = function() return 2048 end
+				local St = BT.Stutter
+				local said = click(tbody.stutterButton)
+				assert(St.on and BT.Cpu.on, "Watch starts the watch and the CPU timing: " .. tostring(said))
+				assert(tbody.stutterButton.label:GetText() == "Stop", "and the button says Stop")
+				assert(not BT.Cpu.Measure(), "the CPU row waits while it watches")
+				St.OnUpdate(nil, 0.016)
+				-- a slow frame: the addons took 1 ms of it, BeebMod's tooltip 0.6
+				BT.Cpu.Record("Modules/Tooltips/Tooltips OnEvent", 0.6)
+				St.OnUpdate(nil, 0.120)
+				St.OnEvent(nil, "LOADING_SCREEN_ENABLED")
+				St.OnUpdate(nil, 4.0)
+				St.OnEvent(nil, "LOADING_SCREEN_DISABLED")
+				St.OnUpdate(nil, 0.9)
+				St.OnUpdate(nil, 0.016)
+				-- while it watched: 12 slow frames in the game, 2 more by all addons, none by BeebMod
+				fig.game[8], fig.game[9] = 22, 3
+				fig.all[6], fig.all[7] = 7, 3
+				others.OtherAddon = 6
+				t = 172
+				local lines
+				local printed = {}
+				local wasPrint = BT.Util.Print
+				BT.Util.Print = function(s) printed[#printed + 1] = s end
+				click(tbody.stutterButton)
+				BT.Util.Print = wasPrint
+				lines = BeebModDB.stutterDump and BeebModDB.stutterDump.lines
+				_G.C_AddOnProfiler, _G.Enum, _G.GetTime = hadProf, hadEnum, hadTime
+				_G.GetAddOnMemoryUsage, _G.UpdateAddOnMemoryUsage = hadMem, hadUpd
+				assert(not St.on and not BT.Cpu.on, "Stop ends both")
+				assert(tbody.stutterButton.label:GetText() == "Watch", "and the button says Watch again")
+				assert(lines and #printed == #lines, "the lines go to chat and the saved file")
+				local text = table.concat(lines, "\n")
+				assert(text:find("watched 1 min 12 s · 3 frames · 1 over 50 ms · the slowest 120 ms", 1, true),
+					"frames counted, the loading screen and the frame after it left out: " .. text)
+				assert(text:find("the whole game 0 / 0 / 12 / 1", 1, true), "the game's counts grew by: " .. text)
+				assert(text:find("all addons 3 / 1 / 0 / 0 · BeebMod 0 / 0 / 0 / 0", 1, true), "addon counts: " .. text)
+				assert(text:find("Most frames over 5 ms by addon · OtherAddon 3", 1, true), "who was slow: " .. text)
+				assert(text:find("· 120 ms · all addons 1.0 ms · BeebMod 0.2 ms · most of it Tooltips/Tooltips OnEvent 0.6 ms", 1, true),
+					"the slow frame and what ran in it: " .. text)
+				assert(text:find("Memory · BeebMod 2.0 MB", 1, true), "memory last: " .. text)
+				assert(#BeebModDB.stutterDump.slowest == 1, "the slow frame is in the saved file")
+			end
 			-- THE GAME'S TAINT LOG (Josh 2026-11-08): a switch that sets the
 			-- console variable, remembered and set again at login
 			do
@@ -3530,25 +3598,38 @@ if ok then
 			assert(BT.settings.questDrops[2032]["Small Spider Leg"] and not BT.settings.questDrops[2032]["Ruined Pelt"],
 				"under the enemy it came from")
 			assert(hover("Mangy Nightsaber", "Cat", 2032), "and after that the cat wears the row")
-			-- A QUEST-ONLY ITEM IS THE CLIENT'S: the Webwood Egg is from a nest,
-			-- and the client would have said so if a spider dropped it
+			-- A QUEST-ONLY ITEM IS THE CLIENT'S: the client would have said so if
+			-- a spider dropped it (an item made up here, so the list below
+			-- doesn't know it)
 			local hadItem = _G.C_Item
-			_G.GetQuestLogLeaderBoard = function() return "Webwood Egg: 0/1", "item", false end
-			mod.ForgetQuests()
-			local function eggRow(name, family, npc)
+			local function rowFor(item, name, family, npc)
 				hover(name, family, npc)
 				for _, text in ipairs(lines) do
-					if text:find("Webwood Egg", 1, true) then
+					if text:find(item, 1, true) then
 						return true
 					end
 				end
 				return false
 			end
+			_G.GetQuestLogLeaderBoard = function() return "Webwood Fang Shard: 0/1", "item", false end
+			mod.ForgetQuests()
 			_G.C_Item = setmetatable({ GetItemInfoInstant = function() return nil end }, { __index = hadItem })
-			assert(eggRow("Webwood Lurker", "Spider", 1998), "an item the client has not seen is matched by name")
+			assert(rowFor("Webwood Fang Shard", "Webwood Lurker", "Spider", 1998), "an item the client has not seen is matched by name")
 			_G.C_Item = setmetatable({ GetItemInfoInstant = function() return 5167, "Quest", "Quest", "", 1, 12, 0 end },
 				{ __index = hadItem })
-			assert(not eggRow("Webwood Lurker", "Spider", 1998), "but not once the client says it is a quest item")
+			assert(not rowFor("Webwood Fang Shard", "Webwood Lurker", "Spider", 1998), "but not once the client says it is a quest item")
+			_G.C_Item = setmetatable({ GetItemInfoInstant = function() return nil end }, { __index = hadItem })
+			-- WHO DROPS IT, FROM THE DATABASE (Josh 2026-11-09: "This quest is
+			-- showing all crabs dropping the quest item"): the Webwood Egg is
+			-- from a nest, so no spider has it, seen or not
+			_G.GetQuestLogLeaderBoard = function() return "Webwood Egg: 0/1", "item", false end
+			mod.ForgetQuests()
+			assert(not rowFor("Webwood Egg", "Webwood Lurker", "Spider", 1998), "a quest item no enemy drops is on none")
+			_G.GetQuestLogLeaderBoard = function() return "Fine Crab Chunks: 0/6", "item", false end
+			mod.ForgetQuests()
+			assert(rowFor("Fine Crab Chunks", "Reef Crawler", "Crab", 2235), "Fine Crab Chunks on a Reef Crawler")
+			assert(rowFor("Fine Crab Chunks", "Encrusted Tide Crawler", "Crab", 2233), "and an Encrusted Tide Crawler")
+			assert(not rowFor("Fine Crab Chunks", "Pygmy Tide Crawler", "Crab", 2231), "but not on every crab")
 			_G.C_Item = hadItem
 			_G.GetQuestLogLeaderBoard = function() return "Small Spider Leg: 2/7", "item", false end
 			mod.ForgetQuests()
@@ -4327,6 +4408,41 @@ if ok then
 			-- nothing that would taint a secure frame
 			assert(b._width == nil and b._height == nil, "it never resized the button")
 			assert(b._points == nil, "and never moved it")
+
+			-- DRESSED ONCE (Josh 2026-11-09, the stutter watch): a restyle of
+			-- every button on each event was a 30 ms hitch
+			do
+				local wasStyle, wasAfter, later = mod.StyleButton, _G.C_Timer.After, nil
+				local seen = {}
+				mod.StyleButton = function(btn, plain)
+					seen[#seen + 1] = btn
+					return wasStyle(btn, plain)
+				end
+				_G.C_Timer.After = function(_, fn) later = fn end
+				local ev = mod.Watch():GetScript("OnEvent")
+				ev(mod.events, "ACTIONBAR_SLOT_CHANGED", 2)
+				ev(mod.events, "PET_BAR_UPDATE")
+				assert(later, "events wait for the next frame")
+				later(); later = nil
+				assert(#seen == 0, "buttons already dressed are left alone: " .. #seen)
+				-- a button the client shows later, a pet's first summoning
+				local pet = _G.CreateFrame("CheckButton", "ActionButton4", _G.UIParent)
+				pet.NormalTexture = pet:CreateTexture()
+				pet.icon = pet:CreateTexture()
+				ev(mod.events, "PET_BAR_UPDATE")
+				later(); later = nil
+				assert(#seen == 1 and seen[1] == pet and pet.NormalTexture._alpha == 0, "a new button is dressed: " .. #seen)
+				_G.ActionButton4 = nil
+				seen = {}
+				made[1].HotKey:SetTextColor(1, 1, 1)
+				ev(mod.events, "UPDATE_BINDINGS")
+				later(); later = nil
+				assert(#seen == 0 and made[1].HotKey._textColor[1] == 0.55, "new bindings only recolour the hotkeys")
+				assert(mod.Status():find("heard PET_BAR_UPDATE 2", 1, true), "What loaded names the busiest event: " .. mod.Status())
+				mod.Restyle()
+				assert(#seen >= 3, "a new theme dresses them all: " .. #seen)
+				mod.StyleButton, _G.C_Timer.After = wasStyle, wasAfter
+			end
 
 			-- switching it off gives the client everything back
 			mod:OnDisable()

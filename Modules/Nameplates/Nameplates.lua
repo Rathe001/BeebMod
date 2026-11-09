@@ -34,7 +34,7 @@
 -- under the name (M.PaintFriendHealth). A plate the client keeps from addons (a
 -- "forbidden" one, as a friend's in an instance) is left as the game draws it.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Nameplates/Nameplates.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Nameplates/Nameplates.lua")
 
 local F = BT.UnitFrames
 

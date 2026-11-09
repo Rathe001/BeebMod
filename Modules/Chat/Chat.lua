@@ -18,7 +18,7 @@
 -- opens, so putting it somewhere else means putting it back every time it
 -- shows itself rather than once at login.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Chat/Chat.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Chat/Chat.lua")
 
 local U = BT.Util
 local unpack = unpack or table.unpack

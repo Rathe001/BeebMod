@@ -21,7 +21,7 @@
 -- Record, on the Testing page, writes the next menu you open into the saved
 -- file, for when one comes out wrong.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Dropdowns/Dropdowns.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Dropdowns/Dropdowns.lua")
 
 local U = BT.Util
 

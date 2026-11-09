@@ -15,7 +15,7 @@
 -- crop the bevel at the edges, sit the result on our own surface, and take the
 -- gold down with a tint. It reads as ours; it is not the icon redrawn.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Micro/Micro.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Micro/Micro.lua")
 
 local U = BT.Util
 

@@ -17,7 +17,7 @@
 -- mask is a texture - so a white one makes it square without touching a single
 -- blip.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Minimap/Minimap.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Minimap/Minimap.lua")
 
 local U = BT.Util
 

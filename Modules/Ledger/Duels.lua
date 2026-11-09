@@ -15,7 +15,7 @@
 -- moment the duel was asked for, or from one in front of you with that name.
 -- Nothing is sent to anyone.
 local _, BT = ...
-local CreateFrame = BT.Cpu.For("Modules/Ledger/Duels.lua")
+local CreateFrame, _, hooksecurefunc = BT.Cpu.For("Modules/Ledger/Duels.lua")
 
 local U, N = BT.Util, BT.Notes
 

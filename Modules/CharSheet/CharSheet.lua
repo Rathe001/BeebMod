@@ -9,7 +9,7 @@
 -- dragging the average down is visible at a glance, without pointing at
 -- nineteen tooltips. Shirts and tabards have no say in it and show none.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/CharSheet/CharSheet.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/CharSheet/CharSheet.lua")
 
 local U = BT.Util
 

@@ -472,3 +472,66 @@ function Q.Drop(quest)
 	end
 	return false
 end
+
+-- ---------------------------------------------------------------------------
+-- The record
+-- ---------------------------------------------------------------------------
+
+-- WHAT THE GAME SAYS OF EACH OBJECTIVE (Josh 2026-11-09: "This quest
+-- objective is showing as complete, but it is not. I used the item, but I
+-- didn't actually catch the bear yet"). The tracker crosses an objective out
+-- when the game calls it finished. This writes down every answer the game
+-- gives for each followed quest, through each call the tracker could use, so
+-- the saved file shows which one said finished.
+local function raw(...)
+	local out = {}
+	for i = 1, select("#", ...) do
+		out[i] = tostring((select(i, ...)))
+	end
+	return table.concat(out, " | ")
+end
+
+function Q.Dump()
+	local quests = {}
+	for i = 1, numEntries() do
+		local title, _, isHeader, questID = entry(i)
+		if not isHeader and title and watched(i, questID) then
+			local q = { index = i, questID = questID, title = title, complete = complete(i, questID), objectives = {} }
+			if GetQuestLogTitle then
+				q.logTitle = raw(pcall(GetQuestLogTitle, i))
+			end
+			local n = 0
+			if C_QuestLog and C_QuestLog.GetNumQuestObjectives and questID then
+				n = tonumber(C_QuestLog.GetNumQuestObjectives(questID)) or 0
+			end
+			if GetNumQuestLeaderBoards then
+				n = math.max(n, tonumber(GetNumQuestLeaderBoards(i)) or 0)
+			end
+			for j = 1, n do
+				local o = {}
+				if GetQuestObjectiveInfo and questID then
+					o.objectiveInfo = raw(pcall(GetQuestObjectiveInfo, questID, j, false))
+				end
+				if GetQuestLogLeaderBoard then
+					o.leaderBoard = raw(pcall(GetQuestLogLeaderBoard, j, i))
+				end
+				q.objectives[j] = o
+			end
+			if C_QuestLog and C_QuestLog.GetQuestObjectives and questID then
+				local ok, list = pcall(C_QuestLog.GetQuestObjectives, questID)
+				if ok and type(list) == "table" then
+					q.questObjectives = {}
+					for j, o in ipairs(list) do
+						q.questObjectives[j] = raw(o.text, o.type, o.finished, o.numFulfilled, o.numRequired)
+					end
+				end
+			end
+			quests[#quests + 1] = q
+		end
+	end
+	BT.EnsureBound()
+	BeebModDB.trackerDump = { at = BT.Util.Now(), quests = quests }
+	return quests
+end
+
+BT.Record("trackerDump", Q.Dump, "tracker")

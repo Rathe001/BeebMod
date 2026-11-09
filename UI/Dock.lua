@@ -21,7 +21,7 @@
 -- that did, and its notes moved to the game's right-click menu
 -- (Modules/Ledger/Menu.lua), so the row and everything that laid it out went.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("UI/Dock.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("UI/Dock.lua")
 
 local U = BT.Util
 local B = {}

@@ -29,6 +29,7 @@
 Core\Init.lua
 Core\Rename.lua
 Core\Cpu.lua
+Core\Stutter.lua
 Core\Util.lua
 Core\Session.lua
 Core\Fonts.lua
@@ -76,6 +77,7 @@ Modules\Census\Chart.lua
 Modules\Census\Census.lua
 Modules\Census\Book.lua
 Modules\Census\Demo.lua
+Modules\Tooltips\QuestDropData.lua
 Modules\Tooltips\Tooltips.lua
 Modules\Tracker\Quests.lua
 Modules\Tracker\Tracker.lua

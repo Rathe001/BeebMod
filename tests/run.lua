@@ -925,6 +925,25 @@ do
 	_G.C_Timer = {}
 	check(T.After == nil, "and nothing when the client has none")
 	_G.C_Timer = wasTimer
+	-- HOOKS TOO (Josh 2026-11-09): the client's hooksecurefunc, the hook
+	-- timed while measuring, and false when there is none to place it with
+	local wasHook = _G.hooksecurefunc
+	local placed
+	_G.hooksecurefunc = function(obj, name, fn) placed = { obj, name, fn } end
+	local _, _, H = BT.Cpu.For("Tests/Hook.lua")
+	local obj, ran = {}, 0
+	check(H(obj, "Update", function() ran = ran + 1 end) == true and placed[1] == obj and placed[2] == "Update",
+		"a hook goes to the client's hooksecurefunc")
+	placed[3]()
+	BT.Cpu.on = true
+	placed[3]()
+	BT.Cpu.on = false
+	local s = BT.Cpu.stats["Tests/Hook hook Update"]
+	check(ran == 2 and s and s.calls == 1, "it runs either way, and is timed only while measuring")
+	BT.Cpu.stats["Tests/Hook hook Update"] = nil
+	_G.hooksecurefunc = nil
+	check(H(obj, "Update", function() end) == false, "and says so when the client has none")
+	_G.hooksecurefunc = wasHook
 end
 
 -- 8. Ago, which is the only thing the tooltip says about time.

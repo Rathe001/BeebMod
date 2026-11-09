@@ -23,7 +23,7 @@
 -- make the tooltip actually SHRINK. Blanking lines leaves their height behind,
 -- which is a smaller tooltip with holes in it rather than a compact one.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Tooltips/Tooltips.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Tooltips/Tooltips.lua")
 
 local U = BT.Util
 
@@ -1153,6 +1153,35 @@ local function questOnly(name)
 	return false
 end
 
+-- WHO DROPS IT, FROM THE DATABASE (Josh 2026-11-09: "This quest is showing
+-- all crabs dropping the quest item in the tooltip"). The word "crab" in
+-- Fine Crab Chunks matched every crab. QuestDropData.lua lists the enemies
+-- that drop each Classic quest item (scripts/make-quest-drops.py): Reef
+-- Crawlers and Encrusted Tide Crawlers. For an item it lists, only those
+-- enemies get the row, plus any you have looted it from yourself. An item
+-- it doesn't list, such as one from a quest new to Forever, is still
+-- matched by name. The lists become sets the first time each is asked for.
+local knownSets = {}
+function M.KnownDrops(name)
+	if type(name) ~= "string" or not BT.QuestDrops then
+		return nil
+	end
+	local key = name:lower()
+	local set = knownSets[key]
+	if set == nil then
+		local list = BT.QuestDrops[key]
+		set = false
+		if list then
+			set = {}
+			for _, id in ipairs(list) do
+				set[id] = true
+			end
+		end
+		knownSets[key] = set
+	end
+	return set or nil
+end
+
 -- what you have looted that a quest wanted, by enemy: { [npc] = { [item] = true } }
 -- for the account, since every character's spiders drop the same legs
 function M.Drops()
@@ -1244,7 +1273,10 @@ function M.WithItemQuests(unit, quests)
 	wordsOf(plainText(UnitCreatureFamily, unit), own)
 	for _, o in ipairs(itemObjectives) do
 		local match = learnt and learnt[o.text]
-		if not match and not questOnly(o.text) then
+		local known = M.KnownDrops(o.text)
+		if not match and known then
+			match = npc ~= nil and known[npc] or false
+		elseif not match and not questOnly(o.text) then
 			for word in pairs(wordsOf(o.text)) do
 				if own[word] then
 					match = true

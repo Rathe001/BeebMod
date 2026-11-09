@@ -14,18 +14,25 @@
 -- NOTHING IS WRAPPED UNTIL IT IS MEASURED. A frame of ours only remembers the
 -- OnUpdate and OnEvent it is given; when measuring starts they are swapped
 -- for timed ones, and when it ends the plain ones go back - so the rest of
--- the time it costs nothing at all. A timer carries a check of one flag.
--- Scripts hooked onto the game's own frames, and hooksecurefunc, are not
--- seen; the game's figure for the whole addon is shown beside the total so
--- the gap is plain.
+-- the time it costs nothing at all. A timer carries a check of one flag,
+-- and so does a hook placed with the hooksecurefunc this hands out (since
+-- 2026-11-09). A script hooked onto one of the game's own frames is seen
+-- only where it is wrapped in P.Watch. The game's figure for the whole addon
+-- is shown beside the total, so the gap is plain.
 --
 -- NEVER THE GAME'S SECURE FRAMES: a frame made from a Secure template, and
 -- the client's aura containers, are handed back exactly as the client made
 -- them - wrapping what secure code touches would spread taint into it.
 local _, BT = ...
 
-local P = { on = false, stats = {}, owned = setmetatable({}, { __mode = "k" }) }
+local P = { on = false, stats = {}, owned = setmetatable({}, { __mode = "k" }),
+	-- this frame so far, for the stutter watch (Core/Stutter.lua), which
+	-- reads and clears them once a frame
+	frameMs = 0, frameTopMs = 0, frameTop = nil }
 BT.Cpu = P
+
+-- a run this long is counted as slow on its own
+P.SLOW = 5
 
 -- the scripts worth timing: the ones that run on their own
 P.SCRIPTS = { OnUpdate = true, OnEvent = true }
@@ -40,13 +47,20 @@ end
 local function record(key, ms)
 	local s = P.stats[key]
 	if not s then
-		s = { ms = 0, calls = 0, peak = 0 }
+		s = { ms = 0, calls = 0, peak = 0, slow = 0 }
 		P.stats[key] = s
 	end
 	s.ms = s.ms + ms
 	s.calls = s.calls + 1
 	if ms > s.peak then
 		s.peak = ms
+	end
+	if ms >= P.SLOW then
+		s.slow = s.slow + 1
+	end
+	P.frameMs = P.frameMs + ms
+	if ms > P.frameTopMs then
+		P.frameTopMs, P.frameTop = ms, key
 	end
 end
 P.Record = record
@@ -169,7 +183,40 @@ function P.For(file)
 		end
 		return fn
 	end })
-	return createFrame, timer
+	-- HOOKS TOO (Josh 2026-11-09, the stutter watch). A hook on the game's
+	-- code runs when the game's code does, and the timer could not see it: a
+	-- 33 ms frame with the bags open showed 3 ms of timed parts. This is the
+	-- client's hooksecurefunc, with the hook timed while measuring. Whether
+	-- the client has it is asked at each call, as the tests swap it. True
+	-- when the hook was placed.
+	local function hook(a, b, c)
+		local real = _G.hooksecurefunc
+		if type(real) ~= "function" then
+			return false
+		end
+		if c ~= nil then
+			if type(c) == "function" then
+				c = whenOn(c, label .. " hook " .. tostring(b))
+			end
+			real(a, b, c)
+			return true
+		end
+		if type(b) == "function" then
+			b = whenOn(b, label .. " hook " .. tostring(a))
+		end
+		real(a, b)
+		return true
+	end
+	return createFrame, timer, hook
+end
+
+-- fn, timed under `label` while measuring: for a script hooked onto one of
+-- the game's own frames, which the frames of ours above don't cover
+function P.Watch(fn, label)
+	if type(fn) ~= "function" then
+		return fn
+	end
+	return whenOn(fn, label)
 end
 
 -- ---------------------------------------------------------------------------
@@ -201,6 +248,7 @@ end
 
 function P.Start(seconds)
 	P.stats = {}
+	P.frameMs, P.frameTopMs, P.frameTop = 0, 0, nil
 	P.startedAt = now()
 	P.on = true
 	swap(true)
@@ -214,7 +262,7 @@ function P.Stop()
 	local secs = math.max(0.001, (now() - (P.startedAt or now())) / 1000)
 	local list = {}
 	for key, s in pairs(P.stats) do
-		list[#list + 1] = { key = key, ms = s.ms, calls = s.calls, peak = s.peak }
+		list[#list + 1] = { key = key, ms = s.ms, calls = s.calls, peak = s.peak, slow = s.slow }
 	end
 	table.sort(list, function(a, b) return a.ms > b.ms end)
 	return list, secs

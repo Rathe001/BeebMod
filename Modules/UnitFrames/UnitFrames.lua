@@ -24,7 +24,7 @@
 -- tainted by 'BeebMod'"), so the debuff squares and dispel borders are its
 -- aura containers, described and placed by Modules/UnitFrames/Auras.lua.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/UnitFrames/UnitFrames.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/UnitFrames/UnitFrames.lua")
 
 local U = BT.Util
 local F = BT.UnitFrames
@@ -1016,8 +1016,7 @@ function F.Stow(name)
 	-- the client puts some of them back under UIParent (Edit Mode does): back
 	-- under the hider they go while they are meant to be away, when it is safe
 	if hooksecurefunc and not f.bmHooked then
-		f.bmHooked = true
-		hooksecurefunc(f, "SetParent", function(self, parent)
+		f.bmHooked = hooksecurefunc(f, "SetParent", function(self, parent)
 			-- NOT WHILE EDIT MODE IS OPEN: Edit Mode takes the frame out to be
 			-- moved. By our own word that it is open (M.EditModeEnter), not the
 			-- manager's IsEditModeActive (Josh 2026-10-18: "Default player frame

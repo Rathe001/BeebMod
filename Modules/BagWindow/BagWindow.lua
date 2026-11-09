@@ -25,7 +25,7 @@
 -- bagdump writes the window down into the saved file when something comes
 -- out wrong, the way the meter and the character sheet were put right.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/BagWindow/BagWindow.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/BagWindow/BagWindow.lua")
 
 local U = BT.Util
 
@@ -512,7 +512,7 @@ function M.Hook()
 	for _, w in ipairs(M.Windows()) do
 		if w.HookScript and not w.beebsBagHooked then
 			w.beebsBagHooked = true
-			pcall(w.HookScript, w, "OnShow", soon)
+			pcall(w.HookScript, w, "OnShow", BT.Cpu.Watch(soon, "Modules/BagWindow/BagWindow OnShow (hook)"))
 			if type(hooksecurefunc) == "function" then
 				for _, fn in ipairs({ "UpdateItemLayout", "UpdateItems", "Update" }) do
 					if type(w[fn]) == "function" then
@@ -771,12 +771,12 @@ function M.WatchPosition()
 			frame.beebsPlaceWatched = true
 			fresh = true
 			M.Handle(frame)
-			frame:HookScript("OnShow", function(self)
+			frame:HookScript("OnShow", BT.Cpu.Watch(function(self)
 				M.ApplyPosition(self)
 				if C_Timer and C_Timer.After then
 					C_Timer.After(0, function() M.ApplyPosition(self) end)
 				end
-			end)
+			end, "Modules/BagWindow/BagWindow OnShow place (hook)"))
 		end
 	end
 	if not M.anchorsHooked and type(hooksecurefunc) == "function"

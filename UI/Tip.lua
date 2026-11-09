@@ -27,7 +27,7 @@
 -- one; it goes away with the game's tooltip (every OnLeave already hides
 -- that), when its owner hides, or when the pointer has left the owner.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("UI/Tip.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("UI/Tip.lua")
 
 local T = {}
 BT.Tip = T

@@ -13,7 +13,7 @@
 -- back in the line. With no addon buttons at all there is no line, and
 -- switching this off gives every button back to where it was.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Buttons/Buttons.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Buttons/Buttons.lua")
 
 local U = BT.Util
 

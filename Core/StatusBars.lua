@@ -30,7 +30,7 @@
 -- simply not there to see or to point at. The older single-bar frames are
 -- covered too, for a build that still has them.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Core/StatusBars.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Core/StatusBars.lua")
 
 local S = {}
 BT.StatusBars = S

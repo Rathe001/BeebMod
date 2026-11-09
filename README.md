@@ -159,7 +159,10 @@ bars, Saved characters), move another book's characters into this realm's
 book, and write records for Claude into the saved file. Record
 writes down how the game built each part you have on, and also the next menu
 you open and your next fight. Clear takes the records out again. CPU use times
-BeebMod for 10 seconds. Type `/reload` after a record to save it.
+BeebMod for 10 seconds. Stutters watches each frame until you press Stop.
+It lists the slow frames and says how many of them had slow BeebMod code. The
+counts come from the game's own addon profiler. Type `/reload` after a record
+to save it.
 
 The Testing page shows only when BeebMod runs from this folder. In
 `Core/Init.lua`, `BT.DEV = true` sits between `--@debug@` and
@@ -254,7 +257,8 @@ lives in `Modules/Ledger`.
                          its rows
     Modules/Clock/       the time in the dock's header
     Modules/Census/      the counting and the charts, a part of the Ledger
-    Modules/Tooltips/    the compact tooltip
+    Modules/Tooltips/    the compact tooltip (QuestDropData.lua: which enemies
+                         drop each quest item, from scripts/make-quest-drops.py)
     Modules/Tracker/     the quest tracker in the dock (Quests.lua reads the log)
     Modules/Encounter/   the boss notes under it (Data.lua holds them; the
                          research behind each is in docs/encounters/)
@@ -276,8 +280,11 @@ lives in `Modules/Ledger`.
                          Record on the Testing page
     Core/Cpu.lua         CPU use on the Testing page: times what runs on its
                          own (updates, events, timers) by the file that made
-                         it; every file after it takes CreateFrame and C_Timer
-                         from here, one line
+                         it; every file after it takes CreateFrame, C_Timer
+                         and hooksecurefunc from here, one line
+    Core/Stutter.lua     Stutters on the Testing page: slow frames, and the
+                         game's counts of slow frames for BeebMod and for
+                         all addons
     Core/Fonts.lua       the typefaces BeebMod can use (a list, one line a
                          face), and its own font objects, set in the chosen one
     Art/Fonts/           Google Sans, Google Sans Flex (static cuts), Fira Code,

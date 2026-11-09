@@ -14,7 +14,7 @@
 -- off the tab (M.FromTab). A client with Classic's calls is read those
 -- instead. With none of them, there is no line.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/PvP/PvP.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/PvP/PvP.lua")
 
 local M = BT.Module({
 	key = "pvp",

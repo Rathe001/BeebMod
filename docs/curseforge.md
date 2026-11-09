@@ -124,5 +124,5 @@ If the game showed an error, please paste the whole text.
 ## Credits
 
 - Enemy lore from the Warcraft Wiki
-- Enemy abilities from the VMaNGOS database
+- Enemy abilities, and which enemies drop each quest item, from the VMaNGOS database
 - Built with Claude Code

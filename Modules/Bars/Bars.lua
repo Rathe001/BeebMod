@@ -21,7 +21,7 @@
 -- It is a module like any other, so it can be switched off and the client's
 -- art comes straight back.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/Bars/Bars.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/Bars/Bars.lua")
 local unpack = unpack or table.unpack
 
 local U = BT.Util
@@ -68,6 +68,8 @@ local RIM = BT.Widgets.RIM
 local ACCENT = BT.Widgets.ACCENT
 
 local styled = setmetatable({}, { __mode = "k" })
+-- the buttons wearing ours now (see DRESSED ONCE below)
+local dressed = setmetatable({}, { __mode = "k" })
 
 -- the tests look at what a button is wearing
 function M.Skins()
@@ -395,6 +397,7 @@ function M.StyleButton(button, plain)
 			end
 		end
 	end
+	dressed[button] = not plain or nil
 	return true
 end
 
@@ -431,10 +434,27 @@ end
 -- IN COMBAT, NOTHING (Josh 2026-09-20). None of this is protected, but the
 -- client rebuilds buttons as you fight - a spell going on cooldown, a stance
 -- changing the whole bar - and re-dressing thirty-six buttons in the middle of
--- that is work nobody asked for. It waits for the fight to end.
+-- that is work nobody asked for. It waits for the fight to end, then dresses
+-- them all.
 local pending = false
 
+-- DRESSED ONCE (Josh 2026-11-09, the stutter watch). Every event restyled
+-- every button, over a hundred of them, and that took 30 to 39 ms. Some event
+-- fired more than once a second, and each was a hitch. The client's own
+-- updates of a button change its icon, count, cooldown and checked state
+-- (Blizzard_ActionBar ActionButton.lua and PetActionBar.lua). None of them
+-- undoes ours, and the equipped edge has hooks of its own. So an event only
+-- dresses buttons not dressed yet, such as a pet bar's first showing. New
+-- bindings recolour the hotkeys. A new theme or the switch turned on still
+-- dresses them all (M.Restyle).
+M.heard = {}
+
+-- what waits for the next frame: everything, the undressed, the hotkeys
+local want = { all = false, dress = false, text = false }
+
 local function restyle()
+	local all, dress, text = want.all, want.dress, want.text
+	want.all, want.dress, want.text = false, false, false
 	if not BT.Enabled("bars") then
 		return
 	end
@@ -442,10 +462,30 @@ local function restyle()
 		pending = true
 		return
 	end
-	pending = false
-	M.StyleAll()
+	if pending then
+		pending, dress = false, true
+	end
+	if all then
+		M.StyleAll()
+		return
+	end
+	if dress then
+		for _, button in ipairs(M.Buttons()) do
+			if not dressed[button] then
+				M.StyleButton(button)
+			end
+		end
+	end
+	if text then
+		for _, button in ipairs(M.Buttons()) do
+			styleText(button, false)
+		end
+	end
 end
-M.Restyle = restyle
+M.Restyle = function()
+	want.all = true
+	restyle()
+end
 
 function M.Watch()
 	if M.events then
@@ -461,11 +501,16 @@ function M.Watch()
 	end
 	-- ONCE A FRAME (Josh 2026-09-23, audit): a slot changes one event at a
 	-- time, and a talent swap or a page filled by hand is dozens of them in a
-	-- row - each one restyled every button of every bar
+	-- row. They are gathered, then handled once.
 	local queued = false
 	M.events:SetScript("OnEvent", function(_, event)
+		M.heard[event] = (M.heard[event] or 0) + 1
 		if event == "PLAYER_REGEN_ENABLED" and not pending then
 			return
+		elseif event == "UPDATE_BINDINGS" then
+			want.text = true
+		else
+			want.dress = true
 		end
 		if queued then
 			return
@@ -485,7 +530,7 @@ end
 
 function M:OnEnable()
 	M.Watch()
-	restyle()
+	M.Restyle()
 end
 
 -- AND AT LOGIN, NOT ONLY WHEN SWITCHED ON (Josh 2026-09-20). OnEnable fires
@@ -506,6 +551,20 @@ end
 
 -- WHAT IT IS DOING, for the Testing page's What loaded (it was a line at the
 -- foot of the Action bars page until the settings canvas, 2026-10-04)
+-- and which events it heard most, so a busy one can be named
 function M.Status()
-	return ("%d buttons redrawn"):format(M.lastCount or 0)
+	local line = ("%d buttons redrawn"):format(M.lastCount or 0)
+	local heard = {}
+	for event, n in pairs(M.heard) do
+		heard[#heard + 1] = { event = event, n = n }
+	end
+	table.sort(heard, function(a, b) return a.n > b.n end)
+	local bits = {}
+	for i = 1, math.min(3, #heard) do
+		bits[i] = ("%s %d"):format(heard[i].event, heard[i].n)
+	end
+	if #bits > 0 then
+		line = line .. " · heard " .. table.concat(bits, ", ")
+	end
+	return line
 end

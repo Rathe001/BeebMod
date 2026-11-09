@@ -23,7 +23,7 @@
 -- points and your own arrow stay above them. The canvas grows as you zoom, so
 -- each pin is shrunk by as much to stay the same size on the screen.
 local _, BT = ...
-local CreateFrame = BT.Cpu.For("Modules/Map/Entrances.lua")
+local CreateFrame, _, hooksecurefunc = BT.Cpu.For("Modules/Map/Entrances.lua")
 
 local M = BT.Module({
 	key = "entrances",

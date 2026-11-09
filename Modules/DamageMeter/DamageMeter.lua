@@ -33,7 +33,7 @@
 --     Neither is added where the client already shows it (M.ClientClock,
 --     M.WantsRate).
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/DamageMeter/DamageMeter.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/DamageMeter/DamageMeter.lua")
 
 local U = BT.Util
 

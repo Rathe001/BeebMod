@@ -18,7 +18,7 @@
 -- layout - and it is done to whatever buttons are there, however they are
 -- named. Everything changed is remembered, and put back when this is off.
 local _, BT = ...
-local CreateFrame, C_Timer = BT.Cpu.For("Modules/GameMenu/GameMenu.lua")
+local CreateFrame, C_Timer, hooksecurefunc = BT.Cpu.For("Modules/GameMenu/GameMenu.lua")
 
 local U = BT.Util
 

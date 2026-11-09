@@ -3,6 +3,18 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **No more stutter from the action bars.** They redrew every button each
+  time the game changed one of them. That took long enough to feel as a
+  short stutter, sometimes more than once a second. Now each button is
+  dressed once. Later changes from the game leave BeebMod's look in place.
+- **Quest items on the right enemies.** An enemy's tooltip shows a quest
+  item only on the enemies that drop it. Fine Crab Chunks showed on every
+  crab in Darkshore. Now they show on Reef Crawlers and Encrusted Tide
+  Crawlers only. The list of who drops what comes from the VMaNGOS database.
+  A quest item that is new to Forever is still matched by its name.
+
 ## 1.10.0
 
 - **Gold on every character.** Point at your gold in the dock to see each

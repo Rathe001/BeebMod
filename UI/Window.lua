@@ -986,6 +986,16 @@ local function testingPage(body)
 	body.cpuButton:SetScript("OnClick", function()
 		BT.Cpu.Measure()
 	end)
+	-- STUTTERS (Josh 2026-11-09): slow frames, and whether BeebMod was slow
+	-- in them (Core/Stutter.lua)
+	local stutter = Wd.Row(rec, "Stutters", "Watches each frame until you press Stop, then lists the slow ones in chat")
+	body.stutterButton = stutter:SetControl(Wd.Button(stutter, "Watch", 62, 20))
+	body.stutterButton:SetScript("OnClick", function()
+		BT.Stutter.Toggle()
+	end)
+	BT.Stutter.OnChange = function()
+		body.stutterButton:SetLabel(BT.Stutter.on and "Stop" or "Watch")
+	end
 	-- THE GAME'S TAINT LOG (Josh 2026-11-08): on from here, and on again at
 	-- each login until switched off (Core/Blocked.lua, BT.TaintLog)
 	body.taintRow = Wd.SwitchRow(rec, "Taint log", "The game writes what tainted its code into Logs\\taint.log. Quit the game before Claude reads it.",
