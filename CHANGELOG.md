@@ -3,6 +3,14 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Gold on every character.** Point at your gold in the dock to see each
+  character's gold and the total. Each character is counted once you log in
+  on it. The ten richest are listed by name, with any others in one row.
+  Click your gold to show the total in the dock instead. A pile of coins in
+  front of the number marks the total. Click again for this character's gold.
+
 ## 1.9.0
 
 - **Vendors.** When you open a vendor, BeebMod sells your grey items. Then

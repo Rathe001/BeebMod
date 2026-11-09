@@ -16213,6 +16213,94 @@ if ok then
 			mod.Start(true, false)
 			assert(mod.session ~= session and mod.session.earned == 0, "a new login starts a fresh one")
 
+			-- EVERY CHARACTER'S GOLD (Josh 2026-11-08: "Possible to track
+			-- total money across all characters?")
+			do
+				local hadClass = _G.UnitClass
+				_G.UnitClass = function() return "Hunter", "HUNTER" end
+				BT.settings.purses = nil
+				mod.Money()
+				_G.UnitClass = hadClass
+				local me = BT.Util.MeKey()
+				local mine = BT.settings.purses and BT.settings.purses[me]
+				assert(mine and mine.copper == purse and mine.class == "HUNTER",
+					"your purse is written down under your name and realm: " .. tostring(me))
+				mod.Tip()
+				assert(not BT.Tip.Says("ALL CHARACTERS"), "with one character there is nothing to add up")
+				BT.Tip.Hide()
+				local realm = me:match("@(.+)$")
+				BT.settings.purses["Aeki@" .. realm] = { copper = 4500000, class = "MAGE" }
+				BT.settings.purses["Bankalt@" .. realm] = { copper = 100 }
+				local list, total = mod.Purses()
+				assert(#list == 3 and list[1].name == "Aeki" and list[3].name == "Bankalt",
+					"richest first: " .. tostring(list[1].name))
+				assert(total == 4500000 + purse + 100, "and the total is all of them: " .. total)
+				-- A TOTAL (Josh 2026-11-08: "Right now it looks like another
+				-- line item"): ruled off, a size up
+				local B = BT.Tip.Builder
+				local realTotal, ruled, sum = B.Total, 0, nil
+				local realDivider = B.Divider
+				B.Divider = function(self) ruled = ruled + 1 return realDivider(self) end
+				B.Total = function(self, label, value, state)
+					sum = { label = label, value = value }
+					return realTotal(self, label, value, state)
+				end
+				mod.Tip()
+				B.Total, B.Divider = realTotal, realDivider
+				assert(sum and sum.label == "Total" and sum.value == mod.Coins(total, true) and ruled == 1,
+					"the total is drawn as one, under a hairline")
+				assert(BT.Tip.TOTAL > BT.Tip.ROW, "a size up from the rows over it")
+				assert(BT.Tip.Says("ALL CHARACTERS") and BT.Tip.Says("Aeki") and BT.Tip.Says("Bankalt")
+					and BT.Tip.Says("Total") and BT.Tip.Says(mod.Coins(total, true)),
+					"the hover lists each and the total: " .. table.concat(BT.Tip.Texts(), " | "))
+				BT.Tip.Hide()
+				purse = purse + 300
+				mod.Money()
+				assert(BT.settings.purses[me].copper == purse, "a change to your purse is written down at once")
+				-- more than ten: the rest as one row
+				for i = 1, 11 do
+					BT.settings.purses[("Alt%02d@%s"):format(i, realm)] = { copper = 1 }
+				end
+				mod.Tip()
+				assert(BT.Tip.Says("4 more"), "the ten richest, then the rest together: "
+					.. table.concat(BT.Tip.Texts(), " | "))
+				BT.Tip.Hide()
+				-- ALL OF THEM, FROM A CLICK (Josh 2026-11-08: "Can we click the
+				-- metric to toggle between total and char only gold?")
+				local _, all = mod.Purses()
+				local chip = mod.Build()
+				BT.settings.currencyTotal = nil
+				mod.Update()
+				assert(chip.spec.text == mod.Coins(purse, true) and not chip.spec.icon, "your gold, as before")
+				mod.Tip()
+				assert(BT.Tip.Says("show all characters"), "the hover says a click shows them all")
+				chip:GetScript("OnMouseUp")(chip, "LeftButton")
+				assert(BT.settings.currencyTotal and chip.spec.text == mod.Coins(all, true)
+					and chip.spec.icon == mod.TOTAL_ICON, "a click: every character's, with a pile of coins in front")
+				assert(BT.Tip.Says("show this character"), "and the open hover says the click again")
+				local session = mod.session
+				chip:GetScript("OnMouseUp")(chip, "RightButton")
+				assert(mod.session ~= session and BT.settings.currencyTotal, "a right-click still resets the session")
+				chip:GetScript("OnMouseUp")(chip, "LeftButton")
+				assert(not BT.settings.currencyTotal and chip.spec.text == mod.Coins(purse, true) and not chip.spec.icon,
+					"clicked again, yours alone")
+				BT.Tip.Hide()
+				BT.settings.currencyTotal = true
+				BT.settings.purses = { [me] = { copper = purse } }
+				mod.Update()
+				assert(not mod.ShowsTotal() and not chip.spec.icon, "with one character there is no total to show")
+				mod.Tip()
+				assert(not BT.Tip.Says("show all characters"), "and no click to offer")
+				BT.Tip.Hide()
+				BT.settings.currencyTotal = nil
+				-- two realms: each name says its realm
+				BT.settings.purses = { [me] = { copper = 1 }, ["Aeki@Elsewhere"] = { copper = 2 } }
+				mod.Tip()
+				assert(BT.Tip.Says("Aeki · Elsewhere"), "on two realms, the realm by each name")
+				BT.Tip.Hide()
+				BT.settings.purses = nil
+			end
+
 			-- CURRENCY (Josh 2026-09-22): the same module, renamed; the bag space
 			-- it carried for a while is a line of its own, Bags
 			assert(mod.title == "Currency", "it is called Currency now")

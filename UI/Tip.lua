@@ -188,6 +188,7 @@ T.Frame = function() return frame end
 -- ---------------------------------------------------------------------------
 
 local Builder = {}
+T.Builder = Builder
 Builder.__index = Builder
 
 -- { icon, coords, name, sub, pill, pillState }
@@ -573,6 +574,16 @@ end
 
 function Builder:Row(label, value, state, bar, labelColor)
 	row(self, label, value, state, bar, labelColor)
+end
+
+-- A TOTAL (Josh 2026-11-08: "Can you make the total look more like a total?
+-- Right now it looks like another line item"): a hairline over it, as a sum
+-- is ruled off on paper, then the label and the figure a size up in the
+-- brighter ink
+T.TOTAL = T.ROW + 2
+function Builder:Total(label, value, state)
+	self:Divider()
+	row(self, label, value, state, nil, INK, T.TOTAL)
 end
 
 -- A QUIETER ROW, for a list under a subheading (Josh 2026-10-04: "Can we

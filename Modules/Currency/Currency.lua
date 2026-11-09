@@ -104,6 +104,73 @@ local function store()
 	return BT.settings.currency
 end
 
+-- ---------------------------------------------------------------------------
+-- Every character's purse
+-- ---------------------------------------------------------------------------
+
+-- EVERY CHARACTER'S GOLD (Josh 2026-11-08: "Possible to track total money
+-- across all characters?"). The game tells an addon only the purse of the
+-- character you are playing. So each character writes its own into the
+-- account-wide settings when its money changes, under its name and realm
+-- (U.MeKey), and the hover adds them up. A character you haven't logged in
+-- since this came in isn't counted until you do.
+M.LIST_MAX = 10
+
+local function purses()
+	if not BT.settings then
+		return nil
+	end
+	BT.settings.purses = BT.settings.purses or {}
+	return BT.settings.purses
+end
+
+-- this character's purse, written down; nil when there is no name to file
+-- it under or no purse to read
+function M.Remember()
+	local all = purses()
+	if not all or type(GetMoney) ~= "function" then
+		return nil
+	end
+	local ok, copper = pcall(GetMoney)
+	copper = ok and BT.Pill.Number(copper, nil) or nil
+	local who = U.MeKey and U.MeKey() or nil
+	if not copper or not who or who == "?" then
+		return nil
+	end
+	local entry = type(all[who]) == "table" and all[who] or {}
+	local okC, _, class = pcall(UnitClass, "player")
+	if okC and type(class) == "string" then
+		entry.class = class
+	end
+	entry.copper, entry.at = copper, U.Now()
+	all[who] = entry
+	return entry
+end
+
+-- every purse written down, richest first, and what they come to
+function M.Purses()
+	local list, total, realms = {}, 0, {}
+	for who, e in pairs(purses() or {}) do
+		if type(who) == "string" and type(e) == "table" and type(e.copper) == "number" then
+			local name, realm = who:match("^(.-)@(.+)$")
+			list[#list + 1] = { who = who, name = name or who, realm = realm, copper = e.copper, class = e.class }
+			total = total + e.copper
+			realms[realm or ""] = true
+		end
+	end
+	table.sort(list, function(a, b)
+		if a.copper ~= b.copper then
+			return a.copper > b.copper
+		end
+		return a.who < b.who
+	end)
+	local n = 0
+	for _ in pairs(realms) do
+		n = n + 1
+	end
+	return list, total, n > 1
+end
+
 -- A new session on a login, the same one on a reload (Core/Session.lua).
 function M.Start(initial, reloading)
 	local all = store()
@@ -114,6 +181,7 @@ function M.Start(initial, reloading)
 		return { start = now, earned = 0, spent = 0 }
 	end)
 	M.purse = money()
+	M.Remember()
 	M.Update()
 	return M.session
 end
@@ -133,6 +201,7 @@ function M.Money()
 	end
 	M.purse = now
 	s.last = U.Now()
+	M.Remember()
 	M.Update()
 end
 
@@ -144,15 +213,45 @@ end
 -- gold as the client's coins - to the silver once there is gold, so it fits
 -- a third of the panel. The rate per hour is on the hover with the rest of
 -- the session.
-function M.Cell(purse)
+--
+-- ALL OF THEM, FROM A CLICK (Josh 2026-11-08: "Can we click the metric to
+-- toggle between total and char only gold?"). A click swaps the cell between
+-- this character's gold and every character's together, as the clock swaps
+-- local and server time, and which one it shows is remembered. The total
+-- has a pile of coins in front, so the two can't be mistaken. With only one
+-- character written down there is no total, and the cell shows yours.
+M.TOTAL_ICON = "Interface\\Icons\\INV_Misc_Coin_02"
+
+function M.Cell(purse, total)
+	if total then
+		return { icon = M.TOTAL_ICON, text = M.Coins(total, true) }
+	end
 	return { text = M.Coins(purse, true) }
+end
+
+-- whether there are other characters to add up
+function M.HasOthers()
+	return #(M.Purses()) > 1
+end
+
+-- whether the cell shows every character's gold
+function M.ShowsTotal()
+	return (BT.settings and BT.settings.currencyTotal) and M.HasOthers() or false
+end
+
+function M.Toggle()
+	BT.EnsureBound()
+	BT.settings.currencyTotal = not M.ShowsTotal() or nil
+	M.Update()
+	return M.ShowsTotal()
 end
 
 function M.Update()
 	if not M.chip then
 		return
 	end
-	M.chip:Set(M.Cell(money()))
+	local total = M.ShowsTotal() and select(2, M.Purses()) or nil
+	M.chip:Set(M.Cell(money(), total))
 	if M.session then
 		M.session.last = U.Now()
 	end
@@ -192,8 +291,39 @@ function M.Tip()
 					rate >= 0 and "good" or "bad")
 			end
 		end
-		t:Foot({ { "Right-click", "reset session" } })
+		M.TipPurses(t)
+		local foot = {}
+		if M.HasOthers() then
+			foot[1] = { "Click", M.ShowsTotal() and "show this character" or "show all characters" }
+		end
+		foot[#foot + 1] = { "Right-click", "reset session" }
+		t:Foot(foot)
 	end })
+end
+
+-- every character's gold, once there is more than this one: the richest
+-- first, the rest as one row, and the total
+function M.TipPurses(t)
+	local list, total, realms = M.Purses()
+	if #list < 2 then
+		return false
+	end
+	t:Section("All characters")
+	local others, rest = 0, 0
+	for i, p in ipairs(list) do
+		if i <= M.LIST_MAX then
+			local name = realms and p.realm and (p.name .. " · " .. p.realm) or p.name
+			local colour = p.class and { U.ClassColor(p.class) } or nil
+			t:Row(name, M.Coins(p.copper, true), nil, nil, colour)
+		else
+			others, rest = others + 1, rest + p.copper
+		end
+	end
+	if others > 0 then
+		t:Row(("%d more"):format(others), M.Coins(rest, true))
+	end
+	t:Total("Total", M.Coins(total, true))
+	return true
 end
 
 function M.Build()
@@ -207,9 +337,13 @@ function M.Build()
 	M.chip:SetScript("OnMouseUp", function(_, button)
 		if button == "RightButton" then
 			M.Reset()
-			if BT.Tip and BT.Tip.IsShown() then
-				M.Tip()
-			end
+		elseif button == "LeftButton" then
+			M.Toggle()
+		else
+			return
+		end
+		if BT.Tip and BT.Tip.IsShown() then
+			M.Tip()
 		end
 	end)
 	M.chip:SetScript("OnLeave", function()
@@ -247,6 +381,7 @@ function M.Show(on)
 				M.purse = now
 			end
 		end
+		M.Remember()
 		M.Update()
 		if not M.ticker and C_Timer and C_Timer.NewTicker then
 			M.ticker = C_Timer.NewTicker(EVERY, function()
