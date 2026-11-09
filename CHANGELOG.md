@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.10.1
 
 - **No more stutter from the action bars.** They redrew every button each
   time the game changed one of them. That took long enough to feel as a
