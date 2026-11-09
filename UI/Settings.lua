@@ -111,6 +111,19 @@ function S.Build(parent)
 		function() return BT.Switched("fishing") end,
 		function(on) BT.SetEnabled("fishing", on) end)
 
+	-- REPAIR AND SELL GREY ITEMS (Josh 2026-11-08: "Let's do the auto repair
+	-- and junk sell feature"). Utilities with no page of their own, like
+	-- fishing (Modules/Vendor/Vendor.lua).
+	local vendors = stack:Section("Vendors")
+	S.junkRow = W.SwitchRow(vendors, "Sell grey items",
+		"Sells your grey items at a vendor, unless you hold Shift as you open it",
+		function() return BT.Switched("junk") end,
+		function(on) BT.SetEnabled("junk", on) end)
+	S.repairRow = W.SwitchRow(vendors, "Repair at vendors",
+		"Repairs your gear with your own gold at a vendor, unless you hold Shift as you open it",
+		function() return BT.Switched("repair") end,
+		function(on) BT.SetEnabled("repair", on) end)
+
 	stack:Layout()
 end
 

@@ -32,6 +32,10 @@ or click a page on the rail to go back.
   back where they started. Shift-drag any of them to move it.
 - **Double-click to fish:** with a fishing pole equipped, double right-click
   the world to cast Fishing. It doesn't work in combat or on a player or NPC.
+- **Sell grey items** and **Repair at vendors:** when you open a vendor,
+  BeebMod sells your grey items. Then it repairs your gear with your own gold.
+  A line in chat says what it sold and what the repair cost. Hold Shift as
+  you open the vendor to skip both.
 - **Encounter notes:** the boss notes under your quests in a dungeon. They
   are on unless you switch them off here.
 

@@ -3,6 +3,17 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Vendors.** When you open a vendor, BeebMod sells your grey items. Then
+  it repairs your gear with your own gold. A line in chat says what it sold
+  and what the repair cost. Hold Shift as you open the vendor to skip both.
+  Each has a switch on General: Sell grey items and Repair at vendors.
+- **Hunter pets.** The small square at the end of your pet's health bar now
+  shows its happiness: green when happy, amber when content, red when
+  unhappy. It never showed on this client, because BeebMod asked the game
+  for happiness in an old way the game no longer answers.
+
 ## 1.8.2
 
 - **Chat.** BeebMod now shortens channel names through the game's chat

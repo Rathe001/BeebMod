@@ -2568,8 +2568,10 @@ if ok then
 			local switches = generalSwitches()
 			local found = {}
 			for _, r in ipairs(switches) do found[r] = true end
-			assert(#switches == 2 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow],
-				"on General, only the look, double-click fishing and encounter notes: " .. #switches)
+			-- AND THE VENDOR'S TWO (Josh 2026-11-08), utilities with no page either
+			assert(#switches == 4 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow]
+				and found[BT.Settings.junkRow] and found[BT.Settings.repairRow],
+				"on General, only the look, fishing, encounter notes and the vendor's two: " .. #switches)
 			-- the target row's switch went with the row (Josh 2026-10-05)
 			local function rowFor(page, field)
 				BT.Window.SetView(page)
@@ -4697,6 +4699,135 @@ if ok then
 				_G[n] = had[n]
 			end
 		end },
+		{ "a vendor buys your grey items, then repairs your gear", function()
+			-- REPAIR AND SELL GREY ITEMS (Josh 2026-11-08: "Let's do the auto
+			-- repair and junk sell feature")
+			local mod = BT.Vendor
+			local names = { "C_Container", "C_Item", "CanMerchantRepair", "GetRepairAllCost", "GetMoney",
+				"RepairAllItems", "IsShiftKeyDown", "C_Timer", "NUM_BAG_SLOTS", "print" }
+			local had = {}
+			for _, n in ipairs(names) do
+				had[n] = rawget(_G, n)
+			end
+			local GREY, WHITE = 0, 1
+			local bags, used, repaired, money, cost, shift, said
+			local prices = { [1] = 50, [2] = 10, [3] = 99, [4] = 70, [5] = 0, [6] = 5 }
+			local function fill()
+				bags = { [0] = {
+					{ itemID = 1, quality = GREY, stackCount = 1 },
+					{ itemID = 2, quality = GREY, stackCount = 3 },
+					{ itemID = 3, quality = WHITE, stackCount = 1 },
+					{ itemID = 4, quality = GREY, stackCount = 1, hasNoValue = true },
+					{ itemID = 5, quality = GREY, stackCount = 1 },
+				}, [1] = {} }
+				for i = 1, 8 do
+					bags[1][i] = { itemID = 6, quality = GREY, stackCount = 1 }
+				end
+				used, repaired, said = {}, nil, {}
+			end
+			_G.NUM_BAG_SLOTS = 1
+			_G.C_Container = {
+				GetContainerNumSlots = function(bag) return bags[bag] and 8 or 0 end,
+				GetContainerItemInfo = function(bag, slot) return bags[bag] and bags[bag][slot] end,
+				UseContainerItem = function(bag, slot)
+					used[#used + 1] = bags[bag][slot].itemID
+					bags[bag][slot] = nil
+				end,
+			}
+			_G.C_Item = { GetItemInfo = function(id)
+				return "item", nil, nil, nil, nil, nil, nil, nil, nil, nil, prices[id]
+			end }
+			_G.CanMerchantRepair = function() return true end
+			_G.GetRepairAllCost = function() return cost, cost > 0 end
+			_G.GetMoney = function() return money end
+			_G.RepairAllItems = function(guild) repaired = guild == false and cost or "guild" end
+			_G.IsShiftKeyDown = function() return shift end
+			_G.C_Timer = { After = function(_, fn) fn() end }
+			_G.print = function(...)
+				local parts = {}
+				for i = 1, select("#", ...) do parts[#parts + 1] = tostring((select(i, ...))) end
+				said[#said + 1] = table.concat(parts, " ")
+			end
+			BT.SetEnabled("junk", true)
+			BT.SetEnabled("repair", true)
+
+			fill()
+			money, cost, shift = 10000, 250, false
+			local visit = mod.Open()
+			assert(#used == 10 and visit.sold == 10, "every grey stack with a price is sold: " .. #used)
+			assert(visit.earned == 50 + 30 + 8 * 5, "for what each stack is worth: " .. visit.earned)
+			for _, id in ipairs(used) do
+				assert(id ~= 3 and id ~= 4 and id ~= 5, "a white item, or a grey one with no price, is kept")
+			end
+			assert(repaired == 250 and visit.repaired == 250, "then the gear is repaired with your own gold")
+			assert(#said == 1 and said[1]:find("Sold 10 grey items for", 1, true)
+				and said[1]:find("Repaired for", 1, true), "and one line says both: " .. tostring(said[1]))
+			assert(mod.visit == nil, "the visit is over")
+
+			-- Shift as the window opens keeps everything
+			fill()
+			shift = true
+			assert(mod.Open() == nil and #used == 0 and repaired == nil and #said == 0,
+				"holding Shift sells nothing and repairs nothing")
+			shift = false
+
+			-- not enough gold
+			fill()
+			bags[0], bags[1] = {}, {}
+			money = 100
+			visit = mod.Open()
+			assert(repaired == nil and said[1] == "|cff74c0fcBeebMod|r: Not enough gold to repair. It costs "
+				.. BT.Coins(250) .. ".", "too little gold is said, not spent: " .. tostring(said[1]))
+			money = 10000
+
+			-- nothing to do says nothing
+			fill()
+			bags[0], bags[1] = {}, {}
+			cost = 0
+			mod.Open()
+			assert(#said == 0, "with nothing sold or repaired, no line")
+			cost = 250
+
+			-- each half has its own switch
+			fill()
+			BT.SetEnabled("junk", false)
+			mod.Open()
+			assert(#used == 0 and repaired == 250, "selling off: only the repair")
+			BT.SetEnabled("junk", true)
+			fill()
+			BT.SetEnabled("repair", false)
+			mod.Open()
+			assert(#used == 10 and repaired == nil, "repairing off: only the sale")
+			BT.SetEnabled("repair", true)
+
+			-- the window closed part-way: the rest is left
+			fill()
+			local later = {}
+			_G.C_Timer = { After = function(_, fn) later[#later + 1] = fn end }
+			mod.Open()
+			assert(#used == mod.BATCH, "a few stacks at a time: " .. #used)
+			mod.events:GetScript("OnEvent")(mod.events, "MERCHANT_CLOSED")
+			for _, fn in ipairs(later) do fn() end
+			assert(#used == mod.BATCH and repaired == nil and #said == 0, "closed, nothing more is sold or repaired")
+
+			-- a bag sorted in between is not sold from by memory
+			fill()
+			later = {}
+			mod.Open()
+			bags[1][8] = { itemID = 3, quality = WHITE, stackCount = 1 }
+			while #later > 0 do
+				local fn = table.remove(later, 1)
+				fn()
+			end
+			for _, id in ipairs(used) do
+				assert(id ~= 3, "what is in the slot now is checked before it is sold")
+			end
+			assert(#used == 9, "and the rest are sold: " .. #used)
+
+			for _, n in ipairs(names) do
+				_G[n] = had[n]
+			end
+		end },
 		{ "dungeon entrances are pinned on the world map, with a filter to hide them", function()
 			-- DUNGEON ENTRANCES (Josh 2026-11-05: "add dungeon enterance
 			-- locations to the map", "add it as a filter here")
@@ -5876,6 +6007,26 @@ if ok then
 			-- A HUNTER'S PET, AND HOW IT FEELS: content is amber
 			assert(voidwalker.happy._shown ~= false and voidwalker.happy._color[2] > 0.6 and voidwalker.happy._color[3] < 0.4,
 				"a content pet's square is amber")
+			-- ASKED WHERE THIS CLIENT KEEPS IT (Josh 2026-11-08: "Can we make
+			-- sure hunter pets have happiness displayed?"): Forever has
+			-- C_PetInfo.GetPetHappiness and no global one
+			do
+				local hadInfo, hadGlobal, hadUI = rawget(_G, "C_PetInfo"), rawget(_G, "GetPetHappiness"), rawget(_G, "HasPetUI")
+				local hunter = true
+				_G.GetPetHappiness = nil
+				_G.C_PetInfo = { GetPetHappiness = function() return 3, 125, 1 end }
+				_G.HasPetUI = function() return true, hunter end
+				local live = F.Source("pet")
+				assert(live:Happiness() == 3, "a hunter's pet's mood comes from C_PetInfo: " .. tostring(live:Happiness()))
+				hunter = false
+				assert(live:Happiness() == nil, "a warlock's pet has none")
+				hunter = true
+				assert(F.Source("party1pet"):Happiness() == nil, "and nobody else's pet is asked")
+				_G.C_PetInfo = nil
+				_G.GetPetHappiness = function() return 1 end
+				assert(live:Happiness() == 1, "a client with the old global still answers")
+				_G.C_PetInfo, _G.GetPetHappiness, _G.HasPetUI = hadInfo, hadGlobal, hadUI
+			end
 			-- ITS FOCUS UNDER ITS HEALTH (Josh 2026-10-03), whatever kind of
 			-- power it is, and taken from the health so the party keeps its spacing
 			local pc = voidwalker.power and voidwalker.power._barColor

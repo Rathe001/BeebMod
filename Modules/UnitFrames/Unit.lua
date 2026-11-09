@@ -518,11 +518,24 @@ end
 function Live:MasterLooter() return F.masterLooter ~= nil and self.unit == F.masterLooter end
 -- A HUNTER'S PET, AND HOW IT FEELS (Josh 2026-09-23): 1 unhappy, 2 content,
 -- 3 happy - the Classic question a hunter asks of the pet frame
+-- ASKED WHERE THIS CLIENT KEEPS IT (Josh 2026-11-08: "Can we make sure hunter
+-- pets have happiness displayed?"). Forever has C_PetInfo.GetPetHappiness and
+-- no global GetPetHappiness, so the square never showed. The client's own
+-- pet frame asks C_PetInfo, and only for a hunter's pet (HasPetUI's second
+-- answer; PetHappiness.lua).
 function Live:Happiness()
 	if self.unit ~= "pet" then
 		return nil
 	end
-	local h = plain(GetPetHappiness)
+	local hasUI = rawget(_G, "HasPetUI")
+	if type(hasUI) == "function" then
+		local ok, _, hunter = pcall(hasUI)
+		if ok and not secret(hunter) and hunter == false then
+			return nil
+		end
+	end
+	local info = rawget(_G, "C_PetInfo")
+	local h = plain(info and info.GetPetHappiness) or plain(rawget(_G, "GetPetHappiness"))
 	return type(h) == "number" and h or nil
 end
 -- YOUR THREAT ON AN ENEMY, as a share of what pulls it (the probe: plain for

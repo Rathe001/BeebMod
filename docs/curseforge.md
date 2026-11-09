@@ -57,6 +57,7 @@ Action bars, bags, chat, character sheet, tooltips and menus, restyled to match.
 - All your bags in one window
 - Item level on every character sheet slot
 - Clickable guild names and web links in chat
+- Grey items sold and gear repaired when you open a vendor
 
 ![Spell tooltips](https://raw.githubusercontent.com/Rathe001/BeebMod/main/docs/screens/interface3.jpg)
 
