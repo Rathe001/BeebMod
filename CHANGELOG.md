@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.8.2
 
 - **Chat.** BeebMod now shortens channel names through the game's chat
   filters. Before, every line of chat ran as BeebMod's code, which the game
