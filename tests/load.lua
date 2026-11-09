@@ -2168,6 +2168,28 @@ if ok then
 			assert(BT.Cpu.on and later, "Measure starts timing")
 			later()
 			assert(not BT.Cpu.on and BeebModDB.cpuDump, "and when it ends the list is in the saved file")
+			-- THE GAME'S TAINT LOG (Josh 2026-11-08): a switch that sets the
+			-- console variable, remembered and set again at login
+			do
+				local hadCVar = _G.C_CVar
+				local cvars = { taintLog = "0" }
+				_G.C_CVar = { GetCVar = function(k) return cvars[k] end, SetCVar = function(k, v) cvars[k] = v end }
+				local sw = tbody.taintRow.switch
+				assert(not BT.TaintLog.IsOn(), "off as the game starts it")
+				sw:SetOn(false)
+				local said = click(sw)
+				assert(cvars.taintLog == "2" and BeebModDB.taintLog == true, "on: the game writes the log, and it is remembered")
+				assert(said:find("Taint log: on", 1, true), "and says so: " .. tostring(said))
+				cvars.taintLog = "0"
+				BT.TaintLog.Apply()
+				assert(cvars.taintLog == "2", "the next login sets it again")
+				sw:SetOn(true)
+				click(sw)
+				assert(cvars.taintLog == "0" and BeebModDB.taintLog == nil, "off, and forgotten")
+				BT.TaintLog.Apply()
+				assert(cvars.taintLog == "0", "so a login leaves it off")
+				_G.C_CVar = hadCVar
+			end
 			-- a record still under its module's old name (Core/Rename.lua)
 			BeebModDB.framesDump, BeebModDB.menuDump = { at = 1 }, { at = 2 }
 			local cleared = click(tbody.clearButton)
@@ -8197,13 +8219,13 @@ if ok then
 			-- line, so a third of the window is the same three words repeated
 			-- down the left-hand edge. The zone is the worst of it: you are
 			-- standing in it.
-			assert(mod.Shorten("[1. General - Dun Morogh] hello") == "[1.Gen] hello",
+			assert(mod.ShortChannel("1. General - Dun Morogh") == "1. Gen",
 				"the channel and its zone come down to three letters: "
-					.. mod.Shorten("[1. General - Dun Morogh] hello"))
-			assert(mod.Shorten("[2. Trade - City]") == "[2.Trd]", "and so does Trade")
-			assert(mod.Shorten("[4. LookingForGroup]") == "[4.LFG]",
-				"one we have a name for keeps it: " .. mod.Shorten("[4. LookingForGroup]"))
-			assert(mod.Shorten("[9. Weatherwatchers]") == "[9.Wea]",
+					.. mod.ShortChannel("1. General - Dun Morogh"))
+			assert(mod.ShortChannel("2. Trade - City") == "2. Trd", "and so does Trade")
+			assert(mod.ShortChannel("4. LookingForGroup") == "4. LFG",
+				"one we have a name for keeps it: " .. mod.ShortChannel("4. LookingForGroup"))
+			assert(mod.ShortChannel("9. Weatherwatchers") == "9. Wea",
 				"one we have not gets its first three letters")
 			-- TWO TRADES ARE TOLD APART (Josh 2026-11-05: "Are we able to do
 			-- anything about the duplicate channel abbreviations?"): a channel
@@ -8218,51 +8240,98 @@ if ok then
 					return 0, nil
 				end
 				mod.ForgetTwins()
-				assert(mod.Shorten("[2. Trade - City]") == "[2.Trd·City]"
-					and mod.Shorten("[4. Trade - Darnassus]") == "[4.Trd·Darn]",
-					"two Trades, each with a word of its own: " .. mod.Shorten("[2. Trade - City]") .. " "
-						.. mod.Shorten("[4. Trade - Darnassus]"))
-				assert(mod.Shorten("[1. General - Darnassus] hi") == "[1.Gen] hi", "one with no twin stays short")
-				assert(mod.Shorten("[5. Trade (Services) - City]") == "[5.Svc]",
-					"Trade (Services) is the services channel: " .. mod.Shorten("[5. Trade (Services) - City]"))
+				assert(mod.ShortChannel("2. Trade - City") == "2. Trd·City"
+					and mod.ShortChannel("4. Trade - Darnassus") == "4. Trd·Darn",
+					"two Trades, each with a word of its own: " .. mod.ShortChannel("2. Trade - City") .. " "
+						.. mod.ShortChannel("4. Trade - Darnassus"))
+				assert(mod.ShortChannel("1. General - Darnassus") == "1. Gen", "one with no twin stays short")
+				assert(mod.ShortChannel("5. Trade (Services) - City") == "5. Svc",
+					"Trade (Services) is the services channel: " .. mod.ShortChannel("5. Trade (Services) - City"))
 				joined[4] = nil
 				mod.ForgetTwins()
-				assert(mod.Shorten("[2. Trade - City]") == "[2.Trd]", "the twin left, it is short again")
+				assert(mod.ShortChannel("2. Trade - City") == "2. Trd", "the twin left, it is short again")
 				_G.GetChannelName = hadName
 				mod.ForgetTwins()
 			end
-			assert(mod.Shorten("[Guild] someone: hi") == "[Guild] someone: hi",
+			assert(mod.ShortChannel("") == "" and mod.ShortChannel("Guild") == "Guild",
 				"a channel with no number is left alone")
-			-- the words themselves are never touched
-			local link = "[1. General - Dun Morogh] |Hplayer:Bob|h[Bob]|h: hi"
-			assert(mod.Shorten(link):find("|Hplayer:Bob|h%[Bob%]|h: hi"),
-				"and the links inside the line come through exactly: " .. mod.Shorten(link))
 
-			-- it goes on the frame's own AddMessage, where every line passes
-			local f = _G.ChatFrame1
+			-- THROUGH THE GAME'S CHAT FILTERS (Josh 2026-11-08: "change the
+			-- chat lines now"). A filter is handed a message's parts and hands
+			-- back every one of them, changed or not.
+			local chatWas = BT.Enabled("chat")
+			BT.SetEnabled("chat", true)
+			local f = _G.CreateFrame("Frame", "BeebTestChatWindow", _G.UIParent)
+			local full = "1. General - Dun Morogh"
+			local out = { mod.Filter(f, "CHAT_MSG_CHANNEL", "hello", "Bob", "", full, "", "", 1, 1,
+				"General - Dun Morogh", 0, 7, "Player-1-2", 0, false) }
+			assert(out[1] == false and out[2] == "hello" and out[3] == "Bob", "the message is kept, its words as typed")
+			local short = out[5]
+			assert(short:gsub("|r", "") == "1. Gen", "the channel is short: " .. tostring(short))
+			-- the client splits the number from the name at "1. "
+			-- (ChatFrameUtil.ResolvePrefixedChannelName) and finds the channel
+			-- by a name longer than the channel's own
+			assert(short:match("(%d+. )(.*)") == "1. ", "the client still finds the number in it")
+			assert(#short >= #full, "and it is as long as the name it replaced: " .. #short .. " < " .. #full)
+			assert(#out == 15 and out[10] == "General - Dun Morogh" and out[13] == "Player-1-2" and out[15] == false,
+				"every part after it is handed back as it came")
+			assert(select("#", mod.Filter(f, "CHAT_MSG_SAY", "hello", "Bob", "", "")) == 1,
+				"a message with nothing to change is left to the client")
+			out = { mod.Filter(f, "CHAT_MSG_SAY", "<New Horizon> is recruiting", "Bob", "", "") }
+			assert(out[2]:find("|Haddon:BeebMod:guild:New Horizon|h<New Horizon>|h", 1, true) and out[5] == "",
+				"the words someone typed get their green guild: " .. tostring(out[2]))
+			-- NOT THE COMBAT LOG (Josh 2026-09-30, review)
+			local wasLog = _G.COMBATLOG
+			_G.COMBATLOG = f
+			assert(select("#", mod.Filter(f, "CHAT_MSG_CHANNEL", "www.example.com", "Bob", "", full)) == 1,
+				"a combat log window is left as the client writes it")
+			_G.COMBATLOG = wasLog
+			-- a secret message is never read
+			do
+				local hadSecret = _G.issecretvalue
+				_G.issecretvalue = function(v) return v == "hidden" end
+				assert(select("#", mod.Filter(f, "CHAT_MSG_CHANNEL", "hidden", "Bob", "", full)) == 1,
+					"a secret message goes past untouched")
+				_G.issecretvalue = hadSecret
+			end
+			BT.SetEnabled("chat", false)
+			assert(select("#", mod.Filter(f, "CHAT_MSG_CHANNEL", "hello", "Bob", "", full)) == 1,
+				"with the module off, the client's own line")
+			BT.SetEnabled("chat", true)
+			-- the filters go on with the module and come off with it
+			do
+				local hadUtil = rawget(_G, "ChatFrameUtil")
+				local on = {}
+				_G.ChatFrameUtil = {
+					AddMessageEventFilter = function(event, fn) on[event] = fn end,
+					RemoveMessageEventFilter = function(event, fn) if on[event] == fn then on[event] = nil end end,
+				}
+				assert(mod.Filters(true) and on.CHAT_MSG_CHANNEL == mod.Filter and on.CHAT_MSG_GUILD == mod.Filter
+					and on.CHAT_MSG_CHANNEL_NOTICE == mod.Filter, "on: the game's chat filters run ours")
+				assert(mod.Filters(false) and next(on) == nil, "off: every one is taken off again")
+				_G.ChatFrameUtil = hadUtil
+			end
+
+			-- AFTER THE LINE, NOT IN PLACE OF IT: the window's own AddMessage
+			-- runs as it is, and ours hears the line after it
+			local hadHook = _G.hooksecurefunc
+			_G.hooksecurefunc = function(obj, name, fn)
+				local orig = obj[name]
+				obj[name] = function(...)
+					local r = { orig(...) }
+					fn(...)
+					return (table.unpack or unpack)(r)
+				end
+			end
 			local said = {}
 			f.AddMessage = function(_, text) said[#said + 1] = text end
-			mod.HookMessages(f)
+			local own = f.AddMessage
+			assert(mod.HookMessages(f) and mod.HookMessages(f), "a window is hooked once")
 			f:AddMessage("[1. General - Dun Morogh] hello")
-			assert(said[1] == "[1.Gen] hello", "a line added is a line shortened: " .. said[1])
-			mod.HookMessages(f, true)
-			f:AddMessage("[1. General - Dun Morogh] hello")
-			assert(said[2]:find("Dun Morogh", 1, true),
-				"and switching it off gives the client its own line back")
-			-- NOT THE COMBAT LOG (Josh 2026-09-30, review): its lines pass
-			-- straight through, and still reach the large window
-			local log = _G.CreateFrame("Frame", "BeebTestCombatLog", _G.UIParent)
-			local logged = {}
-			log.AddMessage = function(_, text) logged[#logged + 1] = text end
-			local wasLog = _G.COMBATLOG
-			_G.COMBATLOG = log
-			mod.HookMessages(log)
-			log:AddMessage("[1. General - Dun Morogh] Beeb's Fireball hits www.example.com for 12.")
-			assert(logged[1] == "[1. General - Dun Morogh] Beeb's Fireball hits www.example.com for 12.",
-				"a combat line is left as the client wrote it: " .. tostring(logged[1]))
-			assert(log.beebsLast == logged[1], "and the large window still hears it")
-			mod.HookMessages(log, true)
-			_G.COMBATLOG = wasLog
+			assert(#said == 1 and said[1] == "[1. General - Dun Morogh] hello",
+				"the window adds the line as the client built it: " .. tostring(said[1]))
+			assert(f.beebsLast == said[1], "and the large window hears it")
+			f.AddMessage = own
 
 			-- GUILD NAMES IN GREEN (Josh 2026-09-29: "Let's automatically
 			-- color guild names green, like <New Horizon>")
@@ -8384,7 +8453,8 @@ if ok then
 			assert(not R.selecting, "and it opens on the chat next time")
 			src:AddMessage("fifth")
 			assert(big:GetNumMessages() == 3, "and a closed window copies nothing")
-			mod.HookMessages(src, true)
+			_G.hooksecurefunc = hadHook
+			BT.SetEnabled("chat", chatWas)
 
 			-- OUT OF THE WAY UNTIL YOU ARE TYPING (Josh 2026-09-20). The box
 			-- lies over the tabs, and a frame over another frame takes the
@@ -10378,12 +10448,8 @@ if ok then
 			local chatWasOn = BT.Enabled("chat")
 			BT.SetEnabled("chat", true)
 			local line = _G.CreateFrame("Frame", nil, _G.UIParent)
-			local said
-			line.AddMessage = function(_, text) said = text end
-			chat.HookMessages(line)
-			line:AddMessage("hello")
-			assert(said == "hello", "no time of ours, whatever was saved: " .. tostring(said))
-			chat.HookMessages(line, true)
+			assert(select("#", chat.Filter(line, "CHAT_MSG_SAY", "hello", "Bob", "", "")) == 1,
+				"no time of ours, whatever was saved")
 			BT.SetEnabled("chat", chatWasOn)
 			BT.settings.chat.timestamps = nil
 			-- the damage meter: both its additions
@@ -17407,6 +17473,18 @@ if ok then
 			_G.issecretvalue = wasSecret
 			assert(mod.Percent() == 100, "a plain one is read")
 			_G.CharacterStatsPaneScrollBox, mod.sheetValue = wasPane, nil
+			-- ASKED, NOT TRIED (taint log, 2026-11-08): a secret speed is never
+			-- put in the sum, where the client writes the refusal down as taint
+			mod.secret = nil
+			do
+				local hadSecret = _G.issecretvalue
+				local summed = false
+				local speed = setmetatable({}, { __div = function() summed = true error("refused") end })
+				_G.issecretvalue = function(v) return v == speed or (hadSecret ~= nil and hadSecret(v)) end
+				assert(mod.Percentage(speed) == nil and mod.secret == true and not summed,
+					"a secret speed goes to the sheet, untried")
+				_G.issecretvalue = hadSecret
+			end
 			mod.secret = nil
 			_G.CharacterFrame = wasSheet
 			_G.GetUnitSpeed, _G.BASE_MOVEMENT_SPEED = nil, nil

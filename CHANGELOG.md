@@ -3,6 +3,14 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Chat.** BeebMod now shortens channel names through the game's chat
+  filters. Before, every line of chat ran as BeebMod's code, which the game
+  logged as taint. The guild colours and web addresses go through the filters
+  too. Channel names now have a space after the number, as in [1. Gen]. Lines
+  that other addons print keep their guild names and addresses as printed.
+
 ## 1.8.1
 
 - **Unit tooltips.** Some tooltip lines are hidden from addons, such as an

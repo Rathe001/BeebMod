@@ -84,3 +84,64 @@ end)
 BT.Record("blockedDump", function()
 	return BT.blockedLog and #BT.blockedLog or nil
 end)
+
+-- THE GAME'S TAINT LOG, FROM A SWITCH (Josh 2026-11-08: start on the taint
+-- sweep). With the console variable taintLog at 2 the game writes every
+-- taint it sees into Logs\taint.log, which Claude reads after you quit. It
+-- may not last past a launch, so BeebMod remembers the switch in the saved
+-- file and sets it again at login. Only in a copy to work on
+-- (BT.DEV): the Testing page holds the switch.
+BT.TaintLog = {}
+local TL = BT.TaintLog
+TL.CVAR, TL.ON = "taintLog", "2"
+
+local function getCVar(name)
+	local c = rawget(_G, "C_CVar")
+	local get = c and c.GetCVar or rawget(_G, "GetCVar")
+	if type(get) ~= "function" then
+		return nil
+	end
+	local ok, v = pcall(get, name)
+	return ok and v or nil
+end
+
+local function setCVar(name, value)
+	local c = rawget(_G, "C_CVar")
+	local set = c and c.SetCVar or rawget(_G, "SetCVar")
+	if type(set) ~= "function" then
+		return false
+	end
+	return pcall(set, name, value) and true or false
+end
+
+-- whether the game is writing the log now
+function TL.IsOn()
+	local v = getCVar(TL.CVAR)
+	return v ~= nil and tostring(v) ~= "0" and tostring(v) ~= ""
+end
+
+-- on or off, remembered; true when the game took it
+function TL.Set(on)
+	on = on and true or false
+	if BT.EnsureBound then
+		BT.EnsureBound()
+	end
+	if type(BeebModDB) == "table" then
+		BeebModDB.taintLog = on or nil
+	end
+	setCVar(TL.CVAR, on and TL.ON or "0")
+	return TL.IsOn() == on
+end
+
+-- at login: on again, if the switch was left on
+function TL.Apply()
+	if BT.DEV and type(BeebModDB) == "table" and BeebModDB.taintLog and not TL.IsOn() then
+		setCVar(TL.CVAR, TL.ON)
+	end
+end
+
+local login = CreateFrame("Frame")
+login:RegisterEvent("PLAYER_LOGIN")
+login:SetScript("OnEvent", function()
+	TL.Apply()
+end)

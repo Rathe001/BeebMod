@@ -51,6 +51,13 @@ local function yardsToPercent(yards)
 	if yards == nil then
 		return nil
 	end
+	-- ASKED, NOT TRIED (taint log, 2026-11-08): the sum tried on a secret is
+	-- refused inside the pcall, but the client still writes it down as taint.
+	-- A secret goes straight to the sheet.
+	if issecretvalue and issecretvalue(yards) then
+		M.secret = true
+		return nil
+	end
 	local ok, pct = pcall(function()
 		return math.floor(yards / base() * 100 + 0.5)
 	end)

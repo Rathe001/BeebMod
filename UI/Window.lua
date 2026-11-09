@@ -986,6 +986,21 @@ local function testingPage(body)
 	body.cpuButton:SetScript("OnClick", function()
 		BT.Cpu.Measure()
 	end)
+	-- THE GAME'S TAINT LOG (Josh 2026-11-08): on from here, and on again at
+	-- each login until switched off (Core/Blocked.lua, BT.TaintLog)
+	body.taintRow = Wd.SwitchRow(rec, "Taint log", "The game writes what tainted its code into Logs\\taint.log. Quit the game before Claude reads it.",
+		function() return BT.TaintLog and BT.TaintLog.IsOn() or false end,
+		function(on)
+			if not BT.TaintLog then
+				return
+			end
+			if BT.TaintLog.Set(on) then
+				U.Print(on and "Taint log: on. The game writes it until you switch it off."
+					or "Taint log: off.")
+			else
+				U.Print("Taint log: the game didn't take the change.")
+			end
+		end)
 	-- what is showing now, whenever the page is opened
 	body:HookScript("OnShow", function()
 		local m = BT.GetModule("unitframes")

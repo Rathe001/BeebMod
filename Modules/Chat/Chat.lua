@@ -1017,9 +1017,8 @@ end
 -- which channel far faster than the name does, and three letters is enough to
 -- tell General from Trade from LookingForGroup.
 --
--- This rewrites the TEXT of a line as it is added and nothing else. No message
--- is dropped, re-ordered or re-routed, and the link escapes inside it are left
--- exactly as they came.
+-- This changes the channel's name as the line is built and nothing else. No
+-- message is dropped, re-ordered or re-routed (M.Filter).
 local SHORT = {
 	general = "Gen", trade = "Trd", localdefense = "Def", worlddefense = "Def",
 	lookingforgroup = "LFG", guildrecruitment = "GR", services = "Svc", ["trade (services)"] = "Svc",
@@ -1085,31 +1084,46 @@ local function twinned(short, full)
 end
 M.ForgetTwins = function() twins.at = nil end
 
-local CHANNEL = "%[(%d+)%.%s*([^%]|]+)%]"
-local function shortenChannel(n, rest)
+-- "Trade - City" as it reads: "Trd", or "Trd·City" when another Trade is
+-- joined too
+local function shortName(rest)
 	local name, after = split(rest)
 	local short = abbreviate(name)
 	if after and twinned(short, rest) then
 		local word = after:match("^[%w']+") or after
 		short = short .. "·" .. word:sub(1, M.TWIN_WORD)
 	end
-	return "[" .. n .. "." .. short .. "]"
+	return short
 end
 
-function M.Shorten(text)
-	if type(text) ~= "string" then
-		return text
+-- The channel as the client hands it to a chat window, "2. Trade - City",
+-- comes back as "2. Trd". The space after the dot stays: the client splits
+-- the number from the name there (ChatFrameUtil.ResolvePrefixedChannelName).
+-- Anything else, a secret among them, comes back as it came.
+function M.ShortChannel(channel)
+	if type(channel) ~= "string" or (issecretvalue and issecretvalue(channel)) then
+		return channel
 	end
-	-- A SECRET LINE IS LEFT ALONE (Josh 2026-09-22). A chat line that carries
-	-- a secret value - one of our own prints of a nameplate's measurement -
-	-- is a secret string: type() says string, and indexing it throws.
-	if issecretvalue and issecretvalue(text) then
-		return text
+	local n, rest = channel:match("^(%d+)%.%s*(.+)$")
+	if not n then
+		return channel
 	end
-	-- a numbered channel, with or without the zone hanging off it (no new
-	-- functions per line: every line of chat passes through here)
-	local ok, short = pcall(string.gsub, text, CHANNEL, shortenChannel)
-	return ok and short or text
+	local ok, short = pcall(shortName, rest)
+	return ok and (n .. ". " .. short) or channel
+end
+
+-- AS LONG AS IT WAS (the chat filter, 2026-11-08). Before it colours a
+-- channel line, the client finds the channel by checking that the name it
+-- was handed is longer than the channel's own ("1. General - Elwynn Forest"
+-- against "General"). "1. Gen" is shorter, and the line would lose the
+-- channel's colour. So the short name is filled out to the old length with
+-- colour resets, which draw nothing.
+function M.PadTo(short, long)
+	local want = #long
+	while #short < want do
+		short = short .. "|r"
+	end
+	return short
 end
 
 -- ---------------------------------------------------------------------------
@@ -1158,48 +1172,119 @@ function M.Frames()
 	return out
 end
 
--- The line rewriter goes on the frame's own AddMessage, which is the one
--- place every line passes through however it arrived.
-function M.HookMessages(frame, plain)
-	if not (frame and frame.AddMessage) then
+-- THROUGH THE GAME'S CHAT FILTERS (Josh 2026-11-08: "change the chat lines
+-- now"). The short channel names, the green guilds and the links you can
+-- click were written into each line by replacing the chat window's
+-- AddMessage. Then every line of chat ran as BeebMod's code, and the taint
+-- log filled with the window's fading fields. The game runs each addon's chat
+-- filter in a sealed call of its own (ChatFrameFilters.lua), so a filter
+-- changes the words without the rest of the line running as ours.
+--
+-- A filter sees what a message is made of, not the finished line. The
+-- channel ("2. Trade - City") and the words someone typed are changed. The
+-- client builds the line from them. A line an addon prints straight into the
+-- window goes past the filters and is shown as printed.
+M.CHANNEL_EVENTS = {
+	CHAT_MSG_CHANNEL = true, CHAT_MSG_CHANNEL_NOTICE = true,
+	CHAT_MSG_CHANNEL_NOTICE_USER = true, CHAT_MSG_CHANNEL_LIST = true,
+}
+-- where people's words are: guilds and web addresses are looked for here
+M.WORD_EVENTS = {
+	CHAT_MSG_SAY = true, CHAT_MSG_YELL = true, CHAT_MSG_EMOTE = true,
+	CHAT_MSG_WHISPER = true, CHAT_MSG_WHISPER_INFORM = true,
+	CHAT_MSG_BN_WHISPER = true, CHAT_MSG_BN_WHISPER_INFORM = true,
+	CHAT_MSG_PARTY = true, CHAT_MSG_PARTY_LEADER = true,
+	CHAT_MSG_RAID = true, CHAT_MSG_RAID_LEADER = true, CHAT_MSG_RAID_WARNING = true,
+	CHAT_MSG_INSTANCE_CHAT = true, CHAT_MSG_INSTANCE_CHAT_LEADER = true,
+	CHAT_MSG_GUILD = true, CHAT_MSG_OFFICER = true, CHAT_MSG_CHANNEL = true,
+	CHAT_MSG_COMMUNITIES_CHANNEL = true, CHAT_MSG_SYSTEM = true,
+	CHAT_MSG_AFK = true, CHAT_MSG_DND = true,
+}
+
+-- one message, on its way into one chat window. Returns false to keep it,
+-- and the message's parts after that when any of them changed; every part
+-- is handed back, as the client takes the whole list in their place.
+function M.Filter(frame, event, msg, sender, language, channel, ...)
+	-- NOT THE COMBAT LOG (Josh 2026-09-30, review). Its tab is a chat window
+	-- too, and in a raid it takes hundreds of lines a second.
+	if not BT.Enabled("chat") or frame == _G.COMBATLOG then
 		return false
 	end
-	if plain then
-		if frame.beebsAdd then
-			frame.AddMessage = frame.beebsAdd
-			frame.beebsAdd = nil
+	if issecretvalue and (issecretvalue(msg) or issecretvalue(channel)) then
+		return false
+	end
+	local newMsg, newChannel = msg, channel
+	if M.CHANNEL_EVENTS[event] then
+		newChannel = M.ShortChannel(channel)
+		if newChannel ~= channel then
+			newChannel = M.PadTo(newChannel, channel)
 		end
+	end
+	-- guild names in green and web addresses you can click
+	-- (Modules/Chat/Links.lua)
+	if M.WORD_EVENTS[event] and M.Decorate then
+		newMsg = M.Decorate(msg)
+	end
+	if newMsg == msg and newChannel == channel then
+		return false
+	end
+	return false, newMsg, sender, language, newChannel, ...
+end
+
+local function filterApi()
+	local util = rawget(_G, "ChatFrameUtil")
+	if type(util) == "table" and type(util.AddMessageEventFilter) == "function" then
+		return util.AddMessageEventFilter, util.RemoveMessageEventFilter
+	end
+	return rawget(_G, "ChatFrame_AddMessageEventFilter"), rawget(_G, "ChatFrame_RemoveMessageEventFilter")
+end
+
+-- on, or off with the module
+function M.Filters(on)
+	local add, remove = filterApi()
+	local fn = on and add or remove
+	if type(fn) ~= "function" then
+		return false
+	end
+	local events = {}
+	for event in pairs(M.CHANNEL_EVENTS) do
+		events[event] = true
+	end
+	for event in pairs(M.WORD_EVENTS) do
+		events[event] = true
+	end
+	for event in pairs(events) do
+		pcall(fn, event, M.Filter)
+	end
+	M.filtering = on and true or false
+	return true
+end
+
+-- AFTER THE LINE, NOT IN PLACE OF IT (2026-11-08). The large window still
+-- wants each line as the chat window takes it, and the last one, to tell
+-- which end of the window's history is the newest. hooksecurefunc runs this
+-- after the client's own AddMessage has finished.
+function M.Heard(self, text, ...)
+	self.beebsLast = text
+	local reader = BT.ChatReader
+	if reader and reader.source == self and reader.Add then
+		reader.Add(text, ...)
+	end
+end
+
+-- once a window: a hook can't be taken off, and with the module off the
+-- large window is shut, so it copies nothing
+function M.HookMessages(frame, plain)
+	if not (frame and frame.AddMessage) or plain then
+		return false
+	end
+	if frame.beebsHeard then
 		return true
 	end
-	if frame.beebsAdd then
-		return true
+	if type(hooksecurefunc) ~= "function" or not pcall(hooksecurefunc, frame, "AddMessage", M.Heard) then
+		return false
 	end
-	frame.beebsAdd = frame.AddMessage
-	frame.AddMessage = function(self, text, ...)
-		-- NOT THE COMBAT LOG (Josh 2026-09-30, review). Its tab is a chat
-		-- window too, and in a raid it writes hundreds of lines a second.
-		-- Each was read for channel names, guilds and web addresses it never
-		-- has. The combat log keeps its own time stamps, and its lines still
-		-- reach the large window.
-		if BT.Enabled("chat") and self ~= _G.COMBATLOG then
-			text = M.Shorten(text)
-			-- guild names in green and web addresses you can click
-			-- (Modules/Chat/Links.lua)
-			if M.Decorate then
-				text = M.Decorate(text)
-			end
-		end
-		-- the line as the frame keeps it, so the large window can tell which
-		-- end of the frame's history is the newest
-		self.beebsLast = text
-		local r1, r2, r3, r4 = frame.beebsAdd(self, text, ...)
-		-- and a copy for the large window while it shows this frame
-		local reader = BT.ChatReader
-		if reader and reader.source == self and reader.Add then
-			reader.Add(text, ...)
-		end
-		return r1, r2, r3, r4
-	end
+	frame.beebsHeard = true
 	return true
 end
 
@@ -1241,6 +1326,7 @@ function M.StyleAll(plain)
 	if not plain then
 		M.HookEditMode()
 	end
+	M.Filters(not plain)
 	local n, tabHeight = 0, nil
 	for _, frame in ipairs(M.Frames()) do
 		local name = frame:GetName()

@@ -1,8 +1,9 @@
 -- Guild names in green, and web addresses you can click (Josh 2026-09-29).
 --
 -- Both change the TEXT of a line as it is added, as the short channel names
--- do, and nothing else: no line is dropped or moved. The chat module calls
--- M.Decorate from its AddMessage (Modules/Chat/Chat.lua).
+-- do, and nothing else: no line is dropped or moved. The chat module's
+-- filter calls M.Decorate on the words someone typed (M.Filter in
+-- Modules/Chat/Chat.lua).
 --
 --   a guild     "<New Horizon> is recruiting" - the name in angle brackets,
 --               in the guild chat's green, as a guild reads on a tooltip;
