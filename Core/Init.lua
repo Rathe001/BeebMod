@@ -37,7 +37,7 @@ BT.TITLE = "BeebMod"
 -- left the version the fallback below. (Its shape is what
 -- scripts/cut-release.ps1 rewrites.)
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "1.9.0"
+BT.VERSION = GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version") or "1.10.0"
 BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload

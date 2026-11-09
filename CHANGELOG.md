@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.10.0
 
 - **Gold on every character.** Point at your gold in the dock to see each
   character's gold and the total. Each character is counted once you log in
