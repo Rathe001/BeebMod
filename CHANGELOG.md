@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.9.0
 
 - **Vendors.** When you open a vendor, BeebMod sells your grey items. Then
   it repairs your gear with your own gold. A line in chat says what it sold
