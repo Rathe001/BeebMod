@@ -3425,6 +3425,24 @@ if ok then
 			mod.Queue = wasQueue
 			assert(queued == 1, "and the list is drawn again for it")
 		end },
+		{ "a secret name, GUID or level is passed over, never compared", function()
+			-- (Josh 2026-11-09: errors from a secret sender in chat and on a unit)
+			local say = BT.Collect.Handlers.CHAT_MSG_SAY
+			local ok, err = pcall(say, nil, "CHAT_MSG_SAY", "hello", Strict.Secret("Hidden Name"),
+				"", "", "", "", 0, 0, "", 0, 1, Strict.Secret("Player-4372-0000ABCD"))
+			assert(ok, "a secret sender in chat: " .. tostring(err))
+			ok, err = pcall(say, nil, "CHAT_MSG_SAY", "hello", "Plain Name",
+				"", "", "", "", 0, 0, "", 0, 1, Strict.Secret("Player-4372-0000ABCE"))
+			assert(ok, "a plain sender with a secret GUID: " .. tostring(err))
+			assert(not (BT.db and BT.DB.Get(BT.db, BT.Util.Key("Plain Name"))), "and nobody is written down without a GUID")
+			ok, err = pcall(BT.Collect.Identify, Strict.Secret("Player-4372-0000ABCD"))
+			assert(ok and err == nil, "a secret GUID identifies no one")
+			local had = _G.UnitLevel
+			_G.UnitLevel = function() return Strict.Secret(30) end
+			ok, err = pcall(BT.Collect.FromUnit, "target")
+			_G.UnitLevel = had
+			assert(ok, "a secret level on a unit: " .. tostring(err))
+		end },
 		{ "the guild roster is walked once a minute, not once an event", function()
 			local walked = 0
 			_G.GetGuildRosterInfo = function(i)
@@ -12424,6 +12442,16 @@ if ok then
 			assert(not all:find("consumed", 1, true) and not all:find("Item Level", 1, true)
 				and not all:find("63", 1, true), "nothing the client did not show, and the level said once")
 			assert(tip._minWidth and tip._minWidth >= mod.ITEM.MIN_W, "as wide as a spell's card")
+			-- A LONG NAME AND ITS FIGURE (Josh 2026-11-09: "Overlapping text"):
+			-- the card grows past the usual cap so the name clears its DPS
+			do
+				local long = reaper()
+				long.lines[1].leftText = "Edged Bastard Sword of the Monkey of the Whale"
+				mod.ComposeItem(tip, long)
+				assert(tip._minWidth > 340 and tip._minWidth <= mod.HEAD_MAX_W,
+					"a long name widens the card past 340, up to a point: " .. tostring(tip._minWidth))
+				mod.ComposeItem(tip, reaper())
+			end
 
 			-- THE PARTS GO WITH THEIR CARD (Josh 2026-10-23: "showing the
 			-- previous hovered item instead of the current. The icon was also

@@ -3208,6 +3208,14 @@ do
 	_G.UnitFullName = function() return "Scotty", "Forever" end
 	local fn, fr = U.UnitFullName("target")
 	check(fn == "Scotty Forever" and fr == nil, "and a unit whose realm is its surname has none")
+	-- a secret name is no answer, and is never compared (Josh 2026-11-09)
+	_G.GetUnitName = function() return Strict.Secret("Febbys Stormseeker") end
+	_G.UnitFullName = function() return "Febbys", Strict.Secret("Forever") end
+	local okS, sn, sr = pcall(U.UnitFullName, "target")
+	check(okS and sn == "Febbys" and sr == nil, "a secret name or realm from the client is passed over")
+	_G.UnitFullName = function() return Strict.Secret("Febbys") end
+	okS, sn = pcall(U.UnitFullName, "target")
+	check(okS and sn == nil, "and with only secret names, there is no name")
 	_G.GetUnitName, _G.UnitFullName = hadGUN, hadUFN
 
 	-- what the split left in a saved file: rows and people under a realm

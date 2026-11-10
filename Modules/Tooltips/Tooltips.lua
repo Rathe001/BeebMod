@@ -110,6 +110,12 @@ local MIN_W = 200
 -- and the most it will ask for to keep a long name on one line. Past this a
 -- name really is too long and has to wrap somewhere (Josh 2026-09-20).
 local MAX_W = 340
+-- A CARD'S NAME NEVER WRAPS (Josh 2026-11-09: "Overlapping text"): Edged
+-- Bastard Sword of the Monkey and its DPS beside it needed a little more than
+-- MAX_W, so the name ran under the figure. A card's header asks for what it
+-- needs, up to this.
+local HEAD_MAX_W = 420
+M.HEAD_MAX_W = HEAD_MAX_W
 
 -- WHAT THE HEALTH BAR WAS (Josh 2026-09-22). Compose sets its height to one
 -- pixel and hides it, and switching the module off only showed it again - a
@@ -3040,20 +3046,24 @@ local function card(tip)
 			tagsW = tagsW + T.TagWidth(tag[1], tag.keepCase) + (i > 1 and T.TAG_GAP or 0)
 		end
 		if not figs then
-			return math.max(Measure(name, I.NAME, "name"), tagsW) + c.off + 24
+			c.headNeeds = math.max(Measure(name, I.NAME, "name"), tagsW) + c.off + 24
+			return c.headNeeds
 		end
 		local function fig(i, size)
 			local f = figs[i]
 			return f and (Measure(f[1], size, "text") + I.FIG_GAP + Measure(figLabel(f), I.FIG_LABEL, "name")) or 0
 		end
-		return math.max(Measure(name, I.NAME, "name") + fig(1, I.HEADLINE),
+		c.headNeeds = math.max(Measure(name, I.NAME, "name") + fig(1, I.HEADLINE),
 			Measure(sub or "", I.SUB, "text") + fig(2, I.FIG_SMALL), tagsW) + c.off + 24 + 12
+		return c.headNeeds
 	end
 	-- As wide as `needs`, never narrower than `floor`; shown, so it has a
 	-- width; then the figures and cells laid by that width. Returns it.
 	function c.finish(floor, needs)
 		if tip.SetMinimumWidth then
-			pcall(tip.SetMinimumWidth, tip, math.max(floor, math.min(MAX_W, math.floor(needs))))
+			-- the rest wraps at MAX_W; the header, which cannot, up to HEAD_MAX_W
+			local head = math.min(HEAD_MAX_W, c.headNeeds or 0)
+			pcall(tip.SetMinimumWidth, tip, math.floor(math.max(floor, math.min(MAX_W, needs), head)))
 		end
 		M.composing = true
 		pcall(tip.Show, tip)

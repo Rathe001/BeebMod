@@ -3,6 +3,16 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **No error from a hidden name.** The game sometimes hides a player's name
+  from addons. BeebMod tried to read it anyway, which raised an error when
+  you pointed at a player, targeted one or heard one in chat. Now it passes
+  over a hidden name, level or guild.
+- **Long item names clear their DPS.** A long name, such as Edged Bastard
+  Sword of the Monkey, ran under the DPS figure beside it. The tooltip now
+  grows wide enough for the name and the figure.
+
 ## 1.10.1
 
 - **No more stutter from the action bars.** They redrew every button each

@@ -297,7 +297,16 @@ end
 -- halves together anyway (Core/DB.lua).
 -- one answer weighed against the best so far (no table of answers: every
 -- nameplate and mouseover asks this)
+-- A SECRET NAME IS NO ANSWER (Josh 2026-11-09, an error in game): the client
+-- can hand back a unit's name as a secret, and comparing it is an error. It is
+-- asked first, and a secret realm is left out the same way.
 local function longer(best, realm, n, r)
+	if issecretvalue and (issecretvalue(n) or issecretvalue(r)) then
+		if issecretvalue(n) then
+			return best, realm
+		end
+		r = nil
+	end
 	if type(n) == "string" and n ~= "" and n ~= UNKNOWNOBJECT then
 		n = n:match("^([^%-]+)") or n -- GetUnitName can append "-Realm"
 		if not best or #n > #best then

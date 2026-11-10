@@ -44,6 +44,16 @@ local function secret(v)
 	return issecretvalue ~= nil and issecretvalue(v) and true or false
 end
 
+-- `v` where it can be read, nil where the client keeps it secret (Josh
+-- 2026-11-09: errors from a secret name in chat and on a unit). A secret is
+-- never compared, kept or written down.
+local function plain(v)
+	if secret(v) then
+		return nil
+	end
+	return v
+end
+
 -- a side as the client names it, or nil (Core/Pack.lua keeps three)
 local function side(unit)
 	local ok, f = pcall(UnitFactionGroup or error, unit)
@@ -91,9 +101,13 @@ function C.FromUnit(unit)
 	end
 	local _, class = UnitClass(unit)
 	local _, race = UnitRace(unit)
-	local level = UnitLevel(unit)
+	class, race = plain(class), plain(race)
+	local level = plain(UnitLevel(unit))
 	local guild = GetGuildInfo(unit)
-	if guid and not secret(guild) and guild == nil then
+	-- a secret guild is not "no guild": it is left unsaid
+	local hidden = secret(guild)
+	guild = plain(guild)
+	if guid and not hidden and guild == nil then
 		C.LookAgain(unit, guid, name, realm)
 	end
 	return DB.Note(BT.db, name, realm, {
@@ -107,7 +121,7 @@ function C.FromUnit(unit)
 		-- never records a leave (Josh 2026-09-23, audit): a /who you ran,
 		-- which states the guild outright, is what does.
 		guild = guild,
-		level = (level and level > 0) and level or nil,
+		level = (type(level) == "number" and level > 0) and level or nil,
 		zone = zone(),
 		guid = guid,
 	})
@@ -186,11 +200,15 @@ end
 -- to name a row; GetUnitName and chat are the two sources that carry both
 -- halves (Josh 2026-09-18).
 function C.Identify(guid)
-	if type(guid) ~= "string" or not GetPlayerInfoByGUID then
+	if type(guid) ~= "string" or secret(guid) or not GetPlayerInfoByGUID then
 		return nil
 	end
 	local ok, _, class, _, race, sex, name, realm = pcall(GetPlayerInfoByGUID, guid)
-	if not ok or type(class) ~= "string" or class == "" then
+	if not ok then
+		return nil
+	end
+	class, race, sex, name, realm = plain(class), plain(race), plain(sex), plain(name), plain(realm)
+	if type(class) ~= "string" or class == "" then
 		return nil -- the client has not cached this one
 	end
 	return {
@@ -210,10 +228,10 @@ end
 -- grey, classless, one-word rows. Anything the client will not identify is not
 -- a character, so it is not written down.
 local function fromName(name, guid, faction)
-	if not enabled() or type(name) ~= "string" or name == "" then
+	if not enabled() or secret(name) or type(name) ~= "string" or name == "" then
 		return nil
 	end
-	if type(guid) ~= "string" or not guid:match("^Player%-") then
+	if secret(guid) or type(guid) ~= "string" or not guid:match("^Player%-") then
 		return nil
 	end
 	local key = U.Key(name)
