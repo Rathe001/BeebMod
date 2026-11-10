@@ -1,9 +1,10 @@
 -- Encounter notes: what each boss does and what your role does about it,
--- in the dock under the quests while you are in a dungeon (Josh 2026-11-06:
+-- in a panel beside the dock while you are in a dungeon (Josh 2026-11-06:
 -- "When on a boss fight ... dynamically replace the quest panel with a boss
--- encounter notes panel").
+-- encounter notes panel"; beside the dock since 2026-11-10, opened by a tab
+-- on its edge).
 --
---   ▌ ENCOUNTER                         2 of 7
+--   ▌ ENCOUNTER                  The Deadmines
 --   ▌ ‹  Sneed's Shredder                   ›
 --   ▌    Boss 2 of 7 · then Sneed
 --   ▌ [Tank] [Healer] [DPS]
@@ -16,8 +17,8 @@
 -- BESIDE THE QUESTS, NOT IN PLACE OF THEM (Josh 2026-11-06, the canvas's
 -- third board). The first idea swapped the quest list for the notes, which
 -- needed a switch back. In a dungeon the tracker lists only that dungeon's
--- quests (Modules/Tracker/Tracker.lua), and the room that leaves is this
--- section's. Each header folds its own part.
+-- quests (Modules/Tracker/Tracker.lua). The notes were a section under them
+-- until 2026-11-10, and are a panel of their own now (M.Build).
 --
 -- WHICH BOSS. The first one not killed this run, when you come in. Then the
 -- one whose fight starts (ENCOUNTER_START). A kill (ENCOUNTER_END, BOSS_KILL)
@@ -41,7 +42,7 @@ BT.Encounter = E
 -- ITS SWITCH IS ON GENERAL (Josh 2026-11-06: "We will need to have an
 -- option to enable/disable the encounter note switch in our general
 -- options"), with Fishing's: no feature, and no row on the Dock's page to
--- drag. The section follows the quest tracker instead (`follows`, UI/Dock.lua).
+-- drag. Its panel hangs off the dock's side (M.Build).
 local M = BT.Module({
 	key = "encounter",
 	title = "Encounter notes",
@@ -66,8 +67,6 @@ local ICON = 16
 -- how far in a note's words start, past its icon
 local TEXT_AT = ICON + 5
 local ROLE_H = 18
--- the fewest note lines the section is squeezed to, under its header
-local MIN_LINES = 2
 
 -- the roles' colours, for their buttons, and a square where an icon is missing
 E.COLOURS = {
@@ -415,8 +414,9 @@ function E.Step(notes, dir)
 end
 
 -- "Boss 2 of 7 · then Sneed", "Optional · lower deck"
-function E.Where(notes, i)
-	local boss = notes.bosses[i]
+-- which of the bosses that count boss `i` is, and how many count: an
+-- optional one is left out of both
+function E.Count(notes, i)
 	local n, at = 0, 0
 	for j, b in ipairs(notes.bosses) do
 		if not b.optional then
@@ -426,6 +426,12 @@ function E.Where(notes, i)
 			end
 		end
 	end
+	return at, n
+end
+
+function E.Where(notes, i)
+	local boss = notes.bosses[i]
+	local at, n = E.Count(notes, i)
 	local where = boss.optional and "Optional" or ("Boss %d of %d"):format(at, n)
 	if boss.place then
 		where = where .. " · " .. boss.place
@@ -476,14 +482,6 @@ local function refont()
 	for fs, size in pairs(fonts) do
 		setFont(fs, size)
 	end
-end
-
-local function width()
-	local w = BT.Pill.Number(frame and frame:GetWidth(), 0)
-	if w < 100 then
-		w = BT.Dock.Width()
-	end
-	return w
 end
 
 -- how tall a font string comes out at a width, wrapped
@@ -617,22 +615,182 @@ local function paintLine(row, l, class, w)
 	return tall
 end
 
+-- ---------------------------------------------------------------------------
+-- The panel beside the dock
+-- ---------------------------------------------------------------------------
+--
+-- A PANEL OF ITS OWN, OPENED BY A TAB (Josh 2026-11-10: "Rather than
+-- encounter notes being on the dock, what do you think about having a notes
+-- button floating (but attached) to the left of the dock?", then option A of
+-- the canvas: "I prefer A too"). In the dock the notes shared its height with
+-- the quests, and scrolled in a dungeon with many. Now a tab on the dock's
+-- edge, a page with "2/7" under it, opens a panel beside the dock that is as
+-- tall as its notes, down to the bottom of the screen. The tab rides the
+-- panel's outer edge and shuts it again.
+--
+-- Both are the dock's: they move, scale and fade with it, and go to its
+-- right when the dock is on the left half of the screen. Open or shut is
+-- kept for each character. The ENCOUNTER header folds the panel to the boss
+-- and the arrows.
+E.PANEL_W = 260
+E.TAB_W, E.TAB_H = 30, 50
+-- LEVEL WITH THE PANEL'S TOP, OPEN ON ITS INNER SIDE (Josh 2026-11-10:
+-- "align it with the top of the level row, and remove the right border
+-- radius and border? It should look like a tab"). The tab's skin is drawn
+-- E.TAB_HIDE wider than the tab and the tab cuts it off, so the inner side's
+-- corners and border are never seen, whatever corners and border the Look
+-- page sets. The tab overlaps the dock (or the panel) by one border, which
+-- its fill covers.
+E.TAB_TOP = 0
+E.TAB_HIDE = 18
+-- UNDER THE MAP, BESIDE WHAT FOLLOWS IT (Josh 2026-11-10: "encounter notes
+-- panel is overlapping. Can we attach it to the left of the level row?").
+-- The game's buffs sit left of the minimap, and with the map at the top of
+-- the dock the panel lay over them. So the panel's top is the map's foot
+-- while the map is in the dock: beside the level row, or whatever row is
+-- under the map once that one is switched off. With no map in the dock, the
+-- dock's top. Under a map dragged low in the dock, less than E.MIN_ROOM
+-- would be left, so the panel goes back to the dock's top.
+E.MIN_ROOM = 200
+E.TAB_ICON = "Interface\\Icons\\INV_Misc_Note_01"
+
+local tab
+
+-- the character the panel is opened or shut for
+local function me()
+	local guid = plain(rawget(_G, "UnitGUID"), "player")
+	return type(guid) == "string" and guid or nil
+end
+
+-- open until you shut it
+function E.IsOpen()
+	local s = BT.settings and BT.settings.encounter
+	local id = me()
+	return not (s and s.shut and id and s.shut[id])
+end
+
+function E.SetOpen(open)
+	local id = me()
+	if not id then
+		return
+	end
+	setOpt("shut", opt("shut", nil) or {})
+	BT.settings.encounter.shut[id] = (not open) or nil
+end
+
+-- whether the dock is on the left half of the screen, where the panel goes
+-- to its right
+function E.OnRight(dock)
+	local N = BT.Pill.Number
+	if not (dock and dock.GetCenter and UIParent and UIParent.GetWidth) then
+		return false
+	end
+	local x = N((dock:GetCenter()), nil)
+	local w = N(UIParent:GetWidth(), nil)
+	if not (x and w) then
+		return false
+	end
+	local s = N(dock.GetEffectiveScale and dock:GetEffectiveScale(), 1)
+	local us = N(UIParent.GetEffectiveScale and UIParent:GetEffectiveScale(), 1)
+	return x * s < w * us / 2
+end
+
+-- how far below the dock's top the panel starts: the map's foot, or 0
+function E.Below(dock)
+	local map = BT.Dock.SectionFrame and BT.Dock.SectionFrame("minimap")
+	if not (dock and map and map:IsShown() and map.GetBottom and dock.GetTop) then
+		return 0
+	end
+	local N = BT.Pill.Number
+	local top, foot = N(dock:GetTop(), nil), N(map:GetBottom(), nil)
+	if not (top and foot) or foot >= top then
+		return 0
+	end
+	local down = math.floor(top - foot + 0.5)
+	local room = BT.Dock.Room()
+	if room and room - down < E.MIN_ROOM then
+		return 0
+	end
+	return down
+end
+
+-- the panel against the dock's side, and the tab against the panel's outer
+-- edge, or the dock's while the panel is shut; each overlaps the other by
+-- its border, so the two read as one
+function M.Place()
+	local dock = BT.Dock.Frame()
+	if not (frame and tab and dock) then
+		return
+	end
+	local right = E.OnRight(dock)
+	M.side = right and "right" or "left"
+	local down = E.Below(dock)
+	M.down = down
+	local open = frame:IsShown()
+	local by = open and frame or dock
+	local tabY = -(E.TAB_TOP + (open and 0 or down))
+	-- over the border it meets, by that border's width
+	local over = BT.Pill.Px(dock, (BT.Theme and BT.Theme.Thickness()) or 1) or 1
+	frame:ClearAllPoints()
+	tab:ClearAllPoints()
+	tab.skin:ClearAllPoints()
+	tab.skin:SetWidth(E.TAB_W + E.TAB_HIDE)
+	if right then
+		frame:SetPoint("TOPLEFT", dock, "TOPRIGHT", -1, -down)
+		tab:SetPoint("TOPLEFT", by, "TOPRIGHT", -over, tabY)
+		tab.skin:SetPoint("TOPRIGHT", tab, "TOPRIGHT", 0, 0)
+		tab.skin:SetPoint("BOTTOMRIGHT", tab, "BOTTOMRIGHT", 0, 0)
+	else
+		frame:SetPoint("TOPRIGHT", dock, "TOPLEFT", 1, -down)
+		tab:SetPoint("TOPRIGHT", by, "TOPLEFT", over, tabY)
+		tab.skin:SetPoint("TOPLEFT", tab, "TOPLEFT", 0, 0)
+		tab.skin:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", 0, 0)
+	end
+end
+
+-- the room from the panel's top to the bottom of the screen
+local function room()
+	local r = BT.Dock.Room()
+	return r and math.max(E.MIN_ROOM, r - E.Below(BT.Dock.Frame())) or nil
+end
+
+-- the tab lit in the toolkit's green while the panel is open
+function E.PaintTab()
+	if not tab then
+		return
+	end
+	local W = BT.Widgets
+	local open = frame and frame:IsShown()
+	if open then
+		local c = W.HOVER
+		BT.Pill.Recolour(tab.skin, { c[1] * 0.25, c[2] * 0.25, c[3] * 0.25, 0.95 }, c)
+	else
+		BT.Pill.Recolour(tab.skin, W.FILL, tab.hovered and W.HOVER or W.RIM)
+	end
+	local lit = open or tab.hovered
+	if tab.icon.SetDesaturated then
+		pcall(tab.icon.SetDesaturated, tab.icon, not lit)
+	end
+	tab.icon:SetAlpha(lit and 1 or 0.75)
+	local t = lit and INK or MUTED
+	tab.count:SetTextColor(t[1], t[2], t[3])
+end
+
 function M.Build()
 	if frame then
 		return frame
 	end
-	frame = BT.Dock.Section("encounter", 11)
-	-- right under the quests, wherever they are in the dock
-	frame.follows = "tracker"
-	frame.wantWidth = nil
-	-- it may be cut short to stay on the screen, after the quests are
-	frame.shrinks = true
-	frame.Fit = function(_, height)
-		M.Fit(height)
-	end
+	local dock = BT.Dock.Create()
+	frame = CreateFrame("Frame", "BeebModEncounter", dock)
+	frame:SetWidth(E.PANEL_W)
+	frame:SetHeight(60)
+	frame:EnableMouse(true)
+	BT.Widgets.Panel(frame)
+	BT.Widgets.Shadow(frame)
+	-- Shift-drag moves the dock from here too
+	BT.Dock.MakeHandle(frame)
 
-	-- THE HEADER, which folds it, and is a handle for the dock like the
-	-- tracker's
+	-- THE HEADER, which folds it to the boss, with the dungeon at its right
 	local head = CreateFrame("Button", nil, frame)
 	head:SetHeight(ROW)
 	head:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -PAD)
@@ -645,6 +803,11 @@ function M.Build()
 	head.title = text(head, HEAD, MUTED)
 	head.title:SetPoint("LEFT", head, "LEFT", 18, 0)
 	head.title:SetText(string.upper("Encounter"))
+	head.where = text(head, HEAD, MUTED)
+	head.where:SetPoint("RIGHT", head, "RIGHT", 0, 0)
+	head.where:SetPoint("LEFT", head.title, "RIGHT", 8, 0)
+	head.where:SetJustifyH("RIGHT")
+	head.where:SetWordWrap(false)
 	head.hot = head:CreateTexture(nil, "BACKGROUND")
 	head.hot:SetAllPoints()
 	head.hot:Hide()
@@ -735,19 +898,72 @@ function M.Build()
 			M.Fit(M.maxHeight)
 		end
 	end)
+
+	-- THE TAB: a page, and which boss of how many
+	tab = CreateFrame("Button", "BeebModEncounterTab", dock)
+	tab:SetSize(E.TAB_W, E.TAB_H)
+	tab:SetFrameLevel(BT.Pill.Number(frame:GetFrameLevel(), 1) + 3)
+	if tab.SetClipsChildren then
+		pcall(tab.SetClipsChildren, tab, true)
+	end
+	tab.skin = CreateFrame("Frame", nil, tab)
+	tab.skin:SetFrameLevel(BT.Pill.Number(tab:GetFrameLevel(), 1))
+	tab.skin:SetHeight(E.TAB_H)
+	BT.Widgets.Panel(tab.skin)
+	tab.icon = tab:CreateTexture(nil, "ARTWORK")
+	tab.icon:SetSize(ICON, ICON)
+	tab.icon:SetPoint("TOP", tab, "TOP", 0, -9)
+	tab.icon:SetTexture(E.TAB_ICON)
+	tab.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	tab.count = text(tab, LINE, MUTED)
+	tab.count:SetPoint("BOTTOM", tab, "BOTTOM", 0, 8)
+	tab.count:SetJustifyH("CENTER")
+	tab:RegisterForClicks("AnyUp")
+	tab:SetScript("OnClick", function()
+		-- the end of a Shift-drag by the tab is not a click
+		if BT.Dock.JustMoved() then
+			return
+		end
+		E.SetOpen(not E.IsOpen())
+		M.Update()
+	end)
+	tab:SetScript("OnEnter", function(self)
+		self.hovered = true
+		E.PaintTab()
+		if BT.Tip then
+			BT.Tip.Show(self, { build = function(t)
+				t:Header({ icon = false, name = "Encounter notes" })
+				t:Foot({ { "Click", E.IsOpen() and "hide" or "show" } })
+			end })
+		end
+	end)
+	tab:SetScript("OnLeave", function(self)
+		self.hovered = false
+		E.PaintTab()
+		if GameTooltip then
+			GameTooltip:Hide()
+		end
+	end)
+	BT.Dock.MakeHandle(tab)
+	frame.tab = tab
+
 	frame:Hide()
+	tab:Hide()
+	-- faded with the dock, and whole again under the pointer like it
+	BT.Dock.Attach(frame)
+	BT.Dock.Attach(tab)
+	-- placed again when the dock is: moved, resized, a new screen
+	BT.Dock.AfterLayout(M.Docked)
 	return frame
 end
 
 M.scroll = 0
 
--- what is shown and how tall it comes out; the dock is asked again only
--- when that changes
+-- what is shown and how tall it comes out
 function M.Update()
 	if not frame then
 		return 0
 	end
-	local wasShown = frame:IsShown()
 	local key, _, notes = E.Here()
 	E.Load()
 	if key then
@@ -759,13 +975,10 @@ function M.Update()
 	E.live = BT.Enabled("encounter") and notes ~= nil and #notes.bosses > 0
 	if not E.live then
 		frame:Hide()
+		tab:Hide()
 		M.lastBoss = nil
-		if wasShown then
-			BT.Dock.Relayout()
-		end
 		return 0
 	end
-	frame:Show()
 	refont()
 	local r = E.run
 	if not notes.bosses[r.at] then
@@ -773,29 +986,45 @@ function M.Update()
 	end
 	local boss = notes.bosses[r.at]
 	M.lastBoss = boss.name
+	-- as the panel counts them: "2/6", and "opt" on an optional boss
+	local at, n = E.Count(notes, r.at)
+	tab.count:SetText(boss.optional and "opt" or ("%d/%d"):format(at, n))
+	tab:Show()
+	if not E.IsOpen() then
+		frame:Hide()
+		M.lines = 0
+		M.Place()
+		E.PaintTab()
+		return 0
+	end
+	frame:Show()
 	local head = frame.head
+	head.where:SetText(notes.name or "")
 	local shut = opt("collapsed", false)
 	BT.Dock.ChevronCoord(head.chevron, shut)
 
-	local w = width() - 2 * PAD
+	local w = E.PANEL_W - 2 * PAD
 	local listTop = PAD + ROW + GAP
-	local y = 0
+	-- the boss, folded or not
+	body.prev:ClearAllPoints()
+	body.prev:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -6)
+	body.next:ClearAllPoints()
+	body.next:SetPoint("TOPRIGHT", body, "TOPRIGHT", 0, -6)
+	body.boss:ClearAllPoints()
+	body.boss:SetPoint("TOPLEFT", body, "TOPLEFT", 24, 0)
+	body.boss:SetPoint("RIGHT", body, "RIGHT", -24, 0)
+	body.boss:SetText(boss.name)
+	body.where:ClearAllPoints()
+	body.where:SetPoint("TOPLEFT", body, "TOPLEFT", 24, -(ROW + 1))
+	body.where:SetPoint("RIGHT", body, "RIGHT", -24, 0)
+	body.where:SetText(E.Where(notes, r.at))
+	for _, part in ipairs({ body.prev, body.next, body.boss, body.where }) do
+		part:Show()
+	end
+	local y = 2 * ROW + 2
+	local shown = 0
 	if not shut then
-		-- the boss
-		body.prev:ClearAllPoints()
-		body.prev:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -(y + 6))
-		body.next:ClearAllPoints()
-		body.next:SetPoint("TOPRIGHT", body, "TOPRIGHT", 0, -(y + 6))
-		body.boss:ClearAllPoints()
-		body.boss:SetPoint("TOPLEFT", body, "TOPLEFT", 24, -y)
-		body.boss:SetPoint("RIGHT", body, "RIGHT", -24, 0)
-		body.boss:SetText(boss.name)
-		body.where:ClearAllPoints()
-		body.where:SetPoint("TOPLEFT", body, "TOPLEFT", 24, -(y + ROW + 1))
-		body.where:SetPoint("RIGHT", body, "RIGHT", -24, 0)
-		body.where:SetText(E.Where(notes, r.at))
-		y = y + 2 * ROW + GAP + 2
-
+		y = y + GAP
 		-- the role: three buttons across the width
 		local role, from = E.Role.Current()
 		local gap = 4
@@ -822,38 +1051,42 @@ function M.Update()
 			row:Show()
 			y = y + tall + GAP + 2
 		end
-		for i = #lines + 1, #pool do
-			pool[i]:Hide()
-		end
-		M.lines = #lines
+		shown = #lines
 		y = y - GAP - 2
-		for _, part in ipairs({ body.prev, body.next, body.boss, body.where }) do
-			part:Show()
-		end
-		body:Show()
 	else
-		body:Hide()
-		M.lines = 0
+		for _, b in ipairs(body.roles.buttons) do
+			b:Hide()
+		end
 	end
+	for i = shown + 1, #pool do
+		pool[i]:Hide()
+	end
+	M.lines = shown
+	body:Show()
 
-	local content = listTop + (shut and 0 or (y + PAD)) - (shut and GAP or 0)
-	content = math.max(24, content)
+	local content = listTop + y + PAD
 	M.contentHeight, M.listTop, M.bodyHeight = content, listTop, y
-	-- squeezed, it keeps its header, the boss, the role and two lines
-	local floor = listTop + 2 * ROW + GAP + 2 + ROLE_H + GAP + 4 + MIN_LINES * (ROW + GAP) + PAD
-	local minHeight = math.min(content, floor)
-	if wasShown and frame.wantHeight == content and frame.minHeight == minHeight then
-		M.Fit(M.maxHeight)
-		return M.lines
-	end
-	frame.wantHeight, frame.minHeight = content, minHeight
-	frame:SetHeight(content)
-	M.maxHeight = content
-	BT.Dock.Relayout()
+	-- as tall as the notes, down to the bottom of the screen
+	M.room = room()
+	M.Fit(math.min(content, M.room or content))
+	M.Place()
+	E.PaintTab()
 	return M.lines
 end
 
--- the height the dock gave it: scroll what does not fit under the header
+-- the dock laid out again: placed against it, and measured again if the
+-- room under the dock's top changed
+function M.Docked()
+	if not (frame and tab and tab:IsShown()) then
+		return
+	end
+	M.Place()
+	if frame:IsShown() and room() ~= M.room then
+		M.Update()
+	end
+end
+
+-- the panel at `height`: what does not fit under the header scrolls
 function M.Fit(height)
 	if not (frame and view and body) then
 		return
@@ -861,6 +1094,7 @@ function M.Fit(height)
 	local content = M.contentHeight or 0
 	height = height or content
 	M.maxHeight = height
+	frame:SetHeight(math.max(1, height))
 	local listTop = M.listTop or 0
 	local over = math.max(0, content - height)
 	M.scroll = math.max(0, math.min(M.scroll, over))
@@ -1020,13 +1254,14 @@ function M:OnDisable()
 	E.live = false
 	if frame then
 		frame:Hide()
-		BT.Dock.Relayout()
+		frame.tab:Hide()
 	end
 end
 
 M.OnBind = M.OnEnable
 
 function M.Frame() return frame end
+function M.Tab() return frame and frame.tab end
 function M.Rows() return pool end
 function M.Restyle() return M.Update() end
 

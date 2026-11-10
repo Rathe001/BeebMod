@@ -139,10 +139,12 @@ end
 -- FIVE ZONES, NOT THREE (Josh 2026-11-07: "Not sure we're showing enough of
 -- the zone leveling options here"). A level 16 saw Darkshore, Loch Modan and
 -- Westfall, while Redridge Mountains and Stonetalon Mountains were also his
--- level. Dungeons stay at three (Dungeons.lua, D.SHOW).
-Z.SHOW = 5
+-- level.
+-- THEN EVERY ONE (Josh 2026-11-10: "I think we should list all zones in my
+-- range as well, not just the top 5"). From Classic's ranges the most at
+-- any level is eight, at 43.
 
 -- the zones for a level and a side, by the dungeons' sweet spot
 function Z.For(level, side, limit)
-	return BT.Dungeons.Pick(Z.All(), level, side, limit or Z.SHOW)
+	return BT.Dungeons.Pick(Z.All(), level, side, limit)
 end

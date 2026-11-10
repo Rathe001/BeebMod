@@ -60,11 +60,13 @@ D.LIST = {
 	{ name = "Scholomance", lo = 58, hi = 60 },
 }
 
--- THE SWEET SPOT, AND THREE OF THEM (Josh 2026-10-04: "Rather than
--- starting closest to my level, can we find the sweet spot of the dungeon?
--- Just the average of the min and max level. We can probably cap it to 3").
--- A level 59 saw nine, from Temple of Atal'Hakkar down.
-D.SHOW = 3
+-- THE SWEET SPOT (Josh 2026-10-04: "Rather than starting closest to my
+-- level, can we find the sweet spot of the dungeon? Just the average of the
+-- min and max level").
+-- EVERY ONE IN RANGE, NOT THREE (Josh 2026-11-10: "Dungeons should show all
+-- dungeons that are in my range, not just the top 3"). A level 19 saw three
+-- of its five. Counted from these ranges, the most at any level is nine, at
+-- 58 to 60, and the most zones eight, at 43 (Zones.lua).
 
 -- the middle of a dungeon's range
 function D.Sweet(d)
@@ -81,8 +83,9 @@ function D.Takes(d, level)
 end
 
 -- the entries of a list whose range takes in this level, for this side
--- (with no side known, every one), nearest their sweet spot first, D.SHOW at
--- most; a tie goes to the lower one, then by name, so the list holds still.
+-- (with no side known, every one), nearest their sweet spot first, and
+-- `limit` at most where one is given; a tie goes to the lower one, then by
+-- name, so the list holds still.
 -- The zones use it too (Modules/XP/Zones.lua).
 function D.Pick(list, level, side, limit)
 	local out = {}
@@ -104,7 +107,7 @@ function D.Pick(list, level, side, limit)
 		end
 		return a.name < b.name
 	end)
-	for i = #out, (limit or D.SHOW) + 1, -1 do
+	for i = #out, (limit or #out) + 1, -1 do
 		out[i] = nil
 	end
 	return out
@@ -229,8 +232,5 @@ function D.Next(level, side, within)
 		end
 	end
 	table.sort(out, function(a, b) return a.name < b.name end)
-	for i = #out, D.SHOW + 1, -1 do
-		out[i] = nil
-	end
 	return out
 end

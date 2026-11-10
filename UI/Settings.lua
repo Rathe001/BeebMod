@@ -96,12 +96,12 @@ function S.Build(parent)
 	-- probably"). The one utility here: it has no panel and no page of its own
 	-- (Modules/Fishing/Fishing.lua).
 	-- ENCOUNTER NOTES (Josh 2026-11-06: "an option to enable/disable the
-	-- encounter note switch in our general options"): its part of the dock
-	-- follows the quests and has no row of its own on the Dock's page
+	-- encounter note switch in our general options"): its panel hangs off
+	-- the dock's side and has no row of its own on the Dock's page
 	-- (Modules/Encounter/Encounter.lua)
 	local dungeons = stack:Section("Dungeons")
 	S.encounterRow = W.SwitchRow(dungeons, "Encounter notes",
-		"Notes for each boss, under your quests in a dungeon",
+		"Notes for each boss in a dungeon, in a panel beside the dock",
 		function() return BT.Switched("encounter") end,
 		function(on) BT.SetEnabled("encounter", on) end)
 

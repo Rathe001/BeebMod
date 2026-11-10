@@ -3,6 +3,20 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Encounter notes beside the dock.** The notes are no longer in the dock
+  under your quests. In a dungeon, a tab on the dock's edge shows which boss
+  you are on, such as 2/6. Click it to open the notes in a panel beside the
+  dock. Click it again to shut the panel. With the map in the dock, the
+  panel starts under the map, clear of the game's buffs. It is as tall as
+  its notes, down to the bottom of the screen. Click ENCOUNTER at its top to
+  fold it down to the boss. With the dock on the left of the screen, the
+  panel opens to its right.
+- **Every zone and dungeon for your level.** The experience tooltip listed
+  five zones and three dungeons. Now it lists every one in your range. The
+  most at any level is eight zones or nine dungeons.
+
 ## 1.10.2
 
 - **No error from a hidden name.** The game sometimes hides a player's name

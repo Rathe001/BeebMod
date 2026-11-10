@@ -14313,11 +14313,11 @@ if ok then
 			assert(names(D.For(15, "Alliance")) == "The Hall of Thanes",
 				"a level 15 Alliance player: " .. names(D.For(15, "Alliance")))
 			assert(#D.For(12, "Horde") == 0 and #D.For(nil, "Horde") == 0, "none before level 13")
-			-- NEAREST THE SWEET SPOT, THREE AT MOST (the same day: "the average of
-			-- the min and max level. We can probably cap it to 3")
-			assert(names(D.For(42, "Alliance")) == "Razorfen Downs,Krol'dok Stronghold,Scarlet Monastery Cathedral",
+			-- NEAREST THE SWEET SPOT (the same day: "the average of the min and
+			-- max level"), EVERY ONE IN RANGE (Josh 2026-11-10: "not just the top 3")
+			assert(names(D.For(42, "Alliance")) == "Razorfen Downs,Krol'dok Stronghold,Scarlet Monastery Cathedral,Uldaman",
 				"new and old side by side at 42, nearest the middle first: " .. names(D.For(42, "Alliance")))
-			assert(#D.For(59, "Horde") == 3 and #D.For(59, "Horde", 9) == 9, "nine at 59, three shown")
+			assert(#D.For(59, "Horde") == 9 and #D.For(59, "Horde", 3) == 3, "all nine at 59, or as many as asked")
 			assert(#D.For(15, nil) == 3, "with no side known, every one")
 			-- HOW HARD, BY WHERE YOU ARE IN THE RANGE (Josh 2026-10-04: "13-14
 			-- orange, 15-16 yellow, 17-18 green")
@@ -14500,9 +14500,10 @@ if ok then
 				assert(Z.fromGame == 2 and Z.list ~= nil, "kept once the game has given ranges")
 				Z.All()
 				assert(asked == 1, "read from the game once")
-				assert(zoneNames(Z.For(18, "Horde")) == "The Barrens,Silverpine Forest,Stonetalon Mountains,Redridge Mountains,Ashenvale",
-					"nearest the middle first, five at most: " .. zoneNames(Z.For(18, "Horde")))
-				assert(zoneNames(Z.For(18, "Alliance")) == "Darkshore,Loch Modan,Westfall,Stonetalon Mountains,Redridge Mountains",
+				-- EVERY ONE IN RANGE (Josh 2026-11-10: "not just the top 5")
+				assert(zoneNames(Z.For(18, "Horde")) == "The Barrens,Silverpine Forest,Stonetalon Mountains,Redridge Mountains,Ashenvale,Duskwood",
+					"nearest the middle first, every one in range: " .. zoneNames(Z.For(18, "Horde")))
+				assert(zoneNames(Z.For(18, "Alliance")) == "Darkshore,Loch Modan,Westfall,Stonetalon Mountains,Redridge Mountains,Ashenvale,Duskwood",
 					"and the other side's zones left out: " .. zoneNames(Z.For(18, "Alliance")))
 				-- A LEVEL 16 SAW THREE (Josh 2026-11-07): Redridge and Stonetalon too
 				assert(zoneNames(Z.For(16, "Alliance")) == "Darkshore,Loch Modan,Westfall,Stonetalon Mountains,Redridge Mountains",
@@ -19284,45 +19285,99 @@ if ok then
 			tracker.Update()
 			assert(#shown("title") == 2, "going into a dungeon shuts the others again")
 
-			-- THE NOTES, under the quests
+			-- THE NOTES, in a panel beside the dock, opened by a tab on its
+			-- edge (Josh 2026-11-10, option A)
 			local enc = BT.GetModule("encounter")
 			BT.SetEnabled("encounter", true)
 			enc:OnEnable()
-			local f = enc.Frame()
+			local f, tab = enc.Frame(), enc.Tab()
 			assert(f:IsShown() and f.body.boss._text == "Rhahk'Zor", "the notes open on the first boss: "
 				.. tostring(f.body.boss._text))
 			assert(f.body.where._text == "Boss 1 of 6", "with where it is in the run: " .. tostring(f.body.where._text))
-			local ranks = {}
-			for n, item in ipairs(BT.Dock.stack or {}) do ranks[item.s.key] = n end
-			assert(ranks.tracker and ranks.encounter == ranks.tracker + 1, "right under the quests")
-			-- and still there with the quests dragged to the top of the dock
-			do
-				local hadOrder = BT.settings.order
-				local keys = { "tracker" }
-				for _, m in ipairs(BT.Modules()) do
-					if m.key ~= "tracker" then keys[#keys + 1] = m.key end
+			assert(f.head.where._text == "The Deadmines", "the dungeon at the header's right")
+			assert(tab:IsShown() and tab.count._text == "1/6", "the tab says which boss of how many: " .. tostring(tab.count._text))
+			assert(f:GetParent() == BT.Dock.Frame() and tab:GetParent() == BT.Dock.Frame(), "both the dock's, to move and fade with it")
+			for _, item in ipairs(BT.Dock.stack or {}) do
+				assert(item.s.key ~= "encounter", "and no longer a section in the dock")
+			end
+			-- left of the dock, the tab on the panel's outer edge
+			local function at(frame, n)
+				local p = frame._points or {}
+				for point, a in pairs(p) do
+					if n == nil or point == n then return point, a.rel, a.relPoint end
 				end
-				BT.settings.order = keys
-				BT.SortModules()
+			end
+			assert(enc.side == "left" and select(2, at(f, "TOPRIGHT")) == BT.Dock.Frame()
+				and select(2, at(tab, "TOPRIGHT")) == f, "left of the dock, the tab on the panel's edge")
+			-- A TAB (Josh 2026-11-10: "remove the right border radius and border"):
+			-- level with the panel's top, its skin wider than it and cut off on
+			-- the inner side
+			assert(tab._point.y == 0 and tab.skin._width == enc.Tab().skin._width
+				and tab.skin._width > tab._width and select(2, at(tab.skin, "TOPLEFT")) == tab,
+				"level with the panel's top, its inner side cut off")
+			-- a click shuts it, for this character, and the tab moves to the dock
+			tab:GetScript("OnClick")(tab, "LeftButton")
+			assert(not f:IsShown() and tab:IsShown() and select(2, at(tab, "TOPRIGHT")) == BT.Dock.Frame(),
+				"a click on the tab shuts the panel and the tab stays on the dock")
+			assert(BT.settings.encounter.shut["Player-1-0000ABCD"] == true, "kept for this character")
+			enc.Update()
+			assert(not f:IsShown(), "and stays shut")
+			tab:GetScript("OnClick")(tab, "LeftButton")
+			assert(f:IsShown() and BT.settings.encounter.shut["Player-1-0000ABCD"] == nil, "and opens again")
+			-- the header folds it down to the boss
+			f.head:GetScript("OnClick")(f.head)
+			assert(f:IsShown() and f.body.boss:IsShown() and enc.lines == 0
+				and not f.body.roles.buttons[1]:IsShown(), "folded, the boss and the arrows only")
+			f.head:GetScript("OnClick")(f.head)
+			assert(enc.lines > 0 and f.body.roles.buttons[1]:IsShown(), "unfolded, the notes again")
+			-- UNDER THE MAP (Josh 2026-11-10: "attach it to the left of the level
+			-- row"): the map in the dock, the panel starts at its foot
+			do
+				local dockFrame = BT.Dock.Frame()
+				local map = BT.Dock.SectionFrame("minimap") or CreateFrame("Frame", nil, dockFrame)
+				local hadSections = BT.Dock.SectionFrame
+				BT.Dock.SectionFrame = function(k) if k == "minimap" then return map end return hadSections(k) end
+				local hadShown, hadBottom, hadTop = map:IsShown(), rawget(map, "GetBottom"), rawget(dockFrame, "GetTop")
+				local hadRoom = BT.Dock.Room
+				BT.Dock.Room = function() return 700 end
+				map:Show()
+				dockFrame.GetTop = function() return 760 end
+				map.GetBottom = function() return 560 end
 				BT.Dock.Relayout()
-				local at = {}
-				for n, item in ipairs(BT.Dock.stack or {}) do at[item.s.key] = n end
-				assert(at.encounter == at.tracker + 1, "the notes follow the quests: " .. tostring(at.tracker) .. ", " .. tostring(at.encounter))
-				BT.settings.order = hadOrder
-				BT.SortModules()
+				local rel, y = f._point.rel, f._point.y
+				assert(enc.down == 200 and rel == dockFrame and y == -200, "the panel starts at the map's foot: "
+					.. tostring(enc.down) .. " " .. tostring(y))
+				-- a map dragged low leaves too little room: the dock's top again
+				map.GetBottom = function() return 160 end
+				BT.Dock.Relayout()
+				assert(enc.down == 0, "under a map low in the dock, the dock's top")
+				-- no map: the dock's top
+				map:Hide()
+				BT.Dock.Relayout()
+				assert(enc.down == 0, "with no map, the dock's top")
+				map.GetBottom, dockFrame.GetTop = hadBottom, hadTop
+				if hadShown then map:Show() end
+				BT.Dock.SectionFrame, BT.Dock.Room = hadSections, hadRoom
+				BT.Dock.Relayout()
+			end
+			-- the dock on the left half of the screen: the panel goes to its right
+			do
+				local dockFrame = BT.Dock.Frame()
+				local hadCenter = rawget(dockFrame, "GetCenter")
+				dockFrame.GetCenter = function() return 10, 400 end
+				BT.Dock.Relayout()
+				assert(enc.side == "right" and select(2, at(f, "TOPLEFT")) == dockFrame
+					and select(2, at(tab, "TOPLEFT")) == f, "a dock on the left: the panel to its right")
+				dockFrame.GetCenter = hadCenter
 				BT.Dock.Relayout()
 			end
 			-- its switch is General's
 			BT.Settings.encounterRow.switch:SetOn(true)
 			BT.Settings.encounterRow.switch:GetScript("OnClick")(BT.Settings.encounterRow.switch)
-			assert(not BT.Enabled("encounter") and not f:IsShown(), "switched off on General, the notes go")
+			assert(not BT.Enabled("encounter") and not f:IsShown() and not tab:IsShown(),
+				"switched off on General, the panel and its tab go")
 			BT.SetEnabled("encounter", true)
 			enc:OnEnable()
-			-- squeezed, the quests give their room first
-			local stack = { { s = { frame = tracker.Frame() }, tall = 300 }, { s = { frame = f }, tall = 200 } }
-			BT.Dock.Squeeze(stack, 20, 420)
-			assert(stack[2].tall == 200 and stack[1].tall == 200, "the quests shrink before the notes: "
-				.. stack[1].tall .. ", " .. stack[2].tall)
 
 			local fire = enc.events:GetScript("OnEvent")
 			-- a boss's nameplate and your target don't choose (Josh 2026-11-07)
@@ -19418,13 +19473,14 @@ if ok then
 			end
 			assert(f.body.boss._text == "Cookie" and cookie.icon.what == "kick"
 				and cookie.who._text == "Kick · Warrior, Rogue, Mage, Shaman", "Cookie's kick, and who can")
-			assert(f.body.where._text == "Optional · lower deck", "an optional boss says so")
+			assert(f.body.where._text == "Optional · lower deck" and enc.Tab().count._text == "opt",
+				"an optional boss says so, on the tab too")
 
 			-- A DUNGEON WITH NO NOTES: its quests still, and no notes
 			place = "The Drowned City"
 			tracker.Update()
 			enc.Update()
-			assert(not f:IsShown(), "no notes, no section")
+			assert(not f:IsShown() and not enc.Tab():IsShown(), "no notes, no panel and no tab")
 			assert(#shown("title") == 0 and shown("fold")[1], "the quests narrowed all the same")
 			-- A WING (Scarlet Monastery): the instance goes by the monastery's
 			-- name, so the wing is the one whose boss is seen

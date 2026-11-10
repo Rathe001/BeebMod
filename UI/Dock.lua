@@ -866,15 +866,6 @@ function B.Relayout()
 	-- the modules in your order, worked out once for the sections, the
 	-- readouts and the stack
 	local rank = moduleRank()
-	-- A SECTION THAT FOLLOWS ANOTHER (`follows`, a module's key): right under
-	-- it, wherever that one was dragged. The encounter notes under the quests
-	-- (Modules/Encounter/Encounter.lua) have no row of their own to drag.
-	for _, s in ipairs(ordered) do
-		local after = s.frame.follows
-		if after and rank[after] then
-			rank[s.key] = rank[after] + 0.5
-		end
-	end
 	sortSections(rank)
 	-- the dock's own width; only a header that could not fit in it makes it
 	-- wider
@@ -1054,6 +1045,42 @@ function B.Relayout()
 	-- ALWAYS THERE (Josh 2026-09-27): the logo and the cog are the way back
 	-- in, whatever is switched off, and nothing switches them off
 	dock:Show()
+	-- and what hangs off its side placed against it again
+	for _, fn in ipairs(B.after) do
+		local ok, err = pcall(fn)
+		if not ok then
+			BT.Err("dock.after: " .. tostring(err))
+		end
+	end
+end
+
+-- WHAT HANGS OFF THE DOCK'S SIDE (Josh 2026-11-10: the encounter notes'
+-- tab and panel, Modules/Encounter/Encounter.lua). Children of the dock, so
+-- they move, scale and fade with it. `fn` runs after each layout, to place
+-- them against the dock's new size and place.
+B.after = {}
+function B.AfterLayout(fn)
+	B.after[#B.after + 1] = fn
+end
+
+-- a frame outside the dock's box that keeps the dock whole in a fight while
+-- the pointer is on it, as the dock itself does (B.Fade)
+B.attached = {}
+function B.Attach(f)
+	B.attached[#B.attached + 1] = f
+end
+
+-- the pointer on the dock or on something hanging off it
+function B.Hovered()
+	if dock and dock.IsMouseOver and dock:IsMouseOver() then
+		return true
+	end
+	for _, f in ipairs(B.attached) do
+		if f:IsShown() and f.IsMouseOver and f:IsMouseOver() then
+			return true
+		end
+	end
+	return false
 end
 
 -- THE DOCK STOPS AT THE BOTTOM OF THE SCREEN (Josh 2026-09-23). It grows
@@ -1388,6 +1415,11 @@ function B.Frame() return dock end
 function B.Header() return dock and dock.header end
 function B.Cog() return dock and dock.cog end
 function B.Sections() return ordered or {} end
+-- a module's section, made or not (nil where it never was)
+function B.SectionFrame(key)
+	local s = sections and sections[key]
+	return s and s.frame or nil
+end
 -- the readout grid's cells, every module's
 function B.Chips() return chips end
 
@@ -1512,7 +1544,7 @@ function B.Fade()
 	local a = 1
 	if B.editMode then
 		a = B.EDIT_MODE_ALPHA
-	elseif fighting and not (dock.IsMouseOver and dock:IsMouseOver()) then
+	elseif fighting and not B.Hovered() then
 		a = B.FadeLevel()
 	end
 	dock:SetAlpha(a)
