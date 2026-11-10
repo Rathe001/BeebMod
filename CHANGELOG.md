@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.10.2
 
 - **No error from a hidden name.** The game sometimes hides a player's name
   from addons. BeebMod tried to read it anyway, which raised an error when
