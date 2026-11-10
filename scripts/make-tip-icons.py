@@ -1,7 +1,7 @@
-"""The unit tooltip's row pictures: Art/tipicons.tga, a 256x32 sheet of 32x32
+"""The unit tooltip's row pictures: Art/tipicons.tga, a 512x32 sheet of 32x32
 glyphs (Josh 2026-10-17, the tooltip canvas "C, everything as tags").
 
-  0  quest      an exclamation mark: an objective this enemy counts for
+  0  quest      an empty box: an objective this enemy counts for
   1  kills      a paw: the Expedition's kills of it
   2  note       a quotation mark: your note
   3  tags       a tag: your tags
@@ -9,6 +9,12 @@ glyphs (Josh 2026-10-17, the tooltip canvas "C, everything as tags").
   5  rating     a star: your rating
   6  duels      crossed swords: your duels
   7  guild      a banner: the guild they were in
+  8  questdone  a ticked box: an objective done
+
+A BOX, NOT "!" (Josh 2026-11-10: "It makes it look like the NPC has a
+quest"). The exclamation mark is the game's sign of a quest to pick up. An
+objective is a line on a list, so it is a box, ticked when it is done. The
+sheet grew to sixteen cells to hold the ticked one; seven are empty.
 
 White, with the shape in the ALPHA channel, so each row tints its own (Core/
 Tooltip.lua, T.Icon), as the glyphs in Art/icons.tga are tinted. Drawn eight
@@ -22,7 +28,7 @@ import os
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CELL, COUNT, SCALE = 32, 8, 8
+CELL, COUNT, SCALE = 32, 16, 8
 
 
 def save_tga(img, path):
@@ -56,18 +62,31 @@ class Cell:
     def poly(self, points, fill=255):
         self.d.polygon([self.p(x, y) for x, y in points], fill=fill)
 
-    def line(self, x0, y0, x1, y1, w):
-        self.d.line([self.p(x0, y0), self.p(x1, y1)], fill=255, width=int(w * SCALE))
-        self.circle(x0, y0, w / 2)
-        self.circle(x1, y1, w / 2)
+    def line(self, x0, y0, x1, y1, w, fill=255):
+        self.d.line([self.p(x0, y0), self.p(x1, y1)], fill=fill, width=int(w * SCALE))
+        self.circle(x0, y0, w / 2, fill=fill)
+        self.circle(x1, y1, w / 2, fill=fill)
 
     def rect(self, x0, y0, x1, y1, fill=255):
         self.d.rectangle((*self.p(x0, y0), *self.p(x1, y1)), fill=fill)
 
 
+def box(c):
+    c.rect(5, 6, 26, 27)
+    c.rect(8.5, 9.5, 22.5, 23.5, fill=0)
+
+
 def quest(c):
-    c.poly([(12.5, 3), (19.5, 3), (18, 20), (14, 20)])
-    c.circle(16, 26.5, 3.4)
+    box(c)
+
+
+def questdone(c):
+    box(c)
+    # the tick runs out of the box's top right, through a gap cut for it
+    c.line(10, 16, 15, 21.5, 4.6, fill=0)
+    c.line(15, 21.5, 28, 5, 4.6, fill=0)
+    c.line(10, 16, 15, 21.5, 3)
+    c.line(15, 21.5, 28, 5, 3)
 
 
 def kills(c):
@@ -125,7 +144,7 @@ def guild(c):
     c.poly([(9, 4), (27, 4), (21.5, 10.5), (27, 17), (9, 17)])
 
 
-DRAW = [quest, kills, note, tags, grouped, rating, duels, guild]
+DRAW = [quest, kills, note, tags, grouped, rating, duels, guild, questdone]
 
 
 def main():

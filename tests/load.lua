@@ -1125,7 +1125,7 @@ if ok then
 			assert(right[tagLine] == nil, "not split into columns")
 			-- A ROW LIKE THE OTHERS (Josh 2026-10-17, the tooltip canvas): led by
 			-- the tag picture, in the rows' size
-			assert(lines[tagLine]:find("^|T[^|]*tipicons:11:11:0:0:256:32:96:128"), "led by the tag picture: " .. lines[tagLine])
+			assert(lines[tagLine]:find("^|T[^|]*tipicons:11:11:0:0:512:32:96:128"), "led by the tag picture: " .. lines[tagLine])
 			assert(select(2, _G["TagTipTextLeft" .. tagLine]:GetFont()) == BT.Fonts.Size(BT.UnitTip.ROW),
 				"and the row is row-sized")
 			-- the squares are laid along that one line at measured offsets,
@@ -1211,7 +1211,7 @@ if ok then
 				end
 			end
 			assert(at, "the note is a row of the tooltip: " .. joined)
-			assert(lines[at]:find("^|T[^|]*tipicons:11:11:0:0:256:32:64:96:0:32:156:128:209|t  the best lol"),
+			assert(lines[at]:find("^|T[^|]*tipicons:11:11:0:0:512:32:64:96:0:32:156:128:209|t  the best lol"),
 				"led by the quotation mark in violet: " .. lines[at])
 			assert(wraps[at] == true, "it may wrap")
 			local fs = _G["NoteTipTextLeft" .. at]
@@ -1235,7 +1235,7 @@ if ok then
 			end
 			BT.Tooltip.Fill(tip, "target")
 			joined = table.concat(lines, " | ")
-			assert(not joined:find("256:32:64:96", 1, true) and not joined:find("256:32:96:128", 1, true),
+			assert(not joined:find("512:32:64:96", 1, true) and not joined:find("512:32:96:128", 1, true),
 				"nothing of yours, no note and no tags: " .. joined)
 			bob.tags = hadGood
 			BT.Notes.SetNote("Beeb Bob", "the best lol")
@@ -3541,7 +3541,7 @@ if ok then
 					row = i
 				end
 			end
-			assert(row and lines[row]:find("tipicons:11:11:0:0:256:32:0:32", 1, true),
+			assert(row and lines[row]:find("tipicons:11:11:0:0:512:32:0:32", 1, true),
 				"what you still have to kill is a row with the quest's mark: " .. all)
 			assert(rights[row] == "0/6", "its count on the right: " .. tostring(rights[row]))
 			assert(not all:find("A Favor for Evershine", 1, true), "and the quest's name is not said for one quest: " .. all)
@@ -3793,6 +3793,131 @@ if ok then
 			for _, q in ipairs(found) do said[#said + 1] = q.text end
 			assert(#found == 2 and found[2].have == 11 and found[2].need == 14,
 				"the quest and its one objective, not the threat: " .. table.concat(said, " | "))
+			local function read(list, spoken)
+				tip:ClearLines()
+				for _, l in ipairs(list) do
+					tip:AddLine(l)
+				end
+				local got, words = mod.QuestBlock(tip, spoken) or {}, {}
+				for _, q in ipairs(got) do words[#words + 1] = q.text end
+				return got, table.concat(words, " | ")
+			end
+			-- NOT THE NPC'S OWN TITLE (Josh 2026-11-10, Protector Dorana: "Level
+			-- 30", "Stormwind" and "PvP" with a quest's mark): her title is also
+			-- the name of a quest in the log
+			_G.GetQuestLogTitle = function()
+				return "The People's Militia", 15, nil, false, nil, nil, nil, 12
+			end
+			mod.ForgetQuests()
+			local got, words = read({ "Protector Dorana", "The People's Militia", "Level 30", "Stormwind", "PvP" },
+				{ ["The People's Militia"] = true, ["<The People's Militia>"] = true })
+			assert(#got == 0, "her title begins no quest: " .. words)
+			-- ONLY YOURS (Josh 2026-11-10: "in dungeons it is used for every
+			-- group member's quest objectives, which reads quite spammy"): a
+			-- member's name, then their objectives, are left out
+			_G.GetQuestLogTitle = function()
+				return "Red Silk Bandanas", 17, nil, false, nil, nil, nil, 214
+			end
+			mod.ForgetQuests()
+			local hadMembers, hadName = _G.GetNumGroupMembers, _G.UnitName
+			_G.GetNumGroupMembers = function() return 3 end
+			_G.UnitName = function(unit)
+				return ({ player = "Beeb", party1 = "Aeki", party2 = "Ooken" })[unit]
+			end
+			got, words = read({ "Defias Pillager", "Level 16", "Red Silk Bandanas", "- 2/10 Red Silk Bandana",
+				"Aeki", "- 9/10 Red Silk Bandana", "Ooken", "- 10/10 Red Silk Bandana" })
+			assert(#got == 2 and got[2].have == 2, "the quest and your objective alone: " .. words)
+			-- THE CLIENT'S OWN WORD FOR EACH LINE, where its data has them
+			local hadKinds = _G.Enum.TooltipDataLineType
+			_G.Enum.TooltipDataLineType = { None = 0, UnitName = 2, QuestObjective = 8, QuestTitle = 17, QuestPlayer = 18 }
+			BT.UnitTip.data = { lines = {
+				{ type = 2, leftText = "Defias Pillager" },
+				{ type = 0, leftText = "Level 16" },
+				{ type = 17, leftText = "Red Silk Bandanas" },
+				{ type = 8, leftText = "- 2/10 Red Silk Bandana", completed = false },
+				{ type = 18, leftText = "Aeki" },
+				{ type = 8, leftText = "- 9/10 Red Silk Bandana", completed = false },
+				{ type = 17, leftText = "The Defias Brotherhood" },
+				{ type = 8, leftText = "Gryan's report", completed = true },
+			} }
+			local typed, typedUsed = mod.QuestBlock(tip, {})
+			BT.UnitTip.data = nil
+			assert(#typed == 4 and typed[2].have == 2 and typed[4].done == true and not typed[3].have,
+				"two quests, your objectives, the one the client calls done done: " .. #typed)
+			assert(typedUsed["Aeki"] and typedUsed["- 9/10 Red Silk Bandana"], "and the member's lines used up, not small print")
+			-- no quest lines in the data: the words are read, as before
+			BT.UnitTip.data = { lines = { { type = 2, leftText = "Protector Dorana" } } }
+			assert(mod.TypedQuests(BT.UnitTip.data) == nil, "no quest lines in the data: none from it")
+			BT.UnitTip.data = nil
+			_G.Enum.TooltipDataLineType = hadKinds
+			_G.GetNumGroupMembers, _G.UnitName = hadMembers, hadName
+			-- A BOX, TICKED WHEN DONE (Josh 2026-11-10: the "!" "makes it look like
+			-- the NPC has a quest")
+			tip:ClearLines()
+			mod.QuestRows(tip, {
+				{ title = true, text = "Red Silk Bandanas" },
+				{ text = "Red Silk Bandana", have = 2, need = 10 },
+				{ title = true, text = "The Defias Brotherhood" },
+				{ text = "Gryan's report", done = true },
+			})
+			local box, ticked = BT.UnitTip.ICON.quest * 32, BT.UnitTip.ICON.questdone * 32
+			assert(lines[#lines - 2]:find((":512:32:%d:%d:"):format(box, box + 32), 1, true),
+				"an open objective is an empty box: " .. lines[#lines - 2])
+			assert(lines[#lines]:find((":512:32:%d:%d:"):format(ticked, ticked + 32), 1, true),
+				"a done one a ticked box: " .. lines[#lines])
+			assert(not lines[#lines - 3]:find((":512:32:%d:%d:"):format(box, box + 32), 1, true),
+				"and a quest's name has no box: " .. lines[#lines - 3])
+			-- THE NAME AT THE EDGE, ITS OBJECTIVES UNDER IT (Josh 2026-11-10:
+			-- "the quest name should be left aligned, and the objectives should
+			-- be indented under them ... slightly larger or a different color")
+			assert(lines[#lines - 3] == "Red Silk Bandanas", "the name at the edge, no room before it: "
+				.. lines[#lines - 3])
+			assert(select(2, BT.UnitTip.LineOf(tip, #lines - 3):GetFont()) == BT.Fonts.Size(mod.QUEST_TITLE_SIZE)
+				and mod.QUEST_TITLE_SIZE > mod.QUEST_SIZE, "a size up from its objectives")
+			local space = BT.UnitTip.Space(mod.QUEST_INDENT)
+			assert(lines[#lines]:sub(1, #space) == space and lines[#lines - 2]:sub(1, #space) == space,
+				"its objectives set in under it: " .. lines[#lines])
+			-- one quest: no name, so its objective is not set in
+			tip:ClearLines()
+			mod.QuestRows(tip, { { title = true, text = "Red Silk Bandanas" }, { text = "Red Silk Bandana", have = 2, need = 10 } })
+			assert(lines[#lines]:sub(1, #space) ~= space, "one quest's objective at the edge: " .. lines[#lines])
+			-- A QUEST OBJECT IN THE WORLD, IN THE SAME ROWS (Josh 2026-11-10:
+			-- "regular quest item tooltips don't seem to share the same style",
+			-- a Sack of Oats)
+			_G.GetQuestLogTitle = function()
+				return "Poor Old Blanchy", 14, nil, false, nil, nil, nil, 151
+			end
+			mod.ForgetQuests()
+			local hadGT = _G.GameTooltip
+			_G.GameTooltip = tip
+			local rights = {}
+			local hadDouble = tip.AddDoubleLine
+			tip.AddDoubleLine = function(_, l, r)
+				lines[#lines + 1] = tostring(l)
+				rights[#lines] = r
+			end
+			tip:ClearLines()
+			for _, l in ipairs({ "Sack of Oats", "Poor Old Blanchy", "6/8 Handful of Oats" }) do
+				tip:AddLine(l)
+			end
+			local made = mod.ComposeObject(tip, nil)
+			local all = table.concat(lines, " | ")
+			assert(made == 1 and lines[1] == "Sack of Oats", "the object keeps its name: " .. all)
+			local oats = lines[#lines]
+			assert(oats:find("Handful of Oats", 1, true) and oats:find((":512:32:%d:%d:"):format(box, box + 32), 1, true)
+				and rights[#lines] == "6/8", "the objective is a row with its box, the count on the right: " .. all)
+			assert(not all:find("Poor Old Blanchy", 1, true), "one quest: no name, as on an enemy: " .. all)
+			assert(tip.beebsQuestBands[1]:IsShown(), "on the gold band")
+			-- an object that counts for nothing is left as the client drew it
+			tip:ClearLines()
+			for _, l in ipairs({ "Mailbox" }) do
+				tip:AddLine(l)
+			end
+			assert(mod.ComposeObject(tip, nil) == 0 and #lines == 1 and lines[1] == "Mailbox", "a mailbox is left alone")
+			-- and only GameTooltip is written again
+			_G.GameTooltip = hadGT
+			assert(mod.ComposeObject(tip, nil) == 0, "not another tooltip")
+			tip.AddDoubleLine = hadDouble
 			_G.GetQuestLogTitle, _G.GetNumQuestLogEntries = hadTitle, hadEntries
 			mod.ForgetQuests()
 			-- the next tooltip without quests has none
@@ -4972,7 +5097,8 @@ if ok then
 				had[n] = rawget(_G, n)
 			end
 			-- Westfall and Dun Morogh in the Eastern Kingdoms, Ironforge in Dun
-			-- Morogh, both ways into Blackrock Mountain at one spot on the continent
+			-- Morogh, Blackrock Mountain's two portals each at one spot on the
+			-- continent, seen from either zone
 			local MAPS = {
 				[947] = { mapType = 1 },
 				[1415] = { mapType = 2, parentMapID = 947 },
@@ -4986,9 +5112,10 @@ if ok then
 				["1436>1415"] = { 0.40, 0.50, 0.70, 0.80 },
 				["1426>1415"] = { 0.40, 0.50, 0.50, 0.60 },
 				["1455>1426"] = { 0.40, 0.60, 0.30, 0.50 },
-				-- each of Blackrock Mountain's spots lands on 0.4462, 0.5
-				["1427>1415"] = { 0.4462 - 0.348 * 0.1, 0.4462 + 0.652 * 0.1, 0.5 - 0.853 * 0.1, 0.5 + 0.147 * 0.1 },
-				["1428>1415"] = { 0.4462 - 0.294 * 0.1, 0.4462 + 0.706 * 0.1, 0.5 - 0.383 * 0.1, 0.5 + 0.617 * 0.1 },
+				-- the Spire's spot from either zone lands on 0.4462, 0.5, and the
+				-- Depths' from either within a hair of each other
+				["1427>1415"] = { 0.4462 - 0.408 * 0.1, 0.4462 + 0.592 * 0.1, 0.5 - 0.956 * 0.1, 0.5 + 0.044 * 0.1 },
+				["1428>1415"] = { 0.4462 - 0.330 * 0.1, 0.4462 + 0.670 * 0.1, 0.5 - 0.252 * 0.1, 0.5 + 0.748 * 0.1 },
 			}
 			_G.C_Map = {
 				GetMapInfo = function(id) return MAPS[id] end,
@@ -5035,12 +5162,14 @@ if ok then
 
 			assert(mod.Draw() == 1 and mod.pins[1].spot[1] == "The Deadmines", "Westfall shows the Deadmines")
 			local p = mod.pins[1]._point
-			assert(p.relPoint == "TOPLEFT" and math.abs(p.x - 425) < 0.01 and math.abs(p.y + 430.2) < 0.01,
+			-- THE GAME'S OWN SPOT (Josh 2026-11-10: "Can we use the same
+			-- locations?" as OpenMap): the Map table's, 38.2 77.5
+			assert(p.relPoint == "TOPLEFT" and math.abs(p.x - 382) < 0.01 and math.abs(p.y + 465) < 0.01,
 				"at its spot on the map")
 			scale = 2
 			mod.Draw()
 			p = mod.pins[1]._point
-			assert(mod.pins[1]._scale == 0.5 and math.abs(p.x - 850) < 0.01,
+			assert(mod.pins[1]._scale == 0.5 and math.abs(p.x - 764) < 0.01,
 				"zoomed in, the pin is shrunk to keep its size and its spot")
 			scale = 1
 
@@ -5054,13 +5183,16 @@ if ok then
 			assert(not mod.pins[3] or not mod.pins[3]._shown, "and no pin left over from before")
 
 			shownMap = 1415
-			local brm = 0
+			local spire, depths = 0, 0
 			for i = 1, mod.Draw() do
-				if mod.pins[i].spot[1] == "Blackrock Mountain" then
-					brm = brm + 1
+				if mod.pins[i].spot[1] == "Blackrock Spire" then
+					spire = spire + 1
+				elseif mod.pins[i].spot[1] == "Blackrock Depths" then
+					depths = depths + 1
 				end
 			end
-			assert(brm == 1, "the continent shows Blackrock Mountain once, not once from each zone: " .. brm)
+			assert(spire == 1 and depths == 1, "the continent shows the Spire and the Depths once each, not once from each zone: "
+				.. spire .. " " .. depths)
 			shownMap = 947
 			assert(mod.Draw() == 0, "nothing on the whole world")
 
@@ -5075,10 +5207,15 @@ if ok then
 			assert(not copied, "the card leaves the pin's picture off, which it drew from the wrong part of its sheet")
 			mod.pins[1].icon.GetTexture = nil
 			shownMap = 1427
-			mod.Draw()
-			mod.pins[1]:GetScript("OnEnter")(mod.pins[1])
-			assert(BT.Tip.lastError == nil and BT.Tip.LineOf("3 dungeons") and BT.Tip.LineOf("Lower Blackrock Spire"),
-				"hovering Blackrock Mountain lists its dungeons")
+			local spirePin
+			for i = 1, mod.Draw() do
+				if mod.pins[i].spot[1] == "Blackrock Spire" then
+					spirePin = mod.pins[i]
+				end
+			end
+			spirePin:GetScript("OnEnter")(spirePin)
+			assert(BT.Tip.lastError == nil and BT.Tip.LineOf("2 dungeons") and BT.Tip.LineOf("Lower Blackrock Spire")
+				and BT.Tip.LineOf("Upper Blackrock Spire"), "hovering Blackrock Spire lists its two")
 			BT.Tip.Hide()
 
 			-- the filter
@@ -5094,7 +5231,7 @@ if ok then
 			assert(not box.get() and not BT.Enabled("entrances"), "unticking it turns the pins off")
 			assert(mod.Draw() == 0 and not mod.pins[1]._shown, "and takes them off the map")
 			box.set()
-			assert(box.get() and mod.Draw() == 1, "ticking it puts them back")
+			assert(box.get() and mod.Draw() == 2, "ticking it puts them back, the Depths and the Spire")
 			-- A SWITCH IN BEEBMOD'S WINDOW TOO (2026-11-06, audit): a part of
 			-- Interface, on its page, gone with it, and its map line with it
 			assert(BT.FeatureOf("entrances") == "interface", "a part of Interface")
@@ -7991,7 +8128,7 @@ if ok then
 			local said = false
 			for _, l in ipairs(lines) do
 				-- a row under the picture of two people (Josh 2026-10-17)
-				said = said or tostring(l):find("256:32:128:160[^|]*|t  Grouped once") ~= nil
+				said = said or tostring(l):find("512:32:128:160[^|]*|t  Grouped once") ~= nil
 			end
 			assert(said, "and the tooltip says it: " .. table.concat(lines, " / "))
 
@@ -8076,7 +8213,7 @@ if ok then
 			local said = false
 			for _, line in ipairs(lines) do
 				-- a row under crossed swords (Josh 2026-10-17)
-				said = said or tostring(line):find("256:32:192:224[^|]*|t  Won 2 of 3 duels") ~= nil
+				said = said or tostring(line):find("512:32:192:224[^|]*|t  Won 2 of 3 duels") ~= nil
 			end
 			assert(said, "and the tooltip says it: " .. table.concat(lines, " / "))
 
@@ -8129,7 +8266,7 @@ if ok then
 			local said = false
 			for _, l in ipairs(lines) do
 				-- a row under a banner (Josh 2026-10-17)
-				said = said or tostring(l):find("256:32:224:256[^|]*|t  Was in Nightwatch") ~= nil
+				said = said or tostring(l):find("512:32:224:256[^|]*|t  Was in Nightwatch") ~= nil
 			end
 			assert(said, "the tooltip says the guild they left: " .. table.concat(lines, " / "))
 			assert(type(players[key]) == "string", "and the row is still packed")
@@ -12103,7 +12240,7 @@ if ok then
 			assert(tagsSaid() == "BEAST/plain CAT/plain SKINNABLE/skin",
 				"its type and family in grey, Skinnable in the colour of something to do: " .. tagsSaid())
 			local row = rowWith("4 kills")
-			assert(row and lines[row]:find("256:32:32:64", 1, true),
+			assert(row and lines[row]:find("512:32:32:64", 1, true),
 				"your kills of it, under the Expedition's paw: " .. table.concat(lines, " | "))
 			assert(rights[row] == "Bronze 4/10", "and how far to its next mastery: " .. tostring(rights[row]))
 			-- QUIETER THAN THE QUESTS (Josh 2026-11-05: "The mastery is secondary
@@ -12990,6 +13127,47 @@ if ok then
 			tip.GetOwner = hadOwner
 			mod.ComposeSpell(tip, fireball, "spell")
 			assert(figs() == "25.8 DPS | 2.15 PER MANA", "yours, as fast as you can cast it: " .. figs())
+
+			-- A TALENT'S NAME (Josh 2026-11-10: "Seem to be missing skill names
+			-- on some talent tooltips", Seal of Command named "60 Mana"). The
+			-- talent window writes the name and rank, then adds the spell's
+			-- lines under them, which start with its cost.
+			local above = { "Seal of Command", "Rank |cffffffff0|r/1", " " }
+			for i, words in ipairs(above) do
+				_G["SpellTipTextLeft" .. i]:SetText(words)
+				_G["SpellTipTextLeft" .. i]:SetTextColor(1, 1, 1)
+			end
+			local seal = { id = 20375, lines = {
+				{ type = LT.None, leftText = "60 Mana", lineIndex = 4 },
+				{ type = LT.None, leftText = "Instant", lineIndex = 5 },
+				{ type = LT.SpellDescription, leftText = "Gives the Paladin a chance to deal additional Holy damage equal to "
+					.. "70% of normal weapon damage. Lasts 30 sec.", leftColor = gold, wrapText = true, lineIndex = 6 },
+			} }
+			local head = mod.AppendedHead(tip, seal)
+			assert(head and head.name == "Seal of Command" and head.sub[1] == "Rank 0/1" and #head.rows == 0,
+				"the name and rank are read off the tooltip, above the spell's lines")
+			assert(mod.AppendedHead(tip, fireball) == false, "a spell whose lines come first has its own name")
+			tip.beebsSpellCard = nil
+			mod.ComposeSpell(tip, seal, "spell")
+			all = table.concat(t.lines, " | ")
+			assert(t.lines[1] == "Seal of Command" and t.lines[2]:find("^Rank 0/1") and not all:find("^60 Mana"),
+				"the card is named for the talent, its rank under it: " .. all)
+			assert(cells():find("60|r mana", 1, true), "and its cost is a fact: " .. cells())
+			assert(tip.beebsSpellCard, "the card is marked as written")
+			-- the next rank's lines, added under the card, are left as written
+			local count = #t.lines
+			mod.ComposeSpell(tip, { id = 20375, lines = { { type = LT.None, leftText = "60 Mana", lineIndex = count + 2 } } },
+				"spell")
+			assert(#t.lines == count and t.lines[1] == "Seal of Command", "a second block does not write the card again")
+			-- unreadable lines above: the client's tooltip is left alone
+			for i = 1, #above do
+				_G["SpellTipTextLeft" .. i]:SetText("")
+			end
+			tip.beebsSpellCard = nil
+			assert(mod.AppendedHead(tip, seal) == nil, "with no name above, nil")
+			mod.ComposeSpell(tip, seal, "spell")
+			assert(#t.lines == count and t.lines[1] == "Seal of Command", "and nothing is written")
+			mod.ComposeSpell(tip, fireball, "spell")
 
 			-- a heal: HPS, green
 			mod.ComposeSpell(tip, { id = 2050, lines = {
@@ -14308,17 +14486,20 @@ if ok then
 				for _, d in ipairs(list) do out[#out + 1] = d.name end
 				return table.concat(out, ",")
 			end
-			assert(names(D.For(15, "Horde")) == "Ragefire Chasm,Ruins of Lordaeron",
+			-- THE GROUP FINDER'S RANGES, WRITTEN DOWN (Josh 2026-11-10, of
+			-- OpenMap's: "Maybe we should use those ranges?"): Wailing Caverns
+			-- 15-24, the Ruins 15-22, the Hall of Thanes 13-20
+			assert(names(D.For(15, "Horde")) == "Ragefire Chasm,Ruins of Lordaeron,Wailing Caverns",
 				"a level 15 Horde player: " .. names(D.For(15, "Horde")))
-			assert(names(D.For(15, "Alliance")) == "The Hall of Thanes",
+			assert(names(D.For(15, "Alliance")) == "The Hall of Thanes,Wailing Caverns",
 				"a level 15 Alliance player: " .. names(D.For(15, "Alliance")))
 			assert(#D.For(12, "Horde") == 0 and #D.For(nil, "Horde") == 0, "none before level 13")
 			-- NEAREST THE SWEET SPOT (the same day: "the average of the min and
 			-- max level"), EVERY ONE IN RANGE (Josh 2026-11-10: "not just the top 3")
-			assert(names(D.For(42, "Alliance")) == "Razorfen Downs,Krol'dok Stronghold,Scarlet Monastery Cathedral,Uldaman",
+			assert(names(D.For(42, "Alliance")) == "Scarlet Monastery Cathedral,Razorfen Downs,Krol'dok Stronghold,Scarlet Monastery Armory,Uldaman",
 				"new and old side by side at 42, nearest the middle first: " .. names(D.For(42, "Alliance")))
 			assert(#D.For(59, "Horde") == 9 and #D.For(59, "Horde", 3) == 3, "all nine at 59, or as many as asked")
-			assert(#D.For(15, nil) == 3, "with no side known, every one")
+			assert(#D.For(15, nil) == 4, "with no side known, every one")
 			-- HOW HARD, BY WHERE YOU ARE IN THE RANGE (Josh 2026-10-04: "13-14
 			-- orange, 15-16 yellow, 17-18 green")
 			do
@@ -14365,10 +14546,19 @@ if ok then
 						minLevelSuggestion = 27, maxLevelSuggestion = 36 },
 					[3] = { fullName = "The Deadmines", shortName = "Deadmines", minLevelSuggestion = 0, maxLevelSuggestion = 0 },
 					[4] = { fullName = "Somewhere New", shortName = "", minLevelSuggestion = 30, maxLevelSuggestion = 35 },
+					-- THE FINDER'S OWN NAME FOR IT (2026-11-10): the Stockade kept its
+					-- written range, by another name there
+					[5] = { fullName = "Stormwind Stockades", shortName = "Stormwind Stockades", maxNumPlayers = 5,
+						minLevelSuggestion = 23, maxLevelSuggestion = 31 },
+					-- the raids' Gnomeregan, for ten, is not the dungeon
+					[6] = { fullName = "Gnomeregan", shortName = "Gnomeregan", maxNumPlayers = 10,
+						minLevelSuggestion = 40, maxLevelSuggestion = 49 },
 				}
 				_G.C_LFGList = {
-					GetAvailableCategories = function() return { 2 } end,
-					GetAvailableActivities = function(cat) return cat == 2 and { 1, 2, 3, 4 } or {} end,
+					GetAvailableCategories = function() return { 2, 114 } end,
+					GetAvailableActivities = function(cat)
+						return cat == 2 and { 1, 2, 3, 4, 5 } or cat == 114 and { 6 } or {}
+					end,
 					GetActivityInfoTable = function(id) return acts[id] end,
 					GetActivityGroupInfo = function(g) return g == 7 and "Scarlet Monastery" or nil end,
 				}
@@ -14378,14 +14568,17 @@ if ok then
 					for _, d in ipairs(D.LIST) do if d.name == name then return d end end
 				end
 				local thanes, yard, vc = find("The Hall of Thanes"), find("Scarlet Monastery Graveyard"), find("The Deadmines")
-				assert(found == 2 and thanes.lo == 13 and thanes.hi == 20 and thanes.finder,
+				assert(found == 3 and thanes.lo == 13 and thanes.hi == 20 and thanes.finder,
 					"The Hall of Thanes takes the finder's 13-20: " .. thanes.lo .. "-" .. thanes.hi)
+				local stocks, gnomes = find("The Stockade"), find("Gnomeregan")
+				assert(stocks.lo == 23 and stocks.hi == 31 and stocks.finder, "Stormwind Stockades is the Stockade")
+				assert(gnomes.lo == 29 and gnomes.hi == 38 and not gnomes.finder, "the raid for ten leaves the dungeon's range alone")
 				assert(yard.lo == 27 and yard.hi == 36, "a wing found by its group's name and its own")
 				assert(vc.lo == 17 and vc.hi == 26 and not vc.finder, "a range of 0-0 is no range: ours stays")
 				assert(names(D.For(19, "Alliance", 9)):find("The Hall of Thanes", 1, true),
 					"at 19 it is still for you, as the finder says")
 				acts[1].maxLevelSuggestion = 99
-				assert(D.FromFinder() == 2 and thanes.hi == 20, "read once a session")
+				assert(D.FromFinder() == 3 and thanes.hi == 20, "read once a session")
 				-- no finder at all: nothing read, nothing changed
 				D.fromFinder = nil
 				_G.C_LFGList = nil
@@ -14438,7 +14631,7 @@ if ok then
 				local hadLevel = _G.UnitLevel
 				_G.UnitLevel = function() return 15 end
 				section:GetScript("OnEnter")(section)
-				assert(BT.Tip.Says("RECOMMENDED CONTENT") and BT.Tip.Says("Dungeons") and BT.Tip.Says("Ragefire Chasm") and BT.Tip.Says("15-20")
+				assert(BT.Tip.Says("RECOMMENDED CONTENT") and BT.Tip.Says("Dungeons") and BT.Tip.Says("Ragefire Chasm") and BT.Tip.Says("15-22")
 					and not BT.Tip.Says("The Hall of Thanes"),
 					"the tooltip lists them for your side: " .. table.concat(BT.Tip.Texts(), " | "))
 				_G.UnitLevel = function() return 5 end

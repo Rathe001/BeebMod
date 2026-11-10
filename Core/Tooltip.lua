@@ -403,9 +403,12 @@ end
 T.QUOTE_FACE = "Interface\\AddOns\\BeebMod\\Art\\Fonts\\Alegreya-Italic.ttf"
 T.INK = BT.TEXT.ink
 
--- the rows' pictures, one sheet of eight (scripts/make-tip-icons.py)
+-- the rows' pictures, one sheet sixteen wide (scripts/make-tip-icons.py); a
+-- quest's objective is a box, ticked once it is done (Josh 2026-11-10: the
+-- "!" "makes it look like the NPC has a quest")
 T.ICONS = "Interface\\AddOns\\BeebMod\\Art\\tipicons"
-T.ICON = { quest = 0, kills = 1, note = 2, tags = 3, grouped = 4, rating = 5, duels = 6, guild = 7 }
+T.ICONS_W = 512
+T.ICON = { quest = 0, kills = 1, note = 2, tags = 3, grouped = 4, rating = 5, duels = 6, guild = 7, questdone = 8 }
 T.ICON_SIZE = 11
 -- a row's words, and the breath before the first row
 T.ROW, T.GAP = 10.5, 4
@@ -414,7 +417,7 @@ T.ROW, T.GAP = 10.5, 4
 -- takes with nothing in it (a corner of the sheet with no ink)
 function T.Icon(name, colour)
 	if name == "blank" then
-		return ("|T%s:%d:%d:0:0:256:32:0:1:0:1|t"):format(T.ICONS, T.ICON_SIZE, T.ICON_SIZE)
+		return ("|T%s:%d:%d:0:0:%d:32:0:1:0:1|t"):format(T.ICONS, T.ICON_SIZE, T.ICON_SIZE, T.ICONS_W)
 	end
 	local slot = T.ICON[name]
 	if not slot then
@@ -424,8 +427,8 @@ function T.Icon(name, colour)
 	local function byte(v)
 		return math.floor((v or 1) * 255 + 0.5)
 	end
-	return ("|T%s:%d:%d:0:0:256:32:%d:%d:0:32:%d:%d:%d|t"):format(T.ICONS, T.ICON_SIZE, T.ICON_SIZE,
-		slot * 32, slot * 32 + 32, byte(c[1]), byte(c[2]), byte(c[3]))
+	return ("|T%s:%d:%d:0:0:%d:32:%d:%d:0:32:%d:%d:%d|t"):format(T.ICONS, T.ICON_SIZE, T.ICON_SIZE,
+		T.ICONS_W, slot * 32, slot * 32 + 32, byte(c[1]), byte(c[2]), byte(c[3]))
 end
 
 -- THE BODY'S BREATH: one blank line a few points tall, before the first row
@@ -439,13 +442,24 @@ function T.Gap(tip)
 	T.SizeLine(tip, BT.Pill.Number(tip:NumLines(), 1), T.GAP)
 end
 
+-- room `w` pixels wide with nothing in it, inside a line's text: a line moved
+-- by this keeps its own left edge, so what is laid from that edge (a quest's
+-- band) stays in line
+function T.Space(w)
+	return ("|T%s:1:%d:0:0:%d:32:0:1:0:1|t"):format(T.ICONS, w, T.ICONS_W)
+end
+
 -- One row: its picture in `tint`, its words in `rgb`, and what it says on the
 -- right in `rightRgb`; `wrap` lets long words take more than one line;
--- `size` is its words' size, T.ROW if not given. Returns the line it went on.
-function T.Row(tip, icon, tint, text, rgb, right, rightRgb, wrap, size)
+-- `size` is its words' size, T.ROW if not given; `lead` is room before the
+-- picture, in pixels. An icon of "none" is no picture and no room for one.
+-- Returns the line it went on.
+function T.Row(tip, icon, tint, text, rgb, right, rightRgb, wrap, size, lead)
 	T.Gap(tip)
 	rgb = rgb or T.INK
-	local left = T.Icon(icon, tint) .. "  " .. (text or "")
+	local mark = icon ~= "none" and T.Icon(icon, tint) or ""
+	local left = ((lead and lead > 0) and T.Space(lead) or "")
+		.. (mark ~= "" and (mark .. "  ") or "") .. (text or "")
 	if right then
 		rightRgb = rightRgb or rgb
 		tip:AddDoubleLine(left, right, rgb[1], rgb[2], rgb[3], rightRgb[1], rightRgb[2], rightRgb[3])
@@ -948,7 +962,14 @@ if processor and Enum.TooltipDataType.Unit then
 		end
 		T.Drawn(data)
 		local _, unit = TooltipUtil.GetDisplayedUnit(tip)
-		T.Fill(tip, unit)
+		-- the lines the client drew it from, for the fill that follows only:
+		-- which are quest names, whose objectives (Tooltips.lua, TypedQuests)
+		T.data = data
+		local ok, err = pcall(T.Fill, tip, unit)
+		T.data = nil
+		if not ok then
+			error(err, 0)
+		end
 	end)
 	local updates = CreateFrame("Frame")
 	if pcall(updates.RegisterEvent, updates, "TOOLTIP_DATA_UPDATE") then

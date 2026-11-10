@@ -911,12 +911,122 @@ if CreateFrame then
 	M.questWatch:SetScript("OnEvent", M.ForgetQuests)
 end
 
+-- a value the client handed over, where it may be read
+local function known(v)
+	if v == nil or (issecretvalue and issecretvalue(v)) then
+		return nil
+	end
+	return v
+end
+
+-- an objective's words, its count and whether it is done; `done` is the
+-- client's own word where it gave one
+local function objective(trimmed, done)
+	-- with or without the client's leading dash
+	local body = trimmed:match("^%-%s*(.+)$") or trimmed
+	local words, have, need = BT.Quests.SplitObjective(body)
+	if done == nil then
+		done = (have and need and have >= need) or false
+	end
+	return { text = words, have = have, need = need, done = done }
+end
+
+-- ONLY YOURS (Josh 2026-11-10: "in dungeons it is used for every group
+-- member's quest objectives, which reads quite spammy"). In a group the
+-- client writes, under a quest's name, your objectives and then each other
+-- member's: their name on a line, their objectives under it. The data the
+-- client draws the tooltip from says which line is which (TooltipDataLineType
+-- QuestTitle, QuestPlayer, QuestObjective), so the rows are read from it
+-- where it has them. A member's name and objectives are used up, so they
+-- don't come back as small print. Returns nil where the data has no quest
+-- lines; then the words are read instead (questBlock).
+function M.TypedQuests(data)
+	local lines = type(data) == "table" and type(data.lines) == "table" and data.lines or nil
+	local LT = (Enum and Enum.TooltipDataLineType) or {}
+	if not (lines and LT.QuestTitle and LT.QuestObjective) then
+		return nil
+	end
+	local any = false
+	for _, line in ipairs(lines) do
+		local kind = type(line) == "table" and known(line.type) or nil
+		if kind ~= nil and (kind == LT.QuestTitle or kind == LT.QuestObjective) then
+			any = true
+			break
+		end
+	end
+	if not any then
+		return nil
+	end
+	local out, used, mine = nil, {}, true
+	for _, line in ipairs(lines) do
+		local kind = type(line) == "table" and known(line.type) or nil
+		local text = type(line) == "table" and known(line.leftText) or nil
+		local trimmed = type(text) == "string" and text:match("^%s*(.-)%s*$") or nil
+		if trimmed == "" then
+			trimmed = nil
+		end
+		if kind == nil then
+			-- nothing to go by
+		elseif kind == LT.QuestTitle then
+			mine = true
+			if trimmed then
+				out = out or {}
+				out[#out + 1] = { text = trimmed, title = true }
+				used[trimmed] = true
+			end
+		elseif LT.QuestPlayer and kind == LT.QuestPlayer then
+			mine = false
+			if trimmed then
+				used[trimmed] = true
+			end
+		elseif kind == LT.QuestObjective and trimmed then
+			used[trimmed] = true
+			if mine then
+				local done = known(line.completed)
+				out = out or {}
+				out[#out + 1] = objective(trimmed, type(done) == "boolean" and (done or nil) or nil)
+			end
+		end
+	end
+	return out, used
+end
+
+-- the others in your group, by name: whose objectives are not yours
+function M.GroupNames()
+	local names = {}
+	local n = GetNumGroupMembers and known(GetNumGroupMembers()) or 0
+	if type(n) ~= "number" or n <= 0 or not UnitName then
+		return names
+	end
+	local me = known(UnitName("player"))
+	local raid = IsInRaid and IsInRaid()
+	for i = 1, raid and 40 or 4 do
+		local unit = (raid and "raid" or "party") .. i
+		local name = (not UnitExists or UnitExists(unit)) and known(UnitName(unit)) or nil
+		if type(name) == "string" and name ~= "" and name ~= me then
+			names[name] = true
+		end
+	end
+	return names
+end
+
 -- Returns the block, and the set of raw lines it used up so the sweep above
--- does not carry them over a second time.
-local function questBlock(tip)
+-- does not carry them over a second time. `spoken` is what the tooltip says
+-- for the unit itself (M.Identity).
+--
+-- NOT THE NPC'S OWN TITLE (Josh 2026-11-10, Protector Dorana: her "Level
+-- 30", "Stormwind" and "PvP" were quest rows). Her title line reads "The
+-- People's Militia", which is also the name of a Westfall quest in the log,
+-- so every line under it was read as an objective. A line the tooltip already
+-- says for the unit never begins a quest.
+local function questBlock(tip, spoken)
 	local used = {}
 	if not (tip.NumLines and BT.Quests and BT.Quests.Watched) then
 		return nil, used
+	end
+	local typed, typedUsed = M.TypedQuests(BT.UnitTip and BT.UnitTip.data)
+	if typedUsed then
+		return typed, typedUsed
 	end
 	-- every quest in the log, not only the followed ones: a mob can count
 	-- towards one you are not tracking, and the client still says so
@@ -934,6 +1044,8 @@ local function questBlock(tip)
 	if not next(titles) then
 		return nil, used
 	end
+	local others = M.GroupNames()
+	-- inBlock: false, "mine", or "theirs" under a group member's name
 	local out, inBlock = nil, false
 	for i = 2, BT.Pill.Number(tip:NumLines(), 0) do
 		local fs = lineOf(tip, i)
@@ -959,18 +1071,21 @@ local function questBlock(tip)
 			inBlock = false
 		elseif type(text) == "string" then
 			local trimmed = text:match("^%s*(.-)%s*$")
-			if titles[trimmed] then
+			if spoken and spoken[trimmed] then
+				inBlock = false
+			elseif titles[trimmed] then
 				out = out or {}
 				out[#out + 1] = { text = trimmed, title = true }
 				used[trimmed] = true
-				inBlock = true
+				inBlock = "mine"
+			elseif inBlock and others[trimmed] then
+				used[trimmed] = true
+				inBlock = "theirs"
 			elseif inBlock then
 				used[trimmed] = true
-				-- an objective, with or without the client's leading dash
-				local body = trimmed:match("^%-%s*(.+)$") or trimmed
-				local words, have, need = BT.Quests.SplitObjective(body)
-				local done = (have and need and have >= need) or false
-				out[#out + 1] = { text = words, have = have, need = need, done = done }
+				if inBlock == "mine" then
+					out[#out + 1] = objective(trimmed)
+				end
 			end
 		end
 	end
@@ -1011,9 +1126,22 @@ end
 M.SqueezeBlankTail = squeezeBlankTail
 
 -- THE QUESTS IT COUNTS FOR, AS ROWS (Josh 2026-10-17, the tooltip canvas):
--- each objective led by the quest's mark, its count on the right, green once
--- it is done. The quest's own name only when there is more than one quest to
--- tell apart, with its objectives under it.
+-- each objective led by a mark, its count on the right, green once it is
+-- done. The quest's own name only when there is more than one quest to tell
+-- apart, with its objectives under it.
+-- A BOX, TICKED WHEN DONE (Josh 2026-11-10: the "!" "makes it look like the
+-- NPC has a quest"; he chose the box). An objective is an empty box in gold,
+-- and a ticked box in green once done. A quest's name has no mark: a box
+-- before it would read as one more thing to do.
+-- THE NAME AT THE EDGE, ITS OBJECTIVES UNDER IT (Josh 2026-11-10: "Maybe the
+-- quest name should be left aligned, and the objectives should be indented
+-- under them? Also quest name should be slightly larger or a different
+-- color"). With two quests or more, a name starts at the rows' left edge, a
+-- size up from its objectives, in gold; its objectives are set in by
+-- M.QUEST_INDENT, white. One quest has no name, so its objectives are not set
+-- in.
+M.QUEST_TITLE_SIZE = 13
+M.QUEST_INDENT = 8
 --
 -- LARGER, ON A BAND OF GOLD (Josh 2026-11-07: "Are we able to highlight or
 -- make larger the quest part of tooltips? It still blends in a bit too
@@ -1089,14 +1217,18 @@ function M.QuestRows(tip, quests)
 	for _, q in ipairs(quests or {}) do
 		if q.title then
 			if titles > 1 then
-				lines[#lines + 1] = T.Row(tip, "quest", QUEST_TITLE, q.text, QUEST_TITLE,
-					nil, nil, nil, M.QUEST_SIZE)
+				lines[#lines + 1] = T.Row(tip, "none", QUEST_TITLE, q.text, QUEST_TITLE,
+					nil, nil, nil, M.QUEST_TITLE_SIZE)
 				n = n + 1
 			end
 		else
 			local count = (q.have and q.need) and ("%d/%d"):format(q.have, q.need) or nil
-			lines[#lines + 1] = T.Row(tip, titles > 1 and "blank" or "quest", QUEST_TITLE, q.text, T.INK, count,
-				q.done and QUEST_DONE or QUEST_TITLE, nil, M.QUEST_SIZE)
+			local mark, tint = "quest", QUEST_TITLE
+			if q.done then
+				mark, tint = "questdone", QUEST_DONE
+			end
+			lines[#lines + 1] = T.Row(tip, mark, tint, q.text, T.INK, count,
+				q.done and QUEST_DONE or QUEST_TITLE, nil, M.QUEST_SIZE, titles > 1 and M.QUEST_INDENT or nil)
 			n = n + 1
 		end
 	end
@@ -1571,7 +1703,7 @@ function M.Compose(tip, unit)
 	-- looked through for one (2026-10-17, audit)
 	local quests, usedByQuests = nil, nil
 	if not isPlayer then
-		quests, usedByQuests = questBlock(tip)
+		quests, usedByQuests = questBlock(tip, spoken)
 	end
 	for line in pairs(usedByQuests or {}) do
 		spoken[line] = true
@@ -3672,12 +3804,24 @@ end
 -- this does not know. `kind`: "spell" or "aura". `fresh`: lines fetched,
 -- not drawn, so none says which tooltip line it went on; all are shown.
 -- `enemy`: an enemy's ability, whose DPS goes by its cooldown.
-function M.ReadSpell(data, kind, fresh, enemy)
+-- `head`: the name, its colour, what goes under it and any rows before the
+-- spell's own, where the tooltip wrote them above the spell's lines
+-- (M.AppendedHead); the spell's first line is then not its name.
+function M.ReadSpell(data, kind, fresh, enemy, head)
 	if type(data) ~= "table" or type(data.lines) ~= "table" then
 		return nil
 	end
 	local LT = (Enum and Enum.TooltipDataLineType) or {}
 	local spell = { tiles = {}, rows = {}, sub = {}, facts = {} }
+	if head then
+		spell.name, spell.nameRgb = head.name, head.rgb
+		for _, s in ipairs(head.sub or {}) do
+			spell.sub[#spell.sub + 1] = s
+		end
+		for _, r in ipairs(head.rows or {}) do
+			spell.rows[#spell.rows + 1] = r
+		end
+	end
 	local labels = {}
 	for _, line in ipairs(data.lines) do
 		local shown = type(line) == "table" and (fresh or plainLine(line.lineIndex))
@@ -4466,7 +4610,70 @@ function M.ShowsEnemyAbility(tip)
 	return ok and type(owner) == "table" and owner.beebEnemyAbility == true
 end
 
+-- A TALENT'S NAME (Josh 2026-11-10: "Seem to be missing skill names on some
+-- talent tooltips", Seal of Command named "60 Mana"). The talent window
+-- writes a talent's name and rank itself, then adds the spell's lines under
+-- them (Blizzard_TalentDisplay.lua, AppendInfo "GetTraitEntry"). The spell's
+-- lines start with its cost, so the card took the cost for the name. When a
+-- spell's first line is not the tooltip's first, the lines above it are read
+-- off the tooltip: the first is the name, a rank goes under it, and any
+-- other line comes before the spell's rows.
+-- Returns the head for M.ReadSpell; false when the spell's lines come first;
+-- nil when the lines above cannot be read.
+M.RANK_LINES = { shape("TALENT_BUTTON_TOOLTIP_RANK_FORMAT", "Rank %s/%s"),
+	shape("TALENT_BUTTON_TOOLTIP_RANK_NO_MAX_FORMAT", "Rank %s"), "^Rank %d+/%d+$", "^Rank %d+$" }
+function M.AppendedHead(tip, data)
+	local first = nil
+	for _, line in ipairs(type(data) == "table" and type(data.lines) == "table" and data.lines or {}) do
+		local i = type(line) == "table" and plainLine(line.lineIndex) or nil
+		if type(i) == "number" then
+			first = i
+			break
+		end
+	end
+	if not first or first <= 1 then
+		return false
+	end
+	local head = { sub = {}, rows = {} }
+	for i = 1, first - 1 do
+		local fs = lineOf(tip, i)
+		local text = fs and fs.GetText and known(fs:GetText())
+		local words = type(text) == "string" and M.Bare(text):match("^%s*(.-)%s*$") or ""
+		if words ~= "" then
+			local rgb = nil
+			if fs.GetTextColor then
+				local ok, r, g, b = pcall(fs.GetTextColor, fs)
+				rgb = ok and colourOf({ r = r, g = g, b = b }) or nil
+			end
+			local rank = false
+			for _, p in ipairs(M.RANK_LINES) do
+				rank = rank or words:find(p) ~= nil
+			end
+			if not head.name then
+				head.name, head.rgb = words, rgb
+			elseif rank then
+				head.sub[#head.sub + 1] = words
+			else
+				head.rows[#head.rows + 1] = { text = words, rgb = (rgb == nil or isGold(rgb)) and ITEM_INK or rgb,
+					wrap = true, desc = false }
+			end
+		end
+	end
+	return head.name and head or nil
+end
+
 function M.ComposeSpell(tip, data, kind)
+	-- appended under lines the tooltip already had (a talent): read their
+	-- name. A second block the same tooltip adds ("Next rank:") is left as
+	-- the client wrote it, under the card.
+	local head = nil
+	if kind == "spell" then
+		head = M.AppendedHead(tip, data)
+		if head == nil or (head and tip.beebsSpellCard) then
+			return
+		end
+		head = head or nil
+	end
 	-- whatever a unit left on the tooltip goes, as for an item
 	local s = skins[tip]
 	if s then
@@ -4511,7 +4718,7 @@ function M.ComposeSpell(tip, data, kind)
 		end
 		kind = "spell"
 	end
-	local spell = M.ReadSpell(data, kind, fresh, M.ShowsEnemyAbility(tip))
+	local spell = M.ReadSpell(data, kind, fresh, M.ShowsEnemyAbility(tip), head)
 	if spell then
 		for _, row in ipairs(others or {}) do
 			spell.rows[#spell.rows + 1] = { text = row.text, rgb = row.rgb or ITEM_INK, right = row.right, rrgb = row.rrgb,
@@ -4524,6 +4731,10 @@ function M.ComposeSpell(tip, data, kind)
 		local ok, err = pcall(M.WriteSpell, tip, spell, icon)
 		if not ok then
 			BT.Err("tooltips.spell: " .. tostring(err))
+		end
+		-- until the tooltip is cleared for something else
+		if head then
+			tip.beebsSpellCard = true
 		end
 	end
 	-- dressed after the rebuild, as an item is (M.ComposeItem)
@@ -4613,6 +4824,89 @@ if GameTooltipStatusBar and GameTooltipStatusBar.HookScript then
 end
 
 BT.OnUnitTooltip("tooltips", 0, M.Compose)
+
+-- A QUEST OBJECT IN THE WORLD, IN THE SAME ROWS (Josh 2026-11-10: "regular
+-- quest item tooltips don't seem to share the same style", a Sack of Oats
+-- reading "Poor Old Blanchy" and "6/8 Handful of Oats" in the client's
+-- plain lines). A sack, a crate or a flower is neither a unit nor an item:
+-- the client draws it from data of its own kind (TooltipDataType Object),
+-- and nothing of ours rebuilt it. When it counts for a quest, it is written
+-- again as a unit is: its name as the client drew it, any other line it had,
+-- then the quest rows (M.QuestRows). One with no quest is left alone.
+function M.ComposeObject(tip, data)
+	if tip == nil or tip ~= rawget(_G, "GameTooltip") or M.objecting or not BT.Enabled("tooltips") then
+		return 0
+	end
+	local T = BT.UnitTip
+	local first = lineOf(tip, 1)
+	local name = first and first.GetText and known(first:GetText())
+	if type(name) ~= "string" or name == "" then
+		return 0
+	end
+	T.data = data
+	local ok, quests, used = pcall(questBlock, tip, { [name] = true })
+	T.data = nil
+	if not (ok and type(quests) == "table") then
+		return 0
+	end
+	local objectives = 0
+	for _, q in ipairs(quests) do
+		if not q.title then
+			objectives = objectives + 1
+		end
+	end
+	if objectives == 0 then
+		return 0
+	end
+	local function colour(fs)
+		if not (fs and fs.GetTextColor) then
+			return 1, 1, 1
+		end
+		local okC, r, g, b = pcall(fs.GetTextColor, fs)
+		r, g, b = okC and known(r), okC and known(g), okC and known(b)
+		if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number" then
+			return 1, 1, 1
+		end
+		return r, g, b
+	end
+	local nr, ng, nb = colour(first)
+	local rest = {}
+	for i = 2, BT.Pill.Number(tip:NumLines(), 0) do
+		local fs = lineOf(tip, i)
+		local text = fs and fs.GetText and known(fs:GetText())
+		local trimmed = type(text) == "string" and text:match("^%s*(.-)%s*$") or nil
+		if trimmed and trimmed ~= "" and not (used or {})[trimmed] then
+			local r, g, b = colour(fs)
+			rest[#rest + 1] = { trimmed, r, g, b }
+		end
+	end
+	M.objecting = true
+	local built, err = pcall(function()
+		M.ClearLines(tip)
+		tip:AddLine(name, nr, ng, nb)
+		for _, l in ipairs(rest) do
+			tip:AddLine(l[1], l[2], l[3], l[4], true)
+		end
+		T.gapped = nil
+		M.QuestRows(tip, quests)
+		if tip.Show then
+			tip:Show()
+		end
+	end)
+	M.objecting = false
+	if not built then
+		BT.Err("tooltips.object: " .. tostring(err))
+		return 0
+	end
+	return objectives
+end
+
+if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType
+	and Enum.TooltipDataType.Object then
+	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Object, function(tip, data)
+		M.ComposeObject(tip, data)
+	end)
+end
 
 -- EVERY tooltip wears the skin, not just the unit ones: the border belongs to
 -- the whole frame, and an item tooltip with its border hidden and nothing in
@@ -5023,6 +5317,9 @@ end
 -- new thing needs a moment later. Not for a rebuild's own clear (M.ClearLines).
 if GameTooltip and GameTooltip.HookScript then
 	GameTooltip:HookScript("OnTooltipCleared", function(tip)
+		if not M.clearing then
+			tip.beebsSpellCard = nil
+		end
 		if BT.Enabled("tooltips") and not M.clearing then
 			-- an error here comes out of whatever was writing the tooltip
 			local ok, err = pcall(M.DressPlain, tip)

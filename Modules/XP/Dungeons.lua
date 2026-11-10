@@ -16,6 +16,15 @@
 -- 17-26, Blizzard's own Classic range, where guides give 15-22 to 18-23; at
 -- 17-24 levels 24 and 25 never saw it. These ranges are used only where the
 -- game's group finder doesn't give its own (D.FromFinder, 2026-11-06).
+-- THE GAME'S OWN, WRITTEN DOWN (Josh 2026-11-10: "the OpenMap dungeon level
+-- ranges are different and seem more precise ... I'm just not sure where
+-- they came from"). Every range below is now the group finder's, from the
+-- client's GroupFinderActivity table (MinLevel and MaxLevelSuggestion, build
+-- 1.60.1.70888, read through wago.tools): the same numbers the game's Looking
+-- For Group window shows. OpenMap's are a different number from the game's
+-- tables (LFGDungeons' ContentTuning, the level a dungeon is tuned to), with
+-- five levels added for the top: The Deadmines 16-21, where the finder says
+-- 17-26. Dire Maul is its East wing's, the first of the three.
 --
 -- NOT YET WHICH HAVE QUESTS FOR YOU: nothing in the game or BeebMod's data
 -- says which quests a dungeon holds.
@@ -27,37 +36,37 @@ BT.Dungeons = D
 -- in order of their lowest level; side is the only faction that can use one
 D.LIST = {
 	{ name = "Ragefire Chasm", lo = 13, hi = 18, side = "Horde" },
-	{ name = "The Hall of Thanes", lo = 13, hi = 18, side = "Alliance" },
-	{ name = "Ruins of Lordaeron", lo = 15, hi = 20, side = "Horde" },
-	{ name = "Wailing Caverns", lo = 17, hi = 24 },
+	{ name = "The Hall of Thanes", lo = 13, hi = 20, side = "Alliance" },
+	{ name = "Ruins of Lordaeron", lo = 15, hi = 22, side = "Horde" },
+	{ name = "Wailing Caverns", lo = 15, hi = 24 },
 	{ name = "The Deadmines", lo = 17, hi = 26 },
-	{ name = "Shadowfang Keep", lo = 22, hi = 30 },
-	{ name = "The Stockade", lo = 24, hi = 31, side = "Alliance" },
+	{ name = "Shadowfang Keep", lo = 20, hi = 30 },
+	{ name = "The Stockade", lo = 24, hi = 32, side = "Alliance" },
 	{ name = "Blackfathom Deeps", lo = 24, hi = 32 },
-	{ name = "Excavation Site: Wetlands", lo = 24, hi = 29 },
-	{ name = "Gnomeregan", lo = 26, hi = 38 },
-	{ name = "Scarlet Monastery Graveyard", lo = 26, hi = 36 },
-	{ name = "City of Dalaran", lo = 28, hi = 33 },
+	{ name = "Excavation Site: Wetlands", lo = 26, hi = 33 },
+	{ name = "City of Dalaran", lo = 28, hi = 35 },
+	{ name = "Gnomeregan", lo = 29, hi = 38 },
 	{ name = "Razorfen Kraul", lo = 29, hi = 38 },
-	{ name = "Scarlet Monastery Library", lo = 29, hi = 39 },
-	{ name = "Scarlet Monastery Armory", lo = 32, hi = 42 },
-	{ name = "Scarlet Monastery Cathedral", lo = 35, hi = 45 },
-	{ name = "The Drowned City", lo = 35, hi = 40 },
+	{ name = "Scarlet Monastery Graveyard", lo = 30, hi = 38 },
+	{ name = "Scarlet Monastery Library", lo = 33, hi = 41 },
+	{ name = "The Drowned City", lo = 35, hi = 42 },
+	{ name = "Scarlet Monastery Armory", lo = 36, hi = 44 },
 	{ name = "Razorfen Downs", lo = 37, hi = 46 },
-	{ name = "Krol'dok Stronghold", lo = 40, hi = 45 },
+	{ name = "Scarlet Monastery Cathedral", lo = 38, hi = 46 },
+	{ name = "Krol'dok Stronghold", lo = 40, hi = 47 },
 	{ name = "Uldaman", lo = 41, hi = 51 },
 	{ name = "Zul'Farrak", lo = 44, hi = 54 },
 	{ name = "Maraudon", lo = 46, hi = 55 },
-	{ name = "Alcaz Prison", lo = 48, hi = 53 },
+	{ name = "Alcaz Prison", lo = 48, hi = 55 },
 	{ name = "Temple of Atal'Hakkar", lo = 50, hi = 60 },
 	{ name = "Blackrock Depths", lo = 52, hi = 60 },
+	{ name = "Dire Maul", lo = 54, hi = 60 },
 	{ name = "Blackmaw Hold", lo = 55, hi = 60 },
 	{ name = "Lower Blackrock Spire", lo = 55, hi = 60 },
-	{ name = "Dire Maul", lo = 55, hi = 60 },
 	{ name = "Shaper's Terrace", lo = 58, hi = 60 },
-	{ name = "Upper Blackrock Spire", lo = 58, hi = 60 },
 	{ name = "Stratholme", lo = 58, hi = 60 },
 	{ name = "Scholomance", lo = 58, hi = 60 },
+	{ name = "Upper Blackrock Spire", lo = 59, hi = 60 },
 }
 
 -- THE SWEET SPOT (Josh 2026-10-04: "Rather than starting closest to my
@@ -66,7 +75,7 @@ D.LIST = {
 -- EVERY ONE IN RANGE, NOT THREE (Josh 2026-11-10: "Dungeons should show all
 -- dungeons that are in my range, not just the top 3"). A level 19 saw three
 -- of its five. Counted from these ranges, the most at any level is nine, at
--- 58 to 60, and the most zones eight, at 43 (Zones.lua).
+-- 59 and 60, and the most zones eight, at 43 (Zones.lua).
 
 -- the middle of a dungeon's range
 function D.Sweet(d)
@@ -144,6 +153,19 @@ end
 -- "Scarlet Monastery - Graveyard" the Graveyard. A dungeon the finder doesn't
 -- list for you - the other side's - keeps its written range. Read once the
 -- finder answers, then not again this session.
+-- FOUR GO BY ANOTHER NAME there (2026-11-10, the client's table), so they
+-- kept the written range: the finder's name for them leads to ours.
+D.FINDER_NAMES = {
+	["Stormwind Stockades"] = "The Stockade",
+	["Sunken Temple"] = "Temple of Atal'Hakkar",
+	["Dire Maul (East)"] = "Dire Maul",
+	["Stratholme (Main Gate)"] = "Stratholme",
+}
+-- THE RAIDS' GNOMEREGAN IS NOT THE DUNGEON. The finder lists Blackfathom
+-- Deeps, Gnomeregan and the Sunken Temple twice: as dungeons, and as raids
+-- for ten or twenty (Gnomeregan 40-49). Only an activity for five or fewer is
+-- read, and the first a dungeon matches is kept.
+D.PARTY = 5
 function D.Key(name)
 	if type(name) ~= "string" then
 		return nil
@@ -169,7 +191,7 @@ function D.FromFinder()
 	if not (okC and type(cats) == "table") then
 		return 0
 	end
-	local n = 0
+	local n, seen = 0, {}
 	for _, cat in ipairs(cats) do
 		local okA, acts = pcall(L.GetAvailableActivities, cat)
 		for _, id in ipairs((okA and type(acts) == "table") and acts or {}) do
@@ -184,9 +206,15 @@ function D.FromFinder()
 				local d
 				for _, name in ipairs({ info.fullName, info.shortName,
 					group and type(info.shortName) == "string" and (group .. " " .. info.shortName) or false }) do
-					d = d or (name and byKey[D.Key(name)])
+					local named = type(name) == "string" and D.FINDER_NAMES[name]
+					d = d or (named and byKey[D.Key(named)]) or (name and byKey[D.Key(name)])
 				end
-				if d and lo and hi and lo > 0 and hi >= lo then
+				local size = tonumber(info.maxNumPlayers)
+				if size and size > D.PARTY then
+					d = nil
+				end
+				if d and not seen[d] and lo and hi and lo > 0 and hi >= lo then
+					seen[d] = true
 					d.lo, d.hi, d.finder = lo, hi, true
 					n = n + 1
 				end

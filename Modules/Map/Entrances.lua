@@ -8,14 +8,29 @@
 -- here, and C_EncounterJournal.GetDungeonEntrancesForMap answered an empty list
 -- in Dun Morogh with the setting on. So BeebMod carries the list.
 --
--- WHERE THE POSITIONS COME FROM. The classic dungeons: Questie's table
--- (Database/Zones/data/dungeons.lua, commit 909f229, 2026-08-30), turned from
--- area IDs to Classic Era map IDs. Forever's nine: Warcraft Tavern's guide to
--- each (warcrafttavern.com/forever/guides/, read 2026-11-05). Two of those are
--- a point on the way in, not the portal: the Hall of Thanes is the passage off
--- the Great Forge, and Blackmaw Hold has the tunnel's mouth in Azshara as well
--- as the portal in Winterspring. Alcaz Prison's was given in whole numbers.
--- None was checked in the game.
+-- WHERE THE POSITIONS COME FROM (Josh 2026-11-10: "BeebMod doesn't seem to
+-- have dungeon locations in the right place. I have OpenMap installed which
+-- also shows the locations, and they are different. Can we use the same
+-- locations?"). The Stockade sat about 160 yards from OpenMap's.
+-- The classic dungeons: the game's own entrance, as OpenMap places them. The
+-- client's Map table gives each instance the spot your corpse is moved to when
+-- you die inside (Corpse_0 and Corpse_1, in world yards; build 1.60.1.70888,
+-- read through wago.tools). Each zone's corners in world yards are in its
+-- UiMapAssignment row, which turns that into the zone map's numbers. Six of
+-- Questie's spots, used here before, were 7 to 19 points away: the
+-- Stockade, Gnomeregan, the Deadmines, Uldaman, the Temple of Atal'Hakkar and
+-- Blackrock Mountain. The game's spot is the portal itself, which can be deep
+-- in a cave or a mountain: the Deadmines' is down the mine from Moonbrook. The
+-- table has one spot each, so Uldaman's back door and Stratholme's service
+-- gate are still Questie's. Blackrock Mountain has two spots, one for the
+-- Depths and one for the Spire, at their two portals.
+-- Forever's nine have no spot in the table. Five are where OpenMap puts them,
+-- placed by its makers against Leatrix Maps: the Hall of Thanes, the Ruins of
+-- Lordaeron, the Excavation Site, the City of Dalaran (shown in Alterac too)
+-- and the Drowned City. The other four are from Warcraft Tavern's guides
+-- (warcrafttavern.com/forever/guides/, read 2026-11-05), as before: Blackmaw
+-- Hold has the tunnel's mouth in Azshara as well as the portal in Winterspring,
+-- and Alcaz Prison's was given in whole numbers.
 --
 -- HOW IT IS DRAWN. Not as one of the map's own pins: those are made and
 -- sorted inside the map's secure code. A layer of ours on the map's canvas,
@@ -45,7 +60,7 @@ M.FALLBACK = "Interface\\COMMON\\Indicator-Yellow"
 M.LEVEL_TYPE = "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE"
 M.LEVEL = 2000
 -- two spots of one place closer than this on a bigger map are drawn once
--- (Blackrock Mountain from Searing Gorge and from the Burning Steppes)
+-- (Blackrock Spire from Searing Gorge and from the Burning Steppes)
 M.NEAR = 0.03
 -- a continent or anything smaller; not the whole world
 M.CONTINENT = 2
@@ -54,35 +69,38 @@ M.CONTINENT = 2
 -- names are the XP tooltip's (Modules/XP/Dungeons.lua), which has the levels.
 local SM = { "Scarlet Monastery Graveyard", "Scarlet Monastery Library",
 	"Scarlet Monastery Armory", "Scarlet Monastery Cathedral" }
-local BRM = { "Blackrock Depths", "Lower Blackrock Spire", "Upper Blackrock Spire" }
+local BRS = { "Lower Blackrock Spire", "Upper Blackrock Spire" }
 M.SPOTS = {
-	{ "Ragefire Chasm", 1454, 52.6, 49.0 },
-	{ "Wailing Caverns", 1413, 46.0, 36.5 },
-	{ "The Deadmines", 1436, 42.5, 71.7 },
-	{ "Shadowfang Keep", 1421, 44.8, 67.8 },
-	{ "The Stockade", 1453, 42.3, 58.9 },
-	{ "Blackfathom Deeps", 1440, 14.5, 14.2 },
-	{ "Gnomeregan", 1426, 24.3, 39.8 },
-	{ "Scarlet Monastery", 1420, 82.6, 33.8, wings = SM },
-	{ "Razorfen Kraul", 1413, 42.9, 90.2 },
-	{ "Razorfen Downs", 1413, 49.0, 93.9 },
-	{ "Uldaman", 1418, 44.6, 12.1 },
+	{ "Ragefire Chasm", 1454, 53.0, 48.9 },
+	{ "Wailing Caverns", 1413, 47.7, 35.0 },
+	{ "The Deadmines", 1436, 38.2, 77.5 },
+	{ "Shadowfang Keep", 1421, 44.7, 67.8 },
+	{ "The Stockade", 1453, 50.4, 66.2 },
+	{ "Blackfathom Deeps", 1440, 16.5, 11.0 },
+	{ "Gnomeregan", 1426, 17.7, 39.2 },
+	{ "Scarlet Monastery", 1420, 85.1, 31.4, wings = SM },
+	{ "Razorfen Kraul", 1413, 42.3, 89.9 },
+	{ "Razorfen Downs", 1413, 50.9, 92.9 },
+	{ "Uldaman", 1418, 35.2, 10.3 },
 	{ "Uldaman", 1418, 65.2, 43.5 },
-	{ "Zul'Farrak", 1446, 38.7, 20.1 },
-	{ "Maraudon", 1443, 29.1, 62.5 },
-	{ "Temple of Atal'Hakkar", 1435, 69.9, 53.5 },
-	{ "Blackrock Mountain", 1427, 34.8, 85.3, wings = BRM },
-	{ "Blackrock Mountain", 1428, 29.4, 38.3, wings = BRM },
-	{ "Dire Maul", 1444, 59.2, 45.1 },
-	{ "Stratholme", 1423, 31.3, 15.7 },
+	{ "Zul'Farrak", 1446, 38.7, 19.9 },
+	{ "Maraudon", 1443, 29.1, 62.9 },
+	{ "Temple of Atal'Hakkar", 1435, 77.3, 35.9 },
+	{ "Blackrock Depths", 1427, 27.1, 72.5 },
+	{ "Blackrock Depths", 1428, 22.6, 7.5 },
+	{ "Blackrock Spire", 1427, 40.8, 95.6, wings = BRS },
+	{ "Blackrock Spire", 1428, 33.0, 25.2, wings = BRS },
+	{ "Dire Maul", 1444, 62.0, 33.3 },
+	{ "Stratholme", 1423, 26.1, 10.4 },
 	{ "Stratholme", 1423, 47.9, 23.9 },
-	{ "Scholomance", 1422, 69.7, 73.2 },
+	{ "Scholomance", 1422, 69.1, 73.0 },
 	-- Forever's own
-	{ "The Hall of Thanes", 1455, 43.5, 52.0 },
-	{ "Ruins of Lordaeron", 1458, 72.4, 11.6 },
-	{ "Excavation Site: Wetlands", 1437, 48.1, 56.5 },
+	{ "The Hall of Thanes", 1455, 27.7, 47.9 },
+	{ "Ruins of Lordaeron", 1458, 72.5, 11.4 },
+	{ "Excavation Site: Wetlands", 1437, 47.8, 56.2 },
 	{ "City of Dalaran", 1421, 69.3, 45.6 },
-	{ "The Drowned City", 1434, 21.4, 27.9 },
+	{ "City of Dalaran", 1416, 8.5, 59.3 },
+	{ "The Drowned City", 1434, 21.3, 27.8 },
 	{ "Krol'dok Stronghold", 2548, 37.5, 37.5 },
 	{ "Alcaz Prison", 1445, 75.0, 15.0 },
 	{ "Blackmaw Hold", 1447, 38.7, 33.4 },

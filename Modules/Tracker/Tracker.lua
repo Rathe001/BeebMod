@@ -1466,6 +1466,8 @@ function M.Watch()
 		"QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_WATCH_LIST_CHANGED",
 		"QUEST_ACCEPTED", "QUEST_REMOVED",
 		"ZONE_CHANGED_NEW_AREA", "SUPER_TRACKING_CHANGED",
+		-- a quest item sold or destroyed may send no quest event (Q.Carried)
+		"BAG_UPDATE_DELAYED",
 	}) do
 		pcall(M.events.RegisterEvent, M.events, event)
 	end

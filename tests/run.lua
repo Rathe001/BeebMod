@@ -1642,6 +1642,37 @@ do
 	check(quests[1].objectives[2].done == true, "and a finished one knows it is finished")
 	check(quests[2].title == "Camping 101" and #quests[2].objectives == 1, "each quest reads its own")
 
+	-- A QUEST ITEM SOLD OR DESTROYED (Josh 2026-11-10: "If quest items are sold
+	-- or destroyed, we need to make sure the objectives get un-completed").
+	-- The client still says 1/1 and complete; the bags say none.
+	_G.GetQuestLogTitle = function(i)
+		if i == 1 then return "Dun Morogh", 0, nil, true, nil, nil, nil, nil end
+		if i == 2 then return "Treacherous Cold", 8, nil, false, nil, nil, 1, 1234 end
+		if i == 3 then return "Not followed", 9, nil, false, nil, nil, nil, 5678 end
+		return "Camping 101", 6, nil, false, nil, nil, nil, 91011
+	end
+	local bags = { ["Sunhammer's Rifle"] = 1 }
+	_G.GetItemCount = function(name) return bags[name] or 0 end
+	BT.Quests.seenItems = {}
+	local q = BT.Quests.Watched()[1]
+	check(q.objectives[2].have == 1 and q.objectives[2].done and q.complete,
+		"an item still in the bags is left as the client says")
+	bags["Sunhammer's Rifle"] = 0
+	q = BT.Quests.Watched()[1]
+	check(q.objectives[2].have == 0 and not q.objectives[2].done,
+		"an item gone from the bags is not done any more")
+	check(not q.complete, "and the quest is not ready to hand in")
+	check(q.objectives[1].have == 0 and not q.objectives[1].short,
+		"a name never seen in the bags is left as the client says")
+	_G.GetQuestLogLeaderBoard = function(j, i)
+		if i == 2 and j == 1 then return "Stoneanvil's Rifle: 0/1", "item", false end
+		if i == 2 then return "Find Sunhammer's Rifle: 1/1", "event", true end
+		return "Raise your herbalism skill to 20", "event", false
+	end
+	q = BT.Quests.Watched()[1]
+	check(q.objectives[2].done and q.complete, "an objective that is not an item is left alone")
+	_G.GetItemCount, BT.Quests.seenItems = nil, {}
+
 	_G.GetNumQuestLogEntries, _G.GetQuestLogTitle = nil, nil
 	_G.IsQuestWatched, _G.GetNumQuestLeaderBoards, _G.GetQuestLogLeaderBoard = nil, nil, nil
 end

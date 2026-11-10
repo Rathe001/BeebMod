@@ -3,6 +3,43 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Dungeon entrances where the game puts them.** The map's entrance pins
+  for the classic dungeons now use the game's own entrance points. Six were
+  in the wrong place. The Stockade's pin was about 160 yards from its door. Some
+  pins sit at the portal itself, deep in a cave or a mountain. The Deadmines'
+  pin is down the mine from Moonbrook. Blackrock Mountain has two pins, one
+  for Blackrock Depths and one for Blackrock Spire. The Hall of Thanes moved
+  to where other map addons show it. The City of Dalaran also shows on the
+  Alterac Mountains map.
+- **Dungeon levels from the group finder.** Every dungeon's level range now
+  matches the game's group finder, such as Wailing Caverns at 15-24. The
+  Stockade, the Temple of Atal'Hakkar, Dire Maul and Stratholme go by other
+  names in the finder, so they missed its ranges before. The finder also
+  lists Gnomeregan as a raid at 40-49. BeebMod now reads only the dungeon.
+- **A box for each quest objective.** Objectives on a tooltip were marked
+  with "!", which looks like an NPC with a quest to give. Each one now has an
+  empty box, which is ticked once it is done. When an enemy counts for two
+  quests or more, each quest's name starts at the left edge, a size larger
+  and in gold. Its objectives are set in under it.
+- **Quest objects in the same style.** A sack, a crate or a plant you
+  collect for a quest now shows its objective the way an enemy does: a row
+  with its box and the count on the right, on the gold band. Objects that
+  count for no quest are left as the game draws them.
+- **Only your own objectives.** In a group the game lists every member's
+  objectives on a tooltip. BeebMod now shows only yours.
+- **An NPC's title is not a quest.** Protector Dorana's title, The People's
+  Militia, is also the name of a quest. With that quest in your log, her
+  level and her PvP line showed as quest objectives.
+- **A quest item sold or destroyed counts again.** With one of three Murloc
+  Eyes sold, the quest tracker still showed 3/3 and the quest ready to hand
+  in. The tracker now counts the items in your bags too. An objective never
+  shows more than you carry.
+- **Talent names on talent tooltips.** A talent that teaches a spell, such
+  as Seal of Command, showed its cost where its name should be. The tooltip
+  now shows the talent's name with its rank under it.
+
 ## 1.11.0
 
 - **Encounter notes beside the dock.** The notes are no longer in the dock

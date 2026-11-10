@@ -130,15 +130,51 @@ function Q.SplitObjective(text, have, need)
 	return text, nil, nil
 end
 
+-- A QUEST ITEM SOLD OR DESTROYED (Josh 2026-11-10: "If quest items are sold
+-- or destroyed, we need to make sure the objectives get un-completed").
+-- Westfall Stew read 3/3 Murloc Eye, crossed out, with two in the bags. The
+-- quest giver knew it was short, but the client's objective still said 3/3.
+-- So the bags are counted too, and an item objective never reads more than
+-- they hold. A name counts only once it has been seen in the bags. An
+-- objective whose words are not an item's name is left as the client says.
+Q.seenItems = {}
+function Q.Carried(name)
+	local count = (C_Item and C_Item.GetItemCount) or rawget(_G, "GetItemCount")
+	if type(count) ~= "function" or type(name) ~= "string" or name == "" then
+		return nil
+	end
+	local ok, n = pcall(function()
+		local have = count(name)
+		return type(have) == "number" and have >= 0 and have or nil
+	end)
+	n = ok and n or nil
+	if n and n > 0 then
+		Q.seenItems[name] = true
+		return n
+	end
+	return Q.seenItems[name] and 0 or nil
+end
+
+-- the count lowered to what the bags hold; `short` says the bags lowered it
+local function carried(o, kind)
+	if kind == "item" and o.have and o.need then
+		local n = Q.Carried(o.text)
+		if n and n < o.have then
+			o.have, o.done, o.short = n, n >= o.need, true
+		end
+	end
+	return o
+end
+
 local function objectives(index, questID)
 	local out = {}
 	if C_QuestLog and C_QuestLog.GetNumQuestObjectives and GetQuestObjectiveInfo and questID then
 		local n = tonumber(C_QuestLog.GetNumQuestObjectives(questID)) or 0
 		for j = 1, n do
-			local text, _, finished, fulfilled, required = GetQuestObjectiveInfo(questID, j, false)
+			local text, kind, finished, fulfilled, required = GetQuestObjectiveInfo(questID, j, false)
 			if text and text ~= "" then
 				local words, have, need = Q.SplitObjective(text, fulfilled, required)
-				out[#out + 1] = { text = words, have = have, need = need, done = finished and true or false }
+				out[#out + 1] = carried({ text = words, have = have, need = need, done = finished and true or false }, kind)
 			end
 		end
 		return out
@@ -146,10 +182,10 @@ local function objectives(index, questID)
 	if GetNumQuestLeaderBoards and GetQuestLogLeaderBoard then
 		local n = tonumber(GetNumQuestLeaderBoards(index)) or 0
 		for j = 1, n do
-			local text, _, finished = GetQuestLogLeaderBoard(j, index)
+			local text, kind, finished = GetQuestLogLeaderBoard(j, index)
 			if text and text ~= "" then
 				local words, have, need = Q.SplitObjective(text)
-				out[#out + 1] = { text = words, have = have, need = need, done = finished and true or false }
+				out[#out + 1] = carried({ text = words, have = have, need = need, done = finished and true or false }, kind)
 			end
 		end
 	end
@@ -309,6 +345,13 @@ end
 -- one quest as the tracker draws it
 local function build(i, title, level, questID, zone, timers, clock)
 	local done = complete(i, questID)
+	local objs = objectives(i, questID)
+	-- an item gone from the bags makes the quest not ready to hand in
+	for _, o in ipairs(objs) do
+		if o.short and not o.done then
+			done = false
+		end
+	end
 	local left = timeLeft(i, questID, timers)
 	return {
 		index = i,
@@ -319,7 +362,7 @@ local function build(i, title, level, questID, zone, timers, clock)
 		zone = zone,
 		complete = done,
 		failed = failed(i, questID),
-		objectives = objectives(i, questID),
+		objectives = objs,
 		item = Q.Item(i, done),
 		-- when its clock runs out, on GetTime's clock
 		endsAt = left and (clock + left) or nil,
