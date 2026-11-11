@@ -5,9 +5,10 @@
 -- all time on the left, this session on the right. Point at it for the split.
 --
 -- HOW A PICK IS TOLD APART FROM ANY OTHER LOOT. Pick Pocket is a cast, and
--- the loot window that opens straight after it is the victim's pocket. So a
--- successful cast is noted, and a loot window opening within a few seconds of
--- it is a pocket:
+-- the loot window that opens with it is the victim's pocket. So a successful
+-- cast is noted, and a loot window opening within a few seconds of it is a
+-- pocket. The game may open the window a moment before it says the cast
+-- succeeded, so a cast just after a window makes it a pocket too:
 --
 --   coin    whatever the purse goes up by while that window is open, and for
 --           a moment after it closes (the money can land a beat late)
@@ -142,73 +143,153 @@ local function itemID(link)
 	return tonumber(link:match("item:(%d+)"))
 end
 
--- the cast: the next loot window, if it comes soon, is a pocket
-function M.Cast(spellID)
-	local isPick = spellID == PICK_POCKET
-	if not isPick and type(GetSpellInfo) == "function" then
-		if not M.pickName then
-			local ok, name = pcall(GetSpellInfo, PICK_POCKET)
-			M.pickName = (ok and type(name) == "string") and name or "Pick Pocket"
+-- WHAT HAPPENED, FOR CLAUDE (Josh 2026-11-10: "Total pickpocket money isn't
+-- going up", one pocket counted in a session of many). The last few casts,
+-- loot windows and coins, with the time each came, written into the saved
+-- file by the Testing page's Record button.
+M.TRACE_MOST = 60
+M.trace = {}
+local function note(what, ...)
+	local plain = {}
+	for i = 1, select("#", ...) do
+		local v = select(i, ...)
+		if issecretvalue and issecretvalue(v) then
+			v = "secret"
 		end
-		local ok, name = pcall(GetSpellInfo, spellID)
-		isPick = ok and name == M.pickName
+		plain[i] = tostring(v)
 	end
+	table.insert(M.trace, { t = now(), what = what, args = table.concat(plain, ",") })
+	while #M.trace > M.TRACE_MOST do
+		table.remove(M.trace, 1)
+	end
+end
+M.Note = note
+
+-- the cast: a loot window soon before or after it is a pocket
+function M.Cast(spellID)
+	if issecretvalue and issecretvalue(spellID) then
+		note("cast", "secret")
+		return false
+	end
+	local isPick = spellID == PICK_POCKET
+	if not isPick then
+		local nameOf = (C_Spell and C_Spell.GetSpellName) or rawget(_G, "GetSpellInfo")
+		if type(nameOf) == "function" then
+			if not M.pickName then
+				local ok, name = pcall(nameOf, PICK_POCKET)
+				M.pickName = (ok and type(name) == "string") and name or "Pick Pocket"
+			end
+			local ok, name = pcall(nameOf, spellID)
+			isPick = ok and type(name) == "string" and name == M.pickName
+		end
+	end
+	note("cast", spellID, isPick)
 	if isPick then
 		M.castAt = now()
+		-- AFTER THE WINDOW, TOO: the client may open the pocket before it says
+		-- the cast succeeded. A window opened a moment ago becomes the pocket.
+		local l = M.loot
+		if l and not l.pocket and now() - l.at <= M.CAST_AFTER then
+			M.castAt = nil
+			M.Begin(l)
+		end
 	end
 	return isPick
 end
+-- how long after a loot window opens its cast may still come
+M.CAST_AFTER = 1
 
--- the loot window: a pocket if it follows the cast; what is in each slot is
--- read now, and counted only when the slot is taken
-function M.Opened()
-	if not (M.castAt and now() - M.castAt <= OPEN_WITHIN) then
-		return false
-	end
-	M.castAt = nil
-	local r = M.Record()
-	if not r then
-		return false
-	end
-	M.pocket = { slots = {} }
-	-- and not the last pocket's closing time, or this one's coin is refused
-	-- and the timer from the last one empties this one
-	M.closedAt = nil
-	M.purse = money()
-	add(r, "pick")
-	local n = type(GetNumLootItems) == "function" and GetNumLootItems() or 0
-	for slot = 1, n do
+-- what is in each slot of the window open now, read once it has any
+local function readSlots(l)
+	local n = type(GetNumLootItems) == "function" and tonumber(GetNumLootItems()) or 0
+	for slot = 1, n or 0 do
 		local link = type(GetLootSlotLink) == "function" and GetLootSlotLink(slot) or nil
 		local id = itemID(link)
-		if id then
+		if id and not l.slots[slot] and not l.taken[slot] then
 			local quantity = 1
 			if type(GetLootSlotInfo) == "function" then
 				quantity = select(3, GetLootSlotInfo(slot)) or 1
 			end
-			M.pocket.slots[slot] = { id = id, count = tonumber(quantity) or 1 }
+			l.slots[slot] = { id = id, count = tonumber(quantity) or 1 }
 		end
+	end
+end
+
+-- The loot window, whichever of LOOT_READY and LOOT_OPENED comes first (with
+-- auto loot the game may send only the first, and take the slots before the
+-- second). Every window is kept a moment: it is a pocket if a cast came just
+-- before it, or comes just after (M.Cast). What is in each slot is read now,
+-- and counted only when the slot is taken.
+function M.Opened(event)
+	note(event or "opened", type(GetNumLootItems) == "function" and GetNumLootItems() or "?", money())
+	local l = M.loot
+	if l and not l.closed then
+		-- the second event for the same window
+		readSlots(l)
+		return l.pocket == true
+	end
+	l = { at = now(), slots = {}, taken = {}, coin = 0 }
+	M.loot = l
+	-- the purse as the window opens: only what it gains from here is the window's
+	M.purse = money()
+	-- and not the last pocket's closing time, or this one's coin is refused
+	-- and the timer from the last one empties this one
+	M.closedAt = nil
+	readSlots(l)
+	if M.castAt and now() - M.castAt <= OPEN_WITHIN then
+		M.castAt = nil
+		M.Begin(l)
+	end
+	return l.pocket == true
+end
+
+-- the window `l` is a pocket: counted, with whatever it gave already
+function M.Begin(l)
+	local r = M.Record()
+	if not r then
+		return false
+	end
+	l.pocket = true
+	M.pocket = l
+	add(r, "pick")
+	if l.coin > 0 then
+		add(r, "coin", l.coin)
+	end
+	for slot, item in pairs(l.taken) do
+		add(r, "item", item.count, item.id)
 	end
 	M.Update()
 	return true
 end
 
 function M.Taken(slot)
-	local item = M.pocket and M.pocket.slots[slot]
+	local l = M.loot
+	local item = l and l.slots[slot]
+	note("taken", slot, item and item.id)
+	if not item then
+		return
+	end
+	l.slots[slot] = nil
+	l.taken[slot] = item
 	local r = M.Record()
-	if item and r then
+	if l.pocket and r then
 		add(r, "item", item.count, item.id)
-		M.pocket.slots[slot] = nil
 		M.Update()
 	end
 end
 
+-- coin while a window is open, or a moment after it shuts: the window's, and
+-- the pocket's if it is one (now, or once its cast comes)
 function M.Money()
-	local open = M.pocket and (not M.closedAt or now() - M.closedAt <= LATE_MONEY)
 	local purse = money()
-	if open and M.purse then
-		local up = purse - M.purse
+	local l = M.loot
+	local open = l and (not M.closedAt or now() - M.closedAt <= LATE_MONEY)
+	local up = M.purse and purse - M.purse or 0
+	note("money", up)
+	if open and up > 0 then
+		l.coin = l.coin + up
 		local r = M.Record()
-		if up > 0 and r then
+		if l.pocket and r then
 			add(r, "coin", up)
 			M.Update()
 		end
@@ -217,17 +298,28 @@ function M.Money()
 end
 
 function M.Closed()
-	if M.pocket then
+	note("closed")
+	local l = M.loot
+	if l then
+		l.closed = true
 		M.closedAt = now()
 		if C_Timer and C_Timer.After then
-			C_Timer.After(LATE_MONEY, function()
-				if M.closedAt and now() - M.closedAt >= LATE_MONEY then
-					M.pocket, M.closedAt = nil, nil
+			C_Timer.After(math.max(LATE_MONEY, M.CAST_AFTER), function()
+				if M.loot == l and M.closedAt and now() - M.closedAt >= LATE_MONEY then
+					M.loot, M.pocket, M.closedAt = nil, nil, nil
 				end
 			end)
 		end
 	end
 end
+
+-- the trace, into the saved file
+function M.Dump()
+	BT.EnsureBound()
+	BeebModDB.pickpocketDump = { at = U.Now(), trace = M.trace, castAt = M.castAt, clock = now() }
+	return #M.trace
+end
+BT.Record("pickpocketDump", M.Dump, "pickpocket")
 
 -- ---------------------------------------------------------------------------
 -- The cell
@@ -366,7 +458,7 @@ function M.Build()
 end
 
 M.events = CreateFrame("Frame")
-for _, event in ipairs({ "LOOT_OPENED", "LOOT_SLOT_CLEARED",
+for _, event in ipairs({ "LOOT_READY", "LOOT_OPENED", "LOOT_SLOT_CLEARED",
 	"LOOT_CLOSED", "PLAYER_MONEY", "PLAYER_ENTERING_WORLD", "GET_ITEM_INFO_RECEIVED" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
@@ -386,8 +478,8 @@ M.events:SetScript("OnEvent", function(_, event, a, b, c)
 		if a == "player" then
 			M.Cast(c)
 		end
-	elseif event == "LOOT_OPENED" then
-		M.Opened()
+	elseif event == "LOOT_READY" or event == "LOOT_OPENED" then
+		M.Opened(event)
 	elseif event == "LOOT_SLOT_CLEARED" then
 		M.Taken(a)
 	elseif event == "LOOT_CLOSED" then

@@ -14897,6 +14897,10 @@ if ok then
 
 			-- a loot window that does not follow the cast is not a pocket
 			assert(not mod.Opened(), "ordinary loot is not a pocket")
+			mod.Closed()
+			clock = clock + 5
+			assert(mod.Cast(921) and mod.Record().picks == 0, "nor once a cast comes long after it")
+			clock = clock + 5
 
 			-- the cast, then the pocket: 23 copper, the watch taken, the cloth left
 			assert(mod.Cast(921), "Pick Pocket is noticed")
@@ -14923,6 +14927,35 @@ if ok then
 			purse = purse + 500
 			mod.Money()
 			assert(r.coin == 23, "money later is not pickpocketed")
+
+			-- THE WINDOW BEFORE THE CAST (Josh 2026-11-10: "Total pickpocket
+			-- money isn't going up"). The window opens, auto loot takes the coin
+			-- and the cloth, then the cast is said to have succeeded.
+			clock = clock + 5
+			assert(not mod.Opened("LOOT_READY"), "a window with no cast yet is not a pocket yet")
+			purse = purse + 40
+			mod.Money()
+			mod.Taken(2)
+			mod.Closed()
+			clock = clock + 0.3
+			assert(mod.Cast(921), "the cast")
+			assert(r.picks == 2 and r.coin == 63 and r.items[2589] == 3,
+				"the window just before it is the pocket, with its coin and cloth: " .. r.picks .. " " .. r.coin)
+			-- LOOT_READY then LOOT_OPENED for one window is one pocket
+			clock = clock + 5
+			mod.Cast(921)
+			assert(mod.Opened("LOOT_READY") and mod.Opened("LOOT_OPENED") and r.picks == 3, "two events, one pocket")
+			mod.Closed()
+			-- and a pick's coin when the client sends only LOOT_READY
+			purse = purse + 7
+			mod.Money()
+			assert(r.coin == 70, "coin a moment after the window shuts is the pocket's")
+			clock = clock + 5
+			assert(#mod.trace > 0 and mod.Dump() == #mod.trace and BeebModDB.pickpocketDump.trace[1].what,
+				"the trace goes into the saved file")
+			-- back to the one pocket the checks below are about
+			r.picks, r.coin, r.items[2589] = 1, 23, nil
+			mod.session.picks, mod.session.coin, mod.session.items[2589] = 1, 23, nil
 
 			-- an item the client has not priced yet counts once it has
 			prices[5374] = nil

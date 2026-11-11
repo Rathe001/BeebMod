@@ -3,6 +3,16 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Pick Pocket counts every pocket again.** Most pockets went uncounted:
+  BeebMod waited for the loot window after the cast. The game can open the
+  pocket a moment before it says the cast worked, and with auto loot it may
+  send only the first of its two loot window signals. A pocket now counts in
+  either order. The Testing page's Record button also saves the last few
+  casts and loot windows, in case one is still missed. Your all-time record
+  was not lost.
+
 ## 1.12.0
 
 - **Dungeon entrances where the game puts them.** The map's entrance pins
