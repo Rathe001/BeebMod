@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.12.1
 
 - **Pick Pocket counts every pocket again.** Most pockets went uncounted:
   BeebMod waited for the loot window after the cast. The game can open the
