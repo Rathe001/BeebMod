@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.14.0
 
 - **Your own buffs have a green border on the target.** A buff you or your
   pet cast comes first in the target's buff row. Up to four of yours show,
