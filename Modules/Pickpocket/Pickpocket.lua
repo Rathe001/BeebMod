@@ -398,41 +398,14 @@ function M.Tip()
 				t:Row("Best find", ("%s ×%s"):format(name, U.Commas(count)))
 			end
 		end
-		if M.Armed() then
-			t:Foot({ { "Shift-right-click again", "clear all time" } })
-		else
-			t:Foot({ { "Right-click", "reset session" }, { "Shift-right-click", "clear all time" } })
-		end
 	end })
 end
 
--- CLEARED ON A SECOND CLICK (2026-11-06, audit: one right-click wiped the
--- all-time record, where the XP and Gold lines' right-click only starts a new
--- session). A right-click starts a new session here too. All time takes a
--- Shift-right-click, then another within ARM_WAIT seconds, the tooltip
--- saying so in between.
-M.ARM_WAIT = 5
-function M.Armed()
-	return M.armedAt ~= nil and GetTime ~= nil and GetTime() - M.armedAt <= M.ARM_WAIT
-end
-
-function M.Click(button, shift)
-	if button ~= "RightButton" then
-		return nil
-	end
-	if not shift then
-		M.armedAt = nil
-		M.ResetSession()
-		return "session"
-	end
-	if M.Armed() then
-		M.armedAt = nil
-		M.Reset()
-		return "cleared"
-	end
-	M.armedAt = GetTime and GetTime() or nil
-	return "armed"
-end
+-- NOTHING TO CLEAR (Josh 2026-11-10: "We should also remove the ability to
+-- clear the all time total and session. I see no reason the user would ever
+-- delete data"). A right-click started a new session and two
+-- Shift-right-clicks wiped the all-time record. Both are gone. A session
+-- still starts on each login.
 
 function M.Build()
 	if M.chip then
@@ -440,15 +413,6 @@ function M.Build()
 	end
 	M.chip = BT.Dock.Chip("pickpocket", "pockets", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
-	-- a right-click starts a new session, two Shift-right-clicks clear the
-	-- record (M.Click), and the open tooltip says so at once (2026-10-05,
-	-- audit): it went on showing the old record, so the click looked as if it
-	-- had done nothing
-	M.chip:SetScript("OnMouseUp", function(_, button)
-		if M.Click(button, IsShiftKeyDown and IsShiftKeyDown() or false) and BT.Tip and BT.Tip.IsShown() then
-			M.Tip()
-		end
-	end)
 	M.chip:SetScript("OnLeave", function()
 		if GameTooltip then
 			GameTooltip:Hide()
@@ -528,34 +492,4 @@ end
 
 function M:OnDisable()
 	M.Show(false)
-end
-
--- CLEARED FROM THE CELL (Josh 2026-09-28: "We don't need hundreds of slash
--- commands"). What /bt pockets reset did, from two Shift-right-clicks on the
--- Pick Pocket cell (M.Click; moved from the Metrics page, 2026-10-04).
-function M.Reset()
-	if not M.Record() then
-		return
-	end
-	-- under the name and realm, where M.Record keeps it (the name alone,
-	-- which this cleared, is always empty - Josh 2026-09-23, audit)
-	for _, who in ipairs({ U.MeKey and U.MeKey(), U.Me and U.Me() }) do
-		if who then
-			BT.settings.pickpocket[who] = nil
-		end
-	end
-	M.session = nil
-	M.Start(true, false)
-	U.Print("Pick Pocket: record cleared.")
-end
-
--- a new session, the all-time record kept
-function M.ResetSession()
-	local r = M.Record()
-	if not r then
-		return
-	end
-	r.session = nil
-	M.Start(true, false)
-	U.Print("Pick Pocket: session reset.")
 end

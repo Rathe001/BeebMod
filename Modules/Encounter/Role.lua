@@ -99,12 +99,22 @@ function R.Picked()
 	return E.ROLES[r] and r or nil
 end
 
+-- THE ROLE YOU PICKED, CLICKED AGAIN, IS LET GO (2026-11-11, audit): a pick
+-- comes before the group's word and was kept for good, with no way back, so
+-- a druid who clicked Healer once read the healer's lines as a tank a week
+-- later. The same button again drops the pick, and the group, the group
+-- finder or the class says the role as before.
 function R.Pick(role)
 	local me = who()
 	if not (me and E.ROLES[role]) then
 		return false
 	end
-	picks(true)[me] = role
+	local all = picks(true)
+	if all[me] == role then
+		all[me] = nil
+		return "auto"
+	end
+	all[me] = role
 	return true
 end
 

@@ -5391,7 +5391,12 @@ if GameTooltip and GameTooltip.HookScript then
 	end
 	-- the late-built tooltips, looked for a frame later rather than in the
 	-- middle of this one being shown
+	-- ONE LOOK A FRAME (2026-11-11, audit): the tooltip is shown several
+	-- times while one card is written, and across a bag dozens of times a
+	-- second, and each show set a timer of its own for the same look
+	local lateQueued = false
 	local function late()
+		lateQueued = false
 		M.HookOthers(true)
 	end
 	GameTooltip:HookScript("OnShow", function(tip)
@@ -5401,7 +5406,10 @@ if GameTooltip and GameTooltip.HookScript then
 				BT.Err("tooltips.shown: " .. tostring(err))
 			end
 			if C_Timer and C_Timer.After then
-				C_Timer.After(0, late)
+				if not lateQueued then
+					lateQueued = true
+					C_Timer.After(0, late)
+				end
 			else
 				late()
 			end

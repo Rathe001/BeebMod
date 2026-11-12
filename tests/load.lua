@@ -5013,13 +5013,14 @@ if ok then
 			fill()
 			money, cost, shift = 10000, 250, false
 			local visit = mod.Open()
-			assert(#used == 10 and visit.sold == 10, "every grey stack with a price is sold: " .. #used)
+			assert(#used == 10 and #visit.tried == 10, "every grey stack with a price is sold: " .. #used)
+			assert(visit.sold == 12, "and counted by the item, not the stack (2026-11-11, audit): " .. visit.sold)
 			assert(visit.earned == 50 + 30 + 8 * 5, "for what each stack is worth: " .. visit.earned)
 			for _, id in ipairs(used) do
 				assert(id ~= 3 and id ~= 4 and id ~= 5, "a white item, or a grey one with no price, is kept")
 			end
 			assert(repaired == 250 and visit.repaired == 250, "then the gear is repaired with your own gold")
-			assert(#said == 1 and said[1]:find("Sold 10 grey items for", 1, true)
+			assert(#said == 1 and said[1]:find("Sold 12 grey items for", 1, true)
 				and said[1]:find("Repaired for", 1, true), "and one line says both: " .. tostring(said[1]))
 			assert(mod.visit == nil, "the visit is over")
 
@@ -5067,7 +5068,25 @@ if ok then
 			assert(#used == mod.BATCH, "a few stacks at a time: " .. #used)
 			mod.events:GetScript("OnEvent")(mod.events, "MERCHANT_CLOSED")
 			for _, fn in ipairs(later) do fn() end
-			assert(#used == mod.BATCH and repaired == nil and #said == 0, "closed, nothing more is sold or repaired")
+			assert(#used == mod.BATCH and repaired == nil, "closed, nothing more is sold or repaired")
+			-- (2026-11-11, audit: what was sold by then is still said)
+			assert(#said == 1 and said[1]:find("Sold 8 grey items for", 1, true) and not said[1]:find("Repaired", 1, true),
+				"and what was sold before it closed is said: " .. tostring(said[1]))
+			-- a sale the vendor did not take is not counted
+			fill()
+			later = {}
+			local take = _G.C_Container.UseContainerItem
+			_G.C_Container.UseContainerItem = function(bag, slot)
+				if bags[bag][slot].itemID == 2 then
+					return
+				end
+				take(bag, slot)
+			end
+			mod.Open()
+			mod.events:GetScript("OnEvent")(mod.events, "MERCHANT_CLOSED")
+			assert(said[1] and said[1]:find("Sold 5 grey items for", 1, true),
+				"a stack still in the bag was not sold: " .. tostring(said[1]))
+			_G.C_Container.UseContainerItem = take
 
 			-- a bag sorted in between is not sold from by memory
 			fill()
@@ -14383,8 +14402,17 @@ if ok then
 				end
 				return n
 			end
+			-- a clean start for each case below (the tests' own: a right-click
+			-- that did this went on 2026-11-11)
+			local function fresh()
+				local list = mod.PaceList()
+				for i = #list, 1, -1 do
+					list[i] = nil
+				end
+				mod.Start(true, false)
+			end
 			-- a session: 1500 into this level, then a level-up carrying 500 over
-			mod.Reset()
+			fresh()
 			cur = 2500
 			mod.Gain()
 			level, cur, max = 9, 500, 5000
@@ -14395,7 +14423,7 @@ if ok then
 
 			-- A LEVEL READ HALF NEW (Josh 2026-09-30, review): the new level's
 			-- bar under the old level, and then the level
-			mod.Reset()
+			fresh()
 			level, cur, max = 9, 4900, 5000
 			mod.Start(true, false)
 			cur, max = 200, 5500
@@ -14423,7 +14451,7 @@ if ok then
 				"only what came after it was switched on: " .. tostring(booked() - before))
 			-- THE NEW MAX WITH THE OLD BAR (2026-10-17, audit): 13 at 500 of
 			-- 11,000, then 14 at 500 of 12,000, then the bar. Once 10,550, and 14.
-			mod.Reset()
+			fresh()
 			level, cur, max = 13, 500, 11000
 			mod.Start(true, false)
 			level, max = 14, 12000
@@ -14437,7 +14465,7 @@ if ok then
 			-- THE PACE WHILE YOU PLAY (Josh 2026-09-28): an hour in town before
 			-- the first kill is not levelling, and neither is the time since
 			-- the last
-			mod.Reset()
+			fresh()
 			level, cur, max = 9, 0, 5000
 			mod.Start(true, false)
 			clock = clock + 3600
@@ -14473,11 +14501,21 @@ if ok then
 			max = 5000
 			assert(math.abs(mod.Rate() - 6000) < 1 and #mod.PaceList() <= 125,
 				"the last hour's pace, the rest let go: " .. tostring(mod.Rate()) .. " from " .. #mod.PaceList())
-			-- RIGHT-CLICK TO START AGAIN (Josh 2026-09-28): the tooltip says so,
-			-- and a right-click on the line does it
+			-- NOTHING TO RESET (2026-11-11, audit, after Josh 2026-11-10: "I see
+			-- no reason the user would ever delete data"): the tooltip offers
+			-- no right-click, and one on the line keeps the session and the pace
 			section:GetScript("OnEnter")(section)
-			assert(BT.Tip.Says("RIGHT-CLICK") and BT.Tip.Says("reset session"),
-				"the tooltip names the right-click: " .. table.concat(BT.Tip.Texts(), " | "))
+			assert(not BT.Tip.Says("RIGHT-CLICK") and not BT.Tip.Says("reset session"),
+				"the tooltip names no right-click: " .. table.concat(BT.Tip.Texts(), " | "))
+			do
+				local kept, gains = mod.session, #mod.PaceList()
+				local up = section:GetScript("OnMouseUp")
+				if up then
+					up(section, "RightButton")
+				end
+				assert(mod.session == kept and #mod.PaceList() == gains and mod.Reset == nil,
+					"a right-click keeps the session and the pace")
+			end
 			-- DUNGEONS FOR YOUR LEVEL (Josh 2026-10-04): the old ones and the
 			-- new, each side its own, none before the first
 			local D = BT.Dungeons
@@ -14710,11 +14748,8 @@ if ok then
 				Z.list = nil
 				section:GetScript("OnEnter")(section)
 			end
-			section:GetScript("OnMouseUp")(section, "LeftButton")
-			assert(mod.Rate() ~= nil, "a left-click resets nothing")
-			section:GetScript("OnMouseUp")(section, "RightButton")
-			assert(mod.Rate() == nil and #mod.PaceList() == 0,
-				"a right-click starts the pace and the session again")
+			assert(section:GetScript("OnMouseUp") == nil and mod.Rate() ~= nil,
+				"no click on the line resets anything (2026-11-11, audit)")
 			-- NO XP RATE IN THE TOOLTIP (Josh 2026-10-04: "remove all of this
 			-- redundant or unneeded info to save space"): the dock's line says
 			-- how long the level takes
@@ -14733,10 +14768,6 @@ if ok then
 			level = 60
 			mod.Update()
 			assert(not section:IsShown(), "at the level cap there is no bar")
-			-- a new session, as a right-click on the line asks for one
-			session = mod.session
-			mod.Reset()
-			assert(mod.session ~= session and mod.Rate() == nil, "a reset starts a new session, and a new pace")
 
 			_G.UnitLevel, _G.UnitXP, _G.UnitXPMax = realLevel, nil, nil
 			_G.GetXPExhaustion, _G.GetMaxPlayerLevel = nil, nil
@@ -14993,36 +15024,23 @@ if ok then
 			assert(mod.Best(r) == nil and asked[1] == 5374, "an item not loaded yet has no name, and is asked for")
 			_G.GetItemInfo, _G.C_Item = global, hadC
 
-			-- CLEARED ON A SECOND CLICK (2026-11-06, audit): a right-click starts
-			-- a new session, as on the XP and Gold lines; all time takes two
-			-- Shift-right-clicks, the tooltip saying so after the first
+			-- NOTHING TO CLEAR (Josh 2026-11-10: "I see no reason the user would
+			-- ever delete data"): a click of any kind leaves the session and the
+			-- record, and the tooltip offers no clicks
 			local chip = mod.Build()
-			local clock, hadTime, hadShift = 500, _G.GetTime, _G.IsShiftKeyDown
-			_G.GetTime = function() return clock end
-			local shift = false
-			_G.IsShiftKeyDown = function() return shift end
-			chip:GetScript("OnMouseUp")(chip, "LeftButton")
-			assert(select(1, mod.Worth(mod.Record())) > 0, "a plain click leaves the record")
 			mod.session.picks = 3
-			chip:GetScript("OnMouseUp")(chip, "RightButton")
-			assert(select(1, mod.Worth(mod.Record())) > 0 and (mod.session.picks or 0) == 0,
-				"a right-click starts a new session and keeps all time")
-			shift = true
-			assert(mod.Click("RightButton", true) == "armed" and select(1, mod.Worth(mod.Record())) > 0,
-				"one Shift-right-click clears nothing")
+			local worth = select(1, mod.Worth(mod.Record()))
+			local up = chip:GetScript("OnMouseUp")
+			if up then
+				up(chip, "RightButton")
+			end
+			assert(worth > 0 and select(1, mod.Worth(mod.Record())) == worth and mod.session.picks == 3,
+				"a right-click keeps the session and all time")
+			assert(mod.Click == nil and mod.Reset == nil and mod.ResetSession == nil, "nothing clears them")
 			mod.Tip()
-			assert(BT.Tip.Says("SHIFT-RIGHT-CLICK AGAIN") and not BT.Tip.Says("reset session"),
-				"the tooltip says to click again: "
-				.. table.concat(BT.Tip.Texts(), " | "))
+			assert(not BT.Tip.Says("reset session") and not BT.Tip.Says("clear all time")
+				and not BT.Tip.Says("RIGHT-CLICK"), "and the tooltip offers no clicks: " .. table.concat(BT.Tip.Texts(), " | "))
 			BT.Tip.Hide()
-			clock = clock + mod.ARM_WAIT + 1
-			assert(mod.Click("RightButton", true) == "armed" and select(1, mod.Worth(mod.Record())) > 0,
-				"a second one too late starts over")
-			clock = clock + 1
-			chip:GetScript("OnMouseUp")(chip, "RightButton")
-			assert(select(1, mod.Worth(mod.Record())) == 0 and select(2, mod.Worth(mod.Record())) == 0,
-				"a second one in time clears the record")
-			_G.GetTime, _G.IsShiftKeyDown = hadTime, hadShift
 			_G.UnitClass = wasClass
 			BT.Window.Rebuild()
 			mod.Update()
@@ -15991,8 +16009,10 @@ if ok then
 				_G.GetUnitName = hadFull
 			end
 			fire(mod.events, "NAME_PLATE_UNIT_ADDED", "nameplate21")
-			assert(mod.skins.nameplate21 == nil and (plates.nameplate21.UnitFrame._alpha or 1) == 1,
-				"and one past the first twenty keeps the game's")
+			-- ALL FORTY WEAR OURS (2026-11-11, audit): it was the first twenty
+			assert(mod.PLATES == mod.MAX_PLATES and mod.skins.nameplate21 and mod.skins.nameplate21._shown
+				and plates.nameplate21.UnitFrame._alpha == 0,
+				"and an enemy past the twentieth plate wears ours too")
 			-- ALL FORTY (2026-10-17, audit): a friend past the first twenty is
 			-- dressed by a sweep too, and given back by one
 			do
@@ -16651,7 +16671,9 @@ if ok then
 				assert(BT.Tip.Says("show this character"), "and the open hover says the click again")
 				local session = mod.session
 				chip:GetScript("OnMouseUp")(chip, "RightButton")
-				assert(mod.session ~= session and BT.settings.currencyTotal, "a right-click still resets the session")
+				assert(mod.session == session and BT.settings.currencyTotal and mod.Reset == nil
+					and not BT.Tip.Says("reset session"),
+					"a right-click resets nothing (2026-11-11, audit)")
 				chip:GetScript("OnMouseUp")(chip, "LeftButton")
 				assert(not BT.settings.currencyTotal and chip.spec.text == mod.Coins(purse, true) and not chip.spec.icon,
 					"clicked again, yours alone")
@@ -16844,12 +16866,13 @@ if ok then
 			space.Update()
 			assert(not space.Build().wanted, "no slots at all, no cell")
 
-			-- A RIGHT-CLICK ON ITS CELL STARTS A NEW SESSION (the settings canvas
-			-- moved the Reset there from the Metrics page, 2026-10-04)
+			-- A RIGHT-CLICK ON ITS CELL KEEPS THE SESSION (2026-11-11, audit,
+			-- after Josh 2026-11-10: "I see no reason the user would ever
+			-- delete data")
 			local chip = mod.Build()
 			mod.session.earned = 500
 			chip:GetScript("OnMouseUp")(chip, "RightButton")
-			assert(mod.session.earned == 0 and mod.session.spent == 0, "a right-click on the cell starts a new session")
+			assert(mod.session.earned == 500, "a right-click on the cell keeps the session")
 			BT.Util.Now = realNow
 			_G.GetMoney = nil
 		end },
@@ -19624,8 +19647,12 @@ if ok then
 			-- the arrows hold until a different boss is seen
 			f.body.next:GetScript("OnClick")(f.body.next)
 			assert(f.body.boss._text == "Sneed's Shredder", "an arrow shows the next")
+			-- (a wipe and another go: his kill is put aside for the one look,
+			-- since a dead boss fighting again is a new run, tested below)
+			E.run.killed[7] = nil
 			fire(enc.events, "ENCOUNTER_START", 1094, "Edwin VanCleef", 1, 5)
 			assert(f.body.boss._text == "Sneed's Shredder", "the boss seen last doesn't take it back")
+			E.run.killed[7] = true
 			fire(enc.events, "ENCOUNTER_START", 1091, "Sneed", 1, 5)
 			assert(f.body.boss._text == "Sneed's Shredder" and not E.run.held, "a different one does (Sneed is the Shredder's)")
 			-- a kill by a name none of ours has: the boss shown, and on to the next
@@ -19649,6 +19676,18 @@ if ok then
 				E.run, E.loaded = { killed = {}, at = 1, held = false }, false
 				enc.Update()
 				assert(f.body.boss._text == "Rhahk'Zor" and not E.run.killed[2], "a run the next evening starts clean")
+				-- A BOSS YOU KILLED, FIGHTING AGAIN, IS A NEW RUN (2026-11-11,
+				-- audit): the dungeon was reset and gone straight back into
+				fire(enc.events, "ENCOUNTER_START", 1, "Rhahk'Zor", 1, 5)
+				fire(enc.events, "ENCOUNTER_END", 1, "Rhahk'Zor", 1, 5, 1)
+				E.run.lastKill = nil
+				fire(enc.events, "ENCOUNTER_START", 2, "Sneed", 1, 5)
+				fire(enc.events, "ENCOUNTER_END", 2, "Sneed", 1, 5, 1)
+				assert(E.run.killed[1] and E.run.killed[2], "two bosses down")
+				fire(enc.events, "ENCOUNTER_START", 1, "Rhahk'Zor", 1, 5)
+				assert(not E.run.killed[1] and not E.run.killed[2] and f.body.boss._text == "Rhahk'Zor",
+					"a dead boss's fight starting clears the run's kills: " .. tostring(f.body.boss._text))
+				fire(enc.events, "ENCOUNTER_END", 1, "Rhahk'Zor", 1, 5, 0)
 				-- back as it was for what follows: Sneed's Shredder shown
 				E.run.at = 2
 			end
@@ -19690,6 +19729,13 @@ if ok then
 			dps:GetScript("OnClick")(dps)
 			assert(R.Current() == "dps" and select(2, R.Current()) == "pick"
 				and BT.settings.encounter.roles["Player-1-0000ABCD"] == "dps", "a click picks, for this character")
+			-- THE PICK CLICKED AGAIN IS LET GO (2026-11-11, audit): back to the
+			-- group's word, and a third click picks it once more
+			dps:GetScript("OnClick")(dps)
+			assert(select(2, R.Current()) == "group" and BT.settings.encounter.roles["Player-1-0000ABCD"] == nil
+				and f.body.roles.buttons[2].on, "the same button again goes back to the group's role")
+			dps:GetScript("OnClick")(dps)
+			assert(R.Current() == "dps" and select(2, R.Current()) == "pick", "and a click picks again")
 			-- a skill line says who can do it
 			E.Step(BT.EncounterNotes.deadmines, 1)
 			enc.Update()

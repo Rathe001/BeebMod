@@ -216,6 +216,24 @@ function M.SpotsFor(mapID)
 	return out
 end
 
+-- WORKED OUT ONCE A MAP (2026-11-11, audit): the map tells us of every step
+-- of a zoom, and each one asked the game where all 35 spots were again. A
+-- map's spots do not move, so the answer is kept, and a zoom only places the
+-- pins. Forgotten when the module comes on (M.OnEnable), in case the game had
+-- not answered yet.
+M.kept = {}
+function M.SpotsKept(mapID)
+	if type(mapID) ~= "number" then
+		return M.SpotsFor(mapID)
+	end
+	local list = M.kept[mapID]
+	if not list then
+		list = M.SpotsFor(mapID)
+		M.kept[mapID] = list
+	end
+	return list
+end
+
 -- ---------------------------------------------------------------------------
 -- The pins
 -- ---------------------------------------------------------------------------
@@ -339,7 +357,7 @@ function M.Draw()
 	end
 	local shown = {}
 	if BT.Enabled("entrances") then
-		shown = M.SpotsFor(call(f.GetMapID, f))
+		shown = M.SpotsKept(call(f.GetMapID, f))
 	end
 	local c = canvas(f)
 	local w, h = call(c.GetWidth, c), call(c.GetHeight, c)
@@ -457,6 +475,7 @@ end)
 M.HookMenu()
 
 function M:OnEnable()
+	M.kept = {}
 	M.Hook()
 	M.Redraw()
 end

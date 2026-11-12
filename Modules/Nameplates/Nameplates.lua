@@ -18,10 +18,11 @@
 -- frame goes back to its pool as it came.
 --
 -- MADE BEFORE A FIGHT. The lanes are the client's aura containers, which may
--- only be made out of combat, so a frame is made for each of the first
--- M.PLATES tokens ("nameplate1" and on) when the module comes on, and after
--- that only moved, shown and hidden - which the client allows in a fight. An
--- enemy whose plate has a later token keeps the game's own plate.
+-- only be made out of combat, so a frame is made for each of the M.PLATES
+-- tokens ("nameplate1" and on, all forty since 2026-11-11) when the module
+-- comes on, and after that only moved, shown and hidden - which the client
+-- allows in a fight. An enemy whose frame could not be made yet (the module
+-- switched on in a fight) keeps the game's own plate until the fight ends.
 --
 -- A FRIEND'S PLATE IS ITS NAME (Josh 2026-10-04: "Can we add friendly
 -- nameplates as well? They should look distinct and more simple than enemy
@@ -45,8 +46,12 @@ local M = BT.Module({
 	order = 58.6,
 })
 
--- how many enemies at once wear ours
-M.PLATES = 20
+-- how many enemies at once wear ours.
+-- ALL FORTY (2026-11-11, audit): it was twenty, and the game hands out forty
+-- plates (M.MAX_PLATES) to enemies and friends alike. With friends' names and
+-- minions on, an enemy often came in on a plate past the twentieth and kept
+-- the game's own plate, beside others wearing ours.
+M.PLATES = 40
 -- how far the others step back while you have a target
 M.DIM = 0.7
 -- the alpha the client gives the highlight on its target's plate (its XML)
@@ -500,9 +505,10 @@ end
 
 -- whether a player controls this unit: the game's word, or a hunter's pet's
 -- GUID where that is hidden
+local OWNED_ASKS = { "UnitIsMinion", "UnitPlayerControlled" }
 function M.Owned(token)
 	-- "a pet, totem, or guardian", the client's own documentation says
-	for _, ask in ipairs({ "UnitIsMinion", "UnitPlayerControlled" }) do
+	for _, ask in ipairs(OWNED_ASKS) do
 		local v = F.Plain(_G[ask], token)
 		if v ~= nil then
 			return v and true or false
@@ -869,8 +875,13 @@ function M.CursorOf(token)
 	-- soft-target icon asks for the gamepad's set, the "Crosshair" pictures,
 	-- and that answered nothing for a flight master; the mouse's set is the
 	-- cursor you see when you point at it
-	local mouse = Enum and Enum.CursorStyle and Enum.CursorStyle.Mouse or 0
-	local tries = { { nil, true }, { mouse, false } }
+	-- (the two tries made once, not with every NPC that comes into view)
+	local tries = M.cursorTries
+	if not tries then
+		local mouse = Enum and Enum.CursorStyle and Enum.CursorStyle.Mouse or 0
+		tries = { { nil, true }, { mouse, false } }
+		M.cursorTries = tries
+	end
 	local ok, has
 	for _, try in ipairs(tries) do
 		pcall(probe.SetTexture, probe, nil)

@@ -241,6 +241,12 @@ end
 
 function M.Toggle()
 	BT.EnsureBound()
+	-- NOTHING TO SWITCH TO WITH ONE CHARACTER (2026-11-11, audit): a click
+	-- then set the total on unseen, and it showed by itself the day a second
+	-- character logged in
+	if not M.HasOthers() then
+		return false
+	end
 	BT.settings.currencyTotal = not M.ShowsTotal() or nil
 	M.Update()
 	return M.ShowsTotal()
@@ -296,7 +302,6 @@ function M.Tip()
 		if M.HasOthers() then
 			foot[1] = { "Click", M.ShowsTotal() and "show this character" or "show all characters" }
 		end
-		foot[#foot + 1] = { "Right-click", "reset session" }
 		t:Foot(foot)
 	end })
 end
@@ -332,16 +337,16 @@ function M.Build()
 	end
 	M.chip = BT.Dock.Chip("currency", "purse", 1)
 	M.chip:SetScript("OnEnter", M.Tip)
-	-- a right-click starts a new session (M.Reset), and the open tooltip says
-	-- so at once, as Experience's does (2026-10-05, audit)
+	-- a click shows every character's gold or this one's, and the open
+	-- tooltip says so at once. NO RIGHT-CLICK (Josh 2026-11-10, of Pick
+	-- Pocket: "I see no reason the user would ever delete data"; 2026-11-11,
+	-- audit: the same holds here): it started a new session. One still
+	-- starts on each login.
 	M.chip:SetScript("OnMouseUp", function(_, button)
-		if button == "RightButton" then
-			M.Reset()
-		elseif button == "LeftButton" then
-			M.Toggle()
-		else
+		if button ~= "LeftButton" then
 			return
 		end
+		M.Toggle()
 		if BT.Tip and BT.Tip.IsShown() then
 			M.Tip()
 		end
@@ -411,14 +416,4 @@ function M:OnDisable()
 	M.Show(false)
 end
 
--- ---------------------------------------------------------------------------
--- A new session
--- ---------------------------------------------------------------------------
 
--- A NEW SESSION (Josh 2026-09-28: "We don't need hundreds of slash
--- commands"). What /bt gold reset did, from a right-click on the gold cell
--- (the settings canvas moved it there from the Metrics page, 2026-10-04).
-function M.Reset()
-	M.Start(true, false)
-	U.Print("Currency: session reset.")
-end

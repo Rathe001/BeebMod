@@ -409,7 +409,6 @@ function M.Tip()
 				end
 			end
 		end
-		t:Foot({ { "Right-click", "reset session" } })
 	end })
 end
 
@@ -478,16 +477,10 @@ function M.Build()
 			GameTooltip:Hide()
 		end
 	end)
-	-- RIGHT-CLICK TO START AGAIN (Josh 2026-09-28: "Maybe we should add a
-	-- 'right click to reset'"), as the Reset on the Progress page does
-	M.frame:SetScript("OnMouseUp", function(_, button)
-		if button == "RightButton" then
-			M.Reset()
-			if BT.Tip and BT.Tip.IsShown() then
-				M.Tip()
-			end
-		end
-	end)
+	-- NO RIGHT-CLICK (Josh 2026-11-10, of Pick Pocket: "I see no reason the
+	-- user would ever delete data"; 2026-11-11, audit: the same holds here).
+	-- A right-click started a new session and emptied the pace. A session
+	-- still starts on each login.
 	return M.frame
 end
 
@@ -566,15 +559,4 @@ function M:OnDisable()
 	M.Show(false)
 end
 
--- A NEW SESSION (Josh 2026-09-28: "We don't need hundreds of slash
--- commands"): what /bt xp reset did, from a right-click on the XP line
-function M.Reset()
-	local list = M.PaceList()
-	if list then
-		for i = #list, 1, -1 do
-			list[i] = nil
-		end
-	end
-	M.Start(true, false)
-	U.Print("XP: session reset.")
-end
+

@@ -1158,6 +1158,11 @@ do
 		and saved.settings.rep["Beeb Bob"],
 		"on a beta realm every beta record is kept")
 
+	-- (what the encounter notes keep by character is filed under a GUID,
+	-- 2026-11-11, audit: it says no realm, so all of it goes with the rest)
+	saved.settings.encounter = { collapsed = true, runs = { ["Player-1-0000000A"] = { key = "deadmines" } },
+		shut = { ["Player-1-0000000A"] = true }, roles = { ["Player-1-0000000A"] = "tank" } }
+
 	-- the same file on a launch realm
 	local said, realPrint = {}, _G.print
 	_G.print = function(...) said[#said + 1] = table.concat({ ... }, " ") end
@@ -1165,7 +1170,7 @@ do
 	_G.print = realPrint
 	local gone = BT.betaDropped
 	check(gone and gone.books == 1 and gone.characters == 2 and gone.ledger == 1 and gone.people == 1
-		and gone.journals == 1 and gone.enemies == 1 and gone.records == 5,
+		and gone.journals == 1 and gone.enemies == 1 and gone.records == 8,
 		("on a launch realm the beta's records go, and are counted (%s)"):format(
 			gone and ("%d %d %d %d %d %d %d"):format(gone.books, gone.characters, gone.ledger, gone.people,
 				gone.journals, gone.enemies, gone.records) or "nothing dropped"))
@@ -1175,6 +1180,9 @@ do
 	check(saved.settings.rep["Beeb Bob"] == nil and saved.settings.rep["Ola Bard@Whitemane"]
 		and saved.settings.clock["Ola Bard"] == nil,
 		"and so do the ones filed under a name alone, so no launch character of that name takes them over")
+	check(saved.settings.encounter.runs == nil and saved.settings.encounter.shut == nil
+		and saved.settings.encounter.roles == nil and saved.settings.encounter.collapsed == true,
+		"the encounter notes' run, shut panel and role go, and its own setting stays")
 	check(#said == 1 and said[1]:find("Cleared the Ledger, Expedition and character records from the beta realms.", 1, true),
 		"and one line in chat says so: " .. table.concat(said, " | "))
 	check(saved.realms["ClassicBetaPvE2|All"] == nil and DB.Get(BT.db, "Home Body") ~= nil,
@@ -2560,6 +2568,33 @@ do
 		"a dungeon's trash is worth less than an elite met alone, its boss more")
 	-- a boss fight won marks the enemy of that name; a kill notes where it was
 	J.Learn({ npc = 90090, name = "Edwin VanCleef", rank = "elite", instance = "party" })
+	-- WHAT THE GAME WOULD NOT SAY (2026-11-11, audit): an enemy counted from
+	-- its loot in a dungeon has no name; the dungeon list and the encounter
+	-- notes' bosses fill in what the journal lacks, and nothing it has
+	do
+		local hadDungeon, hadNotes = BT.ExpeditionDungeon, BT.EncounterNotes
+		BT.ExpeditionDungeon = { [70001] = { "Listed Miner", "Humanoid", "elite", 17, 18, "party" },
+			[70002] = { "Listed Boss", "Beast", nil, 20, 20, "party" } }
+		BT.EncounterNotes = { somewhere = { name = "Somewhere", bosses = {
+			{ name = "The Boss's Fight", npc = { 70002 } }, { name = "New Boss", npc = { 70003 } } } } }
+		J.BossNames()[70002], J.BossNames()[70003] = "The Boss's Fight", "New Boss"
+		local s = J.Store()
+		s.enemies[70001], s.enemies[70002], s.enemies[70003], s.enemies[70004] = {}, {}, { name = "Seen Alive" }, {}
+		check(J.FillAll() == 3, "three of the four can be filled in")
+		local a, b, c, d = s.enemies[70001], s.enemies[70002], s.enemies[70003], s.enemies[70004]
+		check(a.name == "Listed Miner" and a.kind == "Humanoid" and a.rank == "elite" and a.lo == 17 and a.hi == 18
+			and a.instance == "party" and not a.boss and J.Category(a) == "dungeonelite",
+			"a dungeon's enemy takes its name, type, rank and levels from the list")
+		check(b.name == "Listed Boss" and b.boss == true and J.Category(b) == "dungeonboss",
+			"a boss takes the list's name and the notes' word that it is a boss")
+		check(c.name == "Seen Alive" and c.boss == true and c.instance == "party",
+			"what the journal already has is kept, and a boss in the notes alone is still marked")
+		check(d.name == nil and J.FillAll() == 0, "one in neither list stays as it was, and nothing is filled twice")
+		s.enemies[70001], s.enemies[70002], s.enemies[70003], s.enemies[70004] = nil, nil, nil, nil
+		J.BossNames()[70002], J.BossNames()[70003] = nil, nil
+		BT.ExpeditionDungeon, BT.EncounterNotes = hadDungeon, hadNotes
+		J.kept = nil
+	end
 	check(J.Category(J.Store().enemies[90090]) == "dungeonelite" and J.EncounterWon("Edwin VanCleef")
 		and J.Category(J.Store().enemies[90090]) == "dungeonboss" and not J.EncounterWon("The Seven"),
 		"a won encounter makes its enemy a dungeon boss")
@@ -3014,6 +3049,40 @@ do
 	check(got[6] == sources[1] .. ":loot" and named[sources[1]] == "Tusked Boar",
 		"a corpse counted from its loot alone is named from its token: " .. tostring(named[sources[1]]))
 	units.mouseover = nil
+	-- INSIDE A DUNGEON THE GAME HIDES THE ENEMY (2026-11-11, audit): a kill
+	-- there is counted from its loot with no unit to ask. It still says where
+	-- it was, and a boss whose fight was won is counted then, once.
+	do
+		local hadZone, hadInst = _G.GetRealZoneText, _G.IsInInstance
+		local placed = {}
+		K.onKill = function(info, how)
+			got[#got + 1] = info.guid .. ":" .. how
+			placed[info.npc] = info
+		end
+		_G.GetRealZoneText = function() return "The Deadmines" end
+		_G.IsInInstance = function() return true, "party" end
+		_G.UnitTokenFromGUID = function() return nil end
+		_G.GetNumLootItems = function() return 1 end
+		sources[1] = "Creature-0-1-2-3-634-L"
+		local before = #got
+		K.Loot(T + 50)
+		check(#got == before + 1 and placed[634] and placed[634].zone == "The Deadmines"
+			and placed[634].instance == "party" and placed[634].name == nil,
+			"a corpse with no unit to ask still says its zone and that it is a dungeon's")
+		check(K.BossDown(639, T + 60) and placed[639] and placed[639].boss == true
+			and placed[639].instance == "party" and got[#got]:find(":boss$") ~= nil,
+			"a boss fight won is a kill, counted then")
+		check(not K.BossDown(639, T + 61), "once for one fight")
+		sources[1] = "Creature-0-1-2-3-639-M"
+		before = #got
+		K.Loot(T + 90)
+		check(#got == before, "and looting its corpse afterwards is the same kill")
+		K.Loot(T + 90 + K.BOSS_ONCE + 1)
+		check(#got == before, "a corpse passed over as the boss's stays passed over")
+		check(K.BossDown(639, T + 90 + K.BOSS_ONCE + 100), "another run's fight is another kill")
+		check(not K.BossDown(nil), "no enemy known, nothing counted")
+		_G.GetRealZoneText, _G.IsInInstance = hadZone, hadInst
+	end
 	check(K.XPName("Vuldren dies, you gain 50 experience. (25 exp Rested bonus)") == "Vuldren",
 		"the rested form of the XP line names the enemy too")
 	K.plates.nameplate1 = nil

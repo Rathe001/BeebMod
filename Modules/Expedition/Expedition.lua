@@ -148,6 +148,19 @@ end
 -- until the next kill, and a rank reached by the boss's points never
 -- toasted (2026-10-17, audit).
 function M.EncounterWon(name)
+	-- THE FIGHT WON IS THE KILL, WHERE THE NOTES KNOW THE BOSS (2026-11-11,
+	-- audit; K.BossDown): counted before the boss is marked, so a boss met
+	-- for the first time has a page to mark
+	local E = BT.Encounter
+	if E and E.Here and E.Find and not J.demo then
+		local ok, _, _, notes = pcall(E.Here)
+		local i = ok and notes and E.Find(notes, nil, name)
+		local boss = i and notes.bosses[i]
+		local npc = boss and type(boss.npc) == "table" and boss.npc[1]
+		if npc then
+			K.BossDown(npc)
+		end
+	end
 	local points, st = J.Saved(function()
 		J.BestRank()
 		if J.EncounterWon(name) then
@@ -658,6 +671,13 @@ local function logOpen()
 	return false
 end
 
+-- A QUEST THAT GIVES NO TEXT IS LEFT ALONE (2026-11-11, audit): one whose
+-- text came back empty was never kept, so every change to the quest log
+-- selected it again to ask, for as long as it was in the log. After
+-- M.QUEST_TRIES empty answers it is not asked again until the next /reload.
+M.QUEST_TRIES = 3
+M.questTries = {}
+
 -- Read every quest in the log the journal has not kept yet. Returns how
 -- many were read.
 function M.ReadQuests()
@@ -671,13 +691,17 @@ function M.ReadQuests()
 	local read, lore, moved = 0, 0, false
 	for i = 1, questCount() do
 		local title, isHeader, questID = questEntry(i)
-		if title and not isHeader and questID and not s.quests[questID] and select_(i, questID) then
+		if title and not isHeader and questID and not s.quests[questID]
+			and (M.questTries[questID] or 0) < M.QUEST_TRIES and select_(i, questID) then
 			moved = true
 			local ok, text = pcall(GetQuestLogQuestText, i)
 			if ok and type(text) == "string" and text ~= "" then
 				lore = lore + J.QuestSeen({ id = questID, title = title, text = text,
 					objectives = questObjectives(i, questID) })
 				read = read + 1
+				M.questTries[questID] = nil
+			else
+				M.questTries[questID] = (M.questTries[questID] or 0) + 1
 			end
 		end
 	end
@@ -841,7 +865,9 @@ end
 -- still counted, and the enemies in view are looked at afresh
 function M:OnBind()
 	M.Listen(true)
-	-- two pages for one enemy, from before they were one (J.MergeSame)
+	-- an enemy the game would not name, named from what is known (J.Fill),
+	-- and two pages for one enemy, from before they were one (J.MergeSame)
+	J.FillAll()
 	J.MergeSame()
 	K.Reset(J.Counted())
 	M.Show(true)

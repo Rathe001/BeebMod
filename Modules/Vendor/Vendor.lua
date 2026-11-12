@@ -3,8 +3,8 @@
 --
 -- When a vendor's window opens:
 --
---   1. every grey item in your bags that has a price is sold, a few at a
---      time (M.BATCH every M.PACE seconds), so the server takes each one
+--   1. every grey item in your bags that has a price is sold, a few stacks
+--      at a time (M.BATCH every M.PACE seconds), so the server takes each one
 --   2. then your gear is repaired with your own gold, if the vendor repairs
 --      and you have enough; the junk's money is in your purse by then
 --   3. one chat line says what was sold and what the repair cost
@@ -98,7 +98,8 @@ function M.Junk()
 				local count = N(info.stackCount, 1)
 				local price = priceOf(info.itemID, count)
 				if price > 0 then
-					out[#out + 1] = { bag = bag, slot = slot, itemID = info.itemID, price = price }
+					out[#out + 1] = { bag = bag, slot = slot, itemID = info.itemID, price = price,
+						count = math.max(1, count) }
 				end
 			end
 		end
@@ -151,10 +152,30 @@ function R.Run(visit)
 	end
 end
 
+-- WHAT WAS SOLD IS WHAT LEFT THE BAG (2026-11-11, audit): a sale was counted
+-- when it was asked for, and by the stack, so three stacks of five read
+-- "Sold 3 grey items" whether or not the vendor took them. Each slot a sale
+-- was asked of is looked at again: empty, holding something else, or still
+-- locked while the server takes it, it sold, and its whole stack is counted.
+local function tally(visit)
+	local sold, earned = 0, 0
+	for _, j in ipairs(visit.tried) do
+		local info = slotInfo(j.bag, j.slot)
+		if not info or info.itemID ~= j.itemID or info.isLocked then
+			sold = sold + j.count
+			earned = earned + j.price
+		end
+	end
+	visit.sold, visit.earned = sold, earned
+	return sold
+end
+M.Tally = tally
+
 local function finish(visit)
 	if M.visit ~= visit then
 		return
 	end
+	tally(visit)
 	R.Run(visit)
 	M.Say(visit)
 	M.visit = nil
@@ -175,15 +196,14 @@ local function sellSome(visit)
 		local info = slotInfo(j.bag, j.slot)
 		if info and info.itemID == j.itemID and not info.isLocked then
 			if pcall(use, j.bag, j.slot) then
-				visit.sold = visit.sold + 1
-				visit.earned = visit.earned + j.price
+				visit.tried[#visit.tried + 1] = j
 			end
 			n = n + 1
 		end
 	end
 	if visit.next <= #visit.junk and C_Timer and C_Timer.After then
 		C_Timer.After(M.PACE, function() sellSome(visit) end)
-	elseif C_Timer and C_Timer.After and visit.sold > 0 then
+	elseif C_Timer and C_Timer.After and #visit.tried > 0 then
 		-- the last sale's money arrives before the repair is asked for
 		C_Timer.After(M.PACE, function() finish(visit) end)
 	else
@@ -196,14 +216,21 @@ function M.Open()
 	if shiftDown() or not (BT.Enabled("junk") or BT.Enabled("repair")) then
 		return nil
 	end
-	local visit = { sold = 0, earned = 0, next = 1, junk = BT.Enabled("junk") and M.Junk() or {} }
+	local visit = { sold = 0, earned = 0, next = 1, tried = {}, junk = BT.Enabled("junk") and M.Junk() or {} }
 	M.visit = visit
 	sellSome(visit)
 	return visit
 end
 
+-- the window closed part-way: nothing more is sold or repaired, and what
+-- was sold by then is still said (2026-11-11, audit: it was not)
 function M.Close()
+	local visit = M.visit
 	M.visit = nil
+	if visit and #visit.tried > 0 then
+		tally(visit)
+		M.Say(visit)
+	end
 end
 
 M.events = CreateFrame("Frame")

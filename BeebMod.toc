@@ -116,6 +116,7 @@ Modules\Expedition\LoreData.lua
 Modules\Expedition\BodyData.lua
 Modules\Expedition\SexData.lua
 Modules\Expedition\AbilityData.lua
+Modules\Expedition\DungeonData.lua
 Modules\Expedition\Journal.lua
 Modules\Expedition\Kills.lua
 Modules\Expedition\Toast.lua

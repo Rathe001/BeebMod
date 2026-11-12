@@ -653,5 +653,13 @@ S.events:SetScript("OnEvent", function(_, event, unit)
 	if event == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then
 		return
 	end
+	-- NOTHING TO REDRAW WHILE THE BAGS ARE SHUT (2026-11-11, audit): the
+	-- game sends hundreds of item events at login, and each one wrote a line
+	-- in the log for slots nobody could see, with the module off as well.
+	-- The slots are drawn when the window opens (S.Attach).
+	local f = S.frame
+	if not (f and f.IsVisible and f:IsVisible() and BT.Enabled("bagwindow")) then
+		return
+	end
 	S.Soon(event)
 end)

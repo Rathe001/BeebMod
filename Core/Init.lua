@@ -880,6 +880,22 @@ function BT.DropBeta(realm)
 			end
 		end
 	end
+	-- AND WHAT THE ENCOUNTER NOTES KEEP BY CHARACTER (2026-11-11, audit): the
+	-- dungeon run, the panel shut and the role picked are filed under a
+	-- character's GUID, which says no realm, so the pass above never found
+	-- them. A launch character has none yet on the login that finds the
+	-- beta's records, so all of them go.
+	local enc = type(BeebModDB.settings) == "table" and BeebModDB.settings.encounter
+	if type(enc) == "table" then
+		for _, k in ipairs(BT.BETA_BY_GUID) do
+			if type(enc[k]) == "table" then
+				for _ in pairs(enc[k]) do
+					out.records = out.records + 1
+				end
+				enc[k] = nil
+			end
+		end
+	end
 	if out.books > 0 and BT.DB then
 		BT.DB.rev = (BT.DB.rev or 0) + 1
 	end
@@ -895,6 +911,8 @@ end
 
 -- the settings that hold one record a character, keyed "Name@Realm" now
 BT.BETA_BARE = { "xp", "xpPace", "rep", "currency", "clock", "pvp", "pickpocket" }
+-- the encounter notes' tables that hold one record a character, keyed by GUID
+BT.BETA_BY_GUID = { "runs", "shut", "roles" }
 
 -- ---------------------------------------------------------------------------
 -- THE BOOK

@@ -870,6 +870,84 @@ end
 -- A kill
 -- ---------------------------------------------------------------------------
 
+-- WHAT THE GAME WOULD NOT SAY (2026-11-11, audit). Inside a dungeon an
+-- enemy's name and GUID are hidden from addons, so a kill there is counted
+-- from its loot with nothing known of it: 54 of Josh's 314 enemies were a
+-- number ("#3653"), with no zone, type or rank, and no boss among them.
+-- Two lists fill those in, only where the journal has nothing:
+--   the encounter notes' bosses, by npc id (Modules/Encounter/Data.lua):
+--     a name, and that it is a boss
+--   Modules/Expedition/DungeonData.lua, from the VMaNGOS database: the
+--     name, type, rank and levels of the original game's dungeon enemies
+-- The dungeons new in Forever are in neither but for their bosses, so their
+-- other enemies stay a number until the game says more.
+local bossNames
+function J.BossNames()
+	if not bossNames then
+		bossNames = {}
+		for _, notes in pairs(BT.EncounterNotes or {}) do
+			for _, b in ipairs(type(notes) == "table" and type(notes.bosses) == "table" and notes.bosses or {}) do
+				for _, id in ipairs(type(b.npc) == "table" and b.npc or {}) do
+					bossNames[id] = b.name
+				end
+			end
+		end
+	end
+	return bossNames
+end
+
+function J.Fill(npc, m)
+	if type(npc) ~= "number" or type(m) ~= "table" then
+		return false
+	end
+	local d = BT.ExpeditionDungeon and BT.ExpeditionDungeon[npc]
+	local boss = J.BossNames()[npc]
+	if not (d or boss) then
+		return false
+	end
+	local changed = false
+	local function set(field, v)
+		if m[field] == nil and v ~= nil then
+			m[field] = v
+			changed = true
+		end
+	end
+	if d then
+		set("name", d[1])
+		set("kind", d[2])
+		set("rank", d[3])
+		if m.lo == nil and not m.skull and type(d[4]) == "number" then
+			m.lo, m.hi = d[4], d[5] or d[4]
+			changed = true
+		end
+		set("instance", d[6])
+	end
+	if boss then
+		set("name", boss)
+		set("boss", true)
+		-- the notes are of dungeons; a raid's enemy says so itself (above)
+		set("instance", "party")
+	end
+	if changed then
+		-- its category may have moved, and the points with it (J.KeptScore)
+		J.kept = nil
+	end
+	return changed
+end
+
+-- every enemy kept, filled in once more: those counted before the lists
+-- above were there. How many changed.
+function J.FillAll()
+	local s = J.Store()
+	local n = 0
+	for npc, m in pairs(s and s.enemies or {}) do
+		if type(m) == "table" and (m.name == nil or m.instance == nil) and J.Fill(npc, m) then
+			n = n + 1
+		end
+	end
+	return n
+end
+
 -- What an enemy is, from whatever the living unit said. Each field is taken when
 -- it is known and kept when it is not: a rank the client hid mid-fight is not
 -- "normal", it is the rank we read last time (or nothing yet).
@@ -891,6 +969,8 @@ function J.Learn(info, now)
 			m[field] = v
 		end
 	end
+	-- and what the unit could not say, from what is known of it (J.Fill)
+	J.Fill(info.npc, m)
 	-- met in a dungeon or a raid, and a boss there (J.Category): kept once
 	-- known - one kill in the open world does not make a dungeon's enemy less
 	if info.instance == "party" or info.instance == "raid" then

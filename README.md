@@ -56,12 +56,12 @@ bottom. Drag a row on that page to move it in the dock.
 | **Clock** | Local or server time, in the dock's header. Click it to switch. |
 | **Minimap** | Square minimap with coordinates. |
 | **Addon buttons** | Other addons' minimap buttons in one row. |
-| **Experience** | Your level on a shield. The XP bar with rested XP. Time to level at your XP per hour. Its tooltip lists zones and dungeons for your level. Right-click it to reset the session. |
+| **Experience** | Your level on a shield. The XP bar with rested XP. Time to level at your XP per hour. Its tooltip lists zones and dungeons for your level. |
 | **PvP**, **Reputation** | Your PvP rank with its insignia and progress to the next. Your standing with the faction you watch. |
 | **Expedition**, **Ledger** | Each journal's rank badge, rank and points. Click a line to open its journal. |
-| **Metrics** | Small stats in rows of three, each with its own switch: gold, bag space with your class's reagents, durability, item level, Pick Pocket takings (rogues), movement speed, FPS and latency. Point at the gold to see every character's gold and the total. Each character is counted once you log in on it. Click the gold to show the total in the dock, with a pile of coins in front. Click again for this character's gold. Right-click the gold or Pick Pocket to reset its session. Shift-right-click Pick Pocket twice to clear its all-time record. |
+| **Metrics** | Small stats in rows of three, each with its own switch: gold, bag space with your class's reagents, durability, item level, Pick Pocket takings (rogues), movement speed, FPS and latency. Point at the gold to see every character's gold and the total. Each character is counted once you log in on it. Click the gold to show the total in the dock, with a pile of coins in front. Click again for this character's gold. |
 | **Quest tracker** | Your quests grouped by zone, lowest level first. In a dungeon or raid it lists the quests filed under that place, followed or not. Your other quests fold under one line. The game's tracker is hidden. |
-| **Encounter notes** | In a dungeon, a tab on the dock's edge opens notes for each boss in a panel beside it. The tab shows which boss you are on, such as 2/6. Click ENCOUNTER at the top of the panel to fold it down to the boss. Some lines are for everyone. Others are for your role, or for a skill such as a kick, with the classes that have it. The notes open on the next boss alive. They switch to a boss when its fight starts and move on after a kill. The arrows show the others. Your role comes from your group or the group finder. Click Tank, Healer or DPS to pick another. The notes cover every dungeon from the original game, from Ragefire Chasm to Scholomance. They also cover the new Hall of Thanes, Ruins of Lordaeron, Excavation Site: Wetlands and City of Dalaran. The five new dungeons from level 35 up have none yet. Their switch is on the General page. |
+| **Encounter notes** | In a dungeon, a tab on the dock's edge opens notes for each boss in a panel beside it. The tab shows which boss you are on, such as 2/6. Click ENCOUNTER at the top of the panel to fold it down to the boss. Some lines are for everyone. Others are for your role, or for a skill such as a kick, with the classes that have it. The notes open on the next boss alive. They switch to a boss when its fight starts and move on after a kill. The arrows show the others. Your role comes from your group or the group finder. Click Tank, Healer or DPS to pick another. Click your pick again to go back to the group's. The notes cover every dungeon from the original game, from Ragefire Chasm to Scholomance. They also cover the new Hall of Thanes, Ruins of Lordaeron, Excavation Site: Wetlands and City of Dalaran. The five new dungeons from level 35 up have none yet. Their switch is on the General page. |
 | **Micro menu** | The game's menu buttons. |
 
 **Fade in combat**, on the Dock's page, fades the dock to 70% in a fight
@@ -141,6 +141,11 @@ enemy has a card with its model, its lore from the Warcraft Wiki and its
 mastery. On its page, the Model · Map switch shows the zone's map with a dot
 for each place you killed it, or a dungeon's loading screen. The page also
 lists the enemy's abilities, from the VMaNGOS database.
+
+The game hides an enemy's name inside a dungeon. A kill there counts when you
+loot the corpse, or when a boss fight is won. Enemies from the original
+game's dungeons and raids get their names from the VMaNGOS database. Others
+show as a number, such as #263389.
 
 Every unique kill and every commendation is worth points. Points set your
 rank, from Greenhorn to Expedition Leader. The Expedition's line in the dock

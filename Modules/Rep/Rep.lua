@@ -317,6 +317,26 @@ function M.Build()
 	return M.frame
 end
 
+-- ONCE A FRAME (2026-11-11, audit): the game sends UPDATE_FACTION several
+-- times for one quest handed in, and each one read every faction you have
+local gainQueued = false
+function M.GainSoon()
+	if not (C_Timer and C_Timer.After) then
+		M.Gain()
+		return
+	end
+	if gainQueued then
+		return
+	end
+	gainQueued = true
+	C_Timer.After(0, function()
+		gainQueued = false
+		if BT.Enabled("rep") then
+			M.Gain()
+		end
+	end)
+end
+
 M.events = CreateFrame("Frame")
 for _, event in ipairs({ "UPDATE_FACTION", "PLAYER_ENTERING_WORLD" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
@@ -329,7 +349,7 @@ M.events:SetScript("OnEvent", function(_, event, initial, reloading)
 		BT.Session.OnWorld(M, initial, reloading)
 	else
 		-- a gain, or a different faction ticked: either way, read it again
-		M.Gain()
+		M.GainSoon()
 	end
 end)
 

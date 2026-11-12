@@ -188,6 +188,22 @@ local function learnLook(w, unit)
 	w.look = looked[key]
 end
 
+-- WHERE IT WAS, WHICH NEEDS NO UNIT (2026-11-11, audit): the zone and
+-- whether it is a dungeon were read only with the rest, from a unit. Inside
+-- a dungeon the game hides an enemy's GUID, so a kill there is counted from
+-- its loot with no unit to ask, and went in the journal with no zone and not
+-- as a dungeon's enemy.
+local function place(w)
+	if w.zone == nil then
+		w.zone = ask(GetRealZoneText) or ask(GetZoneText)
+	end
+	-- "party", "raid", or the open world's "none"
+	if w.instance == nil and IsInInstance then
+		local ok, _, kind = pcall(IsInInstance)
+		w.instance = ok and type(kind) == "string" and not secret(kind) and kind or nil
+	end
+end
+
 local function learn(w, unit)
 	for _, f in ipairs(FACTS) do
 		if w[f[1]] == nil then
@@ -195,14 +211,7 @@ local function learn(w, unit)
 		end
 	end
 	learnLook(w, unit)
-	if w.zone == nil then
-		w.zone = ask(GetRealZoneText) or ask(GetZoneText)
-	end
-	-- "party", "raid", or the open world's "none"
-	if w.instance == nil and IsInInstance then
-		local ok, _, kind = pcall(IsInInstance)
-		w.instance = ok and type(kind) == "string" and kind or nil
-	end
+	place(w)
 end
 
 -- WHERE ON THE MAP (Josh 2026-09-26: the zone's map behind the portrait, the
@@ -354,6 +363,14 @@ function K.Observe(unit, t)
 		return w
 	end
 	if not w then
+		-- A PLAYER IS NEVER A KILL, AND STAYS ONE (2026-11-11, audit): a
+		-- player's GUID was asked whether it could be attacked five times a
+		-- second for every friendly plate, forty of them in a city. It can
+		-- never become an enemy's, so it is kept with the others that are not.
+		if guid:sub(1, 7) == "Player-" then
+			notEnemies[guid] = true
+			return nil
+		end
 		-- A FRIEND IS NOT A KILL (2026-10-05, audit): guards, vendors and
 		-- townsfolk were watched as enemies, five looks a second each, and each
 		-- kind's look asked for on first sight - dozens in a city with friendly
@@ -653,7 +670,10 @@ function K.Loot(t)
 			if r[1] and type(guid) == "string" and not secret(guid) and not seen[guid] and not counted[guid] then
 				seen[guid] = true
 				local npc = K.Parse(guid)
-				if npc and not K.Standing(guid) then
+				if npc and K.bossAt[npc] and t - K.bossAt[npc] <= K.BOSS_ONCE then
+					-- a boss already counted when its fight was won (K.BossDown)
+					counted[guid] = true
+				elseif npc and not K.Standing(guid) then
 					local w = W[guid] or { npc = npc }
 					W[guid] = w
 					w.t = t
@@ -668,6 +688,7 @@ function K.Loot(t)
 							learn(w, token)
 						end
 					end
+					place(w)
 					if K.Count(guid, w, "loot") then
 						n = n + 1
 					end
@@ -676,6 +697,29 @@ function K.Loot(t)
 		end
 	end
 	return n
+end
+
+-- A BOSS FIGHT WON IS A KILL (2026-11-11, audit). Inside a dungeon the game
+-- hides an enemy's GUID, so a kill there is only counted from its loot, and
+-- with group loot most of the party never open a boss's corpse. The game
+-- does say a boss fight was won (ENCOUNTER_END), and the encounter notes
+-- know which enemy that is, so the kill is counted then. Looting the corpse
+-- within K.BOSS_ONCE seconds is the same kill (K.Loot).
+K.BOSS_ONCE = 600
+K.bossAt = {}
+function K.BossDown(npc, t)
+	if type(npc) ~= "number" then
+		return false
+	end
+	t = t or now()
+	local last = K.bossAt[npc]
+	if last and t - last <= K.BOSS_ONCE then
+		return false
+	end
+	K.bossAt[npc] = t
+	local w = { npc = npc, boss = true, alive = true, t = t }
+	place(w)
+	return K.Count(("Boss-%d-%d"):format(npc, math.floor(t)), w, "boss")
 end
 
 -- an enemy that is still on its feet (a pocket, whatever the cast says)

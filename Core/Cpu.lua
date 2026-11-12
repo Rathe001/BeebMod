@@ -86,7 +86,14 @@ end
 
 -- fn, timed only while measuring (for what cannot be unwrapped: timers, hooks);
 -- the timed wrapper is made the first time it is needed, not with every timer
+-- ONLY IN A COPY TO WORK ON (2026-11-11, audit): the measurements start from
+-- the Testing page, which a player's copy does not have, and every hook,
+-- timer and hooksecurefunc of theirs still went through a wrapper that could
+-- never be switched on. There, the function is handed back as it came.
 local function whenOn(fn, label, byEvent)
+	if not BT.DEV then
+		return fn
+	end
 	local t
 	return function(...)
 		if P.on then

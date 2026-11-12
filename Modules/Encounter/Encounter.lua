@@ -1184,6 +1184,17 @@ function E.Fight(event, id, name, a, b, success)
 		end
 	end
 	if event == "ENCOUNTER_START" then
+		-- A BOSS YOU KILLED, FIGHTING AGAIN, IS A NEW RUN (2026-11-11, audit):
+		-- a run started within E.FRESH_AFTER of the last one kept its kills,
+		-- which is every run for a group that resets and goes straight back
+		-- in. With every boss marked dead the notes opened on the last one
+		-- and stopped moving on. A dead boss cannot start a fight, so its
+		-- fight starting says the dungeon is a fresh one.
+		if E.run.killed[i] then
+			local r = E.run
+			E.run = { key = r.key, lastKey = r.lastKey or r.key, killed = {}, at = r.at, held = r.held,
+				seen = r.seen }
+		end
 		E.Seen(i)
 	elseif kill then
 		E.Killed(notes, i)

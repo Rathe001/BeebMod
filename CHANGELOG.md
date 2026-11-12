@@ -3,6 +3,45 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Dungeon enemies have names in the journal.** The game hides an enemy's
+  name inside a dungeon, so those kills went in the Expedition as a number
+  such as #3653, with no zone, type or rank. Enemies from the original
+  game's dungeons and raids now get their name, type, rank and levels from
+  the VMaNGOS database. Kills already in your journal are filled in the next
+  time you log in. Enemies from the dungeons new in Forever still show as a
+  number, except their bosses.
+- **Dungeon bosses count for everyone.** A dungeon kill only counted when you
+  looted the corpse yourself. A boss in the encounter notes now counts when
+  its fight is won. It is also marked as a dungeon boss, which no boss was
+  before.
+- **Encounter notes start over on a new run.** A second run of the same
+  dungeon within 30 minutes kept the first run's kills. The notes opened on
+  the last boss and stopped moving on. A fresh run now starts when a boss you
+  already killed is fought again.
+- **Encounter notes: back to your group's role.** A role you clicked stayed
+  picked for good. Click your pick again to go back to the role from your
+  group or the group finder.
+- **All 40 nameplates are restyled.** Only the first 20 enemy nameplates were.
+  In a crowd, some enemies kept the game's own nameplate.
+- **Selling grey items counts items.** The chat line counted stacks, so three
+  stacks of five read "Sold 3 grey items". It also counts only what the
+  vendor took. If you close the window part-way, it still says what was sold.
+- **No session resets.** A right-click on Experience, the gold or Pick Pocket
+  no longer resets its session. Shift-right-clicking Pick Pocket twice no
+  longer clears its all-time record. A new session still starts each time
+  you log in.
+- **Gold total.** Clicking the gold with one character no longer switches
+  the total on for later.
+- **Less work in the background.** The Expedition no longer checks friendly
+  players five times a second. Dungeon pins are worked out once for each map
+  instead of at every step of a zoom. Reputation, chat and the bag slots do
+  less on the game's repeated events.
+- **Fixed:** the Ledger could save a guild name or ID the game had hidden.
+  The Expedition asked again and again for the text of a quest that has
+  none.
+
 ## 1.12.1
 
 - **Pick Pocket counts every pocket again.** Most pockets went uncounted:

@@ -181,6 +181,14 @@ local function settle(key, p)
 	end
 end
 
+-- a value the game let us read, or nil for one it hid
+local function plain(v)
+	if issecretvalue and issecretvalue(v) then
+		return nil
+	end
+	return v
+end
+
 -- What a unit says about who it is, for N.Ensure; nil for anyone who is not
 -- a player you can name.
 function N.Face(unit)
@@ -195,20 +203,25 @@ function N.Face(unit)
 	if not key then
 		return nil
 	end
+	-- NOTHING HIDDEN IS KEPT (2026-11-11, audit): the game hides some of
+	-- these at times (a guild's name, a GUID), and what came back was written
+	-- into the saved book as it was. A hidden answer is no answer, as the
+	-- census reads a unit (Core/Collect/Sightings.lua).
 	local info = { name = full or name, realm = realm }
 	local ok, _, class = pcall(UnitClass, unit)
-	info.class = ok and class or nil
+	info.class = ok and plain(class) or nil
 	-- the race's own word, not the shown one, as the census files it
 	local okR, _, race = pcall(UnitRace, unit)
-	info.race = okR and race or nil
+	info.race = okR and plain(race) or nil
 	local okL, level = pcall(UnitLevel, unit)
-	info.level = okL and type(level) == "number" and level > 0 and level or nil
+	level = okL and plain(level) or nil
+	info.level = type(level) == "number" and level > 0 and level or nil
 	-- a guild, when there is one: a unit whose guild has not arrived reads as
 	-- unguilded, so a unit never says anyone left one (as the census reads it)
 	local okG, guild = pcall(GetGuildInfo, unit)
-	info.guild = okG and guild or nil
+	info.guild = okG and plain(guild) or nil
 	local okU, guid = pcall(UnitGUID, unit)
-	info.guid = okU and guid or nil
+	info.guid = okU and plain(guid) or nil
 	info.faction = BT.Collect and BT.Collect.Side and BT.Collect.Side(unit) or nil
 	info.sex = BT.Collect and BT.Collect.Sex and BT.Collect.Sex(unit) or nil
 	return key, info

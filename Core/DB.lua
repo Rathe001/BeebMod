@@ -431,6 +431,7 @@ end
 -- knows - a combat log line knows a name and a faction, a unit you moused over
 -- knows everything - and a field that is nil never overwrites a field we have.
 -- Returns the record.
+local NOTED = { "class", "race", "guid" }
 function DB.Note(db, name, realm, info, now)
 	db = db or BT.db
 	if not db then
@@ -535,7 +536,7 @@ function DB.Note(db, name, realm, info, now)
 	if type(info.level) == "number" and info.level > 0 and info.level > (p.level or 0) then
 		p.level, p.levelAt = info.level, now
 	end
-	for _, f in ipairs({ "class", "race", "guid" }) do
+	for _, f in ipairs(NOTED) do
 		if info[f] ~= nil then
 			p[f] = info[f]
 		end

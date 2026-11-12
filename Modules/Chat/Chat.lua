@@ -1326,7 +1326,11 @@ function M.StyleAll(plain)
 	if not plain then
 		M.HookEditMode()
 	end
-	M.Filters(not plain)
+	-- ONCE, NOT WITH EVERY RESTYLE (2026-11-11, audit): a click on a chat tab
+	-- restyles, and each one asked the game to add all 28 filters again
+	if (M.filtering or false) ~= (not plain) then
+		M.Filters(not plain)
+	end
 	local n, tabHeight = 0, nil
 	for _, frame in ipairs(M.Frames()) do
 		local name = frame:GetName()

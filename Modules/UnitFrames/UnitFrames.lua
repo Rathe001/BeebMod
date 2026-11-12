@@ -1409,6 +1409,21 @@ local function onEvent(_, event, unit, powerType)
 	end
 end
 
+-- a header's cells, taken as they come (2026-11-11, audit): a list of them
+-- was built for every header four times a second and thrown away
+local function tickCells(groupFar, ...)
+	for i = 1, select("#", ...) do
+		local child = select(i, ...)
+		if type(child) == "table" and child.bmUnit and child:IsShown() then
+			local src = F.Source(child.bmUnit)
+			F.AlphaFrom(child, src:InRange(), 1, groupFar)
+			if child.bmTarget and child.bmTarget:IsShown() then
+				F.PaintHealth(child.bmTarget, F.Source(child.bmTarget.bmUnit))
+			end
+		end
+	end
+end
+
 -- The target of target has no events of its own, and range in a group moves
 -- without telling anyone: both are asked again four times a second.
 local function tick()
@@ -1443,15 +1458,7 @@ local function tick()
 	end
 	for _, h in ipairs(M.headers) do
 		if h:IsShown() then
-			for _, child in ipairs({ h:GetChildren() }) do
-				if type(child) == "table" and child.bmUnit and child:IsShown() then
-					local src = F.Source(child.bmUnit)
-					F.AlphaFrom(child, src:InRange(), 1, groupFar)
-					if child.bmTarget and child.bmTarget:IsShown() then
-						F.PaintHealth(child.bmTarget, F.Source(child.bmTarget.bmUnit))
-					end
-				end
-			end
+			tickCells(groupFar, h:GetChildren())
 		end
 	end
 end
