@@ -751,6 +751,99 @@ function W.Segmented(parent, options, onPick, width)
 	return seg
 end
 
+-- ONE OF MANY, IN THE ROOM OF ONE (Josh 2026-11-12: "make the Seen filter a
+-- dropdown, and add more options"). A button that says what is chosen, with
+-- the dock's chevron; a click opens the choices under it, a click on one
+-- picks it, and a click anywhere else shuts the list. It answers as
+-- W.Segmented does - `buttons`, each with its key, and `Select` - so a page
+-- can swap one for the other.
+W.DROP_ROW_H = 20
+
+function W.Dropdown(parent, options, onPick, width)
+	width = width or 96
+	local d = W.Button(parent, "", width, 20)
+	d.label:ClearAllPoints()
+	d.label:SetPoint("LEFT", 8, 0)
+	d.chevron = d:CreateTexture(nil, "OVERLAY")
+	d.chevron:SetSize(10, 10)
+	d.chevron:SetPoint("RIGHT", -6, 0)
+	d.chevron:SetTexture(ICONS)
+	d.chevron:SetTexCoord(0.625, 0.75, 0, 1)
+	d.chevron:SetVertexColor(QUIET[1], QUIET[2], QUIET[3], QUIET[4])
+
+	-- the list: over everything in the window, and as wide as the button
+	local list = CreateFrame("Frame", nil, d)
+	list:SetFrameStrata("FULLSCREEN_DIALOG")
+	list:SetPoint("TOPLEFT", d, "BOTTOMLEFT", 0, -2)
+	list:SetSize(width, #options * W.DROP_ROW_H + 2)
+	BT.Pill.Panel(list, W.SOLID, W.RIM)
+	pcall(list.EnableMouse, list, true)
+	list:Hide()
+	d.list = list
+	-- a click that misses the list lands here and shuts it
+	local away = CreateFrame("Button", nil, list)
+	away:SetFrameStrata("FULLSCREEN")
+	away:SetAllPoints(_G.UIParent)
+	pcall(away.RegisterForClicks, away, "AnyUp")
+	away:SetScript("OnClick", function()
+		list:Hide()
+	end)
+	d.away = away
+
+	d.buttons = {}
+	for i, o in ipairs(options) do
+		local r = CreateFrame("Button", nil, list)
+		r:SetPoint("TOPLEFT", 1, -1 - (i - 1) * W.DROP_ROW_H)
+		r:SetPoint("TOPRIGHT", -1, -1 - (i - 1) * W.DROP_ROW_H)
+		r:SetHeight(W.DROP_ROW_H)
+		r.key, r.text = o[1], o[2]
+		r.lit = r:CreateTexture(nil, "BACKGROUND")
+		r.lit:SetAllPoints()
+		r.lit:Hide()
+		r.label = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")
+		r.label:SetPoint("LEFT", 7, 0)
+		r.label:SetText(o[2] or "")
+		r.Paint = function(self)
+			local text = (self.chosen or self.hovered) and ON_TEXT or IDLE_TEXT
+			self.label:SetTextColor(text[1], text[2], text[3])
+			if self.chosen then
+				self.lit:SetColorTexture(W.WASH[1], W.WASH[2], W.WASH[3], W.WASH[4])
+			elseif self.hovered then
+				self.lit:SetColorTexture(1, 1, 1, 0.05)
+			end
+			self.lit:SetShown(self.chosen or self.hovered or false)
+		end
+		r:SetScript("OnEnter", function(self) self.hovered = true; self:Paint() end)
+		r:SetScript("OnLeave", function(self) self.hovered = false; self:Paint() end)
+		r:SetScript("OnClick", function(self)
+			list:Hide()
+			d:Select(self.key)
+			if onPick then
+				onPick(self.key)
+			end
+		end)
+		d.buttons[#d.buttons + 1] = r
+	end
+	d.Select = function(self, key)
+		for _, r in ipairs(self.buttons) do
+			r.chosen = r.key == key
+			r:Paint()
+			if r.chosen then
+				self.key = key
+				self:SetLabel(r.text)
+			end
+		end
+	end
+	d:SetScript("OnClick", function()
+		list:SetShown(not list:IsShown())
+	end)
+	-- put away with its window: a list left open would come back with it
+	d:SetScript("OnHide", function()
+		list:Hide()
+	end)
+	return d
+end
+
 -- A heading and a group of rows. Rows are laid out top to bottom in the order
 -- they were added; a hidden row takes no room, so a section can put away rows
 -- that do not apply (a rogue's line, a setting under a switch that is off).

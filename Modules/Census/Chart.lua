@@ -15,7 +15,14 @@ local U = BT.Util
 local C = {}
 BT.Census = C
 
-local ROWS, ROW_H = 12, 22
+-- AS MANY ROWS AS THE WINDOW HAS ROOM FOR (Josh 2026-11-12: "extend the height
+-- to the window height for all charts"). The window is a fixed height and
+-- the charts stopped at twelve rows, with a third of it empty under them.
+-- ROWS is the least a chart shows; MAX_ROWS are made, and C.Fit says how many
+-- of them the column holds today (fewer under the chips' line).
+local ROWS, ROW_H, MAX_ROWS = 12, 22, 24
+-- under the last row: a gap, and the line of the footer
+local FOOT_H = 26
 -- the tiles, the chips of the filters that are on, then the bars
 local TILE_H = 62
 local CAP_Y = -(TILE_H + 10)
@@ -33,9 +40,21 @@ local MODES = {
 	{ key = "level", label = "Level" },
 	{ key = "guild", label = "Guild" },
 	{ key = "zone",  label = "Zone"  },
-	{ key = "tag",   label = "Tags"  },
+	{ key = "tag",   label = "Tags",  ledger = true },
+	-- the people you grouped with, a row each (C.Grouped): the Ledger's too
+	{ key = "grouped", label = "Grouped", ledger = true },
 }
 C.MODES = MODES
+
+-- the search box's width, and what was typed as the words to look for: lower
+-- case, no spaces at the ends
+C.SEARCH_W = 120
+function C.Words(text)
+	if type(text) ~= "string" then
+		return ""
+	end
+	return (text:lower():gsub("^%s+", ""):gsub("%s+$", ""))
+end
 
 local function prettyClass(key)
 	return (key:sub(1, 1) .. key:sub(2):lower():gsub("_", " "))
@@ -268,6 +287,21 @@ function C.Build(parent, shell)
 	view.modeButtons = {}
 	if view.rail then
 		view.rail.onPick = function(key)
+			-- a new chart starts at its top
+			if key ~= view.mode and view.groupScroll then
+				view.painting = true
+				view.groupScroll:ScrollTo(0)
+				view.painting = nil
+			end
+			-- and with no search (Josh 2026-11-12: "When switching the chart, we
+			-- should clear out the text search"): words typed for a guild
+			-- find nothing among the classes
+			if key ~= view.mode and view.searchBox and view.search ~= "" then
+				view.search = ""
+				view.searchBox.edit:SetText("")
+				view.searchBox.edit:ClearFocus()
+				view.searchBox.Apply()
+			end
 			view.mode = key
 			C.Refresh(view)
 		end
@@ -280,10 +314,11 @@ function C.Build(parent, shell)
 		seenOptions[#seenOptions + 1] = { s.key, s.short or s.label }
 	end
 	local bar = shell.toolbar or view
-	view.seenControl = BT.Widgets.Segmented(bar, seenOptions, function(k)
+	-- a dropdown (Josh 2026-11-12): eight choices are too many for a row of buttons
+	view.seenControl = BT.Widgets.Dropdown(bar, seenOptions, function(k)
 		view.seen = k
 		C.Refresh(view)
-	end, 48)
+	end, 96)
 	view.seenControl:SetPoint("RIGHT", bar, "RIGHT", 0, 0)
 	view.seenWord = label(bar, "Seen", "small", 0.50, 0.55, 0.53)
 	view.seenWord:SetPoint("RIGHT", view.seenControl, "LEFT", -8, 0)
@@ -292,16 +327,66 @@ function C.Build(parent, shell)
 		view.seenButtons[b.key] = b
 	end
 
+	-- A SEARCH (Josh 2026-11-12: "I want to be able to search 'Olympus' for
+	-- example, to see all the guilds with olympus in their names"). It narrows
+	-- the rows of the chart you are on to the ones with the words in their
+	-- name, and on Guild, Zone and Tags it looks through all of them and not
+	-- only the ten largest. Nothing is counted again: the tiles and the
+	-- shares stay as they were.
+	view.search = ""
+	if BT.Book and BT.Book.Search then
+		view.searchBox = BT.Book.Search(bar, "Search", C.SEARCH_W, function(text)
+			text = C.Words(text)
+			if text ~= view.search then
+				view.search = text
+				view.groupScroll:ScrollTo(0)
+				C.Refresh(view)
+			end
+		end)
+		view.searchBox:SetPoint("RIGHT", view.seenWord, "LEFT", -12, 0)
+	end
+
 	-- every filter that is on, a chip with its x, on a line of their own
 	-- above the bars. NO COUNT BESIDE THEM (Josh 2026-10-01: "I think we can
 	-- just remove this line"): the tiles say how many there are.
 	view.chips = {}
 
+	-- MORE PEOPLE THAN ROWS (Josh 2026-11-12, the Grouped chart: "Scrolling
+	-- list is good"). The other charts are twelve rows at most; the people
+	-- you grouped with can be hundreds. The twelve rows stay where they are
+	-- and show a different twelve: this scroller, under them, takes the wheel
+	-- and draws the thumb, and the rows are painted from wherever it stands.
+	view.groupScroll = BT.Widgets.Scroller(view, 8)
+	view.groupScroll.step = ROW_H * 3
+	view.groupScroll:Hide()
+	do
+		local sc = view.groupScroll
+		local scrollTo = sc.ScrollTo
+		function sc:ScrollTo(y)
+			local at = scrollTo(self, y)
+			if view.scrolls and not view.painting then
+				C.Refresh(view)
+			end
+			return at
+		end
+	end
+	local rowLevel = (view.GetFrameLevel and view:GetFrameLevel() or 1) + 3
+
 	view.rows = {}
-	for i = 1, ROWS do
+	view.fit = ROWS
+	for i = 1, MAX_ROWS do
 		-- A ROW IS AS WIDE AS THE PANEL (Josh 2026-09-19): the count and its
 		-- share pinned to the right, and the bar stretching to meet them
 		local row = CreateFrame("Button", nil, view)
+		pcall(row.SetFrameLevel, row, rowLevel)
+		-- the wheel over a row is the scroller's, whichever of them the
+		-- client hands it to
+		pcall(row.EnableMouseWheel, row, true)
+		row:SetScript("OnMouseWheel", function(_, delta)
+			if view.scrolls then
+				view.groupScroll:ScrollBy(-(delta or 0) * view.groupScroll.step)
+			end
+		end)
 		row:SetHeight(ROW_H)
 		row:SetPoint("TOPLEFT", 0, ROWS_Y - (i - 1) * ROW_H)
 		row:SetPoint("TOPRIGHT", 0, ROWS_Y - (i - 1) * ROW_H)
@@ -322,6 +407,18 @@ function C.Build(parent, shell)
 			end
 			if BT.Tip and self.n then
 				BT.Tip.Show(self, { near = true, build = function(t)
+					-- a person: how often, and the last time and place
+					local who = self.person
+					if who then
+						local what = who.class and prettyClass(who.class) or nil
+						if what and who.level then
+							what = ("Level %d %s"):format(who.level, what)
+						end
+						t:Header({ name = who.name, sub = what })
+						t:Note(BT.LedgerGroups and BT.LedgerGroups.Line({ grouped = who.n, groupedAt = who.at,
+							groupedWhere = who.where }) or U.Commas(who.n))
+						return
+					end
 					t:Header({ name = self.name:GetText(), sub = U.Commas(self.n) })
 					t:Note(("%d%% of the %s in this chart."):format(self.share or 0, U.Commas(self.of or 0)))
 					if self.pickable then
@@ -376,6 +473,13 @@ function C.Build(parent, shell)
 	view.note = label(view, "", "small", 0.42, 0.47, 0.45)
 	view.note:SetPoint("TOPRIGHT", view, "TOPRIGHT", -4, ROWS_Y - 8 - ROWS * ROW_H)
 	view.note:SetJustifyH("RIGHT")
+	-- the window opens before it has a height, and the rows that fit are
+	-- counted from it: drawn again once it is known
+	view:SetScript("OnSizeChanged", function(self)
+		if self.census and not self.painting and self.fit ~= C.Fit(self, self.rowsTop or ROWS_BARE) then
+			C.Refresh(self)
+		end
+	end)
 	return view
 end
 
@@ -589,15 +693,39 @@ function C.Refresh(view, census)
 	-- (not `top`: that name is the biggest bar's count further down, and the
 	-- window was once made as tall as 4,738 less the rows: negative, with no
 	-- background and its top above the screen)
-	local rowsTop = C.PaintChips(view) > 0 and ROWS_Y or ROWS_BARE
+	local chips = C.PaintChips(view)
+	local rowsTop = chips > 0 and ROWS_Y or ROWS_BARE
+	-- the people you grouped with: every one of them, twelve at a time from
+	-- where the scroller stands
+	local grouped = view.mode == "grouped"
+	local rows, first = BT.Stats.LongRows(census, view.mode), 0
+	-- everyone the chart counts, whatever the search leaves of it
+	local counted = 0
+	for _, r in ipairs(rows) do
+		counted = counted + r.n
+	end
+	if grouped then
+		rows = C.Grouped(view, want, key, census)
+	end
+	local words = view.search or ""
+	if words ~= "" then
+		rows = C.Search(view, census, rows, words)
+	end
+	-- EVERY CHART SCROLLS (Josh 2026-11-12): as many rows as fit, from wherever
+	-- the scroller stands, and its thumb only when there are more than fit
+	view.scrolls = true
+	view.rowsTop = rowsTop
+	local fit = C.Fit(view, rowsTop)
+	first =C.GroupedFirst(view, #rows, rowsTop)
+	-- room for the thumb when there is one
+	local inset = #rows > fit and -12 or 0
 	for i, row in ipairs(view.rows) do
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", 0, rowsTop - (i - 1) * ROW_H)
-		row:SetPoint("TOPRIGHT", 0, rowsTop - (i - 1) * ROW_H)
+		row:SetPoint("TOPRIGHT", inset, rowsTop - (i - 1) * ROW_H)
 	end
 
 	local pick = view.pick
-	local rows = census[view.mode] or {}
 	-- On the level chart the brackets are a highlight, not a filter; on the
 	-- chart a bar was picked from, every bar but that one is quiet.
 	local function muted(r)
@@ -607,21 +735,33 @@ function C.Refresh(view, census)
 		return pick ~= nil and pick.mode == view.mode and pick.key ~= r.key
 	end
 	local pickable = BT.Stats.PICKABLE[view.mode]
-	local top = 0
+	-- THE BARS ARE MEASURED AGAINST THE BIGGEST NAMED ROW (Josh 2026-11-12:
+	-- "fix the no guild and other guilds"). No guild and Other guilds were
+	-- 37% and 57% of the chart, so the largest guild, at 1%, was a sliver and
+	-- no two guilds could be told apart. The grey rows (a gap in the book, a
+	-- pile of the rest) are not what the chart compares: they are drawn full
+	-- when they are bigger than every named row, and their numbers say by how
+	-- much. A chart of nothing but grey rows measures against those.
+	local S = BT.Stats
+	local top, greyTop = 0, 0
 	for _, r in ipairs(rows) do
-		if r.n > top then top = r.n end
+		if r.key == S.UNKNOWN or r.key == S.UNGUILDED or r.key == S.OTHER then
+			if r.n > greyTop then greyTop = r.n end
+		elseif r.n > top then
+			top = r.n
+		end
 	end
-	local counted = 0
-	for _, r in ipairs(rows) do
-		counted = counted + r.n
+	if top == 0 then
+		top = greyTop
 	end
 	local accent = BT.Widgets.ACCENT
 	local shown = 0
 	for i, row in ipairs(view.rows) do
-		local r = rows[i]
+		local r = i <= fit and rows[i + first] or nil
 		if r then
 			shown = shown + 1
-			row.name:SetText(rowLabel(view.mode, r.key))
+			row.person = grouped and r or nil
+			row.name:SetText(grouped and r.name or rowLabel(view.mode, r.key))
 			-- the track stretches with the panel, so the bar is a fraction of
 			-- whatever it actually came out as
 			local track = BT.Pill.Number(row.track.GetWidth and row.track:GetWidth(), BAR_W)
@@ -630,7 +770,7 @@ function C.Refresh(view, census)
 			if track < 2 then
 				track = BAR_W
 			end
-			row.bar:SetWidth(math.max(1, track * (top > 0 and r.n / top or 0)))
+			row.bar:SetWidth(math.max(1, track * (top > 0 and math.min(1, r.n / top) or 0)))
 			-- the pile of the rest is not one thing, so it cannot be picked
 			row.key = r.key
 			row.pickable = pickable and r.key ~= BT.Stats.OTHER
@@ -643,7 +783,9 @@ function C.Refresh(view, census)
 				row.bar:SetColorTexture(0.35, 0.4, 0.38, 0.5)
 				BT.Ink(row.name, "faint")
 			else
-				row.bar:SetColorTexture(rowColor(view.mode, r.key))
+				-- a person's bar is their class's colour
+				row.bar:SetColorTexture(rowColor(grouped and "class" or view.mode,
+					grouped and (r.class or BT.Stats.UNKNOWN) or r.key))
 				BT.Ink(row.name, "ink")
 			end
 			-- share of everyone counted in THIS chart, not of the whole book:
@@ -651,10 +793,11 @@ function C.Refresh(view, census)
 			local pct = counted > 0 and math.floor(r.n / counted * 100 + 0.5) or 0
 			row.n, row.share, row.of = r.n, pct, counted
 			row.count:SetText(U.Commas(r.n))
-			row.pct:SetText(pct .. "%")
+			-- a share of all your groups says nothing about one person
+			row.pct:SetText(grouped and "" or (pct .. "%"))
 			row:Show()
 		else
-			row.key, row.pickable, row.picked, row.n = nil, nil, nil, nil
+			row.key, row.pickable, row.picked, row.n, row.person = nil, nil, nil, nil, nil
 			row:Hide()
 		end
 	end
@@ -663,7 +806,19 @@ function C.Refresh(view, census)
 	local bottom = rowsTop - math.max(shown, 1) * ROW_H - 8
 	view.footer:ClearAllPoints()
 	view.footer:SetPoint("TOPLEFT", 4, bottom)
-	view.footer:SetText(BT.Stats.AgeLine(census))
+	-- HOW MANY (Josh 2026-11-12: "we need to show the number of results
+	-- somewhere, especially if the text search is used"): first on the line
+	-- under the rows, before how old the book is
+	local howMany = C.CountLine(view.mode, words ~= "" and #rows or C.Named(census, view.mode, rows), words)
+	if #rows == 0 and words ~= "" then
+		view.footer:SetText(howMany)
+	elseif grouped then
+		view.footer:SetText(#rows > 0 and howMany or C.GroupedLine(#rows, chips > 0))
+	elseif howMany then
+		view.footer:SetText(howMany .. " · " .. BT.Stats.AgeLine(census))
+	else
+		view.footer:SetText(BT.Stats.AgeLine(census))
+	end
 	view.note:ClearAllPoints()
 	view.note:SetPoint("TOPRIGHT", view, "TOPRIGHT", -4, bottom)
 	local unknown = census.unknown and census.unknown[view.mode] or 0
@@ -675,15 +830,138 @@ function C.Refresh(view, census)
 	end
 end
 
--- The rail's rows: a chart each, the one shown lit. Tags are the Ledger's
--- notes, so only while the Ledger is on.
+-- The people you grouped with, for the filter that is on (BT.Stats.Grouped):
+-- read again when the filter, the Ledger's book or the census changes, and
+-- not on every notch of the wheel
+function C.Grouped(view, want, key, census)
+	local N = BT.Notes
+	local stamp = key .. "#" .. tostring(N and N.rev or 0)
+	if view.grouped and view.groupedStamp == stamp and view.groupedFor == census then
+		return view.grouped
+	end
+	view.grouped = BT.Stats.Grouped(N and N.People and N.People() or nil, BT.db, nil, want)
+	view.groupedStamp, view.groupedFor = stamp, census
+	return view.grouped
+end
+
+-- The rows of a chart with `words` in their name, largest first. On Guild,
+-- Zone and Tags it is every one of them (BT.Stats.AllRows); on the Grouped
+-- chart, the people (`rows`). The pile of the rest has no name to match.
+-- Kept for the census and the words, so the wheel does not search again.
+function C.Search(view, census, rows, words)
+	local mode = view.mode
+	local s = view.searched
+	if s and s.census == census and s.mode == mode and s.words == words and s.from == rows then
+		return s.rows
+	end
+	local from = mode == "grouped" and rows or BT.Stats.AllRows(census, mode)
+	local out = {}
+	for _, r in ipairs(from) do
+		if r.key ~= BT.Stats.OTHER then
+			local name = mode == "grouped" and r.name or rowLabel(mode, r.key)
+			if type(name) == "string" and name:lower():find(words, 1, true) then
+				out[#out + 1] = r
+			end
+		end
+	end
+	view.searched = { census = census, mode = mode, words = words, from = rows, rows = out }
+	return out
+end
+
+-- The scroller laid behind the rows and told how many people there are; gives
+-- back how many of them are above the first row. It rests on whole rows.
+function C.GroupedFirst(view, n, rowsTop)
+	local sc = view.groupScroll
+	view.painting = true
+	sc:ClearAllPoints()
+	sc:SetPoint("TOPLEFT", 0, rowsTop)
+	sc:SetPoint("TOPRIGHT", 0, rowsTop)
+	local fit = view.fit or ROWS
+	sc:SetHeight(fit * ROW_H)
+	sc:Show()
+	sc:SetContentHeight(n * ROW_H)
+	view.painting = nil
+	return math.max(0, math.min(n - fit, math.floor((sc.offset or 0) / ROW_H + 0.5)))
+end
+
+-- How many rows the column holds from `rowsTop` down, leaving the footer its
+-- line: never fewer than ROWS (a window not laid out yet has no height), nor
+-- more than were made.
+function C.Fit(view, rowsTop)
+	local h = BT.Pill.Number(view.GetHeight and view:GetHeight(), 0)
+	local n = math.floor((h + rowsTop - FOOT_H) / ROW_H)
+	view.fit = math.max(ROWS, math.min(MAX_ROWS, n))
+	return view.fit
+end
+
+-- What a chart's rows are, one and many; the short charts have no count
+-- worth saying until you search them
+local NOUN = {
+	class = { "class", "classes" }, race = { "race", "races" }, level = { "level range", "level ranges" },
+	guild = { "guild", "guilds", true }, zone = { "zone", "zones", true }, tag = { "tag", "tags", true },
+	grouped = { "person", "people", true },
+}
+
+-- how many guilds, zones or tags a chart has by name: not the pile of the
+-- rest, nor the rows for a gap in the book. Counted once for a census.
+function C.Named(census, mode, rows)
+	if mode == "grouped" then
+		return #rows
+	end
+	local counts = census.counts and census.counts[mode]
+	if not counts then
+		return #rows
+	end
+	census.named = census.named or {}
+	if not census.named[mode] then
+		local S, n = BT.Stats, 0
+		for key in pairs(counts) do
+			if key ~= S.UNGUILDED and key ~= S.UNKNOWN and key ~= S.OTHER then
+				n = n + 1
+			end
+		end
+		census.named[mode] = n
+	end
+	return census.named[mode]
+end
+
+-- "1,204 guilds", or with a search `5 guilds match "olympus"`; nil when there
+-- is nothing to say
+function C.CountLine(mode, n, words)
+	local noun = NOUN[mode]
+	if not noun then
+		return nil
+	end
+	if words and words ~= "" then
+		if n == 0 then
+			return ('Nothing matches "%s".'):format(words)
+		end
+		return ('%s %s %s "%s"'):format(U.Commas(n), noun[n == 1 and 1 or 2], n == 1 and "matches" or "match", words)
+	end
+	if not noun[3] or n == 0 then
+		return nil
+	end
+	return ("%s %s"):format(U.Commas(n), noun[n == 1 and 1 or 2])
+end
+
+-- the line under the people: how many, or why there are none
+function C.GroupedLine(n, filtering)
+	if n == 0 then
+		return filtering and "Nobody matches the filter."
+			or "Nobody yet. A group counts after 5 minutes together, or in a dungeon."
+	end
+	return n == 1 and "1 person" or ("%s people"):format(U.Commas(n))
+end
+
+-- The rail's rows: a chart each, the one shown lit. Tags and Grouped are the
+-- Ledger's, so only while the Ledger is on.
 function C.PaintModes(view)
 	if not view.rail then
 		return
 	end
 	local entries = {}
 	for _, m in ipairs(MODES) do
-		if m.key ~= "tag" or BT.Enabled("ledger") then
+		if not m.ledger or BT.Enabled("ledger") then
 			entries[#entries + 1] = { key = m.key, label = m.label, chosen = m.key == view.mode }
 		elseif view.mode == m.key then
 			view.mode = "class"
@@ -816,7 +1094,11 @@ end
 
 -- THE FILTERS THAT ARE ON, AS CHIPS (the census redesign): each one named,
 -- and a click on it lets it go. Right to left from the window's edge.
-local SEEN_WORDS = { today = "Seen today", week = "Seen this week", month = "Seen this month" }
+-- "Seen today", "Seen in the past 3 hours": the Stats' own words, capitalised
+local SEEN_WORDS = {}
+for key, as in pairs(BT.Stats.SEEN_AS) do
+	SEEN_WORDS[key] = as:gsub("^%l", string.upper)
+end
 function C.Chips(view)
 	local out = {}
 	if view.faction and view.faction ~= "all" then

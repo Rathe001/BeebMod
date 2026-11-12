@@ -3,6 +3,33 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Your own buffs have a green border on the target.** A buff you or your
+  pet cast comes first in the target's buff row. Up to four of yours show,
+  then up to eight from other people.
+- **Ledger charts: Grouped.** A new chart on the left lists everyone you
+  grouped with. Each person has a bar in their class colour for the number
+  of groups. The list scrolls. Hover a bar for the last time and place.
+- **Ledger charts: every chart scrolls.** Guild and Zone showed their ten
+  largest. They now list the 100 largest, with the rest in one row at the
+  end.
+- **Ledger charts: taller, with a count.** The bars now fill the window. The
+  line under them says how many guilds, zones, tags or
+  people there are, or how many match your search.
+- **Ledger charts: guild bars you can compare.** "No guild" and "Other
+  guilds" were so large that every guild's bar was a sliver. Bars are now
+  sized against the largest guild. The two grey rows stop at full width.
+  Their numbers and percentages are unchanged.
+- **Ledger charts: search.** Type in the box by Seen to keep only the bars
+  with those words in their name. On Guild, Zone and Tags it looks through
+  all of them. Search "olympus" on Guild to list every guild with Olympus
+  in its name.
+- **Ledger charts: Seen is a dropdown.** It has four new choices. You can
+  count the characters seen in the past 12, 6, 3 or 1 hours. "Today" is now
+  called "Day". The line under the bars now counts in minutes inside the
+  first hour, as in "Half were last seen in the past 20 minutes".
+
 ## 1.13.0
 
 - **Dungeon enemies have names in the journal.** The game hides an enemy's

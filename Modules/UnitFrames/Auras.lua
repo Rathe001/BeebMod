@@ -88,7 +88,7 @@ A.SPECS = {
 	target = {
 		{ key = "debuffs", filter = "HARMFUL", max = 8, size = 18, perLine = 4, at = "BELOW", below = "combo" },
 		{ key = "buffs", filter = "HELPFUL", max = 8, size = 16, perLine = 4, at = "BELOW", below = "combo",
-			growLeft = true, flowAt = "TOPRIGHT", helpfulRing = true },
+			growLeft = true, flowAt = "TOPRIGHT", helpfulRing = true, mineFirst = 4 },
 	},
 	focus = {
 		{ key = "debuffs", filter = "HARMFUL|PLAYER", max = 4, size = 14, at = "RIGHT" },
@@ -219,6 +219,15 @@ local function dispelOptions(helpful)
 	}
 end
 
+-- YOUR OWN BUFFS WEAR A GREEN EDGE (Josh 2026-11-12: "a green border to buffs
+-- cast by me"). A button cannot be told whose aura it holds, and in a fight
+-- nothing of ours may ask. So a row with mineFirst is two groups in the one
+-- container, which the client sorts by its own candidate filter
+-- (isFromPlayerOrPlayerPet): yours first, on buttons made with a green edge,
+-- then everybody else's on the plain ones. mineFirst is how many of yours the
+-- row holds; the others keep the row's own max.
+A.MINE = { 0.25, 0.90, 0.35 }
+
 -- ---------------------------------------------------------------------------
 -- Buttons: made by the client, dressed once, here
 -- ---------------------------------------------------------------------------
@@ -226,7 +235,8 @@ end
 -- An icon: black edge, the picture cropped of its own border, a sweep for its
 -- time, its stacks, and the edge in its dispel colour when it has one.
 -- noSweep: no clock face across the picture (the aura tray shows time as a bar)
-local function iconButton(size, quiet, clickThrough, helpful, noSweep)
+-- edgeColour: the edge in this colour and not black (A.MINE)
+local function iconButton(size, quiet, clickThrough, helpful, noSweep, edgeColour)
 	return function(b)
 		b:SetSize(size, size)
 		-- ITS TOOLTIP (Josh 2026-09-23: "should be able to see tooltips if I
@@ -244,7 +254,11 @@ local function iconButton(size, quiet, clickThrough, helpful, noSweep)
 		end
 		local edge = b:CreateTexture(nil, "BACKGROUND", nil, 0)
 		edge:SetAllPoints()
-		edge:SetColorTexture(0, 0, 0, 1)
+		if edgeColour then
+			edge:SetColorTexture(edgeColour[1], edgeColour[2], edgeColour[3], 1)
+		else
+			edge:SetColorTexture(0, 0, 0, 1)
+		end
 		if not quiet and b.AddDispelTypeTexture then
 			local ring = b:CreateTexture(nil, "BACKGROUND", nil, 1)
 			ring:SetAllPoints()
@@ -374,13 +388,37 @@ local function container(host, spec, unit)
 	end
 	pcall(c.SetUnit, c, unit or "player")
 	local sort = _G.AuraContainerSortMethod and _G.AuraContainerSortMethod.UnitFrameDebuff
+	local gap = spec.spacing or (spec.inside and 1 or 2)
+	local candidate = spec.candidate
+	if spec.mineFirst then
+		-- yours first, green at the edge; the group after it then takes
+		-- everybody else's (see A.MINE). A group registered first is laid first.
+		local mine, rest = { isFromPlayerOrPlayerPet = true }, { isFromPlayerOrPlayerPet = false }
+		for k, v in pairs(candidate or {}) do
+			mine[k], rest[k] = v, v
+		end
+		local okMine = pcall(c.AddAuraGroup, c, spec.key .. "Mine", spec.filter, {
+			maxFrameCount = spec.mineFirst,
+			initializeFrame = iconButton(spec.size, true, spec.inside, nil, nil, A.MINE),
+			candidateFilters = mine,
+			sortMethod = spec.sort,
+			sortDirection = spec.direction,
+			layout = { elementSpacing = gap, lineSpacing = 2,
+				elementWidth = spec.size, elementHeight = spec.cellH or spec.size },
+		})
+		-- without the first group the row stays as it was: everyone's, plain
+		if okMine then
+			candidate = rest
+		end
+	end
 	local ok2 = pcall(c.AddAuraGroup, c, spec.key, spec.filter, {
 		maxFrameCount = spec.max,
 		initializeFrame = spec.init or iconButton(spec.size, spec.quiet, spec.inside, spec.helpfulRing),
-		candidateFilters = spec.candidate,
+		candidateFilters = candidate,
 		sortMethod = spec.sort or (spec.filter:find("HARMFUL") and sort) or nil,
 		sortDirection = spec.direction,
-		layout = { elementSpacing = spec.spacing or (spec.inside and 1 or 2), lineSpacing = 2,
+		-- groupSpacing: the gap between your last and the first of the rest
+		layout = { elementSpacing = gap, lineSpacing = 2, groupSpacing = spec.mineFirst and gap or nil,
 			elementWidth = spec.size, elementHeight = spec.cellH or spec.size },
 	})
 	if not ok2 then
@@ -805,8 +843,16 @@ function A.Show(b, kind, data)
 			else
 				f.ring:Hide()
 			end
+			-- `mine = true` on a made-up buff: your green edge, where the row has one
+			local own = (a.mine and spec.mineFirst) and A.MINE or nil
+			if own then
+				f.edge:SetColorTexture(own[1], own[2], own[3], 1)
+				f.ring:Hide()
+			else
+				f.edge:SetColorTexture(0, 0, 0, 1)
+			end
 			f.count:SetText((a.count and a.count > 1) and tostring(a.count) or "")
-			f.spell, f.type = a.spell, a.type
+			f.spell, f.type, f.mine = a.spell, a.type, own and true or nil
 			placeIcon(f, b, spec, n)
 			f:Show()
 			shown = shown + 1

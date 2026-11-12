@@ -113,7 +113,11 @@ with both factions in it.
 
 - **Charts:** your realm by class, race, level, guild and zone. Pick the
   chart on the left. Tiles across the top show the faction, gender and level
-  split. Click any part of one to narrow every chart to it.
+  split. Click any part of one to narrow every chart to it. Seen narrows them
+  to the characters you saw lately, from the past month down to the past
+  hour. The Grouped chart lists everyone you grouped with, most groups first.
+  The search box keeps the bars with your words in their name. On the Guild
+  chart, "olympus" lists every guild with Olympus in its name.
 - **Find people:** search by name, guild or a word you wrote. The list on the
   left shows everyone, your notes, or the people with one tag.
 - **Commendations:** characters recorded, notes, tags, groups and duels.

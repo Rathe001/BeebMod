@@ -682,7 +682,11 @@ do
 		local got = line({ 1.9 * 86400, 1.9 * 86400, 5 * 86400 })
 		check(got == "Half were last seen in the past 2 days", "1.9 days rounds up: " .. got)
 		got = line({ 1800 })
-		check(got == "Half were last seen in the past hour", "half an hour is the past hour: " .. got)
+		check(got == "Half were last seen in the past 30 minutes", "half an hour, to five minutes: " .. got)
+		got = line({ 100, 400, 3000 })
+		check(got == "Half were last seen in the past 10 minutes", "the middle of three, rounded up to five minutes: " .. got)
+		got = line({ 3500, 3590 })
+		check(got == "Half were last seen in the past hour", "58 minutes is the past hour: " .. got)
 		got = line({ 20.5 * 3600 })
 		check(got == "Half were last seen in the past 21 hours", "20.5 hours: " .. got)
 		got = line({ 23.5 * 3600 })
@@ -1985,6 +1989,78 @@ do
 	local week = S.Census(db, now, { seen = "week" })
 	check(week.total == 4, "this week adds the one seen two days ago")
 	check(S.Census(db, now, { seen = "month" }).total == 4, "the month leaves out forty days ago and never")
+	-- DOWN TO THE HOUR (Josh 2026-11-12): 12, 6, 3 and 1 hours
+	check(S.Census(db, now, { seen = "h12" }).total == 3 and S.Census(db, now, { seen = "h3" }).total == 3,
+		"three hours keeps the three seen an hour ago")
+	check(S.Census(db, now, { seen = "h1" }).total == 0 and S.Census(db, now - 60, { seen = "h1" }).total == 3,
+		"one hour is under an hour: a whole hour ago is out, 59 minutes is in")
+	check(S.AgeLine(S.Census(db, now, { seen = "h1" })) == "Nobody was seen in the past hour."
+		and S.AgeLine(S.Census(db, now + DAY, { seen = "h6" })) == "Nobody was seen in the past 6 hours.",
+		"and each says who it found nobody among")
+	local keys = {}
+	for i, s in ipairs(S.SEEN) do
+		keys[i] = s.key
+	end
+	check(table.concat(keys, " ") == "all month week today h12 h6 h3 h1", "the choices, longest first: " .. table.concat(keys, " "))
+	-- EVERY GUILD FOR A SEARCH (Josh 2026-11-12): the chart keeps its largest,
+	-- and the whole list is there to look through
+	do
+		local big = newdb()
+		for i = 1, 30 do
+			for k = 1, i do
+				DB.Note(big, ("G%dn%dx Member"):format(i, k), nil, { class = "MAGE", guild = "Guild " .. i }, now - 60)
+			end
+		end
+		local c = S.Census(big, now)
+		local all = S.AllRows(c, "guild")
+		check(#c.guild == S.TOP + 1 and c.guild[#c.guild].key == S.OTHER, "the guild chart is its ten largest and the rest")
+		check(#all == 30 and all[1].key == "Guild 30" and all[30].key == "Guild 1" and all[30].n == 1,
+			("every guild, largest first (%d)"):format(#all))
+		check(S.AllRows(c, "guild") == all and S.AllRows(c, "class") == c.class, "sorted once; a short chart is itself")
+		-- A CHART THAT SCROLLS (Josh 2026-11-12): the hundred largest, the
+		-- rest as one row, No guild last
+		check(#S.LongRows(c, "guild") == 30 and S.LongRows(c, "class") == c.class, "thirty guilds are all shown")
+		for i = 31, 130 do
+			DB.Note(big, ("G%dx Member"):format(i), nil, { class = "MAGE", guild = "Small " .. i }, now - 60)
+		end
+		DB.Note(big, "Lone Wolf", nil, { class = "MAGE", guild = "" }, now - 60)
+		local long = S.LongRows(S.Census(big, now), "guild")
+		local sum = 0
+		for _, r in ipairs(long) do
+			sum = sum + r.n
+		end
+		check(#long == S.LONG + 2 and long[1].key == "Guild 30" and long[S.LONG + 1].key == S.OTHER
+			and long[S.LONG + 1].n == 30 and long[S.LONG + 2].key == S.UNGUILDED,
+			("130 guilds: a hundred, the other thirty as one row, then No guild (%d rows)"):format(#long))
+		check(sum == 30 * 31 / 2 + 100 + 1, "and the rows still add up to everyone")
+	end
+	-- THE PEOPLE YOU GROUPED WITH (Josh 2026-11-12): the Ledger's rows, read
+	-- with what the census knows, under the same filters
+	do
+		local people = {
+			["Ann Arrow"] = { name = "Ann Arrow", class = "HUNTER", level = 58, grouped = 2, groupedAt = now - 5 * DAY },
+			["Bob Bow"] = { name = "Bob Bow", grouped = 5, groupedAt = now - 2 * DAY, groupedWhere = "Gnomeregan" },
+			["Not Booked"] = { name = "Not Booked", class = "PRIEST", level = 20, faction = "Horde", grouped = 2, groupedAt = now - 60 },
+			["Eve Edge"] = { name = "Eve Edge", note = "a note and no group" },
+		}
+		local function names(filter)
+			local out = {}
+			for i, r in ipairs(S.Grouped(people, db, now, filter)) do
+				out[i] = r.name
+			end
+			return table.concat(out, ", ")
+		end
+		check(names() == "Bob Bow, Not Booked, Ann Arrow", "most groups first, then the latest: " .. names())
+		local rows = S.Grouped(people, db, now)
+		check(rows[1].n == 5 and rows[1].class == "HUNTER" and rows[1].where == "Gnomeregan" and rows[3].level == 60,
+			"a face from the census where it has one")
+		check(names({ seen = "today" }) == "Not Booked, Ann Arrow", "Seen: the census saw Ann an hour ago: " .. names({ seen = "today" }))
+		check(names({ seen = "h1" }) == "Not Booked", "and a group a minute ago is a sighting")
+		check(names({ bands = { ["60"] = true } }) == "Ann Arrow", "a bracket")
+		check(names({ faction = "Horde" }) == "Not Booked", "a side, from the Ledger's own row when the census has none")
+		check(names({ pick = { mode = "class", key = "HUNTER" } }) == "Bob Bow, Ann Arrow", "a bar picked on another chart")
+		check(#S.Grouped(nil, db, now) == 0, "and no Ledger is nobody")
+	end
 	check(S.Census(db, now, { seen = "nonsense" }).total == 6, "a seen that is not one of ours is no filter")
 	check(S.AgeLine(S.Census(db, now + 100 * DAY, { seen = "today" })) == "Nobody was seen today.",
 		"a Seen filter that leaves nobody says so, not that the book is empty")

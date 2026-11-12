@@ -2466,11 +2466,178 @@ if ok then
 			BT.RemoveTag(gone.key)
 			assert(BT.Census.Filter(view).pick == nil and view.pick == nil and #BT.Census.Chips(view) == 0,
 				"one on a tag deleted since is let go")
+			-- SEEN IS A DROPDOWN (Josh 2026-11-12): shut until clicked, eight
+			-- choices, and a pick shuts it and names itself on the button
+			local drop = view.seenControl
+			assert(#drop.buttons == 8 and not drop.list:IsShown() and drop.label:GetText() == "All",
+				"Seen: one button saying All, its list shut")
+			drop:GetScript("OnClick")(drop)
+			assert(drop.list:IsShown(), "a click opens the list")
 			view.seenButtons.today:GetScript("OnClick")(view.seenButtons.today)
 			assert(view.seen == "today" and view.census.seen == "today", "seen today narrows the charts")
+			assert(not drop.list:IsShown() and drop.label:GetText() == "Day" and view.seenButtons.today.chosen,
+				"the pick shuts the list and the button says Day")
 			assert(BT.Census.Filter(view).seen == "today", "and the window's own counting with them")
+			view.seenButtons.h3:GetScript("OnClick")(view.seenButtons.h3)
+			assert(view.census.seen == "h3" and drop.label:GetText() == "3 hours", "down to three hours")
+			local chip
+			for _, c in ipairs(BT.Census.Chips(view)) do
+				chip = chip or (c.text == "Seen in the past 3 hours" and c)
+			end
+			assert(chip, "and its chip says so")
+			drop:GetScript("OnClick")(drop)
+			drop.away:GetScript("OnClick")(drop.away)
+			assert(not drop.list:IsShown() and view.seen == "h3", "a click away shuts the list and picks nothing")
 			view.seenButtons.all:GetScript("OnClick")(view.seenButtons.all)
 			assert(view.census.seen == nil, "and All is the whole book")
+			-- THE PEOPLE YOU GROUPED WITH (Josh 2026-11-12): a chart of its own,
+			-- a row a person, every one of them behind a scroller
+			do
+				local N, tnow = BT.Notes, BT.Util.Now()
+				local people = N.People()
+				local kept = {}
+				for k, p in pairs(people) do
+					kept[k] = p
+					people[k] = nil
+				end
+				assert(view.modeButtons.grouped, "Grouped is on the rail")
+				view.modeButtons.grouped:GetScript("OnClick")(view.modeButtons.grouped)
+				assert(view.mode == "grouped" and not view.rows[1]:IsShown()
+					and view.footer:GetText():find("^Nobody yet%."), "nobody yet, and it says what counts: " .. tostring(view.footer:GetText()))
+				for i = 1, 30 do
+					people["Pal " .. i] = { name = "Pal " .. i, class = i == 30 and "MAGE" or "WARRIOR", level = 20,
+						grouped = i, groupedAt = tnow - 60, groupedWhere = "The Deadmines" }
+				end
+				people["Only Noted"] = { name = "Only Noted", note = "never grouped" }
+				N.Touched()
+				BT.Census.Refresh(view)
+				local sc = view.groupScroll
+				assert(view.rows[1].name:GetText() == "Pal 30" and view.rows[1].count:GetText() == "30"
+					and view.rows[1].pct:GetText() == "" and view.rows[12].name:GetText() == "Pal 19",
+					"most groups first, twelve at a time: " .. tostring(view.rows[1].name:GetText()))
+				assert(view.footer:GetText() == "30 people" and sc:IsShown() and sc:Max() == 18 * 22,
+					"thirty people, and the rest a scroll away: " .. tostring(view.footer:GetText()) .. " " .. tostring(sc:Max()))
+				local mr, mg, mb = BT.Util.ClassColor("MAGE")
+				local c = view.rows[1].bar._color or {}
+				assert(c[1] == mr and c[2] == mg and c[3] == mb and not view.rows[1].pickable, "a bar in the class's colour, not one to pick")
+				sc:GetScript("OnMouseWheel")(sc, -1)
+				assert(view.rows[1].name:GetText() == "Pal 27" and view.rows[12].name:GetText() == "Pal 16",
+					"the wheel moves three rows: " .. tostring(view.rows[1].name:GetText()))
+				view.rows[3]:GetScript("OnMouseWheel")(view.rows[3], -1)
+				assert(view.rows[1].name:GetText() == "Pal 24", "and over a row as well")
+				sc:ScrollTo(1e6)
+				assert(view.rows[12].name:GetText() == "Pal 1" and view.rows[1].name:GetText() == "Pal 12", "down to the last of them")
+				-- the window's filters narrow it
+				view.seenButtons.h1:GetScript("OnClick")(view.seenButtons.h1)
+				assert(view.footer:GetText() == "30 people", "a group a minute ago is a sighting")
+				people["Pal 30"].groupedAt = tnow - 2 * 3600
+				N.Touched()
+				BT.Census.Refresh(view)
+				assert(view.footer:GetText() == "29 people" and view.rows[1].name:GetText() ~= "Pal 30",
+					"and one two hours ago is not in the past hour: " .. tostring(view.footer:GetText()))
+				view.seenButtons.all:GetScript("OnClick")(view.seenButtons.all)
+				-- with the Ledger off there is no such chart
+				view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+				assert(sc.offset == 0 and sc:Max() == 0 and view.rows[1].pct:GetText() ~= "",
+					"another chart: from its top, nothing to scroll, and its shares again")
+				-- A SEARCH (Josh 2026-11-12): the rows with the words in their name
+				local box = view.searchBox
+				local function search(text)
+					box.edit:SetText(text)
+					box.Apply()
+				end
+				assert(box and box:GetParent() == view.seenControl:GetParent(), "a search box on the toolbar, by Seen")
+				view.modeButtons.grouped:GetScript("OnClick")(view.modeButtons.grouped)
+				search("  PAL 2 ")
+				assert(view.search == "pal 2" and view.footer:GetText() == '11 people match "pal 2"' and view.rows[1].name:GetText() == "Pal 29"
+					and view.rows[11].name:GetText() == "Pal 2" and not view.rows[12]:IsShown(),
+					"Pal 2 and Pal 20 to 29, whatever the case: " .. tostring(view.footer:GetText()))
+				search("zzz")
+				assert(not view.rows[1]:IsShown() and view.footer:GetText() == 'Nothing matches "zzz".', "and nothing says so")
+				-- on a chart of the book: its rows by name, the shares as they were
+				-- ANOTHER CHART, NO SEARCH (Josh 2026-11-12): the words go with the
+				-- chart they were typed for
+				view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+				assert(view.search == "" and box.edit:GetText() == "" and view.rows[1]:IsShown(),
+					"switching chart empties the search, and the classes are all there")
+				view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+				search("zzz")
+				view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+				assert(view.search == "zzz", "a click on the chart you are on keeps it")
+				search("")
+				local name, pct, n = view.rows[1].name:GetText(), view.rows[1].pct:GetText(), 0
+				for _, r in ipairs(view.rows) do
+					n = n + (r:IsShown() and 1 or 0)
+				end
+				search(name:sub(1, 4))
+				local left = 0
+				for _, r in ipairs(view.rows) do
+					if r:IsShown() then
+						left = left + 1
+						assert(r.name:GetText():lower():find(name:sub(1, 4):lower(), 1, true), "only rows with the words: " .. r.name:GetText())
+					end
+				end
+				assert(left >= 1 and left < n and view.rows[1].name:GetText() == name and view.rows[1].pct:GetText() == pct
+					and view.rows[1].pickable, ("%d of %d classes left, its share unchanged, still one to pick"):format(left, n))
+				-- every guild, not only the ten largest
+				local all = BT.Stats.AllRows(view.census, "guild")
+				view.modeButtons.guild:GetScript("OnClick")(view.modeButtons.guild)
+				if #all > 0 then
+					local last = all[#all].key
+					local label = last == BT.Stats.UNGUILDED and "No guild" or last
+					search(label)
+					local found
+					for _, r in ipairs(view.rows) do
+						found = found or (r:IsShown() and r.name:GetText() == label)
+					end
+					assert(found, "the smallest guild is found by its name: " .. tostring(label))
+				end
+				-- HOW MANY (Josh 2026-11-12): the number of results, under the rows
+				local Cs = BT.Census
+				assert(Cs.CountLine("guild", 5, "olympus") == '5 guilds match "olympus"'
+					and Cs.CountLine("guild", 1, "olympus") == '1 guild matches "olympus"'
+					and Cs.CountLine("class", 0, "zzz") == 'Nothing matches "zzz".', "what a search found")
+				assert(Cs.CountLine("guild", 1204, "") == "1,204 guilds" and Cs.CountLine("zone", 1, "") == "1 zone"
+					and Cs.CountLine("class", 9, "") == nil and Cs.CountLine("guild", 0, "") == nil,
+					"how many there are, on the charts where that is news")
+				search("")
+				local named = Cs.Named(view.census, "guild", {})
+				if named > 0 then
+					assert(view.footer:GetText():find("^" .. named .. " guilds? · "), "the guild chart says how many guilds: "
+						.. tostring(view.footer:GetText()))
+				end
+				-- THE BARS AGAINST THE BIGGEST NAMED ROW (Josh 2026-11-12): No guild
+				-- and Other guilds, however big, do not shrink the guilds' bars
+				do
+					local S = BT.Stats
+					local was = view.census
+					local fake = setmetatable({ counts = false, long = false,
+						guild = { { key = "Big Guild", n = 40 }, { key = "Half Guild", n = 20 },
+							{ key = S.OTHER, n = 4000 }, { key = S.UNGUILDED, n = 10 } } }, { __index = was })
+					fake.key = was.key
+					BT.Census.Refresh(view, fake)
+					local full = view.rows[1].bar:GetWidth()
+					assert(view.rows[1].name:GetText() == "Big Guild" and full > 100
+						and math.abs(view.rows[2].bar:GetWidth() - full / 2) < 1, "the biggest guild is a full bar, half of it a half")
+					assert(view.rows[3].bar:GetWidth() == full and view.rows[3].count:GetText() == "4,000"
+						and view.rows[4].bar:GetWidth() < full / 2, "the pile is a full bar and no more, a small No guild its own size")
+					BT.Census.Refresh(view, was)
+				end
+				-- AS MANY ROWS AS THE WINDOW HOLDS (Josh 2026-11-12)
+				local tall = { GetHeight = function() return 480 end }
+				assert(Cs.Fit(tall, -74) == 17 and Cs.Fit(tall, -100) == 16, "seventeen rows in the column, sixteen under the chips")
+				assert(Cs.Fit({ GetHeight = function() return 0 end }, -74) == 12 and Cs.Fit({ GetHeight = function() return 5000 end }, -74) == #view.rows,
+					"never fewer than twelve, nor more than were made")
+				assert(view.search == "", "an empty box is no search")				view.modeButtons.class:GetScript("OnClick")(view.modeButtons.class)
+				for k in pairs(people) do
+					people[k] = nil
+				end
+				for k, p in pairs(kept) do
+					people[k] = p
+				end
+				N.Touched()
+				BT.Census.Refresh(view)
+			end
 			-- WHICH SIDE AND WHICH SEX (Josh 2026-09-30: "add alliance/horde/all
 			-- faction filters", "We should also add a gender filter")
 			-- (the stubs' units are all Horde and male: those halves have people)
@@ -7998,8 +8165,33 @@ if ok then
 			assert(row._points.TOPLEFT.y == -F.PLAIN_ROOM, "just under a plain target: " .. tostring(row._points.TOPLEFT.y))
 			-- ITS BUFFS, A ROW UNDER (Josh 2026-09-24): every one, permanent too
 			local buffs = target.bmAuras.buffs
-			assert(buffs and buffs.groups.buffs.filter == "HELPFUL" and buffs.groups.buffs.opts.candidateFilters == nil,
-				"the target's buffs, all of them")
+			-- YOURS FIRST, GREEN AT THE EDGE (Josh 2026-11-12): two groups, split by
+			-- the client's own filter, so every buff is in one of them and none in both
+			local own, rest = buffs and buffs.groups.buffsMine, buffs and buffs.groups.buffs
+			assert(own and rest and own.filter == "HELPFUL" and rest.filter == "HELPFUL"
+				and own.opts.candidateFilters.isFromPlayerOrPlayerPet == true
+				and rest.opts.candidateFilters.isFromPlayerOrPlayerPet == false
+				and rest.opts.candidateFilters.maxDuration == nil,
+				"the target's buffs, all of them, yours apart from the rest")
+			assert(own.opts.maxFrameCount == 4 and rest.opts.maxFrameCount == 8
+				and rest.opts.layout.groupSpacing == rest.opts.layout.elementSpacing, "yours first, then the rest, evenly spaced")
+			assert(target.bmAuras.debuffs.groups.debuffsMine == nil, "and its debuffs are one group as before")
+			do
+				local made = {}
+				local button = { SetSize = function() end,
+					CreateTexture = function()
+						local t = { SetAllPoints = function() end, SetPoint = function() end, SetTexCoord = function() end }
+						t.SetColorTexture = function(self, r, g, b) self.colour = { r, g, b } end
+						made[#made + 1] = t
+						return t
+					end,
+					CreateFontString = function() return { SetFont = function() end, SetPoint = function() end } end }
+				own.opts.initializeFrame(button)
+				assert(made[1].colour[1] == A.MINE[1] and made[1].colour[2] == A.MINE[2], "a button of yours has the green edge")
+				made = {}
+				rest.opts.initializeFrame(button)
+				assert(made[1].colour[1] == 0 and made[1].colour[2] == 0, "and anyone else's the black one")
+			end
 			-- DEBUFFS LEFT, BUFFS RIGHT: one row, from either edge of the frame
 			local right = buffs._points.TOPRIGHT
 			assert(right and right.relPoint == "BOTTOMRIGHT" and right.y == row._points.TOPLEFT.y,

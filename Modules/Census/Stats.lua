@@ -47,15 +47,25 @@ S.AGE_BUCKETS = {
 -- SEEN WITHIN (Josh 2026-09-24). A book kept for weeks remembers everyone who
 -- ever passed through; "who plays here NOW" is the characters seen lately. The
 -- window narrows every chart to one of these, and nil is the whole book.
+--
+-- DOWN TO THE HOUR (Josh 2026-11-12: "add more options? Month, Week, Day, 12h,
+-- 6h, 3h, 1h"), the longest first, as a dropdown lists them. `as` is how a
+-- sentence or a chip says it: "seen today", "Nobody was seen in the past hour."
 S.SEEN = {
-	{ key = "today", label = "Today", within = 86400 },
-	{ key = "week",  label = "Week",  within = 7 * 86400 },
-	{ key = "month", label = "Month", within = 30 * 86400 },
 	{ key = "all",   label = "All" },
+	{ key = "month", label = "Month",    within = 30 * 86400, as = "seen this month" },
+	{ key = "week",  label = "Week",     within = 7 * 86400,  as = "seen this week" },
+	{ key = "today", label = "Day",      within = 86400,      as = "seen today" },
+	{ key = "h12",   label = "12 hours", within = 12 * 3600,  as = "seen in the past 12 hours" },
+	{ key = "h6",    label = "6 hours",  within = 6 * 3600,   as = "seen in the past 6 hours" },
+	{ key = "h3",    label = "3 hours",  within = 3 * 3600,   as = "seen in the past 3 hours" },
+	{ key = "h1",    label = "1 hour",   within = 3600,       as = "seen in the past hour" },
 }
 local seenWithin = {}
+S.SEEN_AS = {}
 for _, s in ipairs(S.SEEN) do
 	seenWithin[s.key] = s.within
+	S.SEEN_AS[s.key] = s.as
 end
 
 -- Guild and zone are long charts - a realm has hundreds of guilds - so each
@@ -223,9 +233,16 @@ local DAY = 86400
 -- the hour under a day and to the day after that, rounded up (S.AgeLine), so
 -- each age is counted at its step instead: 1 to 24 hours, then 24 + days.
 -- The middle step is the line the middle age would give.
+--
+-- AND FIVE MINUTES AT A TIME INSIDE THE FIRST HOUR (Josh 2026-11-12: "They
+-- all seem to say 'Half were seen in the past hour'"). With Seen at a few
+-- hours, most of who it keeps you saw in the last hour, so the line said the
+-- same thing whichever you chose. The first hour's steps are twelfths of one.
 function S.AgeStep(age)
-	if age < DAY then
-		return math.max(1, math.ceil(age / 3600))
+	if age < 3600 then
+		return math.max(1, math.ceil(age / 300)) / 12
+	elseif age < DAY then
+		return math.ceil(age / 3600)
 	end
 	return 24 + math.ceil(age / DAY)
 end
@@ -348,6 +365,66 @@ local function count(t, p, key)
 	end
 end
 
+-- THE PEOPLE YOU GROUPED WITH, ONE ROW EACH (Josh 2026-11-12: "a new left
+-- chart to show all the people the player has grouped with"). Not a count of
+-- the book: the Ledger keeps how often you grouped with each person
+-- (Modules/Ledger/Groups.lua), on a row with the face they had then. `people`
+-- is that book. Each person is read with what the census knows of them where
+-- it knows more (their sex, where they were last), and the window's filters
+-- apply as they do to a chart: Seen, side, sex, brackets, and a bar picked on
+-- another chart. Being in a group with someone is a sighting of them.
+-- Most groups first; then the latest; then by name.
+local FACE = { "class", "race", "guild", "zone", "level", "faction", "sex" }
+function S.Grouped(people, db, now, filter)
+	filter = filter or {}
+	now = now or U.Now()
+	local within = seenWithin[filter.seen]
+	local bands = filter.bands
+	if bands and next(bands) == nil then
+		bands = nil
+	end
+	local pick = filter.pick
+	if pick and not (S.PICKABLE[pick.mode] and pick.key ~= nil) then
+		pick = nil
+	end
+	local faction = (filter.faction == "Alliance" or filter.faction == "Horde") and filter.faction or nil
+	local sex = (filter.sex == 2 or filter.sex == 3) and filter.sex or nil
+	local rows, face = {}, {}
+	for key, m in pairs(people or {}) do
+		local n = tonumber(m.grouped)
+		if n and n >= 1 then
+			local c = db and DB.Get(db, key) or nil
+			for _, f in ipairs(FACE) do
+				local v = c and c[f]
+				if v == nil then
+					v = m[f]
+				end
+				face[f] = v
+			end
+			local last = math.max(tonumber(c and c.last) or 0, tonumber(m.last) or 0, tonumber(m.groupedAt) or 0)
+			local band = S.BandOf(face.level)
+			local keep = not (within and (last == 0 or now - last >= within))
+				and not (faction and face.faction ~= faction)
+				and not (sex and face.sex ~= sex)
+				and not (bands and not (band and bands[band] == true))
+				and not (pick and not picks(pick, face, m.tags))
+			if keep then
+				rows[#rows + 1] = { key = key, name = m.name or (c and c.name) or key, n = n, class = face.class,
+					level = face.level, at = tonumber(m.groupedAt) or 0, where = m.groupedWhere }
+			end
+		end
+	end
+	table.sort(rows, function(a, b)
+		if a.n ~= b.n then
+			return a.n > b.n
+		elseif a.at ~= b.at then
+			return a.at > b.at
+		end
+		return tostring(a.name) < tostring(b.name)
+	end)
+	return rows
+end
+
 -- the largest `top` rows, and everything after them as one OTHER row; the
 -- rows kept last (Unguilded) go after that, whatever their size
 local function topRows(counts, top, last)
@@ -429,6 +506,11 @@ local function finish(t)
 		tag = topRows(t.tag, S.TOP + 1),
 		guild = topRows(t.guild, S.TOP, { [S.UNGUILDED] = true }),
 		zone = topRows(t.zone, S.TOP + 1),
+		-- EVERY GUILD, ZONE AND TAG, NOT ONLY THE LARGEST (Josh 2026-11-12, the
+		-- charts' search: "all the guilds with olympus in their names"): the
+		-- counts as they were tallied, sorted only when somebody searches
+		-- (S.AllRows)
+		counts = { guild = t.guild, zone = t.zone, tag = t.tag },
 		tagged = t.tagged,
 		unknown = {
 			class = t.unknownClass, level = t.unknownLevel, race = t.unknownRace, tag = 0,
@@ -441,6 +523,41 @@ local function finish(t)
 			buckets = buckets,
 		},
 	}
+end
+
+-- Every row of a chart, largest first: the long charts' whole lists, which the
+-- chart itself cuts to its largest (topRows), and the short charts as drawn.
+-- Sorted once for a census and kept on it.
+function S.AllRows(census, mode)
+	local counts = census.counts and census.counts[mode]
+	if not counts then
+		return census[mode] or {}
+	end
+	census.all = census.all or {}
+	if not census.all[mode] then
+		census.all[mode] = sorted(counts)
+	end
+	return census.all[mode]
+end
+
+-- A CHART THAT SCROLLS (Josh 2026-11-12: "make the other charts scrollable,
+-- same as Grouped. Maybe limit to 100 rows?"). The window's Guild and Zone
+-- charts are their hundred largest, the rest as one row after them, and No
+-- guild last as before; the short charts are themselves. A hundred because a
+-- list is read, not because of the cost: the window draws twelve rows
+-- wherever the list stands, and the one sort is the same for 100 as for all.
+-- Sorted once for a census and kept on it.
+S.LONG = 100
+function S.LongRows(census, mode)
+	local counts = census.counts and census.counts[mode]
+	if not counts then
+		return census[mode] or {}
+	end
+	census.long = census.long or {}
+	if not census.long[mode] then
+		census.long[mode] = topRows(counts, S.LONG, mode == "guild" and { [S.UNGUILDED] = true } or nil)
+	end
+	return census.long[mode]
 end
 
 -- a packed character is read into one borrowed table, only the six fields a
@@ -523,7 +640,7 @@ end
 -- OUT OF WHOM (Josh 2026-09-24): with a bar picked, a chart counts the
 -- characters it picked, so "of" is out of them and not out of the realm - and
 -- the chart it was picked on is still out of everybody.
-local SEEN_AS = { today = "seen today", week = "seen this week", month = "seen this month" }
+local SEEN_AS = S.SEEN_AS
 
 -- "median 2 days, average 5 days" - how much of this book you should believe.
 -- NOBODY TO COUNT (Josh 2026-09-28, "fix it"): an empty book, the Seen filter
@@ -546,6 +663,9 @@ function S.AgeLine(census)
 	-- keeps these same steps (S.AgeStep).
 	local m = a.median
 	if m < DAY then
+		if m < 3600 then
+			return ("Half were last seen in the past %d minutes"):format(math.max(1, math.ceil(m / 300)) * 5)
+		end
 		local hours = math.max(1, math.ceil(m / 3600))
 		if hours == 1 then
 			return "Half were last seen in the past hour"
