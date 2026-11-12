@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.13.0
 
 - **Dungeon enemies have names in the journal.** The game hides an enemy's
   name inside a dungeon, so those kills went in the Expedition as a number
