@@ -43,6 +43,83 @@ function BT.OnSpellTooltip(moduleKey, order, fn)
 	table.sort(spells, function(a, b) return a.order < b.order end)
 end
 
+-- CELLS FROM ANOTHER ADDON IN AN ITEM'S CARD (Josh 2026-11-16: "BeebMod:
+-- Upgrades... I'd like it integrated with BeebMod, but since most people are
+-- already using Pawn, I don't want to force this on them"). Upgrades is an
+-- addon of its own and cannot see BT, so this one function is put where it
+-- can: the global BeebMod. `fn(tip, data, shopping)` answers with cells,
+-- each { shown words, plain words }, and the card draws them before its own.
+local cellMakers = {}
+function BT.OnItemCells(fn)
+	if type(fn) == "function" then
+		cellMakers[#cellMakers + 1] = fn
+	end
+end
+function T.MoreItemCells(tip, data, shopping)
+	local out = {}
+	for _, fn in ipairs(cellMakers) do
+		local ok, cells = pcall(fn, tip, data, shopping)
+		if ok and type(cells) == "table" then
+			for _, cell in ipairs(cells) do
+				if type(cell) == "table" and type(cell[1]) == "string" and type(cell[2]) == "string" then
+					out[#out + 1] = cell
+				end
+			end
+			-- and plain rows for under the cells, each { left words, right
+			-- words }, `quiet` for the dimmer ink (Upgrades' Shift breakdown)
+			if type(cells.rows) == "table" then
+				out.rows = out.rows or {}
+				for _, row in ipairs(cells.rows) do
+					if type(row) == "table" and type(row[1]) == "string" then
+						out.rows[#out.rows + 1] = row
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+_G.BeebMod = _G.BeebMod or {}
+_G.BeebMod.OnItemCells = BT.OnItemCells
+
+-- A SWITCH FOR AN ADDON THAT RIDES ON BEEBMOD (Josh 2026-11-16, of Upgrades:
+-- "make sure we have a switch for this in the options? Also if the module
+-- is not installed, it should be completely gone everywhere"). The addon
+-- asks for its switch as it loads; with the addon not installed nobody asks,
+-- and the settings page has no section for it (UI/Settings.lua draws only
+-- what is in BT.extras). On unless switched off, kept in settings.extras.
+--   BeebMod.AddSwitch({ key, section, title, blurb, changed = fn(on) })
+--   BeebMod.SwitchOn(key)
+BT.extras = {}
+function BT.ExtraOn(key)
+	local s = BT.settings and BT.settings.extras
+	return not (type(s) == "table" and s[key] == false)
+end
+function BT.SetExtra(key, on)
+	if not BT.settings then
+		return
+	end
+	BT.settings.extras = BT.settings.extras or {}
+	BT.settings.extras[key] = on and true or false
+	for _, x in ipairs(BT.extras) do
+		if x.key == key and type(x.changed) == "function" then
+			pcall(x.changed, on and true or false)
+		end
+	end
+end
+_G.BeebMod.AddSwitch = function(def)
+	if type(def) ~= "table" or type(def.key) ~= "string" or type(def.title) ~= "string" then
+		return
+	end
+	for _, x in ipairs(BT.extras) do
+		if x.key == def.key then
+			return
+		end
+	end
+	BT.extras[#BT.extras + 1] = def
+end
+_G.BeebMod.SwitchOn = BT.ExtraOn
+
 -- Called when the tooltip goes away, for anything drawn OVER it rather than
 -- in it: those frames belong to whatever the tooltip was showing, and have to
 -- leave with it rather than hang over the next thing you point at.

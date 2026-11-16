@@ -124,6 +124,18 @@ function S.Build(parent)
 		function() return BT.Switched("repair") end,
 		function(on) BT.SetEnabled("repair", on) end)
 
+	-- SWITCHES OF ADDONS THAT RIDE ON BEEBMOD (Josh 2026-11-16: "if the
+	-- module is not installed, it should be completely gone everywhere").
+	-- BeebMod: Upgrades asks for one as it loads (BeebMod.AddSwitch,
+	-- Core/Tooltip.lua). Not installed, there is nothing here to draw.
+	S.extraRows = {}
+	for _, x in ipairs(BT.extras or {}) do
+		local section = stack:Section(x.section or x.title)
+		S.extraRows[x.key] = W.SwitchRow(section, x.title, x.blurb or "",
+			function() return BT.ExtraOn(x.key) end,
+			function(on) BT.SetExtra(x.key, on) end)
+	end
+
 	stack:Layout()
 end
 

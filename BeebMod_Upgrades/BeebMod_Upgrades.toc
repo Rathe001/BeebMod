@@ -1,0 +1,16 @@
+# BEEBMOD: UPGRADES (Josh 2026-11-16). An addon of its own that needs BeebMod:
+# most players already use Pawn, so nobody gets this by installing BeebMod.
+# It is not packaged (.pkgmeta ignores the folder) and not on CurseForge.
+## Interface: 16001
+## Title: BeebMod: Upgrades
+## Notes: Damage, healing and survival changes on item tooltips.
+## Author: Josh
+## Version: 0.1.0
+## Dependencies: BeebMod
+## SavedVariables: BeebModUpgradesDB
+
+Math.lua
+Roles.lua
+Read.lua
+Tiles.lua
+Fights.lua

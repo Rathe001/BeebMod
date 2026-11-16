@@ -3091,7 +3091,8 @@ local function card(tip)
 		local rows, row, used = {}, {}, 0
 		for _, it in ipairs(items) do
 			local w = math.ceil(T.Measure(it[2], I.SUB, "text")) + 2 * I.CELL_PAD + 1
-			if #row > 0 and used + w > inner then
+			-- `newRow` on an item starts a row whatever room is left
+			if #row > 0 and (used + w > inner or it.newRow) then
 				rows[#rows + 1] = row
 				row, used = {}, 0
 			end
@@ -3352,13 +3353,46 @@ function M.WriteItem(tip, item, icon, level)
 		needs = math.max(needs, I.BAR_W + I.BAR_GAP + T.Measure(d.text, I.FOOT, "text")
 			+ (item.price and T.Measure(M.Coins(item.price), I.FOOT, "text") or 0) + 24 + I.INSET)
 	end
+	-- WIDE ENOUGH FOR ANOTHER ADDON'S CELLS IN ONE ROW (Josh 2026-11-16, of
+	-- Corpsemaker's card: "the DPS box is on the second grid row"): a narrow
+	-- card broke the three Upgrades cells across two rows
+	-- (the widest of their rows: a cell with `newRow` starts one)
+	local moreWidth, rowWidth = 0, 0
+	for _, cell in ipairs(item.more or {}) do
+		if cell.newRow then
+			rowWidth = 0
+		end
+		rowWidth = rowWidth + math.ceil(T.Measure(cell[2], I.SUB, "text")) + 2 * I.CELL_PAD + 1
+		moreWidth = math.max(moreWidth, rowWidth)
+	end
+	if moreWidth > 0 then
+		needs = math.max(needs, moreWidth + I.INSET + 2)
+	end
 	needs = math.min(MAX_W, needs)
 
 	-- what it does in a fight and what it asks of you, in cells
 	local facts, said, timed = M.ItemFacts(item)
-	if #facts > 0 then
+	-- A ROW TO THEMSELVES (Josh 2026-11-16, of the Upgrades cells: "Sometimes
+	-- there are other items on the row also... it should only ever be those 3
+	-- stats"): the item's own facts start the next row.
+	local cells = M.FactCells(facts)
+	local more = item.more or {}
+	if #more > 0 and cells[1] then
+		cells[1].newRow = true
+	end
+	for i, cell in ipairs(more) do
+		table.insert(cells, i, cell)
+	end
+	if #cells > 0 then
 		spacer()
-		c.cells(M.FactCells(facts), math.max(floor, needs) - I.INSET)
+		c.cells(cells, math.max(floor, needs) - I.INSET)
+	end
+	-- another addon's rows, under the cells (BT.OnItemCells)
+	if more.rows and #more.rows > 0 then
+		spacer()
+		for _, r in ipairs(more.rows) do
+			row(r[1], r.quiet and ITEM_QUIET or ITEM_INK, type(r[2]) == "string" and r[2] or nil)
+		end
 	end
 
 	-- then its stats and what it does beyond them, as plain lines with no
@@ -3498,6 +3532,9 @@ function M.RebuildItem(tip, data)
 	end
 	local id = type(data) == "table" and data.id or nil
 	item.class = M.ItemClass(id)
+	-- cells another addon has for this item (BT.OnItemCells), asked before
+	-- the clear, while the tooltip still knows what it shows
+	item.more = BT.UnitTip.MoreItemCells and BT.UnitTip.MoreItemCells(tip, data, tip.isShopping and true or false)
 	-- THE "EQUIPPED" LABEL OVER A COMPARISON TOOLTIP: the client hides it
 	-- whenever the tooltip is cleared (ShoppingTooltipTemplate), and the
 	-- rebuild clears it, so it is put back as it was
