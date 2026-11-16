@@ -1799,9 +1799,16 @@ function M.DumpPlates(lines)
 				ours = "frame"
 			end
 			local alpha = BT.Pill.Number(plate.GetEffectiveAlpha and plate:GetEffectiveAlpha(), -1)
-			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f"):format(token,
-				describe(F.Plain(UnitName, token)), describe(player), describe(M.IsFriend(token)),
-				ours, alpha)
+			-- WHY A SIDE (Josh 2026-11-13: "Nameplates dont seem to be showing for
+			-- enemy faction players. All their names are just yellow"): what the
+			-- game says of the unit, and how faded our own frame on the plate is
+			local up = (M.friends[token] and M.friends[token]:IsShown() and M.friends[token])
+				or (M.skins[token] and M.skins[token]:IsShown() and M.skins[token]) or nil
+			local oursAlpha = BT.Pill.Number(up and up.GetEffectiveAlpha and up:GetEffectiveAlpha(), -1)
+			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f oursAlpha=%.2f reaction=%s attack=%s pvp=%s"):format(
+				token, describe(F.Plain(UnitName, token)), describe(player), describe(M.IsFriend(token)),
+				ours, alpha, oursAlpha, describe(F.Plain(_G.UnitReaction, token, "player")),
+				describe(F.Plain(_G.UnitCanAttack, "player", token)), describe(F.Plain(_G.UnitIsPVP, token)))
 		end
 	end
 	lines[#lines + 1] = ("plates: %d of %d in use, %d of them players"):format(plates, M.MAX_PLATES, players)

@@ -360,7 +360,12 @@ function E.Enter(key, notes)
 		r.key, r.leftAt = key, nil
 		return false
 	end
-	E.run = { key = key, lastKey = key, killed = {}, at = notes and E.NextLive(notes, nil) or 1, held = false }
+	-- THE NEW RUN FIRST, THEN ITS FIRST BOSS (Josh 2026-11-15: City of Dalaran
+	-- opened on "Boss 6 of 7" at the door). NextLive reads E.run.killed. Asked
+	-- while the old run was still there, it skipped the six bosses killed in
+	-- Razorfen Kraul an hour before and gave Dalaran's seventh.
+	E.run = { key = key, lastKey = key, killed = {}, at = 1, held = false }
+	E.run.at = notes and E.NextLive(notes, nil) or 1
 	return true
 end
 

@@ -85,8 +85,13 @@ A.SPECS = {
 	-- never meet: in a fight nothing of ours can count what is in them. A buff
 	-- you could purge or steal wears its type's colour at the edge. The cast
 	-- goes over the power bar, so nothing else is here.
+	--
+	-- YOUR DEBUFFS TOO (Josh 2026-11-15: "add the green border to debuffs in
+	-- addition to buffs"): yours first with the green edge, up to eight, then
+	-- up to eight of everybody else's.
 	target = {
-		{ key = "debuffs", filter = "HARMFUL", max = 8, size = 18, perLine = 4, at = "BELOW", below = "combo" },
+		{ key = "debuffs", filter = "HARMFUL", max = 8, size = 18, perLine = 4, at = "BELOW", below = "combo",
+			mineFirst = 8 },
 		{ key = "buffs", filter = "HELPFUL", max = 8, size = 16, perLine = 4, at = "BELOW", below = "combo",
 			growLeft = true, flowAt = "TOPRIGHT", helpfulRing = true, mineFirst = 4 },
 	},
@@ -222,11 +227,32 @@ end
 -- YOUR OWN BUFFS WEAR A GREEN EDGE (Josh 2026-11-12: "a green border to buffs
 -- cast by me"). A button cannot be told whose aura it holds, and in a fight
 -- nothing of ours may ask. So a row with mineFirst is two groups in the one
--- container, which the client sorts by its own candidate filter
--- (isFromPlayerOrPlayerPet): yours first, on buttons made with a green edge,
--- then everybody else's on the plain ones. mineFirst is how many of yours the
--- row holds; the others keep the row's own max.
+-- container, which the client sorts by its own filter words: "PLAYER" for
+-- yours, on buttons made with a green edge, then "!PLAYER" for everybody
+-- else's on the plain ones. mineFirst is how many of yours the row holds; the
+-- others keep the row's own max.
+--
+-- NOT isFromPlayerOrPlayerPet (Josh 2026-11-15: "it looks like all buffs have
+-- the border"). That candidate filter is true for a buff from ANY player or a
+-- player's pet: the client's target frame uses it to tell players' auras from
+-- NPCs' (TargetFrameAuraContainer.lua). A group takes every aura its filter
+-- passes, so the second group must say "!PLAYER" or yours would show twice.
 A.MINE = { 0.25, 0.90, 0.35 }
+
+-- the two filter strings of a mineFirst row, or nothing where the client does
+-- not know the "!" in front of a filter word
+function A.MineFilters(filter)
+	local mine, rest = filter .. "|PLAYER", filter .. "|!PLAYER"
+	local valid = _G.AuraUtil and _G.AuraUtil.IsValidFilterString
+	if not valid then
+		return nil
+	end
+	local ok, yes = pcall(valid, rest)
+	if ok and yes then
+		return mine, rest
+	end
+	return nil
+end
 
 -- ---------------------------------------------------------------------------
 -- Buttons: made by the client, dressed once, here
@@ -388,34 +414,34 @@ local function container(host, spec, unit)
 	end
 	pcall(c.SetUnit, c, unit or "player")
 	local sort = _G.AuraContainerSortMethod and _G.AuraContainerSortMethod.UnitFrameDebuff
+	-- a row of debuffs in the client's own order for them, yours as well
+	sort = spec.sort or (spec.filter:find("HARMFUL") and sort) or nil
 	local gap = spec.spacing or (spec.inside and 1 or 2)
 	local candidate = spec.candidate
-	if spec.mineFirst then
+	local filter = spec.filter
+	local mineFilter, restFilter = A.MineFilters(spec.filter)
+	if spec.mineFirst and mineFilter then
 		-- yours first, green at the edge; the group after it then takes
 		-- everybody else's (see A.MINE). A group registered first is laid first.
-		local mine, rest = { isFromPlayerOrPlayerPet = true }, { isFromPlayerOrPlayerPet = false }
-		for k, v in pairs(candidate or {}) do
-			mine[k], rest[k] = v, v
-		end
-		local okMine = pcall(c.AddAuraGroup, c, spec.key .. "Mine", spec.filter, {
+		local okMine = pcall(c.AddAuraGroup, c, spec.key .. "Mine", mineFilter, {
 			maxFrameCount = spec.mineFirst,
 			initializeFrame = iconButton(spec.size, true, spec.inside, nil, nil, A.MINE),
-			candidateFilters = mine,
-			sortMethod = spec.sort,
+			candidateFilters = candidate,
+			sortMethod = sort,
 			sortDirection = spec.direction,
 			layout = { elementSpacing = gap, lineSpacing = 2,
 				elementWidth = spec.size, elementHeight = spec.cellH or spec.size },
 		})
 		-- without the first group the row stays as it was: everyone's, plain
 		if okMine then
-			candidate = rest
+			filter = restFilter
 		end
 	end
-	local ok2 = pcall(c.AddAuraGroup, c, spec.key, spec.filter, {
+	local ok2 = pcall(c.AddAuraGroup, c, spec.key, filter, {
 		maxFrameCount = spec.max,
 		initializeFrame = spec.init or iconButton(spec.size, spec.quiet, spec.inside, spec.helpfulRing),
 		candidateFilters = candidate,
-		sortMethod = spec.sort or (spec.filter:find("HARMFUL") and sort) or nil,
+		sortMethod = sort,
 		sortDirection = spec.direction,
 		-- groupSpacing: the gap between your last and the first of the rest
 		layout = { elementSpacing = gap, lineSpacing = 2, groupSpacing = spec.mineFirst and gap or nil,

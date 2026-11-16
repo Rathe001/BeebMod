@@ -4691,7 +4691,31 @@ if ok then
 				"the icon is cropped past it")
 			assert(b.icon._points and b.icon._points.TOPLEFT,
 				"and sits inside our rim rather than over it")
-			assert(b.Name._alpha == 0, "macro names are off by default")
+			-- A MACRO SAYS SO (Josh 2026-11-14: "We should show them. I can't
+			-- tell which icons are macros"): the name shows, and a button
+			-- holding a macro wears a mark, asked when the client writes the name
+			assert(b.Name._alpha == 1, "macro names show")
+			do
+				local wasInfo = _G.GetActionInfo
+				local holds = { [1] = "macro", [2] = "spell" }
+				_G.GetActionInfo = function(slot) return holds[slot], 1 end
+				made[1].action, made[2].action = 1, 2
+				assert(not mod.MacroMarked(made[1]), "no mark before the client says what the slot holds")
+				made[1].Name:SetText("Kick")
+				made[2].Name:SetText("")
+				assert(mod.MacroMarked(made[1]), "a macro's button wears the mark")
+				assert(not mod.MacroMarked(made[2]), "a spell's does not")
+				holds[1] = "spell"
+				made[1].Name:SetText("")
+				assert(not mod.MacroMarked(made[1]), "and it goes when a spell takes the slot")
+				holds[1] = "macro"
+				made[1].Name:SetText("Kick")
+				mod.StyleButton(made[1], true)
+				assert(not mod.MacroMarked(made[1]), "the client's look back: no mark")
+				mod.StyleButton(made[1])
+				assert(mod.MacroMarked(made[1]), "and ours again")
+				_G.GetActionInfo = wasInfo
+			end
 			assert(b.HotKey._alpha == 1, "hotkeys are not")
 			assert(b.HotKey._textColor[1] == 0.55, "the hotkey in our quieter colour")
 
@@ -5846,17 +5870,35 @@ if ok then
 			assert(fo.rel == mod.singles.targettarget and fo.relPoint == "BOTTOMLEFT", "the focus under that")
 			assert(F.KINDS.tot.h + mod.STACK_GAP + F.KINDS.focus.h == F.KINDS.target.h, "together as tall as the target")
 
-			-- NO PLAYER FRAME: you are the top of the party column, alone as well
-			assert(mod.singles.player == nil and mod.singles.pet == nil, "no player or pet frame of their own")
-			assert(mod.headers[1]:GetAttribute("showSolo") == true and mod.headers[1]:GetAttribute("showPlayer") == true,
-				"the party column is shown alone, with you in it")
+			-- YOUR OWN CELL, A BLOCK OF ITS OWN (Josh 2026-11-15: "Can we decouple
+			-- the party frame from the player's frame?"): a party cell on a frame
+			-- of its own, bound to you, on its own holder; the party's header
+			-- leaves you out
+			assert(mod.singles.player == nil and mod.singles.pet == nil, "no player or pet frame among the singles")
+			assert(mod.headers[1]:GetAttribute("showSolo") == false and mod.headers[1]:GetAttribute("showPlayer") == false,
+				"the party's header is the party without you")
+			do
+				local me = mod.me
+				assert(me and mod.headers[#mod.headers] == me and me.bmRole == "party" and me.bmHolder == "player",
+					"your block is listed with the headers, switched with the party")
+				local at = me._points.TOPLEFT
+				assert(at and at.rel == mod.Holder("player") and mod.Holder("player") ~= mod.Holder("party"),
+					"on a holder of its own")
+				local mine = ({ me:GetChildren() })[1]
+				assert(mine and mine.bmDressed and mine.bmUnit == "player" and mine.bmKind == "party"
+					and mine.bmHandle == "player", "one party cell, bound to you, that moves your block")
+				assert(mine.bmPet and mine.bmTarget and not mine.bmTarget.bmWatched, "your pet under it, and no target beside you")
+				local under = mod.Holder("party")._points.TOPLEFT
+				assert(under and under.rel == mod.Holder("player") and under.y == -(F.KINDS.party.h + mod.PARTY_STEP),
+					"with no Edit Mode frame to go by, the party hangs under you: " .. tostring(under and under.y))
+			end
 			local player = mod.singles.target
 			assert(player and player.bmDressed and player.bmUnit == "target", "the target's frame is built and bound")
 			assert(player:GetAttribute("unit") == "target" and player:GetAttribute("*type1") == "target"
 				and player:GetAttribute("*type2") == "togglemenu", "a click targets, a right click opens the menu")
 			assert(mod.singles.targettarget and mod.singles.focus and mod.singles.boss5,
 				"and its target, the focus and five bosses")
-			assert(#mod.headers == 10, "a party header, eight raid groups and the main tanks: " .. #mod.headers)
+			assert(#mod.headers == 11, "a party header, eight raid groups, the main tanks and your own block: " .. #mod.headers)
 			assert(mod.headers[1]:GetAttribute("template") == "SecureUnitButtonTemplate"
 				and mod.headers[1]:GetAttribute("initialConfigFunction") == nil,
 				"the headers make plain secure buttons, and are handed no snippet")
@@ -5901,8 +5943,8 @@ if ok then
 				assert(totems:GetParent() == _G.UIParent and totems.ignoreFramePositionManager == true,
 					"the totems are out on the screen, and the player frame's row leaves them alone")
 				local at = totems._points.BOTTOMLEFT
-				assert(at and at.rel == mod.Holder("party") and at.relPoint == "TOPLEFT",
-					"just above your frame in the party column")
+				assert(at and at.rel == mod.Holder("player") and at.relPoint == "TOPLEFT",
+					"just above your own frame")
 				mod.SetOpt("party", false)
 				assert(totems:GetParent() == _G.PlayerFrame and not totems.ignoreFramePositionManager and added == 1,
 					"party off: back on the game's player frame and its row")
@@ -6366,7 +6408,8 @@ if ok then
 				end
 			end
 			assert(fits == 2 and tooBig == 2, "two shields that fit and two too big: " .. fits .. " " .. tooBig)
-			assert(mod.previews[1]._points.TOPLEFT.y == -(F.KINDS.party.h + mod.PARTY_STEP), "the first place left for you")
+			assert(mod.previews[1]._points.TOPLEFT.y == 0 and mod.previews[1]._points.TOPLEFT.rel == mod.Holder("party"),
+				"the made-up party starts at the top of the party's block")
 			assert(mod.previews[1].value._shown == false, "a party cell writes no figure: the bar says it")
 			-- A PET AND A TARGET FOR EVERY MEMBER: the room for a pet is kept
 			-- whether there is one or not, so the party is evenly spaced
@@ -6375,7 +6418,7 @@ if ok then
 				if f.bmKind == "party" then cells[#cells + 1] = f end
 			end
 			local step = F.KINDS.party.h + mod.PARTY_STEP
-			assert(-cells[1]._points.TOPLEFT.y == step and -cells[4]._points.TOPLEFT.y == 4 * step,
+			assert(-cells[2]._points.TOPLEFT.y == step and -cells[4]._points.TOPLEFT.y == 3 * step,
 				"every member one pet's room below the last")
 			assert(cells[1].ml._shown ~= false and cells[2].call.icon == F.CALL[1],
 				"the party has its master looter, and a summon waiting")
@@ -6673,6 +6716,7 @@ if ok then
 						ApplySystemAnchor = function() end }
 				end
 				local game = { [1] = gameFrame(400, 300, 230, 80), [2] = gameFrame(700, 300, 230, 80),
+					[4] = gameFrame(50, 500, 120, 260),
 					[5] = gameFrame(30, 600, 400, 300), [6] = gameFrame(1100, 700, 200, 300), cast = gameFrame(600, 150, 200, 20) }
 				E.EditModeSystem = { UnitFrame = 0, CastBar = 1 }
 				E.EditModeUnitFrameSystemIndices = { Player = 1, Target = 2, Focus = 3, Party = 4, Raid = 5, Boss = 6 }
@@ -6686,7 +6730,8 @@ if ok then
 					local p = f._points[corner]
 					return p and p.rel == _G.UIParent and p.relPoint == "BOTTOMLEFT" and math.floor(p.x + 0.5) .. "," .. math.floor(p.y + 0.5) or "-"
 				end
-				assert(at(mod.Holder("party"), "TOPLEFT") == "339,225", "the party column, you at its top, where the player frame's art starts: " .. at(mod.Holder("party"), "TOPLEFT"))
+				assert(at(mod.Holder("player"), "TOPLEFT") == "339,225", "your own frame where the player frame's art starts: " .. at(mod.Holder("player"), "TOPLEFT"))
+				assert(at(mod.Holder("party"), "TOPLEFT") == "40,400", "the party where the game's party frames are: " .. at(mod.Holder("party"), "TOPLEFT"))
 				assert(at(mod.singles.target, "TOPLEFT") == "578,225", "the target where the target frame's art starts")
 				assert(at(mod.Holder("raid"), "TOPLEFT") == "24,480", "the raid where the raid frames are")
 				assert(at(mod.Holder("boss"), "TOPRIGHT") == "1040,560", "the bosses by their top right")
@@ -6695,7 +6740,12 @@ if ok then
 				-- ours follow
 				game[1].l = 500
 				game[1]:ApplySystemAnchor()
-				assert(at(mod.Holder("party"), "TOPLEFT") == "419,225", "the player frame moved, the party column with it")
+				assert(at(mod.Holder("player"), "TOPLEFT") == "419,225", "the player frame moved, yours with it")
+				assert(at(mod.Holder("party"), "TOPLEFT") == "40,400", "and the party stayed where its own frame is")
+				game[4].t = 450
+				game[4]:ApplySystemAnchor()
+				assert(at(mod.Holder("party"), "TOPLEFT") == "40,360" and at(mod.Holder("player"), "TOPLEFT") == "419,225",
+					"the party frame moved, the party with it and you not")
 				-- NO RECT, BY ITS ANCHOR ("Raid frames are not tracking the edit
 				-- mode raid frames"): an empty raid has no size and no rect, and
 				-- hangs by its top left from the raid manager's top right
@@ -8153,7 +8203,15 @@ if ok then
 			assert(raidCell.healRoom == nil and raidCell.heals:GetParent() == raidCell.health
 				and raidCell.shield:GetParent() == raidCell.health,
 				"a raid cell's heal and shield stay inside its health")
+			-- the client knows "!" in front of a filter word; an older one does not
+			local hadAuraUtil = _G.AuraUtil
+			_G.AuraUtil = nil
+			assert(A.MineFilters("HELPFUL") == nil, "no way to say not yours: no split")
+			_G.AuraUtil = { IsValidFilterString = function(f) return not f:find("!", 1, true) end }
+			assert(A.MineFilters("HELPFUL") == nil, "a client without the ! word: no split")
+			_G.AuraUtil = { IsValidFilterString = function() return true end }
 			A.Attach(target, "target")
+			_G.AuraUtil = hadAuraUtil
 			local row = target.bmAuras.debuffs
 			assert(row and row._points.TOPLEFT and row._points.TOPLEFT.rel == target
 				and row._points.TOPLEFT.relPoint == "BOTTOMLEFT", "under the target")
@@ -8168,14 +8226,21 @@ if ok then
 			-- YOURS FIRST, GREEN AT THE EDGE (Josh 2026-11-12): two groups, split by
 			-- the client's own filter, so every buff is in one of them and none in both
 			local own, rest = buffs and buffs.groups.buffsMine, buffs and buffs.groups.buffs
-			assert(own and rest and own.filter == "HELPFUL" and rest.filter == "HELPFUL"
-				and own.opts.candidateFilters.isFromPlayerOrPlayerPet == true
-				and rest.opts.candidateFilters.isFromPlayerOrPlayerPet == false
-				and rest.opts.candidateFilters.maxDuration == nil,
+			-- "PLAYER" is you and your pet. isFromPlayerOrPlayerPet is ANY player
+			-- (Josh 2026-11-15: "it looks like all buffs have the border").
+			assert(own and rest and own.filter == "HELPFUL|PLAYER" and rest.filter == "HELPFUL|!PLAYER"
+				and not (own.opts.candidateFilters and own.opts.candidateFilters.isFromPlayerOrPlayerPet ~= nil)
+				and not (rest.opts.candidateFilters and rest.opts.candidateFilters.isFromPlayerOrPlayerPet ~= nil)
+				and not (rest.opts.candidateFilters and rest.opts.candidateFilters.maxDuration ~= nil),
 				"the target's buffs, all of them, yours apart from the rest")
 			assert(own.opts.maxFrameCount == 4 and rest.opts.maxFrameCount == 8
 				and rest.opts.layout.groupSpacing == rest.opts.layout.elementSpacing, "yours first, then the rest, evenly spaced")
-			assert(target.bmAuras.debuffs.groups.debuffsMine == nil, "and its debuffs are one group as before")
+			-- AND ITS DEBUFFS (Josh 2026-11-15): yours first, green, then the rest
+			local ownD, restD = row.groups.debuffsMine, row.groups.debuffs
+			assert(ownD and ownD.filter == "HARMFUL|PLAYER" and restD.filter == "HARMFUL|!PLAYER"
+				and ownD.opts.maxFrameCount == 8 and restD.opts.maxFrameCount == 8,
+				"its debuffs the same way: yours apart from the rest")
+			assert(ownD.opts.sortMethod == restD.opts.sortMethod, "both in the one order")
 			do
 				local made = {}
 				local button = { SetSize = function() end,
@@ -19868,6 +19933,16 @@ if ok then
 				E.run, E.loaded = { killed = {}, at = 1, held = false }, false
 				enc.Update()
 				assert(f.body.boss._text == "Rhahk'Zor" and not E.run.killed[2], "a run the next evening starts clean")
+				-- THE LAST DUNGEON'S KILLS DON'T CHOOSE THIS ONE'S FIRST BOSS (Josh
+				-- 2026-11-15: Dalaran opened on its seventh after six kills in
+				-- Razorfen Kraul)
+				do
+					local kept = E.run
+					E.run = { lastKey = "somewhereelse", killed = { true, true, true }, at = 3, held = false, leftAt = 0 }
+					assert(E.Enter("deadmines", BT.EncounterNotes.deadmines) and E.run.at == 1,
+						"a new dungeon starts at its first boss: " .. tostring(E.run.at))
+					E.run = kept
+				end
 				-- A BOSS YOU KILLED, FIGHTING AGAIN, IS A NEW RUN (2026-11-11,
 				-- audit): the dungeon was reset and gone straight back into
 				fire(enc.events, "ENCOUNTER_START", 1, "Rhahk'Zor", 1, 5)

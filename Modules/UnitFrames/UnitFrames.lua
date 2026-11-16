@@ -109,11 +109,23 @@ M.drain = drain
 local RAID_W, RAID_H, RAID_GAP = F.KINDS.raid.w, F.KINDS.raid.h, 3
 local GROUP_TOP = -190
 
+-- from one party cell's top to the next: the cell, and its pet's room under it
+local PARTY_PITCH = F.KINDS.party.h + 2 + F.KINDS.gpet.h + 6
+
 local HOLDERS = {
-	-- YOU ARE THE TOP OF THE PARTY (Josh 2026-09-23): the party column starts
-	-- in the corner the player frame had, and is there alone as well
-	party = { w = F.KINDS.party.w + 4 + F.KINDS.gtarget.w, h = 5 * (F.KINDS.party.h + 24),
+	-- YOU, AND YOUR PARTY, EACH ITS OWN BLOCK (Josh 2026-11-15: "Can we
+	-- decouple the party frame from the player's frame? ... when you use edit
+	-- mode to move the player's frame, the party frame goes with it. The party
+	-- frame edit mode is currently ignored"). You were the top cell of the
+	-- party column (Josh 2026-09-23), so the two were one block and went by
+	-- the game's player frame. Your cell is a block of its own now, in the
+	-- corner the player frame had, and the party goes by the game's party
+	-- frame. With no Edit Mode frame to go by, the party hangs under you, as
+	-- the one column did.
+	player = { w = F.KINDS.party.w + 4 + F.KINDS.gtarget.w, h = PARTY_PITCH,
 		at = { "TOPLEFT", "TOPLEFT", 24, -24 } },
+	party = { w = F.KINDS.party.w + 4 + F.KINDS.gtarget.w, h = 4 * PARTY_PITCH,
+		follow = "player", at = { "TOPLEFT", "TOPLEFT", 0, -PARTY_PITCH } },
 	raid = { w = 8 * (RAID_W + RAID_GAP), h = 5 * (RAID_H + 2), at = { "TOPLEFT", "TOPLEFT", 24, GROUP_TOP } },
 	boss = { w = F.KINDS.boss.w, h = 5 * (F.KINDS.boss.h + 44), at = { "TOPRIGHT", "TOPRIGHT", -250, -300 } },
 	-- THE MAIN TANKS, ON TOP OF THE RAID (Josh 2026-09-23: "place them above
@@ -149,7 +161,7 @@ local function holder(key)
 	BT.Pill.PlaceRing(h.ghost.ring, h.ghost, 0, 1, 0)
 	h.ghost.label = h.ghost:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")
 	h.ghost.label:SetPoint("BOTTOMLEFT", h.ghost, "TOPLEFT", 2, 3)
-	h.ghost.label:SetText(({ boss = "Bosses", raid = "Raid", party = "Party", tanks = "Main tanks",
+	h.ghost.label:SetText(({ boss = "Bosses", raid = "Raid", party = "Party", player = "You", tanks = "Main tanks",
 		cast = "Cast bar" })[key] or key)
 	h.ghost:Hide()
 	M.holders[key] = h
@@ -268,7 +280,9 @@ local GAP = 18
 -- frames there, with the player always on top"). Solo or in a party, the party
 -- column is shown with you at the top of it - your pet under you, your target
 -- beside you - so your frame and your party's can never look different. In a
--- raid you are in your group's column like everybody else. The target sits
+-- raid you are in your group's column like everybody else. (Your cell is a
+-- block of its own since 2026-11-15, see HOLDERS: the same cell, placed by the
+-- game's player frame, and the party by the game's party frame.) The target sits
 -- to the right of the party column and its targets, where the eye goes next.
 M.TARGET_X = 24 + F.KINDS.party.w + 4 + F.KINDS.gtarget.w + GAP
 -- room under a boss for its cast bar (10 and 14), and over the next one for
@@ -346,7 +360,8 @@ end
 -- Blizzard_EditMode, EDIT_MODE_GAMEPAD_SYSTEM_MAP), and our frames sat where
 -- they had been Shift-dragged whatever it said. Now each block of ours sits
 -- where Edit Mode puts the game's frame it stands in for, by one corner:
---   the party column (you at its top)    the player frame's top left
+--   your own frame                       the player frame's top left
+--   the party                            the party frames' top left
 --   the target, and its column beside it the target frame's top left
 --   the raid                             the raid frames' top left
 --   the bosses                           the boss frames' top right
@@ -365,7 +380,9 @@ end
 -- Blizzard_UnitFrame/Mainline/PlayerFrame.xml and TargetFrame.xml). `inset`
 -- is that, in the frame's own units.
 M.EDIT_MODE = {
-	party = { index = "Player", corner = "TOPLEFT", inset = { 24, 19 } },
+	player = { index = "Player", corner = "TOPLEFT", inset = { 24, 19 } },
+	-- the party's own (Josh 2026-11-15): its box, with no art to allow for
+	party = { index = "Party", corner = "TOPLEFT" },
 	target = { index = "Target", corner = "TOPLEFT", inset = { 22, 19 } },
 	raid = { index = "Raid", corner = "TOPLEFT", byAnchor = true },
 	boss = { index = "Boss", corner = "TOPRIGHT" },
@@ -622,7 +639,7 @@ function M.EditModeSaid()
 	-- each block: the game's frame it goes by, and where that says, in
 	-- pixels; or what was missing
 	local parts = {}
-	for _, key in ipairs({ "party", "target", "raid", "boss", "cast" }) do
+	for _, key in ipairs({ "player", "party", "target", "raid", "boss", "cast" }) do
 		local f = M.EditModeFrame(key)
 		local x, y = M.EditModeSpot(key)
 		local name = f and BT.Furniture.Call(f, "GetName")
@@ -813,7 +830,8 @@ function M.Sweep()
 					-- a tank's target, and no pet: who is on what is the point
 					M.Minis(child, true)
 				end
-				M.Handle(child, h.bmRole)
+				-- your own cell moves your block, not the party's
+				M.Handle(child, h.bmHolder or h.bmRole)
 				child:HookScript("OnAttributeChanged", function(self, name, value)
 					if name == "unit" then
 						F.Bind(self, value)
@@ -903,8 +921,9 @@ local function buildGroups()
 	if #M.headers > 0 then
 		return
 	end
+	-- the party without you: your cell is M.me, made below
 	local party = header("BeebModParty", "party", {
-		showParty = true, showPlayer = true, showRaid = false, showSolo = true, yOffset = -M.PARTY_STEP,
+		showParty = true, showPlayer = false, showRaid = false, showSolo = false, yOffset = -M.PARTY_STEP,
 	})
 	party:SetPoint("TOPLEFT", holder("party"), "TOPLEFT", 0, 0)
 	party.bmRole = "party"
@@ -930,6 +949,20 @@ local function buildGroups()
 	tanks:SetPoint("BOTTOMLEFT", holder("tanks"), "BOTTOMLEFT", 0, 0)
 	tanks.bmRole = "tanks"
 	M.headers[#M.headers + 1] = tanks
+	-- YOUR OWN CELL, A BLOCK OF ITS OWN (Josh 2026-11-15). Not a header: it
+	-- has one unit, always you. A plain frame with the one secure button on
+	-- it, listed with the headers so it is swept, painted, scaled and switched
+	-- with the party as their cells are. Its role is the party's - the same
+	-- switch, the same cell, shown when the party is - and its block is yours.
+	local me = CreateFrame("Frame", "BeebModMe", UIParent)
+	me:SetSize(F.KINDS.party.w, F.KINDS.party.h)
+	me:SetPoint("TOPLEFT", holder("player"), "TOPLEFT", 0, 0)
+	me.bmKind, me.bmRole, me.bmHolder = "party", "party", "player"
+	local cell = CreateFrame("Button", "BeebModMeCell", me, "SecureUnitButtonTemplate")
+	cell:SetPoint("TOPLEFT", me, "TOPLEFT", 0, 0)
+	cell:SetAttribute("unit", "player")
+	M.me = me
+	M.headers[#M.headers + 1] = me
 	-- MAKE THEM ALL NOW (the startingIndex trick): a header only makes a
 	-- button when there is a unit to put in it, and one made in a fight cannot
 	-- be sized. Asked to start five before the first, it makes all of them.
@@ -1070,10 +1103,10 @@ end
 -- game's frame is kept and moved out: off the player frame's bottom row (its
 -- manager skips a frame marked ignoreFramePositionManager:
 -- Blizzard_ManagedFrameSystem, AddManagedFrame) and onto the screen, just
--- above your frame in the party column. It is not a secure frame, so it may
+-- above your own frame. It is not a secure frame, so it may
 -- move in a fight too.
 M.TOTEM_SCALE = 0.8
--- above the party block, clear of the time under each button
+-- above your block, clear of the time under each button
 M.TOTEM_AT = { -12, 12 }
 function M.KeepTotems(on)
 	local t = rawget(_G, "TotemFrame")
@@ -1090,7 +1123,7 @@ function M.KeepTotems(on)
 		pcall(t.SetParent, t, UIParent)
 		pcall(t.SetScale, t, M.TOTEM_SCALE)
 		t:ClearAllPoints()
-		t:SetPoint("BOTTOMLEFT", holder("party"), "TOPLEFT", M.TOTEM_AT[1], M.TOTEM_AT[2])
+		t:SetPoint("BOTTOMLEFT", holder("player"), "TOPLEFT", M.TOTEM_AT[1], M.TOTEM_AT[2])
 		return true
 	end
 	if not t.bmKept then
@@ -1258,6 +1291,9 @@ function M.QueueRoster()
 		if M.live then
 			M.UpdateLooter()
 			M.PackRaid()
+			-- the game's party frame is as tall as who is in it, so its
+			-- top left may have moved (M.EDIT_MODE.party)
+			M.FollowEditMode()
 			-- the same tokens may be other people now: every cell jumps, and
 			-- reads its auras again (the rows only move on by themselves when
 			-- the token does)
@@ -1740,10 +1776,10 @@ function M.Preview(what)
 		return 0
 	end
 	if what == "party" then
-		-- the first place is yours, and your real frame is already in it
+		-- the party's block: your real frame is in its own (HOLDERS.player)
 		for i, d in ipairs(PARTY) do
 			local cell = preview("party", d, { "TOPLEFT", spot("party"), "TOPLEFT", 0,
-				-i * (F.KINDS.party.h + M.PARTY_STEP) })
+				-(i - 1) * (F.KINDS.party.h + M.PARTY_STEP) })
 			if d.pet then
 				preview("gpet", d.pet, { "TOPRIGHT", cell, "BOTTOMRIGHT", 0, -PET_GAP })
 			end

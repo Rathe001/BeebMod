@@ -16,7 +16,8 @@
 --                        border baked into the corners of the image
 --   pushed / checked     flat colour instead of the client's bevels
 --   the hotkey           small, quiet, and in the corner
---   the macro name       hidden: you know what your own buttons do
+--   the macro name       shown, and a small square in the top left corner
+--                        marks a button that holds a macro
 --
 -- It is a module like any other, so it can be switched off and the client's
 -- art comes straight back.
@@ -78,8 +79,9 @@ end
 
 -- FIXED, NOT ASKED (the settings canvas, Josh 2026-10-04: "This addon is
 -- supposed to be an opinionated solution, not fully customizable"). Hotkeys
--- shown, macro names not. (2026-10-05, cleanup) Nothing reads the old
--- switches now, so the code that read them is gone.
+-- shown. (2026-10-05, cleanup) Nothing reads the old switches now, so the
+-- code that read them is gone. Macro names were hidden until 2026-11-14 (see
+-- A MACRO SAYS SO below).
 
 -- ---------------------------------------------------------------------------
 -- One button
@@ -234,10 +236,10 @@ local function styleText(button, hide)
 	end
 	local macro = piece(button, "Name", "Name")
 	if macro then
-		-- hidden: you know what your own buttons do, and the name covers the
-		-- bottom third of the icon saying so. `hide` here means "put the
-		-- client's look back", and its names show.
-		macro:SetAlpha(hide and 1 or 0)
+		-- shown either way (they were hidden until 2026-11-14): ours are only
+		-- the count's colour
+		macro:SetAlpha(1)
+		tint(macro, { 0.87, 0.92, 0.89 }, hide)
 	end
 	tint(piece(button, "Count", "Count"), { 0.87, 0.92, 0.89 }, hide)
 	if name then
@@ -363,6 +365,68 @@ local function styleEquipped(button, plain)
 	paintEquipped(button)
 end
 
+-- A MACRO SAYS SO (Josh 2026-11-14: "We should show them. I can't tell which
+-- icons are macros. If possible, some other visual indicator would be nice as
+-- well so I can tell which buttons are macros at a glance"). The names show
+-- again (styleText), and a button holding a macro wears a small square in the
+-- accent colour in its top left corner, on a dark edge so it reads on any
+-- icon. The hotkey has the top right and the count the bottom right. The
+-- client writes the name on every update of the action (ActionButton.lua,
+-- Update), so that is when the slot is asked what it holds.
+M.MACRO_MARK = { size = 5, inset = 2 }
+local marks = setmetatable({}, { __mode = "k" })
+
+local function paintMacro(button)
+	local m = marks[button]
+	if not m then
+		return
+	end
+	local is = false
+	-- the hook cannot be taken off: switched off, ours stays down
+	if m.on and BT.Enabled("bars") and type(_G.GetActionInfo) == "function" then
+		local ok, kind = pcall(_G.GetActionInfo, button.action)
+		is = ok and kind == "macro"
+	end
+	if is then
+		m.mark:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 1)
+	end
+	m.edge:SetShown(is)
+	m.mark:SetShown(is)
+end
+M.PaintMacro = paintMacro
+
+-- true while the button wears the mark, for the tests
+function M.MacroMarked(button)
+	local m = marks[button]
+	return m and m.mark:IsShown() or false
+end
+
+local function styleMacro(button, plain)
+	local name = piece(button, "Name", "Name")
+	local m = marks[button]
+	-- a button with no name to write (a pet's, a stance's) holds no macro
+	if not (name and (m or not plain)) then
+		return
+	end
+	if not m then
+		local k = M.MACRO_MARK
+		m = { edge = button:CreateTexture(nil, "OVERLAY", nil, 5), mark = button:CreateTexture(nil, "OVERLAY", nil, 6) }
+		m.edge:SetColorTexture(0, 0, 0, 0.9)
+		m.edge:SetSize(k.size + 2, k.size + 2)
+		m.edge:SetPoint("TOPLEFT", button, "TOPLEFT", k.inset - 1, -(k.inset - 1))
+		m.mark:SetSize(k.size, k.size)
+		m.mark:SetPoint("TOPLEFT", button, "TOPLEFT", k.inset, -k.inset)
+		marks[button] = m
+		if type(hooksecurefunc) == "function" and type(name.SetText) == "function" then
+			pcall(hooksecurefunc, name, "SetText", function()
+				paintMacro(button)
+			end)
+		end
+	end
+	m.on = not plain
+	paintMacro(button)
+end
+
 -- `plain` puts the client's own look back rather than applying ours.
 function M.StyleButton(button, plain)
 	if not (button and button.GetName) then
@@ -373,6 +437,7 @@ function M.StyleButton(button, plain)
 	styleText(button, plain)
 	styleStates(button, plain)
 	styleEquipped(button, plain)
+	styleMacro(button, plain)
 
 	local s = skin(button)
 	if s then

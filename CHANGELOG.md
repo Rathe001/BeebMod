@@ -3,6 +3,27 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Your frame and the party move apart.** Your own frame was the top of
+  the party column, so moving the player frame in Edit Mode moved the party
+  too. They are now two blocks. Your frame goes where Edit Mode puts the
+  player frame. The party goes where Edit Mode puts the party frames. After
+  this update your party may sit in a new place. Move the party frames in
+  Edit Mode to put it where you want it.
+- **Macros show their name, and a mark.** A macro on an action bar now shows
+  its name at the bottom of the button. It also has a small square in the
+  top left corner, in the accent colour, so you can tell a macro from a
+  spell.
+- **Your own debuffs have a green border on the target.** They come first in
+  the target's debuff row, as your buffs do. Up to eight of yours show, then
+  up to eight from other people.
+- **Fixed: every player's buff had the green border.** Only buffs cast by
+  you or your pet have it now.
+- **Fixed: boss notes opened on the wrong boss.** After a dungeon with
+  kills in it, the next dungeon's notes skipped as many bosses as you had
+  killed in the last one. A new dungeon now starts at its first boss.
+
 ## 1.14.0
 
 - **Your own buffs have a green border on the target.** A buff you or your
