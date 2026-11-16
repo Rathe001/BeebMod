@@ -100,6 +100,35 @@ local function redraw(points, st)
 	BT.ExpeditionWindow.Changed()
 end
 
+-- THE PAGES WITH A NUMBER FOR A NAME (Josh 2026-11-16: "Expedition is showing
+-- numbers for some mobs"). Kills counted from a dungeon corpse's loot went in
+-- with no name (K.NameByGUID). The ones already kept are asked for by their
+-- number, a few at a time, and the window is drawn again if any were found.
+function M.NameTheNameless()
+	local s = J.Store()
+	if J.demo or not (s and type(s.enemies) == "table") then
+		return 0
+	end
+	local found, asked = 0, 0
+	for npc, m in pairs(s.enemies) do
+		if type(m) == "table" and (type(m.name) ~= "string" or m.name == "") and type(npc) == "number" then
+			asked = asked + 1
+			if asked > 200 then
+				break
+			end
+			local name = K.NameByGUID(nil, npc)
+			if name then
+				m.name = name
+				found = found + 1
+			end
+		end
+	end
+	if found > 0 and BT.ExpeditionWindow and BT.ExpeditionWindow.Changed then
+		BT.ExpeditionWindow.Changed()
+	end
+	return found
+end
+
 -- a kill, in your own journal (J.Saved): the notices for it, and the score
 local function record(info)
 	-- the rank the kill starts from, for a character with none kept yet
@@ -814,6 +843,12 @@ M.events:SetScript("OnEvent", function(_, event, a, b, c, d, e)
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		BT.Session.OnWorld(M, a, b)
 		M.QuestsChanged()
+		-- pages kept with a number for a name get their names (M.NameTheNameless);
+		-- twice, as the client may need a moment to fetch a name it has not shown
+		if C_Timer and C_Timer.After then
+			C_Timer.After(5, M.NameTheNameless)
+			C_Timer.After(25, M.NameTheNameless)
+		end
 	elseif event == "QUEST_ACCEPTED" or event == "QUEST_LOG_UPDATE" then
 		M.QuestsChanged()
 	elseif event == "ENCOUNTER_END" then

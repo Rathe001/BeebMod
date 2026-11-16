@@ -90,6 +90,28 @@ function K.Parse(guid)
 	return tonumber(npc)
 end
 
+-- A NAME FROM A GUID ALONE (Josh 2026-11-16: "Expedition is showing numbers
+-- for some mobs", a list of "#255069" under City of Dalaran). Inside a
+-- dungeon an enemy's name and GUID are secret while it stands, so it is never
+-- watched; its corpse's loot then gives the GUID, and a unit token for it
+-- still will not say the name. The client's tooltip for the GUID does, with
+-- nobody in sight. `npc` alone will do too: any spawn of a kind has its name.
+function K.NameByGUID(guid, npc)
+	if type(guid) ~= "string" and npc then
+		guid = "Creature-0-0-0-0-" .. npc .. "-0000000000"
+	end
+	if type(guid) ~= "string" or secret(guid) or not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then
+		return nil
+	end
+	local ok, data = pcall(C_TooltipInfo.GetHyperlink, "unit:" .. guid)
+	local line = ok and type(data) == "table" and type(data.lines) == "table" and data.lines[1]
+	local text = type(line) == "table" and line.leftText
+	if type(text) ~= "string" or secret(text) or text == "" or text == UNKNOWN or text == UNKNOWNOBJECT then
+		return nil
+	end
+	return text
+end
+
 -- an answer we may keep, or nil: a refused call and a secret are both "not now"
 local function ask(fn, ...)
 	if type(fn) ~= "function" then
@@ -687,6 +709,11 @@ function K.Loot(t)
 						if type(token) == "string" then
 							learn(w, token)
 						end
+					end
+					-- and where the token would not say (a dungeon), the
+					-- client's tooltip for the corpse does
+					if w.name == nil or secret(w.name) then
+						w.name = K.NameByGUID(guid)
 					end
 					place(w)
 					if K.Count(guid, w, "loot") then
