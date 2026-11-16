@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.15.0
 
 - **Your frame and the party move apart.** Your own frame was the top of
   the party column, so moving the player frame in Edit Mode moved the party
