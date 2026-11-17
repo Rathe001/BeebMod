@@ -7,6 +7,10 @@
 #   curl -o SkillRaceClassInfo.csv "https://wago.tools/db2/SkillRaceClassInfo/csv?product=wowf"
 #   py -I scripts/make-class-spells.py <the folder they are in>
 #
+# The file it makes is not kept in the repository or shipped: add
+# Modules\Tooltips\ClassSpellData.lua to BeebMod.toc, above Tooltips.lua, while
+# a check is run, and take both out after it.
+#
 # Only the ids are kept. The game has each spell's name and description, and
 # the Testing page's Record asks it for them (Modules/Tooltips/Tooltips.lua,
 # M.ClassesRead), so what the spell card reads from each can be checked for

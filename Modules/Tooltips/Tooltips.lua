@@ -6201,6 +6201,12 @@ end
 -- asked. Those are asked for and counted in `waiting`; a second Record a few
 -- seconds later has them.
 --
+-- THE LIST OF IDS IS NOT SHIPPED (2026-11-17, the check done). It is 35 KB
+-- that a player has no use for. With no BT.ClassSpells this does nothing.
+-- To run the check again, after a patch that rewords spells: make the list
+-- with scripts/make-class-spells.py and add Modules\Tooltips\ClassSpellData.lua
+-- to BeebMod.toc above this file, for as long as the check takes.
+--
 -- A SPELL WITH NO WORDS IS NOT ONE TO WAIT FOR (Josh 2026-11-17, a screenshot
 -- of six Records: "1937 class spells read, 1619 not ready", then 1997 and
 -- 1559, then 1937 and 1619 again: "Not sure this is working"). About 1,600

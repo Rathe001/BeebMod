@@ -14,3 +14,7 @@ scripts/lore-missing.json
 # the lore rewrite's working files (scripts/export-lore.lua and the agents);
 # only scripts/lore-curated.json is kept
 scripts/lore-work/
+
+# made by scripts/make-class-spells.py for a check of the spell cards, and
+# taken out again after it; never shipped
+Modules/Tooltips/ClassSpellData.lua
