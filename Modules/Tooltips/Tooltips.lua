@@ -2149,113 +2149,17 @@ M.crestSaid = "none yet"
 -- for What loaded on the Testing page
 function M.Status()
 	local line = ("last crest: %s; card parts left over: %d"):format(M.crestSaid, M.leftovers)
-	local p = M.perf and M.perf.busiest
-	if p then
-		local tips = {}
-		for name, n in pairs(p.tips) do
-			tips[#tips + 1] = ("%s %d"):format(name, n)
-		end
-		table.sort(tips)
-		local laps = {}
-		for _, name in ipairs(M.LAPS) do
-			laps[#laps + 1] = ("%s %.2f"):format(name, (p.laps[name] or 0) / p.n)
-		end
-		line = line .. ("; item tooltips, busiest %d sec: written %d times (%s), %.1f ms each; of each, in ms: %s; since the reload %d fills left unwritten, %d written late")
-			:format(M.PERF_SECONDS, p.n, table.concat(tips, ", "), p.ms / p.n, table.concat(laps, ", "),
-				M.perf.spared or 0, M.perf.settled or 0)
-	end
+	-- comparison cards left as the game filled them, and those written a
+	-- frame late (M.Spared, M.SettleSpared)
+	line = line .. ("; comparison fills left unwritten: %d, written late: %d"):format(M.spared, M.settled)
 	return line
 end
 
--- WHAT AN ITEM TOOLTIP COSTS (Josh 2026-11-16: "Tooltip performance issues.
--- 70 fps with no tooltip open... 61 after I open it"). Each time an item's
--- tooltip is written it is timed, and the cells other addons add to it
--- (Upgrades) apart. The busiest M.PERF_SECONDS since the reload are kept and
--- said on the Testing page (M.Status), so the cost is read, not guessed.
--- AND WHO ASKS FOR IT (his first reading: "written 225 times, 2.2 ms each",
--- 45 a second with the mouse at rest, where the game's own redraw is 5 a
--- second). So also: how many writes each tooltip had, how often the game
--- said its tooltip data had changed (TOOLTIP_DATA_UPDATE, which makes the
--- game draw the tooltip again on the next frame), and the files and lines
--- that led to one write of GameTooltip, taken well into a busy run.
-M.PERF_SECONDS = 5
-M.perf = { n = 0, ms = 0, cells = 0, from = 0, tips = {}, updates = 0, updatesAll = 0, laps = {} }
-local function clock()
-	return type(debugprofilestop) == "function" and debugprofilestop() or 0
-end
--- WHERE THE TIME OF ONE WRITE GOES (third reading: the game itself sets each
--- comparison tooltip more than once for each redraw, ContainerFrame.lua
--- 1747 and 1753, which is not ours to stop; so a write has to cost less).
--- The write is cut in stretches, each timed: M.Lap(name) ends one.
---   dress   the skin and the quality's edge, before the card
---   read    the item read from the game's lines, other addons' lines and cells
---   lines   the card's lines written
---   layout  the tooltip measured and shown, the padding trimmed
---   draw    the band, the level, the tiles, the box, the strip and the bar
---   after   the footnotes, the last show and the padding
-M.LAPS = { "dress", "read", "lines", "layout", "draw", "after" }
-local lapAt = 0
-function M.Lap(name)
-	local t = clock()
-	if name then
-		M.perf.laps[name] = (M.perf.laps[name] or 0) + (t - lapAt)
-	end
-	lapAt = t
-end
-local function callers()
-	if type(debugstack) ~= "function" then
-		return nil
-	end
-	local ok, stack = pcall(debugstack, 3, 60, 0)
-	if not ok or type(stack) ~= "string" then
-		return nil
-	end
-	-- one "File:line" for each call, the line it was at
-	local out = {}
-	for file, line in stack:gmatch("([%w_%-]+)%.lua[\"%]]*:(%d+): in ") do
-		out[#out + 1] = file .. ":" .. line
-		if #out >= 40 then
-			break
-		end
-	end
-	return table.concat(out, " < ")
-end
-function M.Timed(ms, cells, tip)
-	local p = M.perf
-	p.n, p.ms, p.cells = p.n + 1, p.ms + ms, p.cells + (cells or 0)
-	local name = tip and tip.GetName and tip:GetName() or "?"
-	p.tips[name] = (p.tips[name] or 0) + 1
-end
--- a new stretch of M.PERF_SECONDS begins, the last kept if it was the busiest
-function M.Roll()
-	local p = M.perf
-	local t = type(GetTime) == "function" and GetTime() or 0
-	if t - p.from > M.PERF_SECONDS then
-		if p.n > 0 and (not p.busiest or p.n > p.busiest.n) then
-			p.busiest = { n = p.n, ms = p.ms, cells = p.cells, tips = p.tips, updates = p.updates,
-				updatesAll = p.updatesAll, stack = p.stack, shows = p.shows, laps = p.laps }
-		end
-		p.n, p.ms, p.cells, p.from, p.tips, p.updates, p.updatesAll, p.stack = 0, 0, 0, t, {}, 0, 0, nil
-		p.laps = {}
-		p.shows = 0
-	end
-end
-if GameTooltip and hooksecurefunc and GameTooltip.Show then
-	pcall(hooksecurefunc, GameTooltip, "Show", function()
-		M.perf.shows = (M.perf.shows or 0) + 1
-	end)
-end
-if CreateFrame then
-	local heard = CreateFrame("Frame")
-	if pcall(heard.RegisterEvent, heard, "TOOLTIP_DATA_UPDATE") then
-		heard:SetScript("OnEvent", function(_, _, id)
-			M.perf.updates = M.perf.updates + 1
-			if id == nil then
-				M.perf.updatesAll = M.perf.updatesAll + 1
-			end
-		end)
-	end
-end
+-- (The timing of each item tooltip's write, built on 2026-11-16 to find
+-- why the frame rate fell with a tooltip open, came out on 2026-11-17. It
+-- found that the game fills each comparison tooltip several times a redraw,
+-- with or without addons. What it led to is M.Spared.)
+M.spared, M.settled = 0, 0
 
 -- Lays `faction`'s crest on `tip`; returns it, or nil where there is none
 function M.Crest(tip, faction)
@@ -4457,7 +4361,6 @@ function M.WriteItemB(tip, item, icon, level)
 		T.SizeLine(tip, c.last(), B.FOOT_UNDER, nil, "text")
 	end
 
-	M.Lap("lines")
 	local inner = c.finish(floor, math.min(cap, needs))
 	-- LESS UNDER THE FOOT (Josh 2026-11-16: "Need less padding on the bottom
 	-- of the footer"). The room under the foot's words is the tooltip's own
@@ -4473,7 +4376,6 @@ function M.WriteItemB(tip, item, icon, level)
 	end
 	local one = BT.Pill.Px(b.holder, 1) or 1
 
-	M.Lap("layout")
 	-- the band behind the name and the line under it, in the quality's colour
 	local l1, l2 = T.LineOf(tip, 1), T.LineOf(tip, 2)
 	if icon and b.icon:IsShown() then
@@ -4830,7 +4732,6 @@ function M.RebuildItem(tip, data)
 	item.class = M.ItemClass(id)
 	-- cells another addon has for this item (BT.OnItemCells), asked before
 	-- the clear, while the tooltip still knows what it shows
-	local t0 = clock()
 	item.more = BT.UnitTip.MoreItemCells and BT.UnitTip.MoreItemCells(tip, data, tip.isShopping and true or false)
 	-- a recipe: the cells are for the item it makes, by that item's link,
 	-- and its level is asked for by the same
@@ -4849,7 +4750,6 @@ function M.RebuildItem(tip, data)
 			item.recipe.madeLevel = text and text:match("(%d+)%s*$") or nil
 		end
 	end
-	M.cellsMs = clock() - t0
 	-- the item itself and what you wear in its place, for its stats and
 	-- their change (M.StatList); not on the comparison tooltips, which show
 	-- the worn piece
@@ -4867,7 +4767,6 @@ function M.RebuildItem(tip, data)
 	-- the new card is said on the Testing page and the old card is written
 	local level = levelOf(tip)
 	local ok, err = false, nil
-	M.Lap("read")
 	if M.TILES_LOOK and M.WriteItemB then
 		ok, err = pcall(M.WriteItemB, tip, item, M.ItemIcon(id), level)
 		if not ok then
@@ -4939,9 +4838,7 @@ function M.ComposeItem(tip, data)
 	-- that does not know, its lines in the unit tooltip's style where they
 	-- are; then the footnotes quiet
 	M.Seen("item", data)
-	M.Lap("dress")
 	local rebuilt = M.RebuildItem(tip, data)
-	M.Lap("draw")
 	if rebuilt == false then
 		-- the client's lines restyled where they are: no card, so none of a
 		-- card's parts (M.CardShown)
@@ -5045,7 +4942,7 @@ function M.SettleSpared()
 				if not ok then
 					BT.Err("tooltips.spared: " .. tostring(err))
 				end
-				M.perf.settled = (M.perf.settled or 0) + 1
+				M.settled = M.settled + 1
 			end
 		end
 	end
@@ -5060,16 +4957,10 @@ end
 
 BT.OnItemTooltip("tooltips", 0, function(tip, data)
 	if M.Spared(tip, data) then
-		M.perf.spared = (M.perf.spared or 0) + 1
+		M.spared = M.spared + 1
 		return
 	end
-	local t0 = clock()
-	M.cellsMs = 0
-	M.Roll()
-	M.Lap()
 	M.ComposeItem(tip, data)
-	M.Lap("after")
-	M.Timed(clock() - t0, M.cellsMs, tip)
 end)
 
 -- WHAT SWAPPING WOULD CHANGE, AS PART OF THE CARD (Josh 2026-10-17, choosing
