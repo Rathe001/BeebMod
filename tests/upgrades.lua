@@ -1,10 +1,12 @@
--- Run from the BeebMod folder: lua BeebMod_Upgrades/tests.lua
+-- Run from the BeebMod folder: lua tests/upgrades.lua
+-- (tests/run.lua runs it too, as its last part.)
 --
 -- The first case is not made up. It is the probe's record of Josh's level 28
 -- paladin on 2026-11-16, either side of taking off Graveweave Bindings. The
 -- swap math has to land on what the game itself reported.
-local UP = {}
-assert(loadfile("BeebMod_Upgrades/Math.lua"))("BeebMod_Upgrades", UP)
+local BT = {}
+assert(loadfile("Modules/Upgrades/Math.lua"))("BeebMod", BT)
+local UP = BT.Upgrades
 local M = UP.Math
 
 local failed = 0
@@ -79,7 +81,7 @@ near("strength 86 + 10 x 1.1", buffed.strength, 97)
 near("attack power 236 + 11 x 2", buffed.attackPower, 258)
 
 -- ROLES ----------------------------------------------------------------------
-assert(loadfile("BeebMod_Upgrades/Roles.lua"))("BeebMod_Upgrades", UP)
+assert(loadfile("Modules/Upgrades/Roles.lua"))("BeebMod", BT)
 local R = UP.Roles
 local function check(what, yes)
 	if yes then
@@ -195,6 +197,31 @@ check("spell power: worth more on four enemies than on one", c.aoe > c.dps and c
 check("spell power: threat up, survival as it was", c.threat > 0 and c.tank == 0)
 c = second({ ITEM_MOD_STRENGTH_SHORT = 10 })
 check("strength: worth less on four enemies than on one", c.aoe < c.dps and c.aoe > 0)
+do
+	local all = R.Combine({ tank = 7.5, threat = 34.4, healer = 2, sustain = 5, dps = 10, aoe = 2 })
+	near("one number: tank is 70% survival, 30% threat", all.tank, 15.57)
+	near("one number: dps is 75% one enemy, 25% four", all.dps, 8)
+	near("one number: healer is the fight's healing", all.healer, 5)
+	check("one number: with no heal that costs mana, healing per second", R.Combine({ healer = 2 }).healer == 2)
+end
+do
+	-- A cheap heal (100 for 50 mana in 1.5 sec) and a big one (400 for 300
+	-- in 2.5). 144 seconds of casting, 6,000 mana. The cheap one alone runs
+	-- out of time: 96 casts, 9,600. The big one alone runs out of mana: 20
+	-- casts, 8,000. Both limits used up: 1.5x + 2.5y = 144, 50x + 300y =
+	-- 6,000, so y = 5.538, x = 86.769, and 8,676.9 + 2,215.4 = 10,892.3.
+	local two = { at = { healing = 0 }, heals = {
+		{ name = "cheap", amount = 100, share = 0, cast = 1.5, cost = 50 },
+		{ name = "big", amount = 400, share = 0, cast = 2.5, cost = 300 },
+	} }
+	local who = { healing = 0, spellCrit = 0, mana = 6000, manaPer5 = 0, spiritRegen = 0 }
+	near("one fight: the mix of two heals that uses the time and the mana", R.FightHealing(who, two), 10892.31)
+	who.mana = 100000
+	near("one fight: with mana to spare, the big heal for all the time", R.FightHealing(who, two), 144 / 2.5 * 400)
+	who.mana = 1000
+	near("one fight: with little mana, all of it on the cheap heal", R.FightHealing(who, two), 2000)
+	check("one number: the fight's healing comes before sustain", R.Combine({ healer = 2, sustain = 5, fight = 3 }).healer == 3)
+end
 c = second({ ITEM_MOD_STAMINA_SHORT = 10 })
 check("stamina: survival up, threat as it was", c.tank > 0 and c.threat == 0)
 
@@ -256,6 +283,14 @@ kit.crusader = nil
 print("")
 if failed > 0 then
 	print(failed .. " FAILED")
+else
+	print("ALL UPGRADES TESTS PASSED")
+end
+-- run on its own, it ends with its own answer; run from tests/run.lua, it
+-- hands back how many failed
+if ... == "from run.lua" then
+	return failed
+end
+if failed > 0 then
 	os.exit(1)
 end
-print("ALL UPGRADES TESTS PASSED")

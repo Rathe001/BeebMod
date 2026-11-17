@@ -606,6 +606,8 @@ end
 -- does, and a control in the column down the right.
 -- ---------------------------------------------------------------------------
 W.ROW_H, W.ROW_SHORT = 40, 30
+-- how much taller a row is for each line its description wraps onto
+W.BLURB_LINE = 12
 -- A BOX YOU TYPE IN: a sunken well, lighter with a rim in the accent while
 -- it has the cursor (the Ledger's note, the settings window's search)
 W.FIELD_IDLE = { fill = { 0.02, 0.03, 0.03, 0.55 }, edge = { 0.20, 0.26, 0.24, 0.95 } }
@@ -641,7 +643,6 @@ function W.Row(parent, title, blurb, opts)
 	r.blurb = r:CreateFontString(nil, "OVERLAY", "BeebModFontHighlightSmall")
 	r.blurb:SetJustifyH("LEFT")
 	r.blurb:SetTextColor(SUB[1], SUB[2], SUB[3])
-	r.blurb:SetWordWrap(false)
 	r.blurb:SetText(blurb or "")
 	if short then
 		r.label:SetPoint("LEFT", x, 0)
@@ -649,6 +650,28 @@ function W.Row(parent, title, blurb, opts)
 		r.label:SetPoint("TOPLEFT", x, -7)
 		r.blurb:SetPoint("TOPLEFT", x, -23)
 		r.blurb:SetPoint("TOPRIGHT", -CONTROL_W, -23)
+		-- WRAPPED, NOT CUT SHORT (Josh 2026-11-17, a screenshot of "Repairs
+		-- your gear with your own gold at a vendor, unless you hold Shift as
+		-- yo...": "Can we wrap it instead so we can see the whole thing?").
+		-- The line was kept to one and cut with three dots. It now runs onto
+		-- as many lines as it needs, and the row is that much taller. The
+		-- page stacks its rows by their own heights (Stack:Layout).
+		r.blurb:SetWordWrap(true)
+		if r.blurb.SetNonSpaceWrap then
+			r.blurb:SetNonSpaceWrap(false)
+		end
+		local okW, wide = pcall(r.blurb.GetStringWidth, r.blurb)
+		wide = okW and BT.Pill.Number(wide, 0) or 0
+		local room = BT.Pill.Number(holder.GetWidth and holder:GetWidth(), 0)
+		if room <= 0 then
+			room = W.PAGE_W
+		end
+		room = math.max(60, room - x - CONTROL_W)
+		local lines = math.max(1, math.ceil(wide / room - 0.02))
+		r.blurbLines = lines
+		if lines > 1 then
+			r:SetHeight(W.ROW_H + (lines - 1) * W.BLURB_LINE)
+		end
 	end
 	-- the hairline above every row but a section's first
 	r.hair = r:CreateTexture(nil, "ARTWORK")

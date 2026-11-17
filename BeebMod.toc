@@ -78,6 +78,7 @@ Modules\Census\Census.lua
 Modules\Census\Book.lua
 Modules\Census\Demo.lua
 Modules\Tooltips\QuestDropData.lua
+Modules\Tooltips\ClassSpellData.lua
 Modules\Tooltips\Tooltips.lua
 Modules\Tracker\Quests.lua
 Modules\Tracker\Tracker.lua
@@ -103,6 +104,11 @@ Modules\ItemLevel\ItemLevel.lua
 Modules\Pickpocket\Pickpocket.lua
 Modules\Fishing\Fishing.lua
 Modules\Vendor\Vendor.lua
+Modules\Upgrades\Math.lua
+Modules\Upgrades\Roles.lua
+Modules\Upgrades\Read.lua
+Modules\Upgrades\Tiles.lua
+Modules\Upgrades\Fights.lua
 Modules\Map\Entrances.lua
 Modules\Speed\Speed.lua
 Modules\XP\Dungeons.lua

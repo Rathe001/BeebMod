@@ -3733,6 +3733,11 @@ do
 			.. (#bad > 0 and (":\n     " .. table.concat(bad, "\n     ")) or ""))
 end
 
+-- the Upgrades module's math, against what the game itself reported
+-- (tests/upgrades.lua)
+print("")
+failures = failures + assert(loadfile("tests/upgrades.lua"))("from run.lua")
+
 print("")
 if failures == 0 then
 	print("ALL TESTS PASSED")

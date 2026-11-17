@@ -43,12 +43,11 @@ function BT.OnSpellTooltip(moduleKey, order, fn)
 	table.sort(spells, function(a, b) return a.order < b.order end)
 end
 
--- CELLS FROM ANOTHER ADDON IN AN ITEM'S CARD (Josh 2026-11-16: "BeebMod:
--- Upgrades... I'd like it integrated with BeebMod, but since most people are
--- already using Pawn, I don't want to force this on them"). Upgrades is an
--- addon of its own and cannot see BT, so this one function is put where it
--- can: the global BeebMod. `fn(tip, data, shopping)` answers with cells,
--- each { shown words, plain words }, and the card draws them before its own.
+-- CELLS FROM ANOTHER MODULE IN AN ITEM'S CARD (Josh 2026-11-16, of Upgrades).
+-- `fn(tip, data, shopping)` answers with cells, each { shown words, plain
+-- words }, and the card draws them before its own. Upgrades was an addon of
+-- its own until 2026-11-17 and reached this through a global, BeebMod; it is
+-- a module now (Modules/Upgrades) and the global is gone.
 local cellMakers = {}
 function BT.OnItemCells(fn)
 	if type(fn) == "function" then
@@ -67,6 +66,20 @@ function T.MoreItemCells(tip, data, shopping)
 			end
 			-- and plain rows for under the cells, each { left words, right
 			-- words }, `quiet` for the dimmer ink (Upgrades' Shift breakdown)
+			-- and, for the item card's new look (Modules/Tooltips,
+			-- M.WriteItemB): rows of tiles and grids of numbers.
+			--   tiles = { { head = words or nil, { value, rgb, label,
+			--     second = { word, value, rgb } or nil }, ... }, ... }
+			--   grids = { { head = words or nil, rows = { { label,
+			--     { value, rgb }, { value, rgb }, { value, rgb } }, ... } } }
+			for _, kind in ipairs({ "tiles", "grids" }) do
+				if type(cells[kind]) == "table" then
+					out[kind] = out[kind] or {}
+					for _, one in ipairs(cells[kind]) do
+						out[kind][#out[kind] + 1] = one
+					end
+				end
+			end
 			if type(cells.rows) == "table" then
 				out.rows = out.rows or {}
 				for _, row in ipairs(cells.rows) do
@@ -79,46 +92,6 @@ function T.MoreItemCells(tip, data, shopping)
 	end
 	return out
 end
-_G.BeebMod = _G.BeebMod or {}
-_G.BeebMod.OnItemCells = BT.OnItemCells
-
--- A SWITCH FOR AN ADDON THAT RIDES ON BEEBMOD (Josh 2026-11-16, of Upgrades:
--- "make sure we have a switch for this in the options? Also if the module
--- is not installed, it should be completely gone everywhere"). The addon
--- asks for its switch as it loads; with the addon not installed nobody asks,
--- and the settings page has no section for it (UI/Settings.lua draws only
--- what is in BT.extras). On unless switched off, kept in settings.extras.
---   BeebMod.AddSwitch({ key, section, title, blurb, changed = fn(on) })
---   BeebMod.SwitchOn(key)
-BT.extras = {}
-function BT.ExtraOn(key)
-	local s = BT.settings and BT.settings.extras
-	return not (type(s) == "table" and s[key] == false)
-end
-function BT.SetExtra(key, on)
-	if not BT.settings then
-		return
-	end
-	BT.settings.extras = BT.settings.extras or {}
-	BT.settings.extras[key] = on and true or false
-	for _, x in ipairs(BT.extras) do
-		if x.key == key and type(x.changed) == "function" then
-			pcall(x.changed, on and true or false)
-		end
-	end
-end
-_G.BeebMod.AddSwitch = function(def)
-	if type(def) ~= "table" or type(def.key) ~= "string" or type(def.title) ~= "string" then
-		return
-	end
-	for _, x in ipairs(BT.extras) do
-		if x.key == def.key then
-			return
-		end
-	end
-	BT.extras[#BT.extras + 1] = def
-end
-_G.BeebMod.SwitchOn = BT.ExtraOn
 
 -- Called when the tooltip goes away, for anything drawn OVER it rather than
 -- in it: those frames belong to whatever the tooltip was showing, and have to
@@ -591,6 +564,18 @@ T.TAG = {
 -- AN ITEM YOU CANNOT USE (Josh 2026-10-23: "we are not showing the tag for
 -- items the player cannot use"), in the red the client warns with
 T.TAG.warn = T.TAG.pvp
+-- A RECIPE YOU CAN LEARN (the recipe card, 2026-11-17), in the green of a
+-- figure that went up
+T.TAG.good = { fg = { 0.44, 0.86, 0.55 }, bg = { 0.31, 0.78, 0.42, 0.16 } }
+-- ON AN ITEM CARD'S BAND (Josh 2026-11-17, three recipe cards: "The "Already
+-- known" and other tags are a bit hard to read"). The band is the item's
+-- quality colour, so a tag's faint fill in its own colour had nothing to
+-- stand out from: red on a green band, grey on a grey one. On the band a
+-- tag has a dark fill and brighter words, whatever the band's colour.
+T.TAG.bandwarn = { fg = { 1, 0.66, 0.62 }, bg = { 0, 0, 0, 0.55 } }
+T.TAG.bandgood = { fg = { 0.56, 0.95, 0.66 }, bg = { 0, 0, 0, 0.55 } }
+T.TAG.bandquiet = { fg = { 0.88, 0.91, 0.90 }, bg = { 0, 0, 0, 0.55 } }
+T.TAG.bandbound = T.TAG.bandquiet
 
 -- `tags` = { { words, kind } }, in rows no wider than `width`
 function T.TagRows(tags, width)

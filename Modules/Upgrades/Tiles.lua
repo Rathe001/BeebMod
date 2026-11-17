@@ -6,33 +6,48 @@
 -- The cells say the change in percent of your whole character, so most
 -- pieces read between 0% and 5%.
 --
--- BeebMod draws the cells in its item card (BeebMod.OnItemCells). Without
--- that this file does nothing.
+-- The item card draws the cells (BT.OnItemCells, Core/Tooltip.lua).
 --
 -- A RING OR TRINKET has two pieces it could replace, and gets a row of cells
 -- for each.
 --
 -- AND IT CHECKS ITSELF. Every time you really change a piece, the totals the
 -- math expected are compared with what the game then reports, and a miss is
--- said in chat and kept in BeebModUpgradesDB.checks.
-local _, UP = ...
+-- kept in the module's saved table, as `checks`. Nothing is said in chat.
+local _, BT = ...
+BT.Upgrades = BT.Upgrades or {}
+local UP = BT.Upgrades
+local CreateFrame, C_Timer = BT.Cpu.For("Modules/Upgrades/Tiles.lua")
 
 local Rd, M, R = UP.Read, UP.Math, UP.Roles
 local T = {}
 UP.Tiles = T
 
--- ITS SWITCH, IN BEEBMOD'S SETTINGS (Josh 2026-11-16: "make sure we have a
--- switch for this in the options"). BeebMod draws it on its General page and
--- keeps the answer (BeebMod.AddSwitch). Off, nothing here shows, checks or
+-- A MODULE OF BEEBMOD (Josh 2026-11-17: "I think I've decided to include
+-- this in BeebMod proper instead of a separate module"). It was an addon of
+-- its own, BeebMod: Upgrades, that asked BeebMod for a switch. Now it is a
+-- module like any other, with its switch on the General page (UI/Settings.lua)
+-- as the vendor utilities have theirs. Off, nothing here shows, checks or
 -- records.
-if BeebMod and BeebMod.AddSwitch then
-	BeebMod.AddSwitch({
-		key = "upgrades", section = "Upgrades", title = "Upgrades on gear tooltips",
-		blurb = "Shows how much a piece of gear changes your tank, healer and DPS numbers",
-	})
-end
+local Mod = BT.Module({
+	key = "upgrades",
+	title = "Upgrades on gear tooltips",
+	order = 99.3,
+	-- the switch it had as an addon of its own was kept in settings.extras
+	OnBind = function()
+		local s = BT.settings
+		if type(s) == "table" and type(s.extras) == "table" then
+			if s.extras.upgrades == false then
+				s.modules = s.modules or {}
+				s.modules.upgrades = false
+			end
+			s.extras = nil
+		end
+	end,
+})
+UP.Module = Mod
 function UP.On()
-	return not (BeebMod and BeebMod.SwitchOn) or BeebMod.SwitchOn("upgrades")
+	return BT.Enabled("upgrades")
 end
 
 local GREEN, RED, GREY = "|cff1eff00", "|cffff5a4d", "|cff9aa5a0"
@@ -62,11 +77,13 @@ end
 -- each role's first profile under its own name, its second under SECOND's
 local SECOND = { tank = "threat", healer = "sustain", dps = "aoe" }
 local SECOND_WORDS = { threat = "threat", sustain = "sustain", aoe = "AoE" }
+-- and what the first is called beside it, with Shift held
+local FIRST_WORDS = { tank = "survival", healer = "output", dps = "single" }
 
 local function price(s, kit)
 	return {
 		tank = R.Survival(s, kit), healer = R.Healing(s, kit), dps = R.Damage(s, kit),
-		threat = R.Threat(s, kit), sustain = R.Sustain(s, kit),
+		threat = R.Threat(s, kit), sustain = R.Sustain(s, kit), fight = R.FightHealing(s, kit),
 		aoe = R.Damage(s, kit, { enemies = R.AOE_ENEMIES }),
 	}
 end
@@ -91,97 +108,17 @@ function T.Compare(link)
 		for key, was in pairs(before) do
 			change[key] = R.Change(was, worth[key])
 		end
-		out[#out + 1] = { swap = swap, change = change, seal = select(2, R.Damage(after, n.kit)) }
+		-- `all` is the one number a role (R.Combine); `change` its parts
+		out[#out + 1] = { swap = swap, change = change, all = R.Combine(change), seal = select(2, R.Damage(after, n.kit)) }
 	end
 	return out
 end
 
--- THE BREAKDOWN, WITH SHIFT HELD (Josh 2026-11-16: "Proceed with shift").
--- Under each role, what each stat of the swap does on its own: the stat's
--- difference put on your totals with nothing else changed, priced for both
--- of the role's profiles. A new weapon's damage and speed are one line,
--- "Weapon". The lines need not add up to the role's number exactly: stats
--- work on each other (crit is worth more with more attack power).
-local TITLES = { tank = "Tank", healer = "Healer", dps = "DPS" }
-local SEALS = { command = "Seal of Command", righteousness = "Seal of Righteousness", fury = "Seal of Fury" }
-local SKIP = { ITEM_MOD_DAMAGE_PER_SECOND_SHORT = true }
-local NAMES = { UPGRADES_BLOCK = "Block" }
 -- what a two-slot piece's rows are called: "ring 1", "ring 2"
 local PAIRS = { [11] = "ring 1", [12] = "ring 2", [13] = "trinket 1", [14] = "trinket 2" }
 
-local function percent(v)
-	if not v or math.abs(v) < 0.05 then
-		return GREY .. "0.0%|r"
-	end
-	return (v < 0 and RED or GREEN) .. ("%+.1f%%"):format(v) .. "|r"
-end
-
-local function amount(v)
-	if v == math.floor(v) then
-		return ("%+d"):format(v)
-	end
-	return ("%+.1f"):format(v)
-end
-
 local function named(wornLink)
 	return type(wornLink) == "string" and wornLink:match("%[(.-)%]") or "empty"
-end
-
-function T.Rows(link, found)
-	local n = now()
-	if not (n and found) then
-		return nil
-	end
-	local before = price(n.state, n.kit)
-	local new = Rd.ItemStats(link)
-	local rows = {}
-	for _, one in ipairs(found) do
-		local swap, change = one.swap, one.change
-		-- which of the two it is against, when there are two
-		if #found > 1 and PAIRS[swap.slot] then
-			local words = PAIRS[swap.slot]
-			rows[#rows + 1] = { words:sub(1, 1):upper() .. words:sub(2) .. " · " .. named(swap.wornLink) }
-		end
-		for _, role in ipairs(ROLES) do
-			local first, second = role[1], SECOND[role[1]]
-			local title = TITLES[first]
-			if first == "dps" and one.seal and SEALS[one.seal] then
-				title = title .. " · " .. SEALS[one.seal]
-			end
-			rows[#rows + 1] = { title, percent(change[first]) .. "  " .. SECOND_WORDS[second] .. " " .. percent(change[second]) }
-			local function part(words, stats, weapons, shield)
-				local alone = M.Swap(n.state, n.rates, nil, stats, weapons)
-				if shield ~= nil then
-					alone.shield = shield
-				end
-				local worth = price(alone, n.kit)
-				local a, b = R.Change(before[first], worth[first]) or 0, R.Change(before[second], worth[second]) or 0
-				if math.abs(a) >= 0.05 or math.abs(b) >= 0.05 then
-					rows[#rows + 1] = { "   " .. words, percent(a) .. "  " .. SECOND_WORDS[second] .. " " .. percent(b), quiet = true }
-				end
-			end
-			local d = M.Difference(swap.worn, new)
-			local keys = {}
-			for k, v in pairs(d) do
-				if v ~= 0 and not SKIP[k] then
-					keys[#keys + 1] = k
-				end
-			end
-			table.sort(keys)
-			for _, k in ipairs(keys) do
-				part(amount(d[k]) .. " " .. (NAMES[k] or type(_G[k]) == "string" and _G[k] or k), { [k] = d[k] })
-			end
-			if swap.weapons and swap.weapons.new then
-				part("Weapon", nil, swap.weapons)
-			end
-			-- a shield coming off or going on: its block and Seal of Fury's
-			-- absorb with it
-			if swap.shield ~= nil and swap.shield ~= n.state.shield then
-				part(swap.shield and "Shield" or "No shield", nil, nil, swap.shield)
-			end
-		end
-	end
-	return rows
 end
 
 local function link(tip, data)
@@ -203,6 +140,47 @@ local function link(tip, data)
 	return nil
 end
 
+-- FOR BEEBMOD'S NEW ITEM CARD (Josh 2026-11-16, the tooltip redesign: "I like
+-- option B"): the same numbers as tiles, and the Shift breakdown as a grid
+-- whose three columns are the three roles.
+local UP_INK, DOWN_INK, FLAT_INK = { 0.44, 0.86, 0.55 }, { 1, 0.54, 0.40 }, { 0.60, 0.65, 0.63 }
+local function figure(v)
+	if not v or math.abs(v) < 0.05 then
+		return "0.0%", FLAT_INK
+	end
+	return ("%+.1f%%"):format(v), v < 0 and DOWN_INK or UP_INK
+end
+
+-- A row of three tiles for each piece the item could replace, headed by
+-- that piece's name where there are two. A tile is the role's one number
+-- (R.Combine). With Shift held its two parts are named under it.
+function T.TilesFor(found, shift)
+	local groups = {}
+	for _, one in ipairs(found) do
+		local group = {}
+		if #found > 1 then
+			group.head = one.swap.wornLink and ("In place of " .. named(one.swap.wornLink)) or "In the empty slot"
+		end
+		for _, role in ipairs(ROLES) do
+			local first, second = role[1], SECOND[role[1]]
+			local value, rgb = figure((one.all or R.Combine(one.change))[first])
+			local tile = { value = value, rgb = rgb, label = role[2] }
+			if shift then
+				tile.parts = {}
+				for _, part in ipairs({ { FIRST_WORDS[first], one.change[first] }, { SECOND_WORDS[second], one.change[second] } }) do
+					if part[2] then
+						local text, ink = figure(part[2])
+						tile.parts[#tile.parts + 1] = { part[1], text, ink }
+					end
+				end
+			end
+			group[#group + 1] = tile
+		end
+		groups[#groups + 1] = group
+	end
+	return groups
+end
+
 -- the comparison tooltips, which show what you are wearing
 local function wornCard(tip)
 	return tip == ShoppingTooltip1 or tip == ShoppingTooltip2 or tip == ItemRefShoppingTooltip1
@@ -217,6 +195,21 @@ local function cell(v, word, newRow)
 	return { colour .. n .. "|r " .. word, n .. " " .. word, newRow = newRow }
 end
 
+-- the answers kept (T.Cells), by the item's link
+local kept = {}
+T.KEEP = 5
+local stale = CreateFrame("Frame")
+for _, event in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "UNIT_AURA", "UNIT_STATS",
+	"UNIT_ATTACK_POWER", "UNIT_MAXHEALTH", "UNIT_MAXPOWER", "COMBAT_RATING_UPDATE", "PLAYER_DAMAGE_DONE_MODS",
+	"SPELLS_CHANGED", "PLAYER_LEVEL_UP", "PLAYER_ENTERING_WORLD" }) do
+	pcall(stale.RegisterEvent, stale, event)
+end
+stale:SetScript("OnEvent", function(_, _, unit)
+	if unit == nil or unit == "player" or type(unit) ~= "string" then
+		kept = {}
+	end
+end)
+
 -- The cells for BeebMod's item card: { shown words, plain words } each.
 -- NOT ON WHAT YOU ARE WEARING (Josh 2026-11-16: "I don't think the equipped
 -- items need to show the new upgrade stats"): nothing on the comparison
@@ -229,9 +222,22 @@ function T.Cells(tip, data, shopping)
 	if not l or not Rd.Where(l) then
 		return nil
 	end
-	local found = T.Compare(l)
-	if not found or #found == 0 then
-		return nil
+	-- WORKED OUT ONCE, NOT FIVE TIMES A SECOND (Josh 2026-11-16: "Tooltip
+	-- performance issues. 70 fps with no tooltip open... 61 after I open
+	-- it"). The game writes a tooltip again several times a second while
+	-- the mouse rests on an item, and each time the whole comparison was
+	-- worked out again. The answer for an item is kept until something it
+	-- stands on changes (your gear, buffs, stats, spells or level: `stale`
+	-- below), and for T.KEEP seconds at most.
+	local t = GetTime()
+	local found = kept[l]
+	if not (found and t - found.at < T.KEEP) then
+		found = T.Compare(l)
+		if not found or #found == 0 then
+			return nil
+		end
+		found.at = t
+		kept[l] = found
 	end
 	local cells = {}
 	if #found > 1 then
@@ -243,39 +249,27 @@ function T.Cells(tip, data, shopping)
 			local words = PAIRS[one.swap.slot] or ("slot " .. one.swap.slot)
 			cells[#cells + 1] = { GREY .. words .. "|r", words, newRow = #cells > 0 }
 			for _, role in ipairs(ROLES) do
-				cells[#cells + 1] = cell(one.change[role[1]], role[2])
+				cells[#cells + 1] = cell(one.all[role[1]], role[2])
 			end
 		end
 	else
-		local change = found[1].change
 		-- ALWAYS ALL THREE (Josh 2026-11-16: "I think we should always show
 		-- the stats. Sometimes they are missing right now"): a role the item
 		-- does nothing for reads 0.0%, in grey
+		-- ONE NUMBER A ROLE, its parts with Shift (R.Combine)
 		for _, role in ipairs(ROLES) do
-			cells[#cells + 1] = cell(change[role[1]], role[2])
-		end
-		-- A SECOND PROFILE ONLY WHERE IT TELLS A DIFFERENT STORY (Josh
-		-- 2026-11-16, asked whether to show every profile: one number a
-		-- role, the other where they disagree). That is the other sign, or
-		-- a whole percent apart. They get a row of their own under the three.
-		local first = true
-		for _, role in ipairs(ROLES) do
-			local a, b = change[role[1]] or 0, change[SECOND[role[1]]]
-			if b and (math.abs(a - b) >= 1 or (a * b < 0 and math.abs(a - b) >= 0.1)) then
-				cells[#cells + 1] = cell(b, SECOND_WORDS[SECOND[role[1]]], first)
-				first = false
-			end
+			cells[#cells + 1] = cell(found[1].all[role[1]], role[2])
 		end
 	end
-	if IsShiftKeyDown and IsShiftKeyDown() then
-		cells.rows = T.Rows(l, found)
-	end
+	local shift = IsShiftKeyDown and IsShiftKeyDown() and true or false
+	-- NO TABLE OF STATS UNDER THE TILES (Josh 2026-11-16: "The "where it comes
+	-- from" section on shift is confusing to me... I think we could probably
+	-- just remove that?"). Shift names each tile's two parts and no more.
+	cells.tiles = T.TilesFor(found, shift)
 	return cells
 end
 
-if BeebMod and BeebMod.OnItemCells then
-	BeebMod.OnItemCells(T.Cells)
-end
+BT.OnItemCells(T.Cells)
 
 -- pressing or letting go of Shift over an item draws its tooltip again
 local shift = CreateFrame("Frame")
@@ -293,10 +287,19 @@ end)
 
 -- THE CHECK ------------------------------------------------------------------
 
+-- A POINT OF ROUNDING IS NOT A MISS (Josh 2026-11-16, a screenshot of nine
+-- lines in chat: "expected stamina 110.2... The game says 111.0", "expected
+-- health 1264.0... The game says 1272.0", "expected intellect 76.2... The
+-- game says 77.0"). With Blessing of Kings a piece's stats count 1.1 times,
+-- so the math's totals have fractions. The game shows whole numbers, and
+-- the total it started from was rounded too. So a stat may be up to a point
+-- and a half off with nothing wrong, and what hangs on it by as much: 10
+-- health a point of stamina, 15 mana a point of intellect, 2 attack power a
+-- point of strength, 2 armor a point of agility.
 local CHECKED = {
-	{ "strength", 0.6 }, { "agility", 0.6 }, { "stamina", 0.6 }, { "intellect", 0.6 }, { "spirit", 0.6 },
-	{ "attackPower", 1.1 }, { "healing", 0.6 }, { "armor", 1.1 }, { "crit", 0.06 }, { "spellCrit", 0.06 },
-	{ "dodge", 0.06 }, { "health", 1.1 }, { "mana", 1.1 }, { "damageMin", 0.6 }, { "damageMax", 0.6 },
+	{ "strength", 1.5 }, { "agility", 1.5 }, { "stamina", 1.5 }, { "intellect", 1.5 }, { "spirit", 1.5 },
+	{ "attackPower", 3.1 }, { "healing", 0.6 }, { "armor", 3.1 }, { "crit", 0.16 }, { "spellCrit", 0.06 },
+	{ "dodge", 0.16 }, { "health", 16 }, { "mana", 23 }, { "damageMin", 0.6 }, { "damageMax", 0.6 },
 }
 local WORDS = {
 	attackPower = "attack power", spellCrit = "spell crit", damageMin = "weapon damage (low)",
@@ -314,6 +317,11 @@ local function links()
 end
 
 local function remember()
+	-- (only where the tiles show: on, and a paladin)
+	if not UP.On() or not paladin() then
+		last = nil
+		return
+	end
 	local s = Rd.State()
 	last = s and { state = s, rates = Rd.Rates(s), links = links() } or nil
 end
@@ -359,16 +367,18 @@ local function check()
 	if math.abs(expected.spellDamage[2] - last.state.spellDamage[2]) > 0.6 then
 		misses[#misses + 1] = { stat = "Holy spell damage", expected = expected.spellDamage[2], game = last.state.spellDamage[2] }
 	end
-	BeebModUpgradesDB = BeebModUpgradesDB or {}
-	local db = BeebModUpgradesDB
+	local db = UP.DB()
 	db.checks = db.checks or {}
 	table.insert(db.checks, { at = date("%Y-%m-%d %H:%M:%S"), slots = changed, misses = misses,
 		off = was.links[changed[1]], on = last.links[changed[1]] })
 	while #db.checks > 30 do
 		table.remove(db.checks, 1)
 	end
+	-- KEPT, NOT SAID IN CHAT (the same screenshot: "The debug lines show
+	-- here"). A miss is in `checks`, above, with its words
+	-- made here so the saved file reads as the chat lines did.
 	for _, m in ipairs(misses) do
-		print(("Upgrades: expected %s %.1f after that swap. The game says %.1f."):format(WORDS[m.stat] or m.stat, m.expected, m.game))
+		m.words = ("expected %s %.1f after that swap. The game says %.1f."):format(WORDS[m.stat] or m.stat, m.expected, m.game)
 	end
 end
 
@@ -380,9 +390,7 @@ f:SetScript("OnEvent", function(_, event)
 	if event == "PLAYER_LOGIN" then
 		C_Timer.After(4, remember)
 		-- the probe's records, from before the math was written: dropped
-		if type(BeebModUpgradesDB) == "table" then
-			BeebModUpgradesDB.probe = nil
-		end
+		UP.DB().probe = nil
 		-- THE "BEFORE" IS KEPT FRESH (Josh's chat lines, 2026-11-16: every
 		-- stat 5 under what was expected, and armor 152 under). The totals
 		-- had been remembered at login, a buff ended before the swap, and

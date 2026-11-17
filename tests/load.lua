@@ -2804,9 +2804,11 @@ if ok then
 			local found = {}
 			for _, r in ipairs(switches) do found[r] = true end
 			-- AND THE VENDOR'S TWO (Josh 2026-11-08), utilities with no page either
-			assert(#switches == 4 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow]
-				and found[BT.Settings.junkRow] and found[BT.Settings.repairRow],
-				"on General, only the look, fishing, encounter notes and the vendor's two: " .. #switches)
+			-- AND UPGRADES (Josh 2026-11-17, when it became a module of BeebMod)
+			assert(#switches == 5 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow]
+				and found[BT.Settings.junkRow] and found[BT.Settings.repairRow] and found[BT.Settings.upgradesRow],
+				"on General, only the look, fishing, encounter notes, the vendor's two and Upgrades: " .. #switches)
+			assert(BT.GetModule("upgrades") and BT.Enabled("upgrades") and BT.Upgrades.On(), "Upgrades is a module, on until switched off")
 			-- the target row's switch went with the row (Josh 2026-10-05)
 			local function rowFor(page, field)
 				BT.Window.SetView(page)
@@ -3097,8 +3099,19 @@ if ok then
 			-- a name, a row of tags straight under it, and the guild (Josh
 			-- 2026-10-17, the tooltip canvas "C, everything as tags", then "push
 			-- them a bit tighter against the title")
-			assert(#lines == 3,
-				("seven lines become three, not %d: %s"):format(#lines, table.concat(lines, " | ")))
+			-- (and since 2026-11-17 a short blank under them, where the band
+			-- ends: M.UNIT.GAP)
+			assert(#lines == 4 and lines[4] == BT.UnitTip.TAG_BLANK,
+				("seven lines become three and the gap under the band, not %d: %s"):format(#lines, table.concat(lines, " | ")))
+			-- with no rows under who it is, the band runs to the bottom (Josh
+			-- 2026-11-17: "Players have a black bar on the bottom now"); with a
+			-- row under it, it is left where it ends
+			assert(tips.UnitLookEnd(tip) == true, "nothing under the gap: the band is the whole tooltip")
+			tip:AddLine("a row another module wrote")
+			tips.Compose(tip, "target")
+			tip:AddLine("a row another module wrote")
+			assert(tips.UnitLookEnd(tip) == false, "a row under the gap: the band ends over it")
+			tips.Compose(tip, "target")
 			assert(lines[1]:find("Beeb Bob", 1, true) and lines[1]:find("60", 1, true),
 				"the name and the level share the first line: " .. lines[1])
 			assert(lines[2] == BT.UnitTip.TAG_BLANK, "the second is kept for the tags: " .. lines[2])
@@ -3178,7 +3191,9 @@ if ok then
 			-- line 2 is the breath under the name; the tags' line is line 3
 			local sub = select(2, _G.TestTipTextLeft3:GetFont())
 			assert(head > sub, ("the name is bigger than the line under it (%s vs %s)"):format(head, sub))
-			assert(level < head, ("and the level is quieter than the name (%s)"):format(level))
+			-- THE LEVEL LARGE, AS AN ITEM'S IS (Josh 2026-11-17, the units in the
+			-- item card's look); it was quieter than the name until then
+			assert(level > head, ("and the level is the large number (%s)"):format(level))
 
 			-- the Ledger's note is a row under the tags, after a breath
 			-- (Josh 2026-10-17, the tooltip canvas)
@@ -12545,12 +12560,19 @@ if ok then
 			local bar = mod.HealthFrame()
 			assert(bar and bar:IsShown() and bar._value == 40 and bar._max == 100,
 				"its health as a line along the bottom")
-			assert(bar._points.BOTTOMLEFT and bar._height == mod.HEALTH_H, "two pixels on the bottom edge")
+			-- IN THE FOOT'S STRIP (Josh 2026-11-17, the units in the item card's
+			-- look): four pixels, with room at each end; it was two on the edge
+			assert(bar._points.BOTTOMLEFT and bar._height == mod.UNIT.BAR_H, "a bar in the foot's strip")
+			mod.TILES_LOOK = false
+			mod.Compose(tip, "target")
+			assert(mod.HealthFrame()._height == mod.HEALTH_H, "two pixels on the bottom edge, in the look before")
+			mod.TILES_LOOK = true
+			mod.Compose(tip, "target")
 			-- (less the kills row's tuck: it is the last line, and sits nearer
 			-- the bottom - Josh 2026-11-05)
 			assert(mod.Skins()[tip] == nil
-				or mod.Skins()[tip].extraBottom == mod.HEALTH_H + 1 + mod.TAG_DROP - mod.KILLS_TUCK,
-				"with room for it under the last line, and for the tags' drop, less the kills row's tuck: "
+				or mod.Skins()[tip].extraBottom == mod.UNIT.STRIP_H + 2 + mod.TAG_DROP,
+				"with room for the strip under the last line, and for the tags' drop: "
 					.. tostring(mod.Skins()[tip] and mod.Skins()[tip].extraBottom))
 
 			-- dead: grey, and no line of health
@@ -12614,7 +12636,212 @@ if ok then
 			BT.UnitTip.HideTags()
 			mod.HealthLine(nil, nil)
 		end },
+		{ "Record writes the spellbook and what was read from it", function()
+			local mod = BT.GetModule("tooltips")
+			local hadBook, hadSpell = rawget(_G, "C_SpellBook"), rawget(_G, "C_Spell")
+			_G.C_SpellBook = {
+				GetNumSpellBookSkillLines = function() return 1 end,
+				GetSpellBookSkillLineInfo = function() return { itemIndexOffset = 0, numSpellBookItems = 2 } end,
+				GetSpellBookItemInfo = function(i)
+					return i == 1 and { actionID = 11, name = "Holy Light", subName = "Rank 1" }
+						or { actionID = 12, name = "Devotion Aura" }
+				end,
+			}
+			_G.C_Spell = { GetSpellDescription = function(id)
+				return id == 11 and "Heals a friendly target for 39 to 47." or "Gives 55 additional armor to party members."
+			end }
+			-- and every class's spells, from their ids: one not ready is counted
+			local hadClasses = BT.ClassSpells
+			BT.ClassSpells = { { "Mage: Fire", { 133, 134, 135 } } }
+			-- (135: a spell the game has in full, with no words; not waited for)
+			_G.C_Spell.IsSpellDataCached = function(id) return id == 135 end
+			_G.C_Spell.GetSpellName = function(id) return id == 133 and "Fireball" or "Fire Shield" end
+			local asked
+			_G.C_Spell.RequestLoadSpellData = function(id) asked = id end
+			local wasDesc = _G.C_Spell.GetSpellDescription
+			_G.C_Spell.GetSpellDescription = function(id)
+				if id == 133 then return "Hurls a fiery ball that causes 14 to 22 Fire damage and an additional 2 Fire damage over 4 sec." end
+				if id == 134 or id == 135 then return "" end
+				return wasDesc(id)
+			end
+			mod.Dump()
+			local classes = BeebModDB.tooltipsDump.classes
+			assert(classes and classes.spells == 1 and classes.waiting == 1 and asked == 134, "one read, one asked for")
+			assert(classes.wordless == 1, "and one with no words, not waited for")
+			assert(classes.lines[1].name == "Mage: Fire" and classes.lines[1].spells[1].value == "14–22",
+				"Fireball as read: " .. tostring(classes.lines[1].spells[1].value))
+			BT.ClassSpells = hadClasses
+			local out = BeebModDB.tooltipsDump.book
+			_G.C_SpellBook, _G.C_Spell = hadBook, hadSpell
+			BeebModDB.tooltipsDump = nil
+			assert(out and #out.spells == 2, "both spells written")
+			assert(out.spells[1].label == "Healing" and out.spells[1].value == "39–47" and out.spells[1].amount == 43,
+				"Holy Light as read: " .. tostring(out.spells[1].value))
+			assert(out.spells[2].words:find("55 additional armor") and out.spells[2].label == nil, "an aura's words, and no amount")
+		end },
+		{ "a recipe is a card, with what it makes in a box", function()
+			-- the lines are Josh's record of 2026-11-17, with the client's own
+			-- line types
+			local mod = BT.GetModule("tooltips")
+			local T = BT.UnitTip
+			BT.SetEnabled("tooltips", true)
+			local keep = { kinds = _G.Enum.TooltipDataLineType, lines = rawget(_G, "GetNumSkillLines"),
+				info = rawget(_G, "GetSkillLineInfo"), item = _G.C_Item }
+			_G.Enum.TooltipDataLineType = { None = 0, SellPrice = 11, NestedBlock = 19, ItemBinding = 20, EquipSlot = 21,
+				ItemName = 22, ItemSpellTriggerLearn = 38, UsageRequirement = 43, ItemSpellTriggerOnUse = 44 }
+			local LT = _G.Enum.TooltipDataLineType
+			local function makeTip(name)
+				local tip = _G.CreateFrame("Frame")
+				local t = { lines = {}, rights = {} }
+				tip.GetName = function() return name end
+				tip.ClearLines = function() t.lines, t.rights = {}, {} end
+				tip.AddLine = function(_, text) t.lines[#t.lines + 1] = tostring(text) end
+				tip.AddDoubleLine = function(_, l, right)
+					t.lines[#t.lines + 1] = tostring(l)
+					t.rights[#t.lines] = right
+				end
+				tip.NumLines = function() return #t.lines end
+				for i = 1, 40 do
+					_G[name .. "TextLeft" .. i] = _G.CreateFrame("FontString")
+					_G[name .. "TextRight" .. i] = _G.CreateFrame("FontString")
+				end
+				return tip, t
+			end
+			local white, red = { r = 1, g = 1, b = 1 }, { r = 1, g = 0.13, b = 0.13 }
+			local blue, green = { r = 0, g = 0.44, b = 0.87 }, { r = 0, g = 1, b = 0 }
+			local function circlet(requirement)
+				return { id = 253976, lines = {
+					{ type = LT.ItemName, leftText = "Pattern: Filigreed Pristine Circlet", leftColor = blue, lineIndex = 1 },
+					{ type = LT.NestedBlock, leftText = "", tooltipType = 0, tooltipID = 253975, lineIndex = 1 },
+					{ type = LT.ItemName, leftText = "\nFiligreed Pristine Circlet", leftColor = blue, lineIndex = 2 },
+					{ type = LT.ItemBinding, leftText = "Binds when picked up", leftColor = white, lineIndex = 3 },
+					{ type = LT.EquipSlot, leftText = "Head", rightText = "Cloth", leftColor = white, lineIndex = 4 },
+					{ type = LT.None, leftText = "38 Armor", leftColor = white, lineIndex = 5 },
+					{ type = LT.None, leftText = "+12 Stamina", leftColor = white, lineIndex = 6 },
+					{ type = LT.None, leftText = "Equip: Increases healing done by up to 22 and damage done by up to 8 for all magical spells and effects.",
+						leftColor = green, wrapText = true, lineIndex = 7 },
+					{ type = LT.UsageRequirement, leftText = "Requires Level 25", leftColor = white, lineIndex = 8 },
+					{ type = LT.ItemSpellTriggerLearn, leftText = "Use: Teaches you how to craft Filigreed Pristine Circlet.",
+						leftColor = white, wrapText = true, lineIndex = 10 },
+					{ type = LT.None, leftText = "Bolt of Silk Cloth (8), Fine Thread (4), Cerulean Dye (2), Pristine Leather",
+						leftColor = white, wrapText = true, lineIndex = 11 },
+					{ type = LT.UsageRequirement, leftText = "Requires Tailoring (125)", leftColor = requirement, lineIndex = 12 },
+					{ type = LT.SellPrice, leftText = "", price = 1250, lineIndex = 12 },
+				} }
+			end
+			local function drawn(tip)
+				local said = {}
+				for _, fs in ipairs(mod.ItemBits(tip).bFs or {}) do
+					if fs._shown ~= false then
+						said[#said + 1] = tostring(fs._text)
+					end
+				end
+				return table.concat(said, " | ")
+			end
+			local function rightOf(t, words)
+				for i, line in ipairs(t.lines) do
+					if line == words then
+						return t.rights[i]
+					end
+				end
+				return nil
+			end
+			-- a profession you do not have: the requirement is red
+			_G.GetNumSkillLines, _G.GetSkillLineInfo = nil, nil
+			local read = mod.ReadRecipe(circlet(red))
+			assert(read and read.recipe.id == 253975 and read.recipe.made.name == "Filigreed Pristine Circlet",
+				"the made item is read out of the recipe")
+			assert(read.recipe.profession == "Tailoring" and read.recipe.skill == 125 and read.recipe.short,
+				"what it asks, and that you fall short")
+			assert(#read.recipe.materials == 4 and read.recipe.materials[1][1] == "Bolt of Silk Cloth"
+				and read.recipe.materials[1][2] == 8 and read.recipe.materials[4][2] == 1, "the materials, one with no number being 1")
+			assert(read.price == 1250 and read.recipe.made.armor == "38", "the recipe's price, the made item's armor")
+			local tip, t = makeTip("RecipeTip")
+			mod.ComposeItem(tip, circlet(red))
+			local all = table.concat(t.lines, " | ")
+			assert(t.lines[1] == "Pattern: Filigreed Pristine Circlet" and t.lines[2] == "Tailoring recipe", "the recipe, and what it is: " .. all)
+			assert(drawn(tip):find("125 | SKILL", 1, true), "the skill it needs, large: " .. drawn(tip))
+			assert(all:find("MAKES", 1, true) and all:find("Filigreed Pristine Circlet | Head · Cloth · Binds when picked up", 1, true),
+				"what it makes, and what that is: " .. all)
+			assert(all:find("38 Armor | +12 Stamina | Equip: Increases healing", 1, true), "the made item's facts: " .. all)
+			assert(not all:find("Teaches you", 1, true) and not all:find("Requires Level 25", 1, true),
+				"not the teaching line, nor a level you have: " .. all)
+			assert(all:find("MATERIALS", 1, true) and rightOf(t, "Bolt of Silk Cloth") == "8" and rightOf(t, "Pristine Leather") == "1",
+				"the amounts alone for a profession that is not yours: " .. all)
+			do
+				local pool, used = T.TagPool(tip)
+				assert(used == 1 and pool[1].text._text == "NEEDS TAILORING 125", "why you cannot learn it: " .. tostring(pool[1].text._text))
+			end
+			-- the profession is yours, with the skill: what you carry of what it needs
+			_G.GetNumSkillLines = function() return 2 end
+			_G.GetSkillLineInfo = function(i)
+				if i == 1 then return "Professions", true end
+				return "Tailoring", false, false, 150
+			end
+			_G.C_Item = { GetItemCount = function(name) return name == "Bolt of Silk Cloth" and 9 or 0 end }
+			mod.ComposeItem(tip, circlet(white))
+			assert(rightOf(t, "Bolt of Silk Cloth") == "9 / 8" and rightOf(t, "Fine Thread") == "0 / 4",
+				"carried and needed: " .. table.concat(t.lines, " | "))
+			do
+				local pool, used = T.TagPool(tip)
+				assert(used == 1 and pool[1].text._text == "CAN LEARN", "you can learn it: " .. tostring(pool[1].text._text))
+			end
+			-- the profession is not yours, and the game could be asked
+			_G.GetSkillLineInfo = function() return "Professions", true end
+			mod.ComposeItem(tip, circlet(red))
+			do
+				local pool = T.TagPool(tip)
+				assert(pool[1].text._text == "NEEDS TAILORING", "a profession you do not have: " .. tostring(pool[1].text._text))
+			end
+			for _, msg in ipairs(BT.moduleErrors or {}) do
+				assert(not tostring(msg):find("WriteItemB", 1, true), "the recipe card wrote without a fault: " .. tostring(msg))
+			end
+			-- a plain item is not a recipe
+			assert(mod.ReadRecipe({ lines = { { type = LT.ItemName, leftText = "Linen Cloth", lineIndex = 1 } } }) == nil,
+				"an item with nothing inside it is no recipe")
+			_G.Enum.TooltipDataLineType, _G.GetNumSkillLines, _G.GetSkillLineInfo, _G.C_Item = keep.kinds, keep.lines, keep.info, keep.item
+		end },
+		{ "a comparison card is written once a redraw", function()
+			local mod = BT.GetModule("tooltips")
+			local real = GetTime
+			local now = 1000
+			GetTime = function() return now end
+			local shop = rawget(_G, "ShoppingTooltip1")
+			local had = shop
+			if not shop then
+				shop = {}
+				_G.ShoppingTooltip1 = shop
+			end
+			local data = { guid = "Item-1-0-0001" }
+			local function fills(n)
+				local written = 0
+				for _ = 1, n do
+					if not mod.Spared(shop, data) then
+						written = written + 1
+					end
+				end
+				return written
+			end
+			assert(fills(4) == 4, "a hover's first redraw is written every time")
+			now = now + 0.2
+			assert(fills(4) == 1, "the next redraw is written once, on its last fill")
+			assert(not mod.IsSpared(shop), "and nothing is owed after it")
+			now = now + 0.2
+			assert(fills(2) == 0 and mod.IsSpared(shop), "a redraw that stops short is owed its card")
+			now = now + 0.2
+			assert(fills(2) == 1, "and the one after it is taken to be as short")
+			now = now + 0.2
+			assert(not mod.Spared(shop, { guid = "Item-1-0-0002" }), "another item is written at once")
+			now = now + 5
+			assert(fills(1) == 1, "after a pause nothing is assumed")
+			assert(not mod.Spared(GameTooltip, data), "the tooltip you point with is never left unwritten")
+			GetTime = real
+			if not had then
+				_G.ShoppingTooltip1 = nil
+			end
+		end },
 		{ "an item in a shape the rebuild does not know is restyled where it is", function()
+			BT.GetModule("tooltips").TILES_LOOK = false -- the look before the 2026-11-16 redesign: tags on restyled lines
 			-- (Josh 2026-10-17: "Could we use the same style for item tooltips?
 			-- Currently the text kind of all looks the same"): restyled where
 			-- the client wrote them, by the kind of line it says each one is -
@@ -12689,6 +12916,7 @@ if ok then
 			T.HideTags()
 			assert(mod.ItemLines(tip, nil) == 0, "no account, no restyle")
 			_G.Enum.TooltipDataLineType = hadKinds
+			BT.GetModule("tooltips").TILES_LOOK = true
 		end },
 		{ "an item tooltip written as a spell's card is", function()
 			-- (Josh 2026-10-18: the item tooltips "don't match the spell
@@ -12698,6 +12926,7 @@ if ok then
 			-- the same way (Josh 2026-10-17: "Make sure we use this for the
 			-- "equipped" compairson tooltip as well")
 			local mod = BT.GetModule("tooltips")
+			mod.TILES_LOOK = false -- the card before the 2026-11-16 redesign, kept as its fallback (M.WriteItemB)
 			BT.SetEnabled("tooltips", true)
 			local T = BT.UnitTip
 			local keep = { kinds = _G.Enum.TooltipDataLineType, item = _G.C_Item, shop = _G.ShoppingTooltip1 }
@@ -12770,6 +12999,54 @@ if ok then
 				end
 				return table.concat(out, " · ")
 			end
+			-- THE NEW LOOK, OVER THE SAME ITEM (Josh 2026-11-16: "I would like to
+			-- completely redesign our tooltips from scratch", then "I like option
+			-- B"): a band in its quality's colour with its level large, its facts
+			-- as numbers with a word, its binding and price in a darker foot. The
+			-- card above is what it falls back to (M.WriteItemB).
+			mod.TILES_LOOK = true
+			do
+				local tipB, tb = makeTip("TilesTip")
+				mod.ComposeItem(tipB, reaper())
+				local allB = table.concat(tb.lines, " | ")
+				assert(tb.lines[1] == "Arcanite Reaper" and tb.lines[2] == "Axe · Two-Hand", "the name, then what it is: " .. allB)
+				local bb = mod.ItemBits(tipB)
+				assert(bb.band and bb.band._shown ~= false and bb.band._color[1] == 0.64, "a band in the item's quality colour")
+				local said = {}
+				for _, fs in ipairs(bb.bFs or {}) do
+					if fs._shown ~= false then
+						said[#said + 1] = tostring(fs._text)
+					end
+				end
+				local drawn = table.concat(said, " | ")
+				assert(drawn:find("63 | ITEM LEVEL", 1, true), "its level large, its two words under it: " .. drawn)
+				-- AS THE GAME LISTS THEM (Josh 2026-11-16: "I'm not a fan of the
+				-- stats being in 2 columns. Can we make that part look more like the
+				-- default tooltip?"): one to a line, speed at the damage's right
+				local damage = nil
+				for i = 1, #tb.lines do
+					if tb.lines[i]:find("Damage", 1, true) and tb.rights[i] == "Speed 3.80" then
+						damage = i
+					end
+				end
+				assert(damage, "damage, with speed at its right: " .. allB)
+				assert(allB:find("(53.8 damage per second)", 1, true), "damage per second under it: " .. allB)
+				assert(allB:find("+13 Stamina", 1, true), "a stat as its own line: " .. allB)
+				assert(not drawn:find("Stamina", 1, true), "and not drawn in a column as well: " .. drawn)
+				assert(not allB:find("Requires Level 58", 1, true), "a requirement you meet is not said: " .. allB)
+				assert(allB:find("Equip: +62 Attack Power.", 1, true), "an effect the game lists no stat for stays a sentence")
+				-- (Josh 2026-11-16: "we arent showing item tags, like soulbound,
+				-- binds when equipped")
+				do
+					local pool, usedTags = T.TagPool(tipB)
+					assert(usedTags == 1 and pool[1].text._text == "BoE", "how it binds, a tag under what it is")
+				end
+				assert(bb.icon._width == mod.ITEM.ICON_TALL, "the icon as tall as the band")
+				for _, msg in ipairs(BT.moduleErrors or {}) do
+					assert(not tostring(msg):find("WriteItemB", 1, true), "the new card wrote without a fault: " .. tostring(msg))
+				end
+			end
+			mod.TILES_LOOK = false
 			local tip, t = makeTip("RebuiltTip")
 			-- cleared as GameTooltip is: its clearing strips it back (M.DressPlain)
 			local clearMain = tip.ClearLines
@@ -12993,6 +13270,7 @@ if ok then
 			_G.Enum.TooltipDataLineType, _G.C_Item, _G.ShoppingTooltip1 = keep.kinds, keep.item, keep.shop
 			T.HideTags()
 			T.RestoreFonts()
+			mod.TILES_LOOK = true
 		end },
 		{ "items of other shapes written again: armour, no slot, a potion, a wand, a set", function()
 			-- (Josh 2026-10-17: ""use" tag has overlap with the icon. Crafting
@@ -13000,6 +13278,7 @@ if ok then
 			-- well"); in the spell card's look since Josh 2026-10-18 ("Option 1
 			-- for the item tooltips")
 			local mod = BT.GetModule("tooltips")
+			mod.TILES_LOOK = false -- the card before the 2026-11-16 redesign, kept as its fallback (M.WriteItemB)
 			BT.SetEnabled("tooltips", true)
 			local T = BT.UnitTip
 			local keep = { kinds = _G.Enum.TooltipDataLineType, item = _G.C_Item }
@@ -13235,11 +13514,16 @@ if ok then
 			_G.Enum.TooltipDataLineType, _G.C_Item = keep.kinds, keep.item
 			T.HideTags()
 			T.RestoreFonts()
+			mod.TILES_LOOK = true
 		end },
 		{ "spells and buffs written again, in the items' shape", function()
 			-- (Josh 2026-10-17: "Yes, spell and buff tooltips should get the
 			-- same look")
 			local mod = BT.GetModule("tooltips")
+			-- the card before the 2026-11-17 look, kept as its fallback
+			-- (M.WriteSpellB); this step and the two after it are written for
+			-- it, and the new look is checked a little way down
+			mod.TILES_LOOK = false
 			BT.SetEnabled("tooltips", true)
 			local T = BT.UnitTip
 			local keep = { kinds = _G.Enum.TooltipDataLineType, spell = _G.C_Spell, debuff = _G.DebuffTypeColor }
@@ -13279,6 +13563,43 @@ if ok then
 				{ type = LT.SpellDescription, leftText = "Hurls a fiery ball that causes 56 to 73 Fire damage.",
 					leftColor = gold, wrapText = true, lineIndex = 5 },
 			} }
+			-- THE NEW LOOK, OVER THE SAME SPELL (Josh 2026-11-17: "I think we can
+			-- proceed with the remaining tooltips"): a band, the two figures as
+			-- tiles, what it costs and how long it takes in the foot
+			mod.TILES_LOOK = true
+			do
+				mod.ComposeSpell(tip, fireball, "spell")
+				local allB = table.concat(t.lines, " | ")
+				local bb = mod.ItemBits(tip)
+				assert(t.lines[1] == "Fireball" and t.lines[2] == "Rank 3", "the name, and its rank under it: " .. allB)
+				assert(bb.band and bb.band._shown ~= false, "a band behind them")
+				assert(bb.icon._texture == 135812 and bb.icon._width == mod.ITEM.ICON_TALL, "its picture, as tall as the band")
+				local drawn = {}
+				for _, fs in ipairs(bb.bFs or {}) do
+					if fs._shown ~= false then
+						drawn[#drawn + 1] = tostring(fs._text)
+					end
+				end
+				drawn = table.concat(drawn, " | ")
+				assert(drawn:find("25.8 | DPS", 1, true) and drawn:find("2.15 | PER MANA", 1, true), "its two figures as tiles: " .. drawn)
+				assert(allB:find("Requires a staff", 1, true), "what it asks of you: " .. allB)
+				-- AS THE GAME ARRANGES THEM (Josh 2026-11-17: "spells content
+				-- should be arranged more like the default tooltip"): two to
+				-- a line, in the game's words, and no foot
+				local cost, cast = nil, nil
+				for i, line in ipairs(t.lines) do
+					if line == "30 Mana" then cost = i end
+					if line == "2.5 sec cast" then cast = i end
+				end
+				assert(cost and t.rights[cost] == "35 yd range", "what it costs, and how far it reaches at its right: " .. allB)
+				assert(cast == cost + 1 and t.rights[cast] == "8 sec cooldown", "how long it takes, and its cooldown at its right: " .. allB)
+				assert(allB:find("64.5 damage", 1, true) and not allB:find(" · 2.5 sec cast", 1, true),
+					"what it comes to on a line, and nothing joined by dots in a foot: " .. allB)
+				for _, msg in ipairs(BT.moduleErrors or {}) do
+					assert(not tostring(msg):find("WriteSpellB", 1, true), "the new card wrote without a fault: " .. tostring(msg))
+				end
+			end
+			mod.TILES_LOOK = false
 			mod.ComposeSpell(tip, fireball, "spell")
 			local all = table.concat(t.lines, " | ")
 			local b = mod.ItemBits(tip)
@@ -13534,6 +13855,71 @@ if ok then
 				local _, v = mod.SpellAmount(case[1])
 				assert(v == case[2], case[1] .. " -> " .. tostring(v))
 			end
+			-- a share with a point in it and a range added: a higher rank reads higher
+			local _, _, one = mod.SpellAmount("An instant strike that causes 30% weapon damage plus an additional 9 to 12 as Holy damage.")
+			local _, _, four = mod.SpellAmount("An instant strike that causes 43.2% weapon damage plus an additional 19 to 22 as Holy damage.")
+			local wlo, whi = mod.WeaponDamage()
+			local mid = (wlo + whi) / 2
+			assert(math.abs(one - (mid * 0.3 + 10.5)) < 0.001, "Holy Strike rank 1: " .. tostring(one))
+			assert(math.abs(four - (mid * 0.432 + 20.5)) < 0.001, "Holy Strike rank 4: " .. tostring(four))
+			-- the rest of a paladin's spellbook, as recorded 2026-11-16
+			local _, _, command, _, withWeapon = mod.SpellAmount("Gives the Paladin a chance to deal additional Holy damage equal to 70% of normal weapon damage.  Only one Seal can be active on the Paladin at any one time.  Lasts 30 sec.\n\nUnleashing this Seal's energy will judge an enemy, instantly causing 80 to 85 Holy damage, 160 to 169 if the target is stunned or incapacitated.")
+			assert(withWeapon and math.abs(command - mid * 0.7) < 0.001, "Seal of Command is its own hit, not its Judgement's: " .. tostring(command))
+			local _, fury = mod.SpellAmount("Fills you with divine fury for 30 sec, causing melee attacks to deal an additional 11 Holy damage. While a shield is equipped, each attack also grants an absorb shield equal to 50% of the Holy damage dealt. Only one Seal can be active on the Paladin at any one time.\n\nUnleashing this Seal's energy inflicts 54 to 57 Holy damage to an enemy and taunts the target to attack you for 3 sec.")
+			assert(fury == "11", "Seal of Fury is its own hit, not its Judgement's: " .. tostring(fury))
+			local _, right = mod.SpellAmount("Fills the Paladin with holy spirit for 30 sec, granting each melee attack an additional 7 to 15 Holy damage.  Slower weapons cause more Holy damage per swing.\n\nUnleashing this Seal's energy will cause 47 to 50 Holy damage to an enemy.")
+			assert(right == "7–15", "Seal of Righteousness as it was: " .. tostring(right))
+			-- a hunter's shot is the ranged weapon's; a strike, and anyone
+			-- else's ability, the weapon in hand
+			do
+				local hadClass, hadRanged = _G.UnitClass, rawget(_G, "UnitRangedDamage")
+				_G.UnitRangedDamage = function() return 2.8, 100, 140 end
+				local chimera = "You deal 135% weapon damage, refreshing the current Sting on your target and triggering an effect:"
+				_G.UnitClass = function() return "Hunter", "HUNTER" end
+				assert(mod.IsShot("8-35 yd range") and mod.IsShot("35 yd range"), "a hunter's ability that reaches far is a shot")
+				assert(not mod.IsShot("Melee Range") and not mod.IsShot("5 yd range") and not mod.IsShot(nil), "one at melee range is a strike")
+				local _, _, shot = mod.SpellAmount(chimera, mod.IsShot("8-35 yd range"))
+				assert(math.abs(shot - 120 * 1.35) < 0.001, "Chimera Shot from the ranged weapon: " .. tostring(shot))
+				local _, _, strike = mod.SpellAmount("A sweeping attack that strikes all enemies in front of you with your melee weapons for 65% weapon damage.",
+					mod.IsShot("Melee Range"))
+				assert(math.abs(strike - mid * 0.65) < 0.001, "Carve from the melee weapon: " .. tostring(strike))
+				_G.UnitClass = function() return "Rogue", "ROGUE" end
+				assert(not mod.IsShot("20 yd range"), "a rogue's Shadowstrike is the weapon in hand")
+				_G.UnitClass, _G.UnitRangedDamage = hadClass, hadRanged
+			end
+			-- every class's spells, as recorded 2026-11-17
+			for _, case in ipairs({
+				{ "Healed for 250 to 269.", "Healing", "250–269" },
+				{ "Melee attacks made against you have a chance of causing the attacker to be healed for 49.", "Healing", "49" },
+				{ "Heals your pet 116 health every second while you focus.  Lasts 5 sec.", "Healing", "580" },
+				{ "Gives 89 health to the caster's pet every second for 10 sec as long as the caster channels.", "Healing", "890" },
+				{ "The Voidwalker consumes nearby shadows to bolster its form, recovering 1,930 health over 10 sec.", "Healing", "1,930" },
+				{ "Creates a Major Healthstone that can be used to instantly restore 1,440 health.", "Healing", "1,440" },
+				{ "While it is moving, every 1 sec the orb deals 52 Frost Damage and applies a Chill.", "Damage", "52" },
+				{ "Instantly attack the target causing 44 damage and healing you for 10% of your maximum health.", "Damage", "44" },
+				{ "Heals the friendly target for 281 to 318, then jumps to heal additional nearby targets.", "Healing", "281–318" },
+				{ "Causes an explosion of holy light around the caster, causing 179 to 206 Holy damage to all enemy targets within 10 yards and healing all party members within 10 yards for 295 to 342.", "Damage", "179–206" },
+				{ "Lacerates the enemy target, making them bleed for 20 damage over 15 sec plus 10% weapon damage per existing application of Lacerate on the target.", "Damage", "20" },
+				{ "Heals 66 damage over 6 sec.", "Healing", "66" },
+				{ "Absorbs 390 physical damage, draining mana instead.", "Absorb", "390" },
+			}) do
+				local label, value = mod.SpellAmount(case[1])
+				assert(label == case[2] and value == case[3], case[1] .. " -> " .. tostring(label) .. " " .. tostring(value))
+			end
+			for _, words in ipairs({
+				"Heals you for 30% of your maximum health over 10 sec.",
+				"Any successful spell cast against the priest will burn 35 of the attacker's Mana, causing 1 Shadow damage for each point of Mana burned.",
+				"Restores 5 mana per 5 sec.",
+				"Your non-periodic critical heals create a protective shield on the target, absorbing 15% of the amount healed.",
+			}) do
+				assert(mod.SpellAmount(words) == nil, "no amount in: " .. words .. " -> " .. tostring((select(2, mod.SpellAmount(words)))))
+			end
+			do
+				local _, _, storm, _, withWeapon = mod.SpellAmount("An instant weapon attack that causes 110% of weapon damage to up to 4 enemies within 8 yards.")
+				assert(withWeapon and math.abs(storm - mid * 1.1) < 0.001, "Divine Storm, a share of the weapon: " .. tostring(storm))
+			end
+			local _, cons, consAmount, consOver = mod.SpellAmount("Consecrates the land beneath the Paladin, doing 16 Holy damage over 8 sec to enemies who enter the area. The first 4 enemies who enter the area will take an additional 50 damage over 8 sec.")
+			assert(cons == "66" and consAmount == 66 and consOver == 8, "Consecration on one enemy: " .. tostring(cons))
 
 			-- A MACRO SHOWING A SPELL (Josh 2026-10-17: "the tooltip isnt working
 			-- for Backstab for some reason?"): written as the spell, its picture
@@ -13941,10 +14327,12 @@ if ok then
 				assert(said == case[5], case[1] .. ": " .. said)
 			end
 			_G.Enum.TooltipDataLineType, _G.UnitDamage = keep.kinds, keep.damage
+			BT.GetModule("tooltips").TILES_LOOK = true
 		end },
 		{ "a card keeps its level, other addons' lines, and its spine through its own clear", function()
 			-- (2026-10-17, audit)
 			local mod = BT.GetModule("tooltips")
+			mod.TILES_LOOK = false -- the card before the 2026-11-16 redesign, kept as its fallback (M.WriteItemB)
 			BT.SetEnabled("tooltips", true)
 			local T = BT.UnitTip
 			local keep = { kinds = _G.Enum.TooltipDataLineType, item = _G.C_Item, util = _G.TooltipUtil, info = _G.GetItemInfo }
@@ -14146,8 +14534,10 @@ if ok then
 			_G.Enum.TooltipDataLineType, _G.C_Item, _G.TooltipUtil, _G.GetItemInfo = keep.kinds, keep.item, keep.util, keep.info
 			T.HideTags()
 			T.RestoreFonts()
+			mod.TILES_LOOK = true
 		end },
 		{ "the audit's small things on the item and unit tooltips", function()
+			BT.GetModule("tooltips").TILES_LOOK = false -- the look before the 2026-11-16 redesign: tags on restyled lines
 			-- (2026-10-17, audit)
 			local mod = BT.GetModule("tooltips")
 			BT.SetEnabled("tooltips", true)
@@ -14269,6 +14659,7 @@ if ok then
 			mod.ForgetQuests()
 			T.HideTags()
 			T.RestoreFonts()
+			BT.GetModule("tooltips").TILES_LOOK = true
 		end },
 		{ "a player's side, as a crest behind the words", function()
 			-- (Josh 2026-10-17: "Might be cool if we have an Alliance or Horde
@@ -22193,6 +22584,14 @@ do
 	else
 		print(("ok   the addon caught no error but the %d the steps make on purpose"):format(#caught))
 	end
+end
+
+-- A SCRIPT RUN WITH THE ADDON LOADED (2026-11-17, to read every class's
+-- recorded spells again after a change to the reader):
+--   BEEB_AFTER=path/to/script.lua lua tests/load.lua
+-- The script is handed BT.
+if os.getenv("BEEB_AFTER") then
+	assert(loadfile(os.getenv("BEEB_AFTER")))(BT)
 end
 
 print("")

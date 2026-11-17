@@ -12,9 +12,12 @@
 -- numbers as the fight began. Set beside what Roles.lua would have said for
 -- the same fight, the guesses show.
 --
--- It only records, into BeebModUpgradesDB.fights (the last 80). Nothing
+-- It only records, into the module's saved table, as `fights` (the last 80). Nothing
 -- reads it in game yet.
-local _, UP = ...
+local _, BT = ...
+BT.Upgrades = BT.Upgrades or {}
+local UP = BT.Upgrades
+local CreateFrame, C_Timer = BT.Cpu.For("Modules/Upgrades/Fights.lua")
 
 local Rd = UP.Read
 local KEEP = 80
@@ -104,15 +107,12 @@ local function finish()
 	-- (a weapon's procs are not added up into a rate of its own: every proc
 	-- is priced at one rate, Rd.PROC_PER_MINUTE. They stay in the fight's
 	-- casts, to check that one rate against.)
-	if type(BeebModUpgradesDB) == "table" then
-		BeebModUpgradesDB.procs = nil
-	end
+	UP.DB().procs = nil
 	-- a fight with nothing in it says nothing
 	if not (f.damage and #f.damage > 0) and not (f.healing and #f.healing > 0) then
 		return
 	end
-	BeebModUpgradesDB = BeebModUpgradesDB or {}
-	local db = BeebModUpgradesDB
+	local db = UP.DB()
 	db.fights = db.fights or {}
 	table.insert(db.fights, f)
 	while #db.fights > KEEP do

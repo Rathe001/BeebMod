@@ -28,8 +28,10 @@
 -- 70938): taking off Graveweave Bindings (+6 Strength, +5 spell power, 2 mana
 -- per 5 sec, 21 Armor) moved strength 86 to 80, attack power 236 to 224, Holy
 -- spell damage 50 to 45, healing 136 to 131, armor 1654 to 1633 and weapon
--- damage 75.2-99.2 to 72.8-96.8. tests.lua holds that swap.
-local _, UP = ...
+-- damage 75.2-99.2 to 72.8-96.8. tests/upgrades.lua holds that swap.
+local _, BT = ...
+BT.Upgrades = BT.Upgrades or {}
+local UP = BT.Upgrades
 
 local M = {}
 UP.Math = M

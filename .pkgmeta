@@ -9,7 +9,6 @@ enable-toc-creation: no
 # everything that is ours to work with and nothing a player's client loads
 ignore:
   - tests
-  - BeebMod_Upgrades
   - scripts
   - docs
   - README.md

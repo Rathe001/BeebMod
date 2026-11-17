@@ -1629,9 +1629,19 @@ function M.HealthLine(tip, unit)
 	end
 	health:SetParent(tip)
 	health:ClearAllPoints()
-	health:SetPoint("BOTTOMLEFT", tip, "BOTTOMLEFT", 1 + SPINE, 1)
-	health:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1, 1)
-	health:SetHeight(M.HEALTH_H)
+	if M.TILES_LOOK and M.UNIT then
+		-- in the foot's strip, with room at each end and over and under it
+		-- (M.UnitLook)
+		local U2 = M.UNIT
+		local lift = 1 + math.floor((U2.STRIP_H - U2.BAR_H) / 2)
+		health:SetPoint("BOTTOMLEFT", tip, "BOTTOMLEFT", 1 + SPINE + U2.BAR_INSET, lift)
+		health:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1 - U2.BAR_INSET, lift)
+		health:SetHeight(U2.BAR_H)
+	else
+		health:SetPoint("BOTTOMLEFT", tip, "BOTTOMLEFT", 1 + SPINE, 1)
+		health:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1, 1)
+		health:SetHeight(M.HEALTH_H)
+	end
 	pcall(health.SetFrameLevel, health, BT.Pill.Number(tip.GetFrameLevel and tip:GetFrameLevel(), 1) + 4)
 	health.unit = unit
 	paintHealth(health)
@@ -1649,6 +1659,117 @@ BT.OnUnitTooltipHide(function(tip)
 	M.HealthLine(nil, nil)
 	M.KillsRule(tip or _G.GameTooltip, nil)
 	M.QuestBand(tip or _G.GameTooltip, nil)
+end)
+
+-- A UNIT'S TOOLTIP IN THE ITEM CARD'S LOOK (Josh 2026-11-17, with the item
+-- and recipe cards in place: "I think we can proceed with the remaining
+-- tooltips"; the look is the canvas's "B, chosen" board, which he picked on
+-- 2026-11-16). What a unit's tooltip says and in what order is as it was.
+-- What changes is how it is dressed:
+--   a band behind who it is (the name, its tags, its guild or job), in the
+--     class's colour for a player and the reaction's for anything else
+--   the level large at the right, with LEVEL under it
+--   a darker strip along the foot of something you can fight, with its
+--     health as a bar inside it, where the bar had been two pixels on the
+--     tooltip's edge
+-- The pieces are the tooltip's own, one set a tooltip, put away when it
+-- hides or is cleared for something else.
+M.UNIT = { NAME = 15, LEVEL = 19, BAND_UNDER = 6, STRIP_H = 14, BAR_H = 4, BAR_INSET = 9, GAP = 7 }
+local unitBits = setmetatable({}, { __mode = "k" })
+function M.HideUnitBits(tip)
+	local u = tip and unitBits[tip]
+	if u then
+		for _, part in pairs(u) do
+			if type(part) == "table" and part.Hide then
+				part:Hide()
+			end
+		end
+	end
+end
+-- `colour`: the band's; `last`: the last line of who it is; `level`: true
+-- where the level is said; `fighting`: true where the health bar is shown
+function M.UnitLook(tip, colour, last, level, fighting)
+	if not (M.TILES_LOOK and tip and tip.CreateTexture) then
+		return nil
+	end
+	local T, U2 = BT.UnitTip, M.UNIT
+	local u = unitBits[tip]
+	if not u then
+		-- (a tooltip that will not make them goes without)
+		local okBand, band = pcall(tip.CreateTexture, tip, nil, "BORDER")
+		local okStrip, strip = pcall(tip.CreateTexture, tip, nil, "BORDER")
+		local okCap, cap = pcall(tip.CreateFontString, tip, nil, "OVERLAY")
+		if not (okBand and okStrip and okCap and type(band) == "table" and type(strip) == "table" and type(cap) == "table"
+			and band.SetColorTexture and cap.SetText) then
+			return nil
+		end
+		u = { band = band, strip = strip, cap = cap }
+		unitBits[tip] = u
+	end
+	local top = BT.Pill.Number(tip.GetTop and tip:GetTop(), nil)
+	local fs = last and T.LineOf(tip, last)
+	local low = fs and BT.Pill.Number(fs.GetBottom and fs:GetBottom(), nil)
+	u.band:SetColorTexture(colour[1], colour[2], colour[3], M.B.BAND)
+	if top and low and top > low then
+		u.band:ClearAllPoints()
+		u.band:SetPoint("TOPLEFT", tip, "TOPLEFT", 1, -1)
+		u.band:SetPoint("TOPRIGHT", tip, "TOPRIGHT", -1, -1)
+		u.band:SetHeight(top - low + U2.BAND_UNDER)
+		u.band:Show()
+	else
+		u.band:Hide()
+	end
+	local right = level and T.LineOf(tip, 1, "TextRight")
+	if right then
+		BT.Fonts.Set(u.cap, "name", M.ITEM.FIG_LABEL)
+		u.cap:SetText("LEVEL")
+		u.cap:SetTextColor(BT.TEXT.dim[1], BT.TEXT.dim[2], BT.TEXT.dim[3])
+		u.cap:ClearAllPoints()
+		u.cap:SetPoint("TOPRIGHT", right, "BOTTOMRIGHT", 0, -1)
+		u.cap:Show()
+	else
+		u.cap:Hide()
+	end
+	-- for M.UnitLookEnd, once every module has written its rows
+	u.identityEnd, u.fighting = last, fighting and true or false
+	if fighting then
+		u.strip:ClearAllPoints()
+		u.strip:SetPoint("BOTTOMLEFT", tip, "BOTTOMLEFT", 1, 1)
+		u.strip:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1, 1)
+		u.strip:SetHeight(U2.STRIP_H)
+		u.strip:SetColorTexture(0, 0, 0, M.B.STRIP)
+		u.strip:Show()
+	else
+		u.strip:Hide()
+	end
+	return u
+end
+BT.UnitTip.OnGone(M.HideUnitBits)
+
+-- WITH NOTHING UNDER WHO IT IS, THE BAND IS THE WHOLE TOOLTIP (Josh
+-- 2026-11-17, a player with no rows: "Players have a black bar on the bottom
+-- now"). The gap under the band (M.UNIT.GAP) is for the rows that follow.
+-- On a tooltip with none it was a strip of the plain dark fill under the
+-- band. So after every module has had its turn at the tooltip, a tooltip
+-- whose last line is still that gap has its band run to the bottom, or to
+-- the top of the foot's strip where there is one.
+function M.UnitLookEnd(tip)
+	local u = tip and unitBits[tip]
+	if not (M.TILES_LOOK and u and u.band and u.identityEnd) then
+		return false
+	end
+	local lines = BT.Pill.Number(tip.NumLines and tip:NumLines(), 0)
+	if lines > u.identityEnd + 1 then
+		return false
+	end
+	u.band:ClearAllPoints()
+	u.band:SetPoint("TOPLEFT", tip, "TOPLEFT", 1, -1)
+	u.band:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1, u.fighting and (M.UNIT.STRIP_H + 1) or 1)
+	u.band:Show()
+	return true
+end
+BT.OnUnitTooltip("tooltips", 99, function(tip)
+	M.UnitLookEnd(tip)
 end)
 
 -- the gap between the level and the Elite tag beside it, and how much
@@ -1781,6 +1902,11 @@ function M.Compose(tip, unit)
 	-- wide. A name the client keeps secret cannot be measured.
 	local width = MIN_W
 	local rankW = rank and (BT.UnitTip.TagWidth(rank[1]) + RANK_GAP) or 0
+	-- (the item card's sizes in its look: M.UNIT)
+	local HEADER, LEVEL = HEADER, LEVEL
+	if M.TILES_LOOK then
+		HEADER, LEVEL = M.UNIT.NAME, M.UNIT.LEVEL
+	end
 	if not (issecretvalue and issecretvalue(name)) then
 		local needs = BT.UnitTip.Measure(name, HEADER, "name") + BT.UnitTip.Measure("    " .. level, LEVEL, "name")
 			+ rankW + PAD_X + PAD_LEFT + 14
@@ -1826,6 +1952,21 @@ function M.Compose(tip, unit)
 		sizeLine(tip, BT.Pill.Number(tip:NumLines(), 2), FOOT)
 	end
 	indentBody(tip)
+	-- the last line of who it is: the band ends under it (M.UnitLook)
+	local identityEnd = BT.Pill.Number(tip:NumLines(), 1)
+	-- ROOM UNDER THE BAND (Josh 2026-11-17, a Giant Wetlands Crocolisk with
+	-- its kills row hard under the band and hard over the foot's strip: "This
+	-- tooltip looks a bit weird"). The rows began on the line after the tags,
+	-- so the band's lower edge ran along the top of the first row's words.
+	-- A short blank line parts them, and the kills row is no longer pulled
+	-- down toward the foot where the strip is (M.KILLS_TUCK, below).
+	-- (a no-break space: a plain blank at the tooltip's end is taken down
+	-- to a pixel, squeezeBlankTail, and the Ledger's rows are written under
+	-- this one after that has run)
+	if M.TILES_LOOK then
+		tip:AddLine(BT.UnitTip.TAG_BLANK)
+		BT.UnitTip.SizeLine(tip, BT.Pill.Number(tip:NumLines(), 1), M.UNIT.GAP, nil, "text")
+	end
 	-- TWO PIXELS MORE ABOVE THE TAGS (Josh 2026-10-17: "Can I get like 2px
 	-- more margin above the tags?"): their first line hung that much lower
 	-- off the name, and everything under it with it. No spacer line does it:
@@ -1896,8 +2037,12 @@ function M.Compose(tip, unit)
 		-- and the two pixels the tags were dropped by, which the client does
 		-- not count when it measures the lines
 		local room = (fighting and (M.HEALTH_H + 1) or 0) + (firstTags and M.TAG_DROP or 0)
+		if M.TILES_LOOK and fighting then
+			-- (the strip in place of the two pixel line)
+			room = room - (M.HEALTH_H + 1) + M.UNIT.STRIP_H + 2
+		end
 		-- and the kills row, when it is the last line, nearer the bottom
-		if killsAt and killsAt == BT.Pill.Number(tip:NumLines(), 0) then
+		if killsAt and killsAt == BT.Pill.Number(tip:NumLines(), 0) and not (M.TILES_LOOK and fighting) then
 			room = room - M.KILLS_TUCK
 		end
 		skins[tip].extraBottom = room ~= 0 and room or nil
@@ -1949,6 +2094,9 @@ function M.Compose(tip, unit)
 		worn.accent:SetShown(not ranked)
 		M.LeftBar(worn)
 	end
+	-- the band, the level's caption and the foot's strip, now the lines are
+	-- where they will be
+	M.UnitLook(tip, { sr, sg, sb }, identityEnd, true, fighting)
 	-- the side a player is on, behind the words, now the tooltip has a height
 	local side = isPlayer and plainText(UnitFactionGroup, unit) or nil
 	if not M.Crest(tip, side) and worn and worn.crest then
@@ -2000,7 +2148,113 @@ M.crestSaid = "none yet"
 
 -- for What loaded on the Testing page
 function M.Status()
-	return ("last crest: %s; card parts left over: %d"):format(M.crestSaid, M.leftovers)
+	local line = ("last crest: %s; card parts left over: %d"):format(M.crestSaid, M.leftovers)
+	local p = M.perf and M.perf.busiest
+	if p then
+		local tips = {}
+		for name, n in pairs(p.tips) do
+			tips[#tips + 1] = ("%s %d"):format(name, n)
+		end
+		table.sort(tips)
+		local laps = {}
+		for _, name in ipairs(M.LAPS) do
+			laps[#laps + 1] = ("%s %.2f"):format(name, (p.laps[name] or 0) / p.n)
+		end
+		line = line .. ("; item tooltips, busiest %d sec: written %d times (%s), %.1f ms each; of each, in ms: %s; since the reload %d fills left unwritten, %d written late")
+			:format(M.PERF_SECONDS, p.n, table.concat(tips, ", "), p.ms / p.n, table.concat(laps, ", "),
+				M.perf.spared or 0, M.perf.settled or 0)
+	end
+	return line
+end
+
+-- WHAT AN ITEM TOOLTIP COSTS (Josh 2026-11-16: "Tooltip performance issues.
+-- 70 fps with no tooltip open... 61 after I open it"). Each time an item's
+-- tooltip is written it is timed, and the cells other addons add to it
+-- (Upgrades) apart. The busiest M.PERF_SECONDS since the reload are kept and
+-- said on the Testing page (M.Status), so the cost is read, not guessed.
+-- AND WHO ASKS FOR IT (his first reading: "written 225 times, 2.2 ms each",
+-- 45 a second with the mouse at rest, where the game's own redraw is 5 a
+-- second). So also: how many writes each tooltip had, how often the game
+-- said its tooltip data had changed (TOOLTIP_DATA_UPDATE, which makes the
+-- game draw the tooltip again on the next frame), and the files and lines
+-- that led to one write of GameTooltip, taken well into a busy run.
+M.PERF_SECONDS = 5
+M.perf = { n = 0, ms = 0, cells = 0, from = 0, tips = {}, updates = 0, updatesAll = 0, laps = {} }
+local function clock()
+	return type(debugprofilestop) == "function" and debugprofilestop() or 0
+end
+-- WHERE THE TIME OF ONE WRITE GOES (third reading: the game itself sets each
+-- comparison tooltip more than once for each redraw, ContainerFrame.lua
+-- 1747 and 1753, which is not ours to stop; so a write has to cost less).
+-- The write is cut in stretches, each timed: M.Lap(name) ends one.
+--   dress   the skin and the quality's edge, before the card
+--   read    the item read from the game's lines, other addons' lines and cells
+--   lines   the card's lines written
+--   layout  the tooltip measured and shown, the padding trimmed
+--   draw    the band, the level, the tiles, the box, the strip and the bar
+--   after   the footnotes, the last show and the padding
+M.LAPS = { "dress", "read", "lines", "layout", "draw", "after" }
+local lapAt = 0
+function M.Lap(name)
+	local t = clock()
+	if name then
+		M.perf.laps[name] = (M.perf.laps[name] or 0) + (t - lapAt)
+	end
+	lapAt = t
+end
+local function callers()
+	if type(debugstack) ~= "function" then
+		return nil
+	end
+	local ok, stack = pcall(debugstack, 3, 60, 0)
+	if not ok or type(stack) ~= "string" then
+		return nil
+	end
+	-- one "File:line" for each call, the line it was at
+	local out = {}
+	for file, line in stack:gmatch("([%w_%-]+)%.lua[\"%]]*:(%d+): in ") do
+		out[#out + 1] = file .. ":" .. line
+		if #out >= 40 then
+			break
+		end
+	end
+	return table.concat(out, " < ")
+end
+function M.Timed(ms, cells, tip)
+	local p = M.perf
+	p.n, p.ms, p.cells = p.n + 1, p.ms + ms, p.cells + (cells or 0)
+	local name = tip and tip.GetName and tip:GetName() or "?"
+	p.tips[name] = (p.tips[name] or 0) + 1
+end
+-- a new stretch of M.PERF_SECONDS begins, the last kept if it was the busiest
+function M.Roll()
+	local p = M.perf
+	local t = type(GetTime) == "function" and GetTime() or 0
+	if t - p.from > M.PERF_SECONDS then
+		if p.n > 0 and (not p.busiest or p.n > p.busiest.n) then
+			p.busiest = { n = p.n, ms = p.ms, cells = p.cells, tips = p.tips, updates = p.updates,
+				updatesAll = p.updatesAll, stack = p.stack, shows = p.shows, laps = p.laps }
+		end
+		p.n, p.ms, p.cells, p.from, p.tips, p.updates, p.updatesAll, p.stack = 0, 0, 0, t, {}, 0, 0, nil
+		p.laps = {}
+		p.shows = 0
+	end
+end
+if GameTooltip and hooksecurefunc and GameTooltip.Show then
+	pcall(hooksecurefunc, GameTooltip, "Show", function()
+		M.perf.shows = (M.perf.shows or 0) + 1
+	end)
+end
+if CreateFrame then
+	local heard = CreateFrame("Frame")
+	if pcall(heard.RegisterEvent, heard, "TOOLTIP_DATA_UPDATE") then
+		heard:SetScript("OnEvent", function(_, _, id)
+			M.perf.updates = M.perf.updates + 1
+			if id == nil then
+				M.perf.updatesAll = M.perf.updatesAll + 1
+			end
+		end)
+	end
 end
 
 -- Lays `faction`'s crest on `tip`; returns it, or nil where there is none
@@ -2364,14 +2618,24 @@ function M.ItemLines(tip, data)
 		right = type(right) == "string" and right ~= "" and right or nil
 		if type(i) == "number" and i > 1 then
 			local fs = lineOf(tip, i)
-			if (kind ~= nil and kind == LT.ItemBinding) or (left and left == _G.ITEM_UNIQUE) then
+			-- NO TAGS ON A TOOLTIP THAT IS NOT A CARD (Josh 2026-11-16, of a
+			-- tailoring pattern: "Other tooltips look a bit strange, especially
+			-- the tags"). A recipe, with the item it makes inside it, is not
+			-- written again as a card: its lines stay where the game put them
+			-- and are restyled here. This put "BoP" and, for the item inside,
+			-- "HEAD" and "CLOTH" over those lines as tags. On the new card tags
+			-- sit in the band beside the icon; with no band they hung in the
+			-- middle of the text. In the new look these lines stay the game's
+			-- own words, in the card's sizes.
+			local tagged = not M.TILES_LOOK
+			if tagged and ((kind ~= nil and kind == LT.ItemBinding) or (left and left == _G.ITEM_UNIQUE)) then
 				-- its line taller than a row of tags, and the tag at the top of
 				-- it: the room falls under it (Josh 2026-10-17: "Soulbound
 				-- needs some margin under it"), and no line is moved; "BoP" as
 				-- on a card (M.BindShort; 2026-10-17, audit)
 				local short = M.BindShort(left)
 				tagLine(tip, i, { { short or left, "bound", keepCase = short ~= nil } }, M.BOUND_LINE, "TOPLEFT")
-			elseif kind ~= nil and kind == LT.EquipSlot then
+			elseif tagged and kind ~= nil and kind == LT.EquipSlot then
 				local tags = {}
 				for _, words in ipairs({ left or false, right or false }) do
 					if words then
@@ -2667,6 +2931,157 @@ function M.ReadItem(data, shopping)
 		return nil
 	end
 	return item
+end
+
+-- A RECIPE, AND THE ITEM IT MAKES INSIDE IT (Josh 2026-11-17, of the mockup
+-- with a "Makes" box: "Looks great. Proceed."). As this client sends one
+-- (his record of Pattern: Filigreed Pristine Circlet and Plans: Iron Shield
+-- Spike, 2026-11-17):
+--   the recipe's name, and how the recipe itself binds
+--   a NestedBlock line: tooltipType 0 (an item), tooltipID the made item's id
+--   the made item's own lines, its name first with a line break before it
+--   "Use: Teaches you how to craft ..." (ItemSpellTriggerLearn)
+--   the materials on one line: "Bolt of Silk Cloth (8), Fine Thread (4)"
+--   "Requires Tailoring (125)" (UsageRequirement), red where you fall short
+--   "Already known", where you know it; the price
+-- Read into the recipe as an item (M.ReadItem, of its own lines) with
+-- `recipe` on it: { made = the made item as M.ReadItem reads it, id = its id,
+-- profession, skill, short = the requirement was red, known, materials =
+-- { { name, need }, ... } }. Nil for anything that is not this shape.
+function M.ReadRecipe(data, shopping)
+	if type(data) ~= "table" or type(data.lines) ~= "table" then
+		return nil
+	end
+	local LT = (Enum and Enum.TooltipDataLineType) or {}
+	if LT.NestedBlock == nil then
+		return nil
+	end
+	local block, teach, madeId = nil, nil, nil
+	for i, line in ipairs(data.lines) do
+		if type(line) == "table" then
+			local kind, left = plainLine(line.type), plainLine(line.leftText)
+			if not block then
+				if kind == LT.NestedBlock and type(plainLine(line.tooltipID)) == "number"
+					and (plainLine(line.tooltipType) or 0) == 0 then
+					block, madeId = i, plainLine(line.tooltipID)
+				end
+			elseif (LT.ItemSpellTriggerLearn ~= nil and kind == LT.ItemSpellTriggerLearn)
+				or (type(left) == "string" and M.Bare(left):find("^Use: Teaches you")) then
+				teach = i
+				break
+			end
+		end
+	end
+	if not (block and teach and teach > block + 1) then
+		return nil
+	end
+	local own, inner = {}, {}
+	for i = 1, block - 1 do
+		own[#own + 1] = data.lines[i]
+	end
+	for i = block + 1, teach - 1 do
+		local line = data.lines[i]
+		if type(line) == "table" and #inner == 0 then
+			-- the made item's name comes with a line break before it
+			local left = plainLine(line.leftText)
+			if type(left) == "string" then
+				local copy = {}
+				for k, v in pairs(line) do
+					copy[k] = v
+				end
+				copy.leftText = left:gsub("^%s+", "")
+				line = copy
+			end
+		end
+		inner[#inner + 1] = line
+	end
+	local r = { id = madeId, materials = {} }
+	local known = rawget(_G, "ITEM_SPELL_KNOWN") or "Already known"
+	for i = teach + 1, #data.lines do
+		local line = data.lines[i]
+		local kind = type(line) == "table" and plainLine(line.type)
+		local left = type(line) == "table" and plainLine(line.leftText)
+		local bare = type(left) == "string" and left ~= "" and M.Bare(left) or nil
+		if kind ~= nil and kind == LT.SellPrice then
+			own[#own + 1] = line
+		elseif not bare then
+			-- a blank
+		elseif bare == known or bare == "Already known" then
+			r.known = true
+		elseif bare:find("^Requires .+ %(%d+%)$") and (LT.UsageRequirement == nil or kind == LT.UsageRequirement) then
+			local profession, skill = bare:match("^Requires (.+) %((%d+)%)$")
+			r.profession, r.skill, r.short = profession, tonumber(skill), isRed(colourOf(line.leftColor))
+		elseif #r.materials == 0 and not bare:find("^Requires ") then
+			for part in (bare .. ", "):gmatch("(.-), ") do
+				local name, need = part:match("^(.-) %((%d+)%)$")
+				name = (name or part):gsub("^%s+", ""):gsub("%s+$", "")
+				if name ~= "" then
+					r.materials[#r.materials + 1] = { name, tonumber(need) or 1 }
+				end
+			end
+		else
+			own[#own + 1] = line
+		end
+	end
+	local made = M.ReadItem({ lines = inner }, true)
+	local item = M.ReadItem({ lines = own }, shopping)
+	if not (made and item) then
+		return nil
+	end
+	made.id = madeId
+	r.made = made
+	item.recipe = r
+	return item
+end
+
+-- Your rank in a profession, by its name, and whether the game could be
+-- asked at all. Nil and true: asked, and you do not have it.
+function M.ProfessionRank(name)
+	local count, info = rawget(_G, "GetNumSkillLines"), rawget(_G, "GetSkillLineInfo")
+	if type(count) ~= "function" or type(info) ~= "function" then
+		return nil, false
+	end
+	local ok, n = pcall(count)
+	n = ok and plainLine(n) or nil
+	for i = 1, type(n) == "number" and n or 0 do
+		local okLine, skill, header, _, rank = pcall(info, i)
+		if okLine and plainLine(skill) == name and not plainLine(header) then
+			return plainLine(rank), true
+		end
+	end
+	return nil, true
+end
+
+-- What a recipe's one tag says, and whether you have its profession:
+-- "Already known", "Can learn", or why you cannot.
+function M.RecipeState(r)
+	local rank, asked = nil, false
+	if r.profession then
+		rank, asked = M.ProfessionRank(r.profession)
+	end
+	local have = type(rank) == "number" or (not asked and not r.short)
+	if r.known then
+		return { "Already known", "quiet" }, true
+	elseif not r.short and have then
+		return { "Can learn", "good" }, true
+	elseif r.profession and asked and type(rank) ~= "number" then
+		return { "Needs " .. r.profession, "warn" }, false
+	elseif r.profession then
+		return { ("Needs %s %s"):format(r.profession, tostring(r.skill or "")):gsub("%s+$", ""), "warn" }, have
+	end
+	return nil, have
+end
+
+-- how many of an item are in your bags, by its name; nil where the game
+-- will not say
+function M.Carried(name)
+	local get = (C_Item and C_Item.GetItemCount) or rawget(_G, "GetItemCount")
+	if type(get) ~= "function" then
+		return nil
+	end
+	local ok, n = pcall(get, name)
+	n = ok and plainLine(n) or nil
+	return type(n) == "number" and n or nil
 end
 
 -- a line's text colour as three numbers, where the client lets us read it
@@ -3050,6 +3465,9 @@ function M.HideItemBits(tip)
 	if b.deltaRule then
 		b.deltaRule:Hide()
 	end
+	if M.HideTilesBits then
+		M.HideTilesBits(b)
+	end
 	b.holder:Hide()
 end
 BT.UnitTip.OnGone(M.HideItemBits)
@@ -3132,7 +3550,7 @@ local function card(tip)
 	function c.header(name, rgb, icon, sub, edge, figs, tags)
 		b.name = name
 		c.tags = (tags and #tags > 0) and tags or nil
-		local size = c.tags and I.ICON_TALL or I.ICON
+		local size = (c.tags or c.tall) and I.ICON_TALL or I.ICON
 		c.off = icon and (size + I.ICON_GAP) or 0
 		local said = type(sub) == "string" and sub ~= ""
 		if figs then
@@ -3309,6 +3727,881 @@ local function card(tip)
 	return c
 end
 M.Card = card
+
+-- ---------------------------------------------------------------------------
+-- THE ITEM CARD, DRAWN AGAIN FROM NOTHING (Josh 2026-11-16: "I would like to
+-- completely redesign our tooltips from scratch... We've added quite a bit to
+-- the tooltips, and the UX has become a bit bad and hard to follow... We can
+-- disregard any previous rules and work related to the tooltips"; of the
+-- canvas's three directions, "I like option B").
+--
+-- Every tooltip reads in five zones, top to bottom:
+--   1. what it is     a band in its quality's colour: icon, name, kind and
+--                     slot, and its item level large at the right
+--   2. the answer     tiles: another addon's numbers for it (BeebMod:
+--                     Upgrades' tank, healer and DPS), one row of tiles for
+--                     each piece it could replace
+--   3. the facts      its stats, two to a row. An Equip line that only
+--                     adds stats is a stat here and not a sentence (his "ok")
+--   4. the words      what it does beyond stats, and its flavour
+--   5. the foot       a darker strip: how worn, how it binds, what it sells
+--                     for. Other addons' lines sit over it in the quiet ink,
+--                     without their own colours (his "ok")
+--
+-- The old card (M.WriteItem) stays under it: if this one fails part way the
+-- old one is written, so a fault here costs the look and not the tooltip.
+M.TILES_LOOK = true
+-- NEARER THE MOCKUP (Josh 2026-11-16, of the first build beside the canvas:
+-- "Looks a bit off from the mockups"): the icon as tall as the band, the
+-- level and the tiles' numbers in the bold face and larger, more air
+-- between the zones, and the band and the foot strip no taller than they
+-- should be (both had covered the whole tooltip: M.LayBand, M.LayStrip).
+-- AND AGAIN (Josh 2026-11-16, of the second build: "Better, but some font
+-- sizes, border radius, and spacing still seems off", and "we arent showing
+-- item tags, like soulbound, binds when equipped"): the name and the line
+-- under it larger, the tiles with the toolkit's rounded corners (M.TileBack),
+-- a line more between the zones, and how it binds back as a tag under what
+-- it is, where the eye looks for it, and out of the foot.
+M.B = { TILE_H = 40, TILE_H2 = 56, TILE_GAP = 5, STAT_H = 17, GRID_H = 14, COL_GAP = 14, LEVEL = 19, BIG = 15,
+	ROW = 11.5, HEAD_GAP = 14, BAND = 0.24, STRIP = 0.38, NAME = 15, SUB = 11, TILE_FILL = { 1, 1, 1, 0.055 },
+	CAP = 300, CAP_WORN = 270, NAME_LEAST = 11, HEAD_GAP_BARE = 30, BOX_PAD = 5,
+	-- THE FOOT, NEARER THE MOCKUP (Josh 2026-11-16: "can you adjust the
+	-- spacing/padding in the footer so it looks more like the mock?"): its
+	-- words a size larger, the bar a pixel thicker, and the strip with room
+	-- over and under them where it had hugged them
+	FOOT = 10, FOOT_UNDER = 0, STRIP_PAD = 5, BAR_H = 4, NAME_WORN = 15, FOOT_TRIM = -5, BAND_H = 60, UNDER_H = 12,
+	-- a recipe's made item: its name, its picture beside it, and a tile's
+	-- fill where the tile sits in the box (darker, as the box has the tiles'
+	-- own fill)
+	MADE_NAME = 12.5, MADE_ICON = 14, TILE_FILL_IN = { 0, 0, 0, 0.32 } }
+
+-- A tile's back: a frame of its own with the toolkit's one shape on it (its
+-- rounded corners), or a flat square where that cannot be made
+function M.TileBack(b, i)
+	b.tileBacks = b.tileBacks or {}
+	local f = b.tileBacks[i]
+	if not f then
+		f = CreateFrame("Frame", nil, b.holder)
+		f.beebs = true
+		local ok, surface = pcall(BT.Pill.Surface, f, "BACKGROUND", 0)
+		f.surface = ok and surface or nil
+		if not f.surface then
+			f.flat = f:CreateTexture(nil, "BACKGROUND")
+			f.flat:SetAllPoints(f)
+		end
+		b.tileBacks[i] = f
+	end
+	f:ClearAllPoints()
+	f:Show()
+	return f
+end
+function M.PaintTileBack(f, fill)
+	if f.surface and pcall(BT.Pill.PaintSurface, f.surface, f, fill, { 0, 0, 0, 0 }) then
+		return
+	end
+	if not f.flat then
+		f.flat = f:CreateTexture(nil, "BACKGROUND")
+		f.flat:SetAllPoints(f)
+	end
+	f.flat:SetColorTexture(fill[1], fill[2], fill[3], fill[4])
+	f.flat:Show()
+end
+
+-- THE BAND AND THE STRIP, EACH A HEIGHT AND NOT THREE ANCHORS. They were
+-- pinned to the tooltip's top left, its right middle and a line's bottom,
+-- which is one anchor too many: the client made each as tall as the whole
+-- tooltip, and the card came out one flat tint. Now each hangs from two
+-- corners and is given the height measured between them.
+-- THE SAME SPACE UNDER THE TAGS ON EVERY CARD (Josh 2026-11-16, of two cards
+-- side by side: "The item tags don't have consistent spacing under them").
+-- The band ended a fixed distance under the icon. The icon is at most 42
+-- tall, and a name at full size with the line under it and the tags is
+-- taller than that, so on such a card the tags ran to the band's edge, while
+-- a card whose long name was set smaller had room to spare. The band now
+-- ends the same distance under whichever is lower, the icon or `foot2` (the
+-- tags' line).
+function M.LayBand(tip, b, q, foot, foot2)
+	if not tip.CreateTexture then
+		return
+	end
+	b.band = b.band or tip:CreateTexture(nil, "BORDER")
+	local top = BT.Pill.Number(tip.GetTop and tip:GetTop(), nil)
+	local low = foot and BT.Pill.Number(foot.GetBottom and foot:GetBottom(), nil)
+	local low2 = foot2 and BT.Pill.Number(foot2.GetBottom and foot2:GetBottom(), nil)
+	if low and low2 then
+		low = math.min(low, low2)
+	else
+		low = low or low2
+	end
+	-- ONE HEIGHT, MEASURED FROM NOTHING (Josh 2026-11-16, a third time of
+	-- three cards side by side: "Headers still don't have a consistent
+	-- height"). The band's height was worked out on each card from where its
+	-- icon and its tags had come to rest, and the icon's own size from where
+	-- its lines had (c.finish), each rounded to a pixel: a card could come
+	-- out a pixel or two off its neighbour. The band is M.B.BAND_H tall on
+	-- every card now, with tags or without, and the icon one size.
+	local h = M.B.BAND_H or ((top and low and top > low) and (top - low + 7) or (M.ITEM.ICON_TALL + 14))
+	b.band:ClearAllPoints()
+	b.band:SetPoint("TOPLEFT", tip, "TOPLEFT", 1, -1)
+	b.band:SetPoint("TOPRIGHT", tip, "TOPRIGHT", -1, -1)
+	b.band:SetHeight(h)
+	b.band:SetColorTexture(q[1], q[2], q[3], M.B.BAND)
+	b.band:Show()
+end
+-- from just above `from` down to the tooltip's foot, or to just above `till`
+function M.LayStrip(tip, b, from, till)
+	if not (tip.CreateTexture and from) then
+		return
+	end
+	b.strip = b.strip or tip:CreateTexture(nil, "BORDER")
+	b.stripFrom = from
+	local foot = BT.Pill.Number(tip.GetBottom and tip:GetBottom(), nil)
+	local top = BT.Pill.Number(from.GetTop and from:GetTop(), nil)
+	local stop = till and BT.Pill.Number(till.GetTop and till:GetTop(), nil)
+	if not (foot and top and top > foot) then
+		b.strip:Hide()
+		return
+	end
+	local low = stop and (stop + 5 - foot) or 1
+	b.strip:ClearAllPoints()
+	b.strip:SetPoint("BOTTOMLEFT", tip, "BOTTOMLEFT", 1, low)
+	b.strip:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1, low)
+	b.strip:SetHeight(math.max(1, top + M.B.STRIP_PAD - foot - low))
+	b.strip:SetColorTexture(0, 0, 0, M.B.STRIP)
+	b.strip:Show()
+end
+
+-- a texture or some words of the card's own, handed out again each time
+local function bTex(b)
+	b.nTex = (b.nTex or 0) + 1
+	b.bTex = b.bTex or {}
+	local t = b.bTex[b.nTex]
+	if not t then
+		t = b.holder:CreateTexture(nil, "ARTWORK")
+		if BT.Pill and BT.Pill.Snap then
+			BT.Pill.Snap(t)
+		end
+		b.bTex[b.nTex] = t
+	end
+	t:ClearAllPoints()
+	t:Show()
+	return t
+end
+local function bSay(b, text, rgb, size, number, role)
+	b.nFs = (b.nFs or 0) + 1
+	b.bFs = b.bFs or {}
+	local fs = b.bFs[b.nFs]
+	if not fs then
+		fs = b.holder:CreateFontString(nil, "OVERLAY")
+		b.bFs[b.nFs] = fs
+	end
+	local face = number and BT.Tip and BT.Tip.NUMBER
+	if not (face and pcall(fs.SetFont, fs, face, BT.Fonts.Size(size), "")) then
+		BT.Fonts.Set(fs, role or "text", size)
+	end
+	fs:SetText(text)
+	fs:SetTextColor(rgb[1], rgb[2], rgb[3])
+	fs:ClearAllPoints()
+	fs:Show()
+	return fs
+end
+-- all of them off (M.HideItemBits)
+function M.HideTilesBits(b)
+	for _, t in ipairs(b.bTex or {}) do
+		t:Hide()
+	end
+	for _, fs in ipairs(b.bFs or {}) do
+		fs:Hide()
+	end
+	b.nTex, b.nFs = 0, 0
+	for _, f in ipairs(b.tileBacks or {}) do
+		f:Hide()
+	end
+	b.nBack = 0
+	if b.band then
+		b.band:Hide()
+	end
+	if b.strip then
+		b.strip:Hide()
+	end
+end
+
+local UP_INK, DOWN_INK = { 0.44, 0.86, 0.55 }, { 1, 0.54, 0.40 }
+
+-- the slot a piece goes in, where there is only one it could
+local ONE_SLOT = {
+	INVTYPE_HEAD = 1, INVTYPE_NECK = 2, INVTYPE_SHOULDER = 3, INVTYPE_CHEST = 5, INVTYPE_ROBE = 5, INVTYPE_WAIST = 6,
+	INVTYPE_LEGS = 7, INVTYPE_FEET = 8, INVTYPE_WRIST = 9, INVTYPE_HAND = 10, INVTYPE_CLOAK = 15, INVTYPE_WEAPON = 16,
+	INVTYPE_WEAPONMAINHAND = 16, INVTYPE_2HWEAPON = 16, INVTYPE_SHIELD = 17, INVTYPE_HOLDABLE = 17,
+	INVTYPE_WEAPONOFFHAND = 17, INVTYPE_RANGED = 18, INVTYPE_RANGEDRIGHT = 18, INVTYPE_THROWN = 18, INVTYPE_RELIC = 18,
+}
+-- what you wear where `link` would go; nil for a ring or trinket (two
+-- places), for the piece itself, and for what is not worn at all
+function M.WornFor(link)
+	if type(link) ~= "string" or not (C_Item and C_Item.GetItemInfoInstant and GetInventoryItemLink) then
+		return nil
+	end
+	local ok, _, _, _, loc = pcall(C_Item.GetItemInfoInstant, link)
+	local slot = ok and ONE_SLOT[loc]
+	local worn = slot and GetInventoryItemLink("player", slot)
+	if type(worn) ~= "string" or worn == link then
+		return nil
+	end
+	return worn
+end
+
+local STAT_ORDER = { "RESISTANCE0_NAME", "ITEM_MOD_STRENGTH_SHORT", "ITEM_MOD_AGILITY_SHORT", "ITEM_MOD_STAMINA_SHORT",
+	"ITEM_MOD_INTELLECT_SHORT", "ITEM_MOD_SPIRIT_SHORT" }
+local STAT_PRIMARY = {}
+for _, k in ipairs(STAT_ORDER) do
+	STAT_PRIMARY[k] = true
+end
+local STAT_SKIP = { ITEM_MOD_DAMAGE_PER_SECOND_SHORT = true }
+
+local function plainNumber(v)
+	return type(v) == "number" and not (issecretvalue and issecretvalue(v))
+end
+local function amount(v, plus)
+	local s = v == math.floor(v) and ("%d"):format(v) or ("%.1f"):format(v)
+	return (plus and v > 0) and ("+" .. s) or s
+end
+
+-- THE FACTS, AS NUMBERS WITH A WORD: weapon DPS, damage, speed, block, what
+-- a Use gives, then the stats the game lists for the item (C_Item.
+-- GetItemStats). Where the game lists none, the client's own
+-- stat lines are split into number and word. Also returns the Use line the
+-- facts say all of, the Use line whose cooldown is a fact, and the Equip
+-- lines that are stats and nothing else.
+function M.StatList(item)
+	local list = {}
+	local function add(num, label, key)
+		list[#list + 1] = { num = num, label = label or "", key = key }
+		return list[#list]
+	end
+	local used = {}
+	if item.dps then
+		add(tostring(item.dps), "DPS")
+	end
+	local facts, said, timed = M.ItemFacts(item)
+	local need = item.require and M.Bare(item.require.text) or nil
+	for _, f in ipairs(facts) do
+		if f.text ~= need then
+			local text = f.lower and f.text:lower() or f.text
+			local num, label = text:match("^(%S+)%s+(.+)$")
+			if num then
+				if label:lower() == "armor" then
+					used.RESISTANCE0_NAME = true
+				end
+				add(num, label:sub(1, 1):upper() .. label:sub(2))
+			else
+				add(text, "")
+			end
+		end
+	end
+	local ok, stats = false, nil
+	if type(item.link) == "string" and C_Item and C_Item.GetItemStats then
+		ok, stats = pcall(C_Item.GetItemStats, item.link)
+	end
+	local values, isStats = {}, {}
+	if ok and type(stats) == "table" and next(stats) ~= nil then
+		-- THE ITEM'S OWN STATS AND NOTHING BESIDE THEM (Josh 2026-11-16: "On
+		-- second thought, I think we should just show the item stats, not the
+		-- comparison numbers. We can just use the 3 tiles (tank, healer, dps)
+		-- for the quick comparison"). Each stat had its change against the
+		-- worn piece at its right, and a grey 0 for a stat only the worn piece
+		-- has. Both are gone: the tiles are the comparison.
+		local delta = nil
+		local keys, seen = {}, {}
+		for _, k in ipairs(STAT_ORDER) do
+			keys[#keys + 1], seen[k] = k, true
+		end
+		local others = {}
+		for k in pairs(stats) do
+			if type(k) == "string" and not seen[k] then
+				others[#others + 1] = k
+			end
+		end
+		for k in pairs(delta or {}) do
+			if type(k) == "string" and not seen[k] and stats[k] == nil then
+				others[#others + 1] = k
+			end
+		end
+		table.sort(others)
+		for _, k in ipairs(others) do
+			keys[#keys + 1] = k
+		end
+		for _, k in ipairs(keys) do
+			local v, dv = stats[k], delta and delta[k]
+			if not STAT_SKIP[k] and not used[k] then
+				local name = type(_G[k]) == "string" and _G[k] or k
+				if plainNumber(v) and v ~= 0 then
+					local e = add(amount(v, k ~= "RESISTANCE0_NAME"), name, k)
+					e.delta = plainNumber(dv) and dv ~= 0 and dv or nil
+					if not STAT_PRIMARY[k] then
+						values[amount(v)] = true
+					end
+				elseif plainNumber(dv) and dv ~= 0 then
+					local e = add("0", name, k)
+					e.dim, e.delta = true, dv
+				end
+			end
+		end
+		-- an Equip line every number of which is one of those stats
+		for _, e in ipairs(item.effects) do
+			if e.head == "Equip" and type(e.text) == "string" then
+				local words = e.text:gsub("per 5 sec", ""):gsub(",", "")
+				local any, all = false, true
+				for n in words:gmatch("%d[%d%.]*") do
+					n = n:gsub("%.$", "")
+					any = true
+					all = all and values[n] == true
+				end
+				if any and all then
+					isStats[e] = true
+				end
+			end
+		end
+	else
+		if item.armor and not item.dps then
+			add(tostring(item.armor), "Armor")
+		end
+		for _, s in ipairs(item.stats) do
+			local num, label = tostring(s.text):match("^([%+%-]?[%d%.,]+)%s+(.+)$")
+			add(num or tostring(s.text), label)
+		end
+	end
+	return list, said, timed, isStats
+end
+
+-- Writes `item` on `tip` in the new look. Returns true.
+function M.WriteItemB(tip, item, icon, level)
+	local T, I, B = BT.UnitTip, M.ITEM, M.B
+	local c = card(tip)
+	local b = c.b
+	M.HideTilesBits(b)
+	local spacer, row = c.spacer, c.row
+	local q = item.quality or ITEM_INK
+	level = level or item.level
+	-- A RECIPE'S LARGE NUMBER IS THE SKILL IT NEEDS (the recipe mockup,
+	-- 2026-11-17), with the profession's name under it
+	local recipe = item.recipe
+	local levelLabel = "ITEM LEVEL"
+	local recipeTag, hasProfession = nil, false
+	if recipe then
+		-- ("SKILL", not the profession's name: Josh's screenshots of
+		-- 2026-11-17 had "LEATHERWORKING" under the number, wide enough to
+		-- cut the name beside it to "Pattern: Pilferer'...". The line under
+		-- the name says the profession.)
+		level, levelLabel = recipe.skill, "SKILL"
+		recipeTag, hasProfession = M.RecipeState(recipe)
+	end
+
+	-- 1. WHAT IT IS
+	local sub = {}
+	for _, part in ipairs({ { item.kind, item.kindRgb }, { item.slot, item.slotRgb } }) do
+		local words, rgb = part[1], part[2]
+		if words then
+			sub[#sub + 1] = isRed(rgb) and hex(rgb, words) or words
+		end
+	end
+	if #sub == 0 then
+		for _, words in ipairs(item.class or {}) do
+			sub[#sub + 1] = words
+		end
+	end
+	sub = table.concat(sub, " · ")
+	if recipe and recipe.profession then
+		sub = recipe.profession .. " recipe"
+	end
+	-- (a spell's card says its own: M.WriteSpellB)
+	if type(item.subText) == "string" then
+		sub = item.subText
+	end
+	-- (an empty list of figures keeps a blank at the right of both lines,
+	-- for the level to be laid against)
+	-- NO WIDER THAN ITS CAP, WHATEVER IT IS CALLED (Josh's screenshots,
+	-- 2026-11-16: "Seeing an overlap here", then "Still seeing overlap").
+	-- Hovering a two-hander puts three cards side by side. At 320 each they
+	-- were 938 wide in the 880 left of his bags; the game holds the first at
+	-- the screen's edge and it lies under the next. The game's own three were
+	-- about 250 each. So a card for a worn piece is capped at B.CAP_WORN and
+	-- the hovered one at B.CAP, and the name is made to fit the room left
+	-- beside the icon and the level: set smaller, down to B.NAME_LEAST, and
+	-- cut short with three dots if it still will not go.
+	local cap = item.comparing and B.CAP_WORN or B.CAP
+	local off = icon and (I.ICON_TALL + I.ICON_GAP) or 0
+	-- ONE SIZE FOR A NAME, AND CUT ONLY WHEN IT TRULY DOES NOT FIT (Josh
+	-- 2026-11-16, of three cards side by side: "Truncating and resizing seems
+	-- to be off on the headers"). A long name was set smaller, down to 11,
+	-- and then cut, by a guess at the room that was some 30 pixels short. So
+	-- "Battleforge Shield..." was small and cut with space to spare, while
+	-- "Searing Blade" beside it was large. Now every hovered card's name is
+	-- B.NAME and every worn card's B.NAME_WORN, nothing is set smaller, and
+	-- the room is what is really left: the card, less its padding, the icon,
+	-- and the level's own width.
+	-- (THE SAME SIZE ON BOTH, Josh 2026-11-16: "Title resizing is pushing the
+	-- content down, so the headers are different heights". A worn card's name
+	-- was 13.5 and a hovered one's 15, so the hovered header was taller. Both
+	-- are 15 now, and the worn cards a little wider for it.)
+	local size = item.comparing and B.NAME_WORN or B.NAME
+	local levelWide = 0
+	if level then
+		levelWide = math.max(T.Measure(tostring(level), B.LEVEL, "name"), T.Measure(levelLabel, I.FIG_LABEL, "name")) + 10
+	end
+	local room = cap - I.INSET - off - levelWide
+	local shown = item.name
+	if T.Measure(shown, size, "name") > room then
+		local cut = shown
+		while #cut > 4 and T.Measure(cut .. "...", size, "name") > room do
+			cut = cut:sub(1, -2)
+		end
+		shown = cut:gsub("%s+$", "") .. "..."
+	end
+	-- how it binds, whether it is unique, and "Can't use", as tags on a third
+	-- line beside the icon (M.ItemTags)
+	c.tall = true
+	local tags = M.ItemTags(item)
+	if recipeTag then
+		table.insert(tags, 1, recipeTag)
+	end
+	-- (in the band's own tag colours, which read on any quality's band:
+	-- T.TAG.bandwarn and the rest, Core/Tooltip.lua)
+	for _, tag in ipairs(tags) do
+		if T.TAG["band" .. tostring(tag[2])] then
+			tag[2] = "band" .. tag[2]
+		end
+	end
+	c.header(shown, q, icon, sub, item.edgeRgb, {}, tags)
+	T.SizeLine(tip, 1, size, nil, "name")
+	T.SizeLine(tip, 2, B.SUB, nil, "text")
+	local floor = math.min(I.MIN_W, cap)
+	local needs = math.min(cap, math.max(c.needs(shown, sub, {}) + levelWide,
+		T.Measure(shown, size, "name") + off + levelWide + I.INSET + 2))
+	c.headNeeds = needs
+
+	-- the rest of the icon's height, the band's foot and some air
+	-- (Josh's Strong Fishing Pole, 2026-11-16: "Spacing seems off here". With
+	-- no tags there are two lines beside a 40 pixel icon, not three, so the
+	-- band ran down to the tiles' top edge. The gap is larger then.)
+	tip:AddLine(" ")
+	T.SizeLine(tip, c.last(), lineFor(c.tagLine and B.HEAD_GAP or B.HEAD_GAP_BARE), nil, "text")
+
+	local laid = {}
+	local function keep(h, what)
+		tip:AddLine(T.TAG_BLANK)
+		T.SizeLine(tip, c.last(), lineFor(h), nil, "text")
+		what.line, what.h = c.last(), h
+		laid[#laid + 1] = what
+	end
+	local function heading(words)
+		row(tostring(words):upper(), ITEM_HEAD)
+		T.SizeLine(tip, c.last(), I.FIG_LABEL + 0.5, nil, "name")
+	end
+
+	-- 2. THE ANSWER
+	-- the facts of an item, as the game lists them (see 3 AND 4 below); a
+	-- recipe's made item is listed by it too
+	local function facts(item)
+	if item.damage then
+		local school = item.school and (" " .. item.school) or ""
+		row(("%s%s Damage"):format(item.damage, school), ITEM_INK, item.speed and ("Speed " .. item.speed) or nil, ITEM_INK)
+	elseif item.speed then
+		row("Speed " .. item.speed, ITEM_INK)
+	end
+	if item.dps then
+		row(("(%s damage per second)"):format(tostring(item.dps)), ITEM_INK)
+	end
+	if item.armor then
+		row(("%s Armor"):format(tostring(item.armor)), ITEM_INK)
+	end
+	if item.block then
+		row(("%s Block"):format(tostring(item.block)), ITEM_INK)
+	end
+	for _, x in ipairs(item.extraDamage) do
+		row(x.text, x.rgb or ITEM_INK)
+	end
+	for _, st in ipairs(item.stats) do
+		row(st.text, ITEM_INK)
+	end
+	for _, e in ipairs(item.effects) do
+		row(e.line or e.text, e.rgb or ITEM_GREEN, nil, nil, true)
+	end
+	end
+	local more = item.more or {}
+	-- `inBox`: the tiles sit in a recipe's box, and take the darker fill
+	local function tilesOf(more, inBox)
+	for _, group in ipairs(type(more.tiles) == "table" and more.tiles or {}) do
+		if type(group) == "table" and #group > 0 then
+			if type(group.head) == "string" then
+				heading(group.head)
+			end
+			-- (2026-11-16, later: a tile is now the role's one number, and
+			-- with Shift held its parts are listed under it, a line each)
+			local under = 0
+			for _, t in ipairs(group) do
+				if type(t) == "table" then
+					under = math.max(under, type(t.parts) == "table" and #t.parts or (t.second and 1 or 0))
+				end
+			end
+			-- THE SECOND FIGURE UNDER ITS TILE, OUTSIDE IT (Josh 2026-11-16,
+			-- of a row where only the tank's tile had "threat +34.4%" in it:
+			-- "Can we leave tank, healer, and dps in the boxes by themselves?
+			-- The sub-stats (threat, etc) could be a line under it, outside of
+			-- the boxes. This way we won't have a lot of empty space in the
+			-- boxes"). One second figure made all three tiles tall. Every tile
+			-- is B.TILE_H now, and the second figures are a line of small
+			-- print under the row, each centred under its own tile.
+			keep(B.TILE_H, { kind = "tiles", tiles = group, inBox = inBox })
+			for k = 1, under do
+				keep(B.UNDER_H, { kind = "under", tiles = group, nth = k })
+			end
+			spacer()
+		end
+	end
+	end
+
+	-- A RECIPE: WHAT IT MAKES, IN A BOX OF ITS OWN, THEN ITS MATERIALS (Josh
+	-- 2026-11-17, of the mockup: "Looks great. Proceed."). The made item's
+	-- name in its quality's colour with its picture and level, what it is,
+	-- the three role numbers for it against what you wear (other modules'
+	-- tiles, asked for the made item in M.RebuildItem), then its facts as
+	-- any item's. The materials say how many you carry of how many it needs
+	-- where the profession is yours, and the amounts alone where it is not.
+	local boxes = {}
+	if recipe then
+		local made = recipe.made
+		local from = nil
+		heading("Makes")
+		from = c.last()
+		local mq = made.quality or ITEM_INK
+		local picture = M.ItemIcon(recipe.id)
+		local name = (picture and ("|T%s:%d:%d:0:0:64:64:5:59:5:59|t "):format(tostring(picture), B.MADE_ICON, B.MADE_ICON) or "")
+			.. tostring(made.name)
+		row(name, mq, recipe.madeLevel and ("ilvl " .. tostring(recipe.madeLevel)) or nil, ITEM_SUB)
+		T.SizeLine(tip, c.last(), B.MADE_NAME, nil, "name")
+		T.SizeLine(tip, c.last(), I.FOOT, "TextRight", "text")
+		local what = {}
+		for _, part in ipairs({ { made.slot, made.slotRgb }, { made.kind, made.kindRgb } }) do
+			if part[1] then
+				what[#what + 1] = isRed(part[2]) and hex(part[2], part[1]) or part[1]
+			end
+		end
+		if #what == 0 then
+			for _, words in ipairs(M.ItemClass(recipe.id) or {}) do
+				what[#what + 1] = words
+			end
+		end
+		if made.bind then
+			what[#what + 1] = made.bind
+		end
+		if #what > 0 then
+			row(table.concat(what, " · "), ITEM_SUB)
+			T.SizeLine(tip, c.last(), B.SUB, nil, "text")
+		end
+		spacer()
+		tilesOf(made.more or {}, true)
+		local shortOf = made.require and warning(made.require.rgb) or nil
+		if shortOf then
+			row(M.Bare(made.require.text), shortOf, nil, nil, true)
+		end
+		facts(made)
+		for _, r in ipairs(made.rest) do
+			-- (a requirement you meet is not said, as on any card)
+			if not (M.Bare(r.text):find("^Requires ") ~= nil and not isRed(r.rgb)) then
+				row(M.Bare(r.text), isRed(r.rgb) and r.rgb or ITEM_SUB, r.right and M.Bare(r.right) or nil, ITEM_SUB, r.wrap)
+			end
+		end
+		boxes[#boxes + 1] = { from = from, to = c.last() }
+		spacer()
+		spacer()
+		spacer()
+		if #recipe.materials > 0 then
+			heading("Materials")
+			for _, m in ipairs(recipe.materials) do
+				local carried = hasProfession and M.Carried(m[1]) or nil
+				if carried then
+					row(m[1], ITEM_INK, ("%d / %d"):format(carried, m[2]), carried >= m[2] and UP_INK or DOWN_INK)
+				else
+					row(m[1], ITEM_INK, tostring(m[2]), ITEM_SUB)
+				end
+			end
+			spacer()
+		end
+	end
+	tilesOf(more)
+	for _, grid in ipairs(type(more.grids) == "table" and more.grids or {}) do
+		if type(grid) == "table" and type(grid.rows) == "table" and #grid.rows > 0 then
+			if type(grid.head) == "string" then
+				heading(grid.head)
+			end
+			keep(#grid.rows * B.GRID_H + 2, { kind = "grid", rows = grid.rows })
+			spacer()
+		end
+	end
+	-- what it asks of you, in the warning's colour where you fall short
+	-- ONLY WHERE YOU FALL SHORT (his Death Speaker Scepter read "Requires
+	-- Level 28" to a level 28): a requirement you meet is not said
+	local short = item.require and warning(item.require.rgb) or nil
+	if short then
+		row(M.Bare(item.require.text), short, nil, nil, true)
+		spacer()
+	end
+
+	-- 3 AND 4. THE FACTS AND THE WORDS, AS THE GAME LISTS THEM (Josh
+	-- 2026-11-16, beside a screenshot of the game's own tooltips: "I'm not a
+	-- fan of the stats being in 2 columns. Can we make that part look more
+	-- like the default tooltip?"). One to a line, in the game's order and the
+	-- game's words: damage with speed at its right, damage per second, armor,
+	-- block, the stats in white, then each effect as its sentence in the
+	-- game's green. This takes back two things the mockup had: stats as a
+	-- number and a word two to a row, and Equip lines that only add stats
+	-- turned into stat rows (M.StatList, not called now).
+	facts(item)
+	-- rows of its own, as they come (a spell's requirements and what it
+	-- does: M.WriteSpellB)
+	for _, r in ipairs(item.rows or {}) do
+		if r.gap then
+			spacer()
+		end
+		row(r.text, r.rgb or ITEM_INK, r.right, r.rrgb, r.wrap)
+		if r.small then
+			T.SizeLine(tip, c.last(), I.QUIET, nil, "text")
+		end
+	end
+	if item.flavour then
+		spacer()
+		local f = item.flavourRgb or { 1, 0.82, 0 }
+		tip:AddLine(item.flavour, f[1], f[2], f[3], true)
+		T.SizeLine(tip, c.last(), I.FLAVOUR, nil, "quote")
+	end
+
+	-- 5. OTHER ADDONS' LINES, THEN THE FOOT (Josh 2026-11-16: "Any way we can
+	-- have our durability and vendor value on the footer bar, and the other
+	-- addon info in a new container above that?"). The strip had started at
+	-- the first of the other addons' rows, so the foot read as theirs as much
+	-- as ours. Their rows now sit in a box of their own, in the tiles' fill,
+	-- and the strip is the durability and the price alone.
+	-- ROOM BEFORE THE FOOT ONLY WHERE THERE IS ONE (Josh 2026-11-17, of
+	-- Hammer of Justice's card, which has no foot: "now we have too much
+	-- blank space at the bottom"). Two blank lines were always added here,
+	-- to part the facts from the other addons' rows and the foot. A spell's
+	-- card has neither, and the two lines were left under its last words.
+	if #item.rest > 0 or item.durability or item.price or item.footText or item.maker or #item.notes > 0 then
+		spacer()
+		spacer()
+	end
+	local stripFrom = nil
+	local boxFrom, boxTo = nil, nil
+	if #item.rest > 0 then
+		for _, r in ipairs(item.rest) do
+			-- (another addon's "Vendor" price is the foot's own price again)
+			-- (nor is a requirement you meet, such as "Requires Fishing (10)":
+			-- one you fall short of is red and is kept)
+			local met = M.Bare(r.text):find("^Requires ") ~= nil and not isRed(r.rgb)
+			if not met and not (item.price and M.Bare(r.text) == "Vendor") then
+				row(M.Bare(r.text), ITEM_SUB, r.right and M.Bare(r.right) or nil, ITEM_SUB, r.wrap)
+				T.SizeLine(tip, c.last(), I.FOOT, nil, "text")
+				if r.right then
+					T.SizeLine(tip, c.last(), I.FOOT, "TextRight", "text")
+				end
+				boxFrom = boxFrom or c.last()
+				boxTo = c.last()
+			end
+		end
+		if boxFrom then
+			spacer()
+			spacer()
+			spacer()
+		end
+	end
+	local d = item.durability
+	local hasBar = d ~= nil and d.most ~= nil and d.most > 0
+	local right = {}
+	if item.price then
+		right[#right + 1] = M.Coins(item.price)
+	end
+	local footLine = nil
+	if d or #right > 0 or item.footText then
+		local worn = item.footText or " "
+		if d then
+			worn = hasBar and T.TAG_BLANK or d.text
+		end
+		tip:AddDoubleLine(worn, #right > 0 and table.concat(right, " · ") or " ", ITEM_SUB[1], ITEM_SUB[2], ITEM_SUB[3],
+			ITEM_SUB[1], ITEM_SUB[2], ITEM_SUB[3])
+		footLine = c.last()
+		T.SizeLine(tip, footLine, B.FOOT, nil, "text")
+		T.SizeLine(tip, footLine, B.FOOT, "TextRight", "text")
+		stripFrom = stripFrom or footLine
+		if item.footText then
+			needs = math.max(needs, T.Measure(M.Bare(item.footText), B.FOOT, "text") + I.INSET + 4)
+		end
+		needs = math.max(needs, (hasBar and (I.BAR_W + I.BAR_GAP + T.Measure(d.text, B.FOOT, "text")) or 0)
+			+ T.Measure(table.concat(right, " · "), B.FOOT, "text") + 24 + I.INSET)
+	end
+	if item.maker then
+		tip:AddLine(("Made by %s"):format(item.maker), ITEM_MAKER[1], ITEM_MAKER[2], ITEM_MAKER[3])
+		T.SizeLine(tip, c.last(), I.MAKER, nil, "text")
+		stripFrom = stripFrom or c.last()
+	end
+	for _, note in ipairs(item.notes) do
+		tip:AddLine(note)
+	end
+	-- NO LINE UNDER THE FOOT (Josh 2026-11-16: "Footer is too tall. Text should
+	-- be vertically centered, and there should be a good bit less top and
+	-- bottom padding"). A blank line was added under it for room, and the
+	-- smallest line the tooltip makes is far taller than the 3 asked for. The
+	-- tooltip's own padding is the room under the words, and the strip starts
+	-- about as far above them (B.STRIP_PAD).
+	if stripFrom and B.FOOT_UNDER > 0 then
+		tip:AddLine(" ")
+		T.SizeLine(tip, c.last(), B.FOOT_UNDER, nil, "text")
+	end
+
+	M.Lap("lines")
+	local inner = c.finish(floor, math.min(cap, needs))
+	-- LESS UNDER THE FOOT (Josh 2026-11-16: "Need less padding on the bottom
+	-- of the footer"). The room under the foot's words is the tooltip's own
+	-- lower padding, which the card does not draw. So where there is a foot,
+	-- the tooltip is asked for B.FOOT_TRIM less of it, and shown again so
+	-- that the strip below is measured against where the edge now is.
+	if stripFrom and skins[tip] and M.Repad then
+		skins[tip].extraBottom = B.FOOT_TRIM
+		M.Repad(tip, skins[tip], true)
+		M.composing = true
+		pcall(tip.Show, tip)
+		M.composing = false
+	end
+	local one = BT.Pill.Px(b.holder, 1) or 1
+
+	M.Lap("layout")
+	-- the band behind the name and the line under it, in the quality's colour
+	local l1, l2 = T.LineOf(tip, 1), T.LineOf(tip, 2)
+	if icon and b.icon:IsShown() then
+		b.icon:SetSize(I.ICON_TALL, I.ICON_TALL)
+	end
+	if l1 and l2 then
+		M.LayBand(tip, b, item.bandRgb or q, (icon and b.icon:IsShown()) and b.icon or l2, c.tagLine and T.LineOf(tip, c.tagLine) or l2)
+	end
+	-- its level, large, with its two words under it
+	local r1, r2 = T.LineOf(tip, 1, "TextRight"), T.LineOf(tip, 2, "TextRight")
+	if level and r1 and r2 then
+		local num = bSay(b, tostring(level), ITEM_INK, B.LEVEL, false, "name")
+		num:SetPoint("TOPRIGHT", r1, "TOPRIGHT", 0, 2)
+		local cap = bSay(b, levelLabel, ITEM_HEAD, I.FIG_LABEL, false, "name")
+		cap:SetPoint("TOPRIGHT", num, "BOTTOMRIGHT", 0, -3)
+	end
+
+	for _, L in ipairs(laid) do
+		local at = T.LineOf(tip, L.line)
+		if at and L.kind == "tiles" then
+			local n = #L.tiles
+			local w = (inner - B.TILE_GAP * (n - 1)) / n
+			for i, t in ipairs(L.tiles) do
+				local x = math.floor((i - 1) * (w + B.TILE_GAP) + 0.5)
+				b.nBack = (b.nBack or 0) + 1
+				local bg = M.TileBack(b, b.nBack)
+				bg:SetPoint("TOPLEFT", at, "TOPLEFT", x, 0)
+				bg:SetSize(math.floor(w), L.h - 2)
+				M.PaintTileBack(bg, L.inBox and B.TILE_FILL_IN or B.TILE_FILL)
+				-- (over the box it sits in: these frames are made once and used
+				-- again, so the level is set each time)
+				if bg.SetFrameLevel and b.holder.GetFrameLevel then
+					pcall(bg.SetFrameLevel, bg, (b.holder:GetFrameLevel() or 0) + (L.inBox and 2 or 1))
+				end
+				local num = bSay(b, tostring(t.value or ""), t.rgb or ITEM_INK, B.BIG, false, "name")
+				num:SetPoint("TOP", bg, "TOP", 0, -7)
+				local cap = bSay(b, tostring(t.label or ""):upper(), ITEM_HEAD, I.FIG_LABEL, false, "name")
+				cap:SetPoint("TOP", num, "BOTTOM", 0, -3)
+			end
+		elseif at and L.kind == "under" then
+			local n = #L.tiles
+			local w = (inner - B.TILE_GAP * (n - 1)) / n
+			for i, t in ipairs(L.tiles) do
+				local part = type(t.parts) == "table" and t.parts[L.nth] or (L.nth == 1 and t.second) or nil
+				if type(part) == "table" then
+					local x = math.floor((i - 1) * (w + B.TILE_GAP) + w / 2 + 0.5)
+					local second = bSay(b, tostring(part[1]) .. " " .. hex(part[3] or ITEM_INK, tostring(part[2])),
+						ITEM_SUB, I.FOOT)
+					second:SetPoint("TOP", at, "TOPLEFT", x, 0)
+				end
+			end
+		elseif at and L.kind == "stats" then
+			local w = (inner - B.COL_GAP) / 2
+			for i, s in ipairs(L.stats) do
+				local x = ((i - 1) % 2) * (w + B.COL_GAP)
+				local y = math.floor((i - 1) / 2) * B.STAT_H
+				local num = bSay(b, s.num, s.dim and ITEM_SUB or ITEM_INK, B.ROW, false, "name")
+				num:SetPoint("TOPLEFT", at, "TOPLEFT", math.floor(x + 0.5), -y)
+				if s.label ~= "" then
+					local label = bSay(b, s.label, ITEM_SUB, B.ROW)
+					label:SetPoint("LEFT", num, "RIGHT", 5, 0)
+				end
+				if s.delta then
+					local delta = bSay(b, amount(s.delta, true), s.delta < 0 and DOWN_INK or UP_INK, I.FOOT)
+					delta:SetPoint("TOPRIGHT", at, "TOPLEFT", math.floor(x + w + 0.5), -y - 1)
+				end
+			end
+		elseif at and L.kind == "grid" then
+			local first = inner * 0.4
+			local w = (inner - first) / 3
+			for r, cells in ipairs(L.rows) do
+				local y = (r - 1) * B.GRID_H
+				local label = bSay(b, tostring(cells[1] or ""), ITEM_SUB, I.FOOT + 0.5)
+				label:SetPoint("TOPLEFT", at, "TOPLEFT", 0, -y)
+				for k = 1, 3 do
+					local v = cells[k + 1]
+					if type(v) == "table" and v[1] then
+						local fs = bSay(b, tostring(v[1]), v[2] or ITEM_HEAD, I.FOOT + 0.5)
+						fs:SetPoint("TOP", at, "TOPLEFT", math.floor(first + (k - 0.5) * w + 0.5), -y)
+					end
+				end
+			end
+		end
+	end
+
+	-- the foot's darker strip, to the bottom of the tooltip
+	M.LayStrip(tip, b, stripFrom and T.LineOf(tip, stripFrom) or nil, nil)
+	-- the other addons' box, from their first row to their last
+	-- (and a recipe's box, around what it makes)
+	if boxFrom then
+		boxes[#boxes + 1] = { from = boxFrom, to = boxTo }
+	end
+	for _, one in ipairs(boxes) do
+		local first, last = one.from and T.LineOf(tip, one.from), one.to and T.LineOf(tip, one.to)
+		local boxTop = first and BT.Pill.Number(first.GetTop and first:GetTop(), nil)
+		local boxFoot = last and BT.Pill.Number(last.GetBottom and last:GetBottom(), nil)
+		if boxTop and boxFoot and boxTop > boxFoot then
+			b.nBack = (b.nBack or 0) + 1
+			local box = M.TileBack(b, b.nBack)
+			box:SetPoint("TOPLEFT", first, "TOPLEFT", -B.BOX_PAD, B.BOX_PAD - 1)
+			box:SetSize(math.floor(inner + 2 * B.BOX_PAD), math.floor(boxTop - boxFoot + 2 * B.BOX_PAD - 1))
+			M.PaintTileBack(box, B.TILE_FILL)
+			if box.SetFrameLevel and b.holder.GetFrameLevel then
+				pcall(box.SetFrameLevel, box, (b.holder:GetFrameLevel() or 0) + 1)
+			end
+		end
+	end
+	if hasBar then
+		local fs = T.LineOf(tip, footLine)
+		local share = math.max(0, math.min(1, (d.now or 0) / d.most))
+		local col = share > 0.5 and { 0.31, 0.78, 0.42 } or share > 0.25 and { 0.89, 0.75, 0.30 } or { 0.89, 0.38, 0.35 }
+		if fs then
+			b.barBg:ClearAllPoints()
+			b.barBg:SetPoint("LEFT", fs, "LEFT", 0, 0)
+			b.barBg:SetSize(I.BAR_W, B.BAR_H)
+			b.barBg:SetColorTexture(0.12, 0.17, 0.15, 1)
+			b.bar:SetWidth(math.max(1, math.floor(I.BAR_W * share + 0.5)))
+			b.bar:SetColorTexture(col[1], col[2], col[3], 1)
+			b.barBg:Show()
+			b.bar:SetShown(share > 0)
+			BT.Fonts.Set(b.worn, "text", B.FOOT)
+			b.worn:SetText(d.text)
+			b.worn:SetTextColor(ITEM_SUB[1], ITEM_SUB[2], ITEM_SUB[3])
+			b.worn:Show()
+		end
+	end
+	return true
+end
 
 -- Writes `item` on `tip` (from M.ReadItem); `icon` its picture, `level` its
 -- item level. Returns true.
@@ -3511,7 +4804,10 @@ function M.RebuildItem(tip, data)
 		and tip.ItemTooltip:IsShown()) then
 		return false
 	end
-	local item = M.ReadItem(data, tip.isShopping and true or false)
+	-- (a recipe first, in the new look: M.ReadItem leaves one, with its
+	-- block inside it, to the restyle)
+	local item = (M.TILES_LOOK and M.ReadRecipe(data, tip.isShopping and true or false))
+		or M.ReadItem(data, tip.isShopping and true or false)
 	if not item then
 		return false
 	end
@@ -3534,13 +4830,53 @@ function M.RebuildItem(tip, data)
 	item.class = M.ItemClass(id)
 	-- cells another addon has for this item (BT.OnItemCells), asked before
 	-- the clear, while the tooltip still knows what it shows
+	local t0 = clock()
 	item.more = BT.UnitTip.MoreItemCells and BT.UnitTip.MoreItemCells(tip, data, tip.isShopping and true or false)
+	-- a recipe: the cells are for the item it makes, by that item's link,
+	-- and its level is asked for by the same
+	if item.recipe then
+		item.more = nil
+		local get = (C_Item and C_Item.GetItemInfo) or rawget(_G, "GetItemInfo")
+		local okLink, _, link = false, nil, nil
+		if type(get) == "function" then
+			okLink, _, link = pcall(get, item.recipe.id)
+		end
+		link = okLink and plainLine(link) or nil
+		if type(link) == "string" then
+			item.recipe.made.more = BT.UnitTip.MoreItemCells
+				and BT.UnitTip.MoreItemCells(tip, { hyperlink = link, id = item.recipe.id }, tip.isShopping and true or false)
+			local text = M.ItemLevelText(link)
+			item.recipe.madeLevel = text and text:match("(%d+)%s*$") or nil
+		end
+	end
+	M.cellsMs = clock() - t0
+	-- the item itself and what you wear in its place, for its stats and
+	-- their change (M.StatList); not on the comparison tooltips, which show
+	-- the worn piece
+	item.link = shownItem(tip)
+	local comparing = tip.isShopping or tip == rawget(_G, "ShoppingTooltip1") or tip == rawget(_G, "ShoppingTooltip2")
+		or tip == rawget(_G, "ItemRefShoppingTooltip1") or tip == rawget(_G, "ItemRefShoppingTooltip2")
+	item.wornLink = not comparing and M.WornFor and M.WornFor(item.link) or nil
+	item.comparing = comparing and true or false
 	-- THE "EQUIPPED" LABEL OVER A COMPARISON TOOLTIP: the client hides it
 	-- whenever the tooltip is cleared (ShoppingTooltipTemplate), and the
 	-- rebuild clears it, so it is put back as it was
 	local header = type(tip.CompareHeader) == "table" and tip.CompareHeader or nil
 	local headed = header and header.IsShown and header:IsShown()
-	local ok, err = pcall(M.WriteItem, tip, item, M.ItemIcon(id), levelOf(tip))
+	-- THE NEW LOOK FIRST, THE OLD ONE IF IT FAILS (M.WriteItemB): a fault in
+	-- the new card is said on the Testing page and the old card is written
+	local level = levelOf(tip)
+	local ok, err = false, nil
+	M.Lap("read")
+	if M.TILES_LOOK and M.WriteItemB then
+		ok, err = pcall(M.WriteItemB, tip, item, M.ItemIcon(id), level)
+		if not ok then
+			BT.Err("tooltips.WriteItemB: " .. tostring(err))
+		end
+	end
+	if not ok then
+		ok, err = pcall(M.WriteItem, tip, item, M.ItemIcon(id), level)
+	end
 	if headed and header.Show then
 		pcall(header.Show, header)
 	end
@@ -3603,7 +4939,9 @@ function M.ComposeItem(tip, data)
 	-- that does not know, its lines in the unit tooltip's style where they
 	-- are; then the footnotes quiet
 	M.Seen("item", data)
+	M.Lap("dress")
 	local rebuilt = M.RebuildItem(tip, data)
+	M.Lap("draw")
 	if rebuilt == false then
 		-- the client's lines restyled where they are: no card, so none of a
 		-- card's parts (M.CardShown)
@@ -3636,7 +4974,103 @@ function M.ComposeItem(tip, data)
 	repad(tip, skins[tip], true)
 end
 
-BT.OnItemTooltip("tooltips", 0, M.ComposeItem)
+-- A COMPARISON CARD WRITTEN ONCE A REDRAW, NOT FOUR TIMES (Josh 2026-11-16:
+-- "Tooltip performance issues. 70 fps with no tooltip open... 61 after I
+-- open it"; his readings: in 5 seconds GameTooltip written 25 times, each
+-- "Equipped" tooltip 100 times, 2.1 ms a write, no one stretch of a write
+-- the slow one).
+--
+-- While the mouse rests on a bag item the game sets its tooltip again five
+-- times a second, and each time it fills the comparison tooltips more than
+-- once: when the item is set (TooltipDataRules.FinalizeItemTooltip) and
+-- again two lines on (ContainerFrameItemButtonMixin:OnUpdate). Four times,
+-- as he measured it. Each fill cleared the tooltip and the card was written
+-- on it again, and only the last of them is ever seen.
+--
+-- So the fills are counted. All the fills of one redraw happen within one
+-- frame, where GetTime() does not move. Once a redraw of this item on this
+-- tooltip has been seen to take N fills, the next redraw's first N - 1 are
+-- left as the game filled them and the card is written on the Nth: the one
+-- the game then puts its "If you replace" lines under and places the
+-- tooltips by, as before.
+--
+-- If a redraw stops short of N, the tooltip would be left as the game's.
+-- GameTooltip's own OnUpdate, which is what began the redraw, is hooked,
+-- and after it the card is written on any tooltip still owed one
+-- (M.SettleSpared). That redraw's count is the next one's N.
+--
+-- Only GameTooltip's two comparison tooltips. A hover's first redraw, or a
+-- different item, is written every time, as it was.
+local spare = setmetatable({}, { __mode = "k" })
+M.SPARE_FORGET = 0.6 -- sec with no fill: the hover ended, nothing is assumed
+function M.Spared(tip, data)
+	if not M.TILES_LOOK or (tip ~= rawget(_G, "ShoppingTooltip1") and tip ~= rawget(_G, "ShoppingTooltip2")) then
+		return false
+	end
+	local key = type(data) == "table" and (data.guid or data.hyperlink or data.id) or nil
+	local t = type(GetTime) == "function" and GetTime() or nil
+	if key == nil or t == nil or (issecretvalue and issecretvalue(key)) then
+		spare[tip] = nil
+		return false
+	end
+	local c = spare[tip]
+	if not c or c.key ~= key or t - c.at > M.SPARE_FORGET then
+		spare[tip] = { key = key, at = t, n = 1, written = true }
+		return false
+	end
+	if c.at ~= t then
+		-- a new redraw: the last one's count is what this one is taken to be
+		c.expect, c.at, c.n, c.written, c.owed = c.n, t, 0, false, nil
+	end
+	c.n = c.n + 1
+	if c.expect and c.n < c.expect then
+		c.owed = data
+		return true
+	end
+	c.written, c.owed = true, nil
+	return false
+end
+-- true where the last fill of `tip` was left as the game's (M.Spared)
+function M.IsSpared(tip)
+	local c = spare[tip]
+	return c ~= nil and c.owed ~= nil
+end
+function M.SettleSpared()
+	for tip, c in pairs(spare) do
+		if c.owed and not c.written then
+			local data = c.owed
+			c.owed, c.written = nil, true
+			if tip.IsShown and tip:IsShown() and BT.Enabled("tooltips") then
+				local ok, err = pcall(M.ComposeItem, tip, data)
+				if not ok then
+					BT.Err("tooltips.spared: " .. tostring(err))
+				end
+				M.perf.settled = (M.perf.settled or 0) + 1
+			end
+		end
+	end
+end
+if GameTooltip and GameTooltip.HookScript then
+	pcall(GameTooltip.HookScript, GameTooltip, "OnUpdate", function()
+		if next(spare) then
+			M.SettleSpared()
+		end
+	end)
+end
+
+BT.OnItemTooltip("tooltips", 0, function(tip, data)
+	if M.Spared(tip, data) then
+		M.perf.spared = (M.perf.spared or 0) + 1
+		return
+	end
+	local t0 = clock()
+	M.cellsMs = 0
+	M.Roll()
+	M.Lap()
+	M.ComposeItem(tip, data)
+	M.Lap("after")
+	M.Timed(clock() - t0, M.cellsMs, tip)
+end)
 
 -- WHAT SWAPPING WOULD CHANGE, AS PART OF THE CARD (Josh 2026-10-17, choosing
 -- "Fold the Equipped tooltip's "If you replace this item..." lines into the
@@ -3707,6 +5141,11 @@ function M.FoldDelta(tip)
 	b.deltaRule:SetSize(inner, 1)
 	b.deltaRule:SetColorTexture(SKIN_RIM[1], SKIN_RIM[2], SKIN_RIM[3], 0.9)
 	b.deltaRule:Show()
+	-- the new card's foot strip ends above these lines, which the client
+	-- wrote under the foot (M.WriteItemB)
+	if b.strip and b.strip.IsShown and b.strip:IsShown() and b.stripFrom then
+		M.LayStrip(tip, b, b.stripFrom, fs)
+	end
 	return head
 end
 
@@ -3717,7 +5156,8 @@ if TooltipComparisonManager and TooltipComparisonManager.SetItemTooltip and hook
 		end
 		local tips = type(self.tooltip) == "table" and self.tooltip.shoppingTooltips
 		local tip = type(tips) == "table" and tips[primary and 1 or 2]
-		if tip then
+		-- (not on a fill left as the game's: there is no card to fold into)
+		if tip and not M.IsSpared(tip) then
 			local ok, err = pcall(M.FoldDelta, tip)
 			if not ok then
 				BT.Err("tooltips.delta: " .. tostring(err))
@@ -3898,11 +5338,13 @@ function M.ReadSpell(data, kind, fresh, enemy, head)
 						labels[label] = true
 						if label == "Range" then
 							spell.range = value
+							-- (and as the client said it: M.WriteSpellB)
+							spell.rangeText = text
 						else
 							local tile = { value, label, (c and not isGold(c) and c[2] < 0.5) and c or nil }
 							spell.tiles[#spell.tiles + 1] = tile
 							-- and as the client said it, for the line of plain facts
-							local fact = { text = text, rgb = tile[3], lower = true }
+							local fact = { text = text, rgb = tile[3], lower = true, label = label }
 							spell.facts[#spell.facts + 1] = fact
 							if label == "Cast" then
 								spell.cast = value
@@ -3959,7 +5401,7 @@ function M.ReadSpell(data, kind, fresh, enemy, head)
 		local label, value, amount, over, weapon, after, bonus, hit
 		local found = nil
 		for _, r in ipairs(spell.rows) do
-			label, value, amount, over, weapon, after, bonus, hit = M.SpellAmount(r.text)
+			label, value, amount, over, weapon, after, bonus, hit = M.SpellAmount(r.text, M.IsShot(spell.range))
 			if label then
 				found = r
 				break
@@ -3983,7 +5425,8 @@ function M.ReadSpell(data, kind, fresh, enemy, head)
 			spell.amount = { value, label }
 			local said = amount and ((adds and "+" or "") .. M.Middle(amount)) or value
 			table.insert(spell.facts, 1, { text = ("%s %s%s%s"):format(said, label:lower(),
-				type(over) == "number" and (" over " .. M.Lasting(over)) or "", weapon and " with your weapon" or "") })
+				type(over) == "number" and (" over " .. M.Lasting(over)) or "", weapon and " with your weapon" or ""),
+				amount = true })
 			-- A DESCRIPTION THAT SAYS NO MORE GOES (Josh 2026-10-17: "Let's go
 			-- with your recommendation for hidin the paragraph descriptions"):
 			-- one sentence, and after its amount nothing but how long
@@ -4251,21 +5694,45 @@ end
 -- life", a finishing move's "1 point: 6-11 damage" (its middle, not the 11)
 -- and Drain Life's "Transfers 10 health". A number standing alone starts
 -- where no other number does, so the 5 of "2.5 additional damage" is not one.
+-- EVERY CLASS'S SPELLS, AS THIS GAME WORDS THEM (Josh 2026-11-17: "Was this
+-- only paladin? What about all the other classes?"; his record of 1,938
+-- class spells, each beside what was read from it). What was missed or
+-- misread, and is read now:
+--   "Healed for 250 to 269" (Holy Shock), "to be healed for 49" (Judgement
+--     of Light, Devour Magic)
+--   "Heals your pet 116 health every second" (Mend Pet), "Gives 89 health
+--     to the caster's pet" (Health Funnel), "recovering 1,930 health"
+--     (Consume Shadows), "restore 1,440 health" (Create Healthstone)
+--   "deals 52 Frost Damage", with a capital (Frozen Orb)
+--   a percent is not an amount: "healing you for 10% of your maximum
+--     health" read 10 and hid Victory Rush's 44 damage; so did "absorbing
+--     15% of the amount healed" and five more (M.NOT_AMOUNTS)
+--   nor is "1 Shadow damage for each point of Mana" (Feedback), nor
+--     "Restores 5 mana per 5 sec"
+--   "281 to 318, then jumps" (Chain Heal) kept its comma: "281–318,"
+--   the amount said first is the spell's, whichever kind it is: Holy Nova
+--     "causing 179 to 206 Holy damage ... and healing all party members ...
+--     for 295 to 342" read as a heal, because heals were looked for before
+--     damage (M.SpellAmount)
 M.AMOUNTS = {
-	{ "Absorb", { "[Aa]bsorbing ([%d,]+)", "[Aa]bsorbs? ([%d,]+)" } },
-	{ "Healing", { "[Hh]eal[sing]* [^%.]-for ([%d,]+) to ([%d,]+)", "[Hh]eal[sing]* [^%.]-for ([%d,]+)",
-		"[Hh]eals? ([%d,]+)", "[Hh]eals? [^%.]-of ([%d,]+)", "[Rr]estores ([%d,]+) to ([%d,]+) health",
-		"[Rr]estores ([%d,]+) health", "[Rr]estores ([%d,]+) to ([%d,]+) life", "[Rr]estores ([%d,]+) life" } },
+	{ "Absorb", { "[Aa]bsorbing ([%d,]+)", "[Aa]bsorbs? ([%d,]+)", "[Ss]hields up to ([%d,]+)" } },
+	{ "Healing", { "[Hh]eal[singed]* [^%.]-for ([%d,]+) to ([%d,]+)", "[Hh]eal[singed]* [^%.]-for ([%d,]+)",
+		"[Hh]eals? ([%d,]+)", "[Hh]eals? [^%.]-of ([%d,]+)", "[Rr]estores? ([%d,]+) to ([%d,]+) health",
+		"[Rr]estores? ([%d,]+) health", "[Rr]estores ([%d,]+) to ([%d,]+) life", "[Rr]estores ([%d,]+) life",
+		"[Hh]eals [%a ]-([%d,]+) health", "[Gg]ives ([%d,]+) health", "[Rr]ecover[sing]* ([%d,]+) health" } },
 	-- a drink, or a mana potion
 	{ "Mana", { "[Rr]estores ([%d,]+) to ([%d,]+) mana", "[Rr]estores ([%d,]+) mana" } },
-	{ "Damage", { "%f[%d%.,]([%d,]+) to ([%d,]+) [%a ]-damage", "%f[%d%.,]([%d,]+)%-([%d,]+) [%a ]-damage",
-		"%f[%d%.,]([%d,]+) %a* ?damage", "[Tt]ransfers ([%d,]+) health" } },
+	{ "Damage", { "%f[%d%.,]([%d,]+) to ([%d,]+) [%a ]-[Dd]amage", "%f[%d%.,]([%d,]+)%-([%d,]+) [%a ]-[Dd]amage",
+		"%f[%d%.,]([%d,]+) %a* ?[Dd]amage", "[Tt]ransfers ([%d,]+) health" } },
 }
 
 -- NOT AN AMOUNT (2026-10-17, audit): a number followed by a length of time
 -- or a distance, or by the rest of a decimal. Healing Stream Totem lasts
 -- "for 1 min that heals ... for 6": the 1 is how long, and the 6 is the heal.
-M.NOT_AMOUNTS = { "^%.%d", "^%s*sec", "^%s*min", "^%s*hours?%f[%A]", "^%s*yards?%f[%A]", "^%s*yd%f[%A]" }
+-- NOR A PERCENT, NOR ONE "FOR EACH POINT" OR "PER" SOMETHING (2026-11-17, the
+-- record of every class's spells; see M.AMOUNTS)
+M.NOT_AMOUNTS = { "^%.%d", "^%s*sec", "^%s*min", "^%s*hours?%f[%A]", "^%s*yards?%f[%A]", "^%s*yd%f[%A]",
+	"^%%", "^%s*for each point", "^%s*per %d" }
 local function notAnAmount(after)
 	for _, p in ipairs(M.NOT_AMOUNTS) do
 		if after:find(p) then
@@ -4332,14 +5799,31 @@ end
 -- which would take the 3 alone. Each: the pattern, and what it adds to -
 -- "plus" the weapon and the number, "share" a share of the weapon and the
 -- number, "weapon" the weapon alone.
+--
+-- A SHARE WITH A POINT IN IT, AND A RANGE ADDED (Josh 2026-11-16, two
+-- screenshots: "I think somehow the rank tooltips are reversed... rank 1
+-- should be the weakest"). Holy Strike rank 1, "causes 30% weapon damage
+-- plus an additional 9 to 12 as Holy damage", read 61; rank 4, "43.2%
+-- weapon damage plus an additional 19 to 22", read 4.1. The share was read
+-- from digits alone, so 43.2% was taken as 2%. The "additional 9 to 12" was
+-- not read at all. Now a share may have a point, and the range is added.
 M.WEAPON_AMOUNTS = {
 	{ "([%d,]+) damage in addition to your normal weapon damage", "plus" },
-	{ "([%d,]+)%% weapon damage plus ([%d,]+)", "share" },
+	{ "(%d[%d,%.]*)%% weapon damage plus an additional ([%d,]+) to ([%d,]+)", "share" },
+	{ "(%d[%d,%.]*)%% weapon damage plus an additional ([%d,]+)", "share" },
+	{ "(%d[%d,%.]*)%% weapon damage plus ([%d,]+)", "share" },
 	{ "weapon damage plus ([%d,]+)", "plus" },
 	{ "[Ii]ncreases ranged damage by ([%d,]+)", "plus", ranged = true },
 	{ "[Ii]ncreases melee damage by ([%d,]+)", "plus" },
 	{ "[Nn]ext attack by ([%d,]+) damage", "plus" },
-	{ "([%d,]+)%% weapon damage", "share" },
+	{ "(%d[%d,%.]*)%% weapon damage", "share" },
+	-- Seal of Command, "Holy damage equal to 70% of normal weapon damage"
+	-- (the spellbook as recorded 2026-11-16: its Judgement's 80 to 85 was
+	-- shown as the seal's)
+	{ "(%d[%d,%.]*)%% of normal weapon damage", "share" },
+	-- Divine Storm, "causes 110% of weapon damage" (the record of every
+	-- class's spells, 2026-11-17)
+	{ "(%d[%d,%.]*)%% of weapon damage", "share" },
 	{ "causing weapon damage", "weapon" },
 	{ "deals weapon damage", "weapon" },
 }
@@ -4363,20 +5847,52 @@ function M.WeaponDamage(ranged)
 	return lo, hi
 end
 
-local function weaponAmount(text)
+-- A HUNTER'S SHOT IS THE RANGED WEAPON'S (Josh 2026-11-17, of Chimera Shot
+-- and Kill Shot worked out from the melee weapon: "Can we fix the hunter
+-- spells as well?"). "You deal 135% weapon damage" does not say which
+-- weapon. The spell's range does: a hunter's ability that reaches past
+-- M.SHOT_FROM yards is a shot, and one at melee range (Raptor Strike, Carve,
+-- Mongoose Bite) is a strike. Only for a hunter: a rogue's Shadowstrike
+-- reaches 20 yards and hits with the weapon in hand.
+-- `range`: the spell's range as its tooltip says it ("8-35 yd range").
+M.SHOT_FROM = 10
+function M.IsShot(range)
+	if type(range) ~= "string" or type(UnitClass) ~= "function" then
+		return false
+	end
+	local ok, _, class = pcall(UnitClass, "player")
+	if not ok or plainLine(class) ~= "HUNTER" then
+		return false
+	end
+	local far = 0
+	for n in range:gmatch("%d+") do
+		far = math.max(far, tonumber(n) or 0)
+	end
+	return far > M.SHOT_FROM
+end
+
+local function weaponAmount(text, shot)
 	for _, w in ipairs(M.WEAPON_AMOUNTS) do
-		local _, last, a, b = text:find(w[1])
+		local _, last, a, b, c = text:find(w[1])
+		-- (not a share for each of something: Lacerate bleeds "for 20 damage
+		-- over 15 sec plus 10% weapon damage per existing application", and
+		-- was read as a hit for 10% of the weapon; 2026-11-17)
+		if last and text:find("^ per ", last + 1) then
+			last = nil
+		end
 		if last then
+			-- plus: the least it adds; top: the most, where it says a range
 			local share, plus = 1, 0
 			if w[2] == "plus" then
 				plus = number(a) or 0
 			elseif w[2] == "share" then
 				share, plus = (number(a) or 100) / 100, b and number(b) or 0
 			end
+			local top = c and number(c) or plus
 			-- what it adds to a whole hit of the weapon, for an ability that takes
 			-- the place of a swing (M.ReadSpell)
 			local bonus = (share == 1 and plus > 0) and plus or nil
-			local lo, hi = M.WeaponDamage(w.ranged)
+			local lo, hi = M.WeaponDamage(w.ranged or shot)
 			if not lo then
 				-- the weapon unknown: what it adds, and no figures
 				return "Damage", plus > 0 and ("+" .. plus) or "weapon", nil, false, false, text:sub(last + 1), bonus
@@ -4385,8 +5901,8 @@ local function weaponAmount(text)
 			-- (Josh 2026-10-17: "Are we using real spell calculations? Like
 			-- backstab says it does 150% weapon damage plus 30"): the middle of
 			-- the rounded ends was up to half a point under the sum
-			local l, h = math.floor(lo * share + plus), math.floor(hi * share + plus + 0.5)
-			return "Damage", l == h and tostring(l) or (l .. "–" .. h), (lo + hi) / 2 * share + plus, false, true,
+			local l, h = math.floor(lo * share + plus), math.floor(hi * share + top + 0.5)
+			return "Damage", l == h and tostring(l) or (l .. "–" .. h), (lo + hi) / 2 * share + (plus + top) / 2, false, true,
 				text:sub(last + 1), bonus
 		end
 	end
@@ -4450,18 +5966,32 @@ end
 -- damage is in it, what follows the amount, what it adds to a plain hit of
 -- the weapon where that is a number, and whether it lands on a hit, so has
 -- no rate (M.ON_A_HIT). Nil where it says no amount.
-function M.SpellAmount(text)
+-- `shot`: the weapon in it is the ranged one (M.IsShot).
+function M.SpellAmount(text, shot)
 	if type(text) ~= "string" then
 		return nil
 	end
-	local wl, wv, wa, wo, ww, wafter, wbonus = weaponAmount(text)
+	local wl, wv, wa, wo, ww, wafter, wbonus = weaponAmount(text, shot)
 	if wl then
 		return wl, wv, wa, wo, ww, wafter, wbonus, says(text, M.ON_A_HIT)
 	end
+	-- AND WHICHEVER KIND IT IS (2026-11-17, Holy Nova: see M.AMOUNTS). Where
+	-- two kinds start at the same number, "Heals 66 damage", the kind
+	-- listed first has it, as before.
+	local best
 	for _, kind in ipairs(M.AMOUNTS) do
+		-- THE AMOUNT SAID FIRST, WHICHEVER PATTERN FINDS IT (the spellbook as
+		-- recorded 2026-11-16). Seal of Fury: "melee attacks ... deal an
+		-- additional 11 Holy damage ... Unleashing this Seal's energy inflicts
+		-- 54 to 57 Holy damage". The patterns were tried in turn over the
+		-- whole description, so the range, which is its Judgement's, was
+		-- taken before the 11, which is the seal's. Seal of Righteousness
+		-- says a range first and was read as the seal. Now each pattern's
+		-- first amount is found and the one that comes first in the words is
+		-- kept; where two start at the same place, the earlier pattern's.
 		for _, p in ipairs(kind[2]) do
-			-- the first match that is an amount; one that is a length of time
-			-- or a distance is passed over (M.NOT_AMOUNTS)
+			-- a pattern's first match that is an amount; one that is a length
+			-- of time or a distance is passed over (M.NOT_AMOUNTS)
 			local from = 1
 			while true do
 				local first, last, lo, hi = text:find(p, from)
@@ -4472,10 +6002,33 @@ function M.SpellAmount(text)
 				-- (a comma alone is no amount: "the friendly target, reducing
 				-- damage" in Blessing of Sanctuary, 2026-10-18)
 				if lo and lo:find("%d") and not notAnAmount(after) then
-					return amountOf(kind[1], text, lo, hi, after)
+					-- where the amount itself starts, not the words before it
+					local at = text:find(lo, first, true) or first
+					if not best or at < best.at then
+						-- (without the comma a list goes on with: "281 to 318, then")
+						best = { at = at, lo = lo:gsub(",+$", ""), hi = hi and hi:gsub(",+$", ""), after = after, kind = kind[1] }
+					end
+					break
 				end
 				from = first + 1
 			end
+		end
+	end
+	do
+		if best then
+			local label, value, amount, over, weapon, after, bonus, hit = amountOf(best.kind, text, best.lo, best.hi, best.after)
+			-- AND WHAT THE FIRST FEW ENEMIES TAKE BESIDES (the same record).
+			-- Consecration: "doing 16 Holy damage over 8 sec to enemies who
+			-- enter the area. The first 4 enemies who enter the area will take
+			-- an additional 50 damage over 8 sec." It read 16. One enemy takes
+			-- 66, so the 50 is added.
+			local more = label == "Damage" and type(amount) == "number" and not best.hi
+				and number(best.after:match("[Tt]he first %d+ enemies [^%.]-an additional ([%d,]+) damage"))
+			if more then
+				amount = amount + more
+				value = amount == math.floor(amount) and ("%d"):format(amount) or tostring(amount)
+			end
+			return label, value, amount, over, weapon, after, bonus, hit
 		end
 	end
 	return nil
@@ -4585,12 +6138,105 @@ function M.WriteSpell(tip, spell, icon)
 	return true
 end
 
+-- A SPELL OR A BUFF IN THE ITEM CARD'S LOOK (Josh 2026-11-17: "I think we
+-- can proceed with the remaining tooltips"; the canvas's "B, chosen" boards
+-- have Holy Light and Blessing of Might). Written by the item's card
+-- (M.WriteItemB), handed the spell as that card takes things:
+--   the band in the spell's colour (a debuff's kind, or the accent), with
+--     its picture, its name and the line under it
+--   its two figures (damage or healing a second, and per mana) as tiles
+--   what it asks of you and what it does, as lines
+--   what it costs, how long it takes and how far it reaches, in the foot,
+--     where they had been a grid of cells
+-- M.WriteSpell is the card before, and is written if this one fails.
+-- LAID OUT AS THE GAME'S OWN, AND NO WIDER (Josh 2026-11-17, six
+-- screenshots beside the game's Holy Strike: "Some tooltips seem way too
+-- wide. Also not sure how I feel about the footer. I think maybe spells
+-- content should be arranged more like the default tooltip"). The cost, the
+-- cast time, the cooldown and the damage had been one line in the foot,
+-- "97.1 damage with your weapon · 13 mana · instant · 10 sec cooldown", and
+-- that line made Holy Strike's card 400 wide. The foot is gone from a
+-- spell's card. Under the tiles its facts are two to a line as the game
+-- has them, in the game's words:
+--     13 Mana                 Melee Range
+--     Instant              10 sec cooldown
+-- then what it comes to ("97.1 damage with your weapon"), then what it
+-- does. The range is on its line again and out from under the name.
+function M.WriteSpellB(tip, spell, icon)
+	local colour = spellColour(spell)
+	local sub = {}
+	for _, words in ipairs(spell.sub) do
+		if not (spell.rangeText and words == spell.range) then
+			sub[#sub + 1] = words
+		end
+	end
+	local item = { name = spell.name, quality = spell.nameRgb or ITEM_INK, bandRgb = colour, edgeRgb = colour,
+		subText = table.concat(sub, " · "), stats = {}, effects = {}, rest = {}, notes = {}, extraDamage = {},
+		rows = {} }
+	local group = {}
+	for i = 1, 2 do
+		local f = spell.figs and spell.figs[i]
+		if type(f) == "table" and f[1] then
+			group[#group + 1] = { value = f[1], label = f[2], rgb = f[3] }
+		end
+	end
+	if #group > 0 then
+		item.more = { tiles = { group } }
+	end
+	-- the facts in the game's order: what it costs and how far it reaches,
+	-- how long it takes and how long until it can be cast again, then any
+	-- other (a buff's time left)
+	local cost, cast, cooldown, amount, others = nil, nil, nil, nil, {}
+	for _, f in ipairs(spell.facts) do
+		if f.amount then
+			amount = f
+		elseif f.label == "Cast" then
+			cast = f
+		elseif f.label == "Cooldown" then
+			cooldown = f
+		elseif f.label and not cost then
+			cost = f
+		else
+			others[#others + 1] = f
+		end
+	end
+	local halves = {}
+	for _, f in ipairs({ cost or false, spell.rangeText and { text = spell.rangeText } or false, cast or false,
+		cooldown or false }) do
+		if f then
+			halves[#halves + 1] = f
+		end
+	end
+	for _, f in ipairs(others) do
+		halves[#halves + 1] = f
+	end
+	for i = 1, #halves, 2 do
+		local left, right = halves[i], halves[i + 1]
+		item.rows[#item.rows + 1] = { text = left.text, rgb = left.rgb or ITEM_INK, right = right and right.text or nil,
+			rrgb = right and (right.rgb or ITEM_INK) or nil }
+	end
+	local gap = #item.rows > 0
+	if amount then
+		item.rows[#item.rows + 1] = { text = amount.text, rgb = ITEM_INK, gap = gap }
+		gap = false
+	end
+	local first = true
+	for _, r in ipairs(spell.rows) do
+		if not r.hidden then
+			item.rows[#item.rows + 1] = { text = r.text, rgb = r.desc and ITEM_QUIET or r.rgb, right = r.right, rrgb = r.rrgb,
+				wrap = r.wrap, small = r.desc, gap = first and (gap or amount ~= nil) }
+			first = false
+		end
+	end
+	return M.WriteItemB(tip, item, icon, nil)
+end
+
 -- WHAT THE CLIENT WROTE, FOR CLAUDE (the Testing page's Record button). The
 -- spell and buff tooltips were built from the client's strings without one
 -- in hand, so the last few of each kind are kept as they came, and written
 -- into the saved file on Record.
 M.SEEN_MOST = 6
-M.seen = { item = {}, spell = {}, aura = {}, macro = {} }
+M.seen = { item = {}, spell = {}, aura = {}, macro = {}, object = {} }
 function M.Seen(kind, data)
 	local list = M.seen[kind]
 	if not (list and type(data) == "table" and type(data.lines) == "table") then
@@ -4606,6 +6252,117 @@ function M.Seen(kind, data)
 	while #list > M.SEEN_MOST do
 		table.remove(list)
 	end
+end
+
+-- EVERY SPELL IN YOUR SPELLBOOK, AND WHAT WAS READ FROM IT (Josh 2026-11-16,
+-- after Holy Strike's "43.2% weapon damage" was read as 2%: "Are you sure all
+-- the other spells are working, or will we find similar bugs?"). The reader
+-- was written from other games' wordings, and this game words some spells
+-- its own way. So Record also writes each spell's name, rank and words as
+-- the client gives them, beside the label, value and amount M.SpellAmount
+-- took from them, for the two to be compared out of the game. It goes in
+-- the tooltips' own record, as `book` (a module has one record).
+function M.BookRead()
+	if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines and C_SpellBook.GetSpellBookItemInfo
+		and C_Spell and C_Spell.GetSpellDescription) then
+		return nil
+	end
+	local out = { spells = {} }
+	local lo, hi = M.WeaponDamage()
+	out.weapon = lo and { lo, hi } or nil
+	local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+	for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+		local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+		if type(info) == "table" then
+			local first = (info.itemIndexOffset or 0) + 1
+			for index = first, first + (info.numSpellBookItems or 0) - 1 do
+				local ok, item = pcall(C_SpellBook.GetSpellBookItemInfo, index, bank)
+				local id = ok and type(item) == "table" and plainLine(item.actionID or item.spellID) or nil
+				if type(id) == "number" then
+					local okText, text = pcall(C_Spell.GetSpellDescription, id)
+					text = okText and plainLine(text) or nil
+					local one = { id = id, name = plainLine(item.name), rank = plainLine(item.subName),
+						passive = plainLine(item.isPassive), words = text }
+					if type(text) == "string" then
+						local okRead, label, value, amount, over, weapon = pcall(M.SpellAmount, text)
+						if okRead then
+							one.label, one.value, one.amount, one.over, one.weapon = label, value, amount, over, weapon
+						else
+							one.err = tostring(label)
+						end
+					end
+					out.spells[#out.spells + 1] = one
+				end
+			end
+		end
+	end
+	return out
+end
+
+-- AND EVERY OTHER CLASS'S (Josh 2026-11-16: "Was this only paladin? What
+-- about all the other classes?"). The game describes any spell by its id,
+-- whoever asks. BT.ClassSpells (ClassSpellData.lua, made from the client's
+-- own tables) has the id of every spell in every class's skill lines, so
+-- one character's Record writes them all: each skill line's spells with
+-- their words and what M.SpellAmount took from them.
+--
+-- The game has not always got a spell's words ready the first time it is
+-- asked. Those are asked for and counted in `waiting`; a second Record a few
+-- seconds later has them.
+--
+-- A SPELL WITH NO WORDS IS NOT ONE TO WAIT FOR (Josh 2026-11-17, a screenshot
+-- of six Records: "1937 class spells read, 1619 not ready", then 1997 and
+-- 1559, then 1937 and 1619 again: "Not sure this is working"). About 1,600
+-- of the ids are spells the game has and describes with nothing: passives,
+-- hidden parts of other spells. Every one with a name and no words was
+-- counted as not ready, so the count could never reach 0. Now the game is
+-- asked whether it has the spell's data (C_Spell.IsSpellDataCached). With
+-- the data and no words, the spell is counted in `wordless` and not waited
+-- for.
+function M.ClassesRead()
+	if not (BT.ClassSpells and C_Spell and C_Spell.GetSpellDescription) then
+		return nil
+	end
+	local out = { lines = {}, waiting = 0, spells = 0, wordless = 0 }
+	for _, line in ipairs(BT.ClassSpells) do
+		local list = {}
+		for _, id in ipairs(line[2]) do
+			local okText, text = pcall(C_Spell.GetSpellDescription, id)
+			text = okText and plainLine(text) or nil
+			local okName, name = pcall(C_Spell.GetSpellName or tostring, id)
+			name = okName and plainLine(name) or nil
+			if type(text) == "string" and text ~= "" then
+				local one = { id = id, name = name, words = text }
+				if C_Spell.GetSpellSubtext then
+					local okRank, rank = pcall(C_Spell.GetSpellSubtext, id)
+					one.rank = okRank and plainLine(rank) or nil
+				end
+				local okRead, label, value, amount, over, weapon = pcall(M.SpellAmount, text)
+				if okRead then
+					one.label, one.value, one.amount, one.over, one.weapon = label, value, amount, over, weapon
+				else
+					one.err = tostring(label)
+				end
+				list[#list + 1] = one
+				out.spells = out.spells + 1
+			elseif name then
+				local okHas, has = false, nil
+				if C_Spell.IsSpellDataCached then
+					okHas, has = pcall(C_Spell.IsSpellDataCached, id)
+				end
+				if okHas and plainLine(has) == true then
+					-- the game has all it has of this spell, and no words
+					out.wordless = out.wordless + 1
+				elseif C_Spell.RequestLoadSpellData then
+					-- a spell the game has, its words not ready
+					pcall(C_Spell.RequestLoadSpellData, id)
+					out.waiting = out.waiting + 1
+				end
+			end
+		end
+		out.lines[#out.lines + 1] = { name = line[1], spells = list }
+	end
+	return out
 end
 
 function M.Dump()
@@ -4631,11 +6388,36 @@ function M.Dump()
 			n = n + 1
 		end
 	end
+	local okBook, book = pcall(M.BookRead)
+	out.book = okBook and book or nil
+	local okClasses, classes = pcall(M.ClassesRead)
+	out.classes = okClasses and classes or nil
+	if out.classes then
+		U.Print(("Records: %d class spells read, %d with no description, %d not ready. %s"):format(classes.spells,
+			classes.wordless, classes.waiting,
+			classes.waiting > 0 and "Press Record again in a few seconds." or "That is all of them."))
+	end
 	BT.EnsureBound()
 	BeebModDB.tooltipsDump = out
 	return n
 end
 BT.Record("tooltipsDump", M.Dump, "tooltips")
+
+-- A WORLD OBJECT'S LINES, KEPT FOR THE RECORD (2026-11-17). Units, items,
+-- spells and buffs are in the new look. A chest, a herb or a quest object
+-- is not: its tooltip has never been recorded on this client, so there is
+-- nothing to build its card from. The last few are kept as they come and
+-- written on Record, as the others are. Nothing on the tooltip is changed.
+do
+	local DT = Enum and Enum.TooltipDataType
+	if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and DT and DT.Object ~= nil then
+		pcall(TooltipDataProcessor.AddTooltipPostCall, DT.Object, function(_, data)
+			if BT.Enabled("tooltips") then
+				pcall(M.Seen, "object", data)
+			end
+		end)
+	end
+end
 
 -- Whether the tooltip shows an enemy's ability: the Expedition's enemy pages
 -- mark their ability icons so (Modules/Expedition/Window.lua, V.SpellIcons)
@@ -4765,7 +6547,17 @@ function M.ComposeSpell(tip, data, kind)
 	if spell and tip.ClearLines and tip.AddLine then
 		local icon = (id and M.SpellIcon(id)) or (byName and M.SpellIconByName(spell.name))
 			or M.SpellIcon(spellOf(tip, data))
-		local ok, err = pcall(M.WriteSpell, tip, spell, icon)
+		-- the new look first, the card before if it fails (as an item's)
+		local ok, err = false, nil
+		if M.TILES_LOOK then
+			ok, err = pcall(M.WriteSpellB, tip, spell, icon)
+			if not ok then
+				BT.Err("tooltips.WriteSpellB: " .. tostring(err))
+			end
+		end
+		if not ok then
+			ok, err = pcall(M.WriteSpell, tip, spell, icon)
+		end
 		if not ok then
 			BT.Err("tooltips.spell: " .. tostring(err))
 		end

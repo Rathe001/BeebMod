@@ -9,7 +9,21 @@
 -- description's words ("Heals a friendly target for 376 to 417."), because
 -- those words are the game's own answer with your spell power and talents
 -- already counted (probe, 2026-11-16).
-local _, UP = ...
+local _, BT = ...
+BT.Upgrades = BT.Upgrades or {}
+local UP = BT.Upgrades
+
+-- WHAT IT KEEPS, in BeebMod's own saved file under `upgrades` (2026-11-17,
+-- when Upgrades became a module of BeebMod; it was BeebModUpgradesDB, the
+-- saved file of an addon of its own): the rates worked out from the game,
+-- the last fights and the swap checks.
+function UP.DB()
+	BeebModDB = BeebModDB or {}
+	if type(BeebModDB.upgrades) ~= "table" then
+		BeebModDB.upgrades = {}
+	end
+	return BeebModDB.upgrades
+end
 
 local Rd = {}
 UP.Read = Rd
@@ -159,7 +173,7 @@ end
 
 -- what one point is worth, asked of the functions the character sheet calls
 function Rd.Rates(s)
-	local r = { attackPowerPer = {}, multiplier = {} }
+	local r = { attackPowerPer = {}, multiplier = Rd.Multipliers() }
 	for i, name in ipairs(STATS) do
 		local per = num(GetAttackPowerForStat and GetAttackPowerForStat(i, 100))
 		if per and per ~= 0 then
@@ -178,8 +192,7 @@ function Rd.Rates(s)
 	-- and nothing for a total you don't have. So the rate is worked out the
 	-- first time your spirit is seen at two different totals, and kept.
 	-- GUESS until then: classic's 0.1 mana a second for a paladin.
-	BeebModUpgradesDB = BeebModUpgradesDB or {}
-	local db = BeebModUpgradesDB
+	local db = UP.DB()
 	local was = db.spirit
 	if type(was) == "table" and was.level == s.level and math.abs(was.spirit - s.spirit) >= 3 then
 		local per = (s.spiritRegen - was.regen) / (s.spirit - was.spirit)
@@ -303,6 +316,71 @@ local HEALS = { ["Holy Light"] = 0.714, ["Flash of Light"] = 0.429 }
 
 -- What your spells do now. Every rank is in the spellbook, lowest first, so
 -- the last one read for a name is the highest you know.
+-- A BUFF OR A PASSIVE THAT MULTIPLIES A STAT (Josh's chat lines, 2026-11-16,
+-- with Blessing of Kings up: "expected intellect 76.0 after that swap. The
+-- game says 77.0", and his own reading of it: "Probably because I have
+-- blessing of kings"). Kings is "Increases stats by 10%", and that 10% works
+-- on the stats a piece of gear gives too, so 10 intellect on an item is 11.
+-- Math.lua has had a multiplier for each stat from the start; nothing ever
+-- filled it in.
+--
+-- The game has no call for it. So the words are read: each buff on you, and
+-- each passive in your spellbook, is looked up and its description searched
+-- for "stats by N%" or "<a stat> by N%". Buffs cannot be read in combat, so
+-- what was found last is kept until they can.
+local multipliers, multipliersAt = nil, nil
+local function percents(text, into)
+	text = text:lower()
+	local all = text:match("all stats by (%d+)%%") or text:match("total stats by (%d+)%%") or text:match("stats by (%d+)%%")
+	for _, name in ipairs(STATS) do
+		local one = text:match(name .. " by (%d+)%%")
+		local n = tonumber(one or all)
+		if n and n > 0 and n <= 50 then
+			into[name] = (into[name] or 1) * (1 + n / 100)
+		end
+	end
+end
+function Rd.Multipliers()
+	local t = GetTime()
+	if multipliers and multipliersAt and (t - multipliersAt < 2 or InCombatLockdown()) then
+		return multipliers
+	end
+	if InCombatLockdown() then
+		return multipliers or {}
+	end
+	local found = {}
+	-- the buffs on you
+	local get = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+	for i = 1, get and 40 or 0 do
+		local ok, aura = pcall(get, "player", i, "HELPFUL")
+		if not ok or type(aura) ~= "table" then
+			break
+		end
+		local id = aura.spellId
+		if type(id) == "number" and not secret(id) then
+			percents(words(id), found)
+		end
+	end
+	-- and your passives
+	if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines then
+		local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+		for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+			local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+			if type(info) == "table" then
+				local first = (info.itemIndexOffset or 0) + 1
+				for index = first, first + (info.numSpellBookItems or 0) - 1 do
+					local item = C_SpellBook.GetSpellBookItemInfo(index, bank)
+					if type(item) == "table" and item.isPassive and item.spellID and not secret(item.spellID) then
+						percents(words(item.actionID or item.spellID), found)
+					end
+				end
+			end
+		end
+	end
+	multipliers, multipliersAt = found, t
+	return found
+end
+
 -- the attack power your highest Seal of the Crusader gives, looked for at
 -- most every half minute
 local crusaderPower, crusaderAt
@@ -366,8 +444,7 @@ function Rd.Kit(s)
 	-- "60.5% weapon damage plus 38" with the seal up, "43.2% plus 19.5"
 	-- without). What it says with the seal down is kept, and used while the
 	-- seal is up, moved by any spell power gained since.
-	BeebModUpgradesDB = BeebModUpgradesDB or {}
-	local db = BeebModUpgradesDB
+	local db = UP.DB()
 	local strike = kit.holyStrike
 	if strike and not s.crusader then
 		db.holyStrike = { level = s.level, percent = strike.percent, holy = strike.holy, spell = s.spellDamage[2] }

@@ -21,7 +21,9 @@
 -- GUESSED, AND MARKED WHERE USED: the enemy's armor, Seal of Command's hits
 -- per minute, which hits can crit, the fight's length, the share of a fight
 -- a healer is not casting, Consecration's share of spell power.
-local _, UP = ...
+local _, BT = ...
+BT.Upgrades = BT.Upgrades or {}
+local UP = BT.Upgrades
 
 local R = {}
 UP.Roles = R
@@ -140,6 +142,52 @@ function R.Sustain(s, kit)
 	-- and no more than there is time to cast
 	local time = R.Healing(s, kit) * R.FIGHT_SECONDS * (1 - R.NOT_CASTING)
 	return math.min(best * mana, time)
+end
+
+-- HEALER, ONE FIGHT: the most healing a fight allows, with two limits at
+-- once: the time there is to cast, and the mana there is to spend.
+-- (Josh 2026-11-16, of a mace with +68 healing that read +30.2% on its tile,
+-- "sustain +30.2%" and "output +14.1%" under it: "Feels like the number
+-- should be in between those 2".) The tile was R.Sustain, which spends all
+-- the mana on the cheapest heal and so priced the mace as if only Flash of
+-- Light were ever cast. A real fight mixes the cheap heal with the big one:
+-- as many big ones as the mana allows, the cheap one for the rest of the
+-- time. That mix is worked out here. With two limits the best plan is one
+-- heal alone, or the two heals that use up both limits exactly, so each
+-- heal and each pair is tried and the best kept.
+function R.FightHealing(s, kit)
+	local more = s.healing - kit.at.healing
+	local time = R.FIGHT_SECONDS * (1 - R.NOT_CASTING)
+	local mana = s.mana + R.FIGHT_SECONDS * (s.manaPer5 / 5 + R.NOT_CASTING * (s.spiritRegen or 0))
+	local heals = {}
+	for _, h in ipairs(kit.heals or {}) do
+		heals[#heals + 1] = {
+			amount = (h.amount + h.share * more) * (1 + R.SPELL_CRIT * s.spellCrit / 100),
+			cast = math.max(h.cast, 1.5), cost = math.max(h.cost or 0, 0),
+		}
+	end
+	local best = 0
+	for i, a in ipairs(heals) do
+		-- this heal alone, until the time or the mana is gone
+		local casts = time / a.cast
+		if a.cost > 0 then
+			casts = math.min(casts, mana / a.cost)
+		end
+		best = math.max(best, casts * a.amount)
+		-- with another, so that both the time and the mana are used up
+		for j = i + 1, #heals do
+			local b = heals[j]
+			local det = a.cast * b.cost - b.cast * a.cost
+			if det ~= 0 then
+				local x = (time * b.cost - b.cast * mana) / det
+				local y = (a.cast * mana - time * a.cost) / det
+				if x >= 0 and y >= 0 then
+					best = math.max(best, x * a.amount + y * b.amount)
+				end
+			end
+		end
+	end
+	return best
 end
 
 -- DAMAGE, AND THE SEAL THAT GIVES IT. `how` (all optional):
@@ -306,6 +354,34 @@ function R.Threat(s, kit)
 		return R.Damage(s, kit)
 	end
 	return R.Damage(s, kit, { white = f.all, holy = f.all * f.holy })
+end
+
+-- ONE NUMBER A ROLE (Josh 2026-11-16: "Do you think it would make sense to
+-- combine them so we only have 3 stats? Like the tank stat would include the
+-- threat, as well as all the other tank stats. Then we'd have a breakdown
+-- when the user holds shift key", and of the weights: "Yeah the ratios sound
+-- good"). `change` is the six changes in percent. What comes back is three.
+--   tank:   70% survival, 30% threat. A JUDGEMENT, not the game's math.
+--   dps:    75% one enemy, 25% four. A JUDGEMENT too.
+--   healer: all the healing of one fight (R.FightHealing): the best mix
+--           of your heals for the time and the mana there is. No weight is
+--           needed. Without it, sustain, then healing per second.
+R.MIX = { tank = 0.3, dps = 0.25 }
+local function mix(a, b, share)
+	if a == nil and b == nil then
+		return nil
+	end
+	if b == nil then
+		return a
+	end
+	return (a or 0) * (1 - share) + b * share
+end
+function R.Combine(change)
+	return {
+		tank = mix(change.tank, change.threat, R.MIX.tank),
+		healer = change.fight or change.sustain or change.healer,
+		dps = mix(change.dps, change.aoe, R.MIX.dps),
+	}
 end
 
 -- the change, in percent
