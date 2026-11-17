@@ -278,9 +278,23 @@ shift:SetScript("OnEvent", function(_, _, key)
 	if key ~= "LSHIFT" and key ~= "RSHIFT" then
 		return
 	end
+	-- ONLY A TOOLTIP THAT HAS THE NUMBERS ON IT (Josh 2026-11-17, an error
+	-- with a Questie map icon's tooltip up: "attempt to index local 'color'
+	-- (a secret table value, while execution tainted by 'BeebMod')", from
+	-- this line). Shift redrew whatever tooltip was showing. Redrawn from
+	-- addon code, a tooltip of a unit whose words the game keeps secret
+	-- cannot be written by the game's own code, and it stops with an error.
+	-- So nothing is redrawn unless this is on, you are a paladin, and the
+	-- tooltip shows an item that could be worn: the only ones Shift changes.
+	if not UP.On() or not paladin() then
+		return
+	end
 	for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
-		if tip and tip.IsShown and tip:IsShown() and tip.RefreshData then
-			pcall(tip.RefreshData, tip)
+		if tip and tip.IsShown and tip:IsShown() and tip.RefreshData and TooltipUtil and TooltipUtil.GetDisplayedItem then
+			local ok, _, shown = pcall(TooltipUtil.GetDisplayedItem, tip)
+			if ok and type(shown) == "string" and not (issecretvalue and issecretvalue(shown)) and Rd.Where(shown) then
+				pcall(tip.RefreshData, tip)
+			end
 		end
 	end
 end)

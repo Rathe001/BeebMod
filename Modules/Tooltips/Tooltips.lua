@@ -1772,6 +1772,34 @@ BT.OnUnitTooltip("tooltips", 99, function(tip)
 	M.UnitLookEnd(tip)
 end)
 
+-- A WORLD OBJECT'S BAND (Josh 2026-11-17, screenshots of Tin Vein and Solid
+-- Chest in the plain look beside the new cards). An object is written by
+-- M.ComposeObject, below, which rebuilds one a quest wants and leaves any
+-- other as the game drew it. Either way it now has the band: behind its
+-- name and the words under it where quest rows follow, and over the whole
+-- tooltip where nothing does. `identityEnd`: its last line before the
+-- quest's rows, or nil for all of it.
+M.OBJECT_BAND = { 0.62, 0.66, 0.64 }
+function M.ObjectLook(tip, identityEnd)
+	if not (M.TILES_LOOK and tip and tip == rawget(_G, "GameTooltip")) then
+		return false
+	end
+	local lines = BT.Pill.Number(tip.NumLines and tip:NumLines(), 0)
+	if lines < 1 then
+		return false
+	end
+	local u = M.UnitLook(tip, M.OBJECT_BAND, identityEnd or lines, false, false)
+	if not u then
+		return false
+	end
+	if not identityEnd then
+		-- all of it: as a unit with nothing under who it is (M.UnitLookEnd)
+		u.identityEnd = lines
+		M.UnitLookEnd(tip)
+	end
+	return true
+end
+
 -- the gap between the level and the Elite tag beside it, and how much
 -- narrower than the tooltip a row of tags is kept
 local RANK_GAP, TAG_INSET = 5, 18
@@ -6300,11 +6328,8 @@ function M.Dump()
 end
 BT.Record("tooltipsDump", M.Dump, "tooltips")
 
--- A WORLD OBJECT'S LINES, KEPT FOR THE RECORD (2026-11-17). Units, items,
--- spells and buffs are in the new look. A chest, a herb or a quest object
--- is not: its tooltip has never been recorded on this client, so there is
--- nothing to build its card from. The last few are kept as they come and
--- written on Record, as the others are. Nothing on the tooltip is changed.
+-- A WORLD OBJECT'S TOOLTIP, KEPT FOR THE RECORD as the others are. The game
+-- hands an object's tooltip to addons under a type of its own.
 do
 	local DT = Enum and Enum.TooltipDataType
 	if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and DT and DT.Object ~= nil then
@@ -6613,11 +6638,17 @@ function M.ComposeObject(tip, data)
 		for _, l in ipairs(rest) do
 			tip:AddLine(l[1], l[2], l[3], l[4], true)
 		end
+		-- (in the look: a gap under them, where the band ends: M.ObjectLook)
+		if M.TILES_LOOK then
+			tip:AddLine(T.TAG_BLANK)
+			T.SizeLine(tip, BT.Pill.Number(tip:NumLines(), 1), M.UNIT.GAP, nil, "text")
+		end
 		T.gapped = nil
 		M.QuestRows(tip, quests)
 		if tip.Show then
 			tip:Show()
 		end
+		M.ObjectLook(tip, 1 + #rest)
 	end)
 	M.objecting = false
 	if not built then
@@ -6630,7 +6661,11 @@ end
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType
 	and Enum.TooltipDataType.Object then
 	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Object, function(tip, data)
-		M.ComposeObject(tip, data)
+		-- one no quest wants is left as the game drew it, with the band
+		-- over all of it
+		if M.ComposeObject(tip, data) == 0 and BT.Enabled("tooltips") and not M.objecting then
+			pcall(M.ObjectLook, tip, nil)
+		end
 	end)
 end
 

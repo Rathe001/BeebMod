@@ -12801,6 +12801,27 @@ if ok then
 				"an item with nothing inside it is no recipe")
 			_G.Enum.TooltipDataLineType, _G.GetNumSkillLines, _G.GetSkillLineInfo, _G.C_Item = keep.kinds, keep.lines, keep.info, keep.item
 		end },
+		{ "a world object has the band", function()
+			-- (Josh 2026-11-17: Tin Vein and Solid Chest in the plain look)
+			local mod = BT.GetModule("tooltips")
+			local keep = _G.GameTooltip
+			local tip = _G.CreateFrame("Frame")
+			local lines = { "Tin Vein", "Mining" }
+			tip.GetName = function() return "ObjectBandTip" end
+			tip.NumLines = function() return #lines end
+			for i = 1, 4 do
+				_G["ObjectBandTipTextLeft" .. i] = _G.CreateFrame("FontString")
+				_G["ObjectBandTipTextRight" .. i] = _G.CreateFrame("FontString")
+			end
+			assert(mod.ObjectLook(tip, nil) == false, "only the tooltip you point with")
+			_G.GameTooltip = tip
+			assert(mod.ObjectLook(tip, nil) == true, "an object no quest wants: the band over all of it")
+			assert(mod.UnitLookEnd(tip) == true, "as a unit with nothing under who it is")
+			lines = { "Sack of Oats", "\194\160", "Handful of Oats 6/8" }
+			assert(mod.ObjectLook(tip, 1) == true and mod.UnitLookEnd(tip) == false,
+				"one a quest wants: the band ends over the quest's rows")
+			_G.GameTooltip = keep
+		end },
 		{ "a comparison card is written once a redraw", function()
 			local mod = BT.GetModule("tooltips")
 			local real = GetTime
