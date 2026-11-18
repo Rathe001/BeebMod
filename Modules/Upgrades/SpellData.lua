@@ -310,6 +310,47 @@ BT.Upgrades.SpellData = {
 			[5171] = { is = "ability", lvl = 10, key = "sliceanddice", cost = 25, energy = true, finisher = true, speed = true, read = "pct - t1 - t2 - t3 - t4 - t5" }, -- Slice and Dice
 			[6774] = { is = "ability", lvl = 42, key = "sliceanddice", cost = 25, energy = true, finisher = true, speed = true, read = "pct - t1 - t2 - t3 - t4 - t5" }, -- Slice and Dice
 		},
+		HUNTER = {
+			[19434] = { is = "ability", lvl = 20, key = "aimedshot", cost = 75, cd = 6, ranged = true, weapon = "plain", read = "add" }, -- Aimed Shot
+			[20900] = { is = "ability", lvl = 28, key = "aimedshot", cost = 115, cd = 6, ranged = true, weapon = "plain", read = "add" }, -- Aimed Shot
+			[20901] = { is = "ability", lvl = 36, key = "aimedshot", cost = 160, cd = 6, ranged = true, weapon = "plain", read = "add" }, -- Aimed Shot
+			[20902] = { is = "ability", lvl = 44, key = "aimedshot", cost = 210, cd = 6, ranged = true, weapon = "plain", read = "add" }, -- Aimed Shot
+			[20903] = { is = "ability", lvl = 52, key = "aimedshot", cost = 260, cd = 6, ranged = true, weapon = "plain", read = "add" }, -- Aimed Shot
+			[20904] = { is = "ability", lvl = 60, key = "aimedshot", cost = 310, cd = 6, ranged = true, weapon = "plain", read = "add" }, -- Aimed Shot
+			[3044] = { is = "ability", lvl = 6, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[14281] = { is = "ability", lvl = 12, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[14282] = { is = "ability", lvl = 20, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[14283] = { is = "ability", lvl = 28, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[14284] = { is = "ability", lvl = 36, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[14285] = { is = "ability", lvl = 44, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[14286] = { is = "ability", lvl = 52, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[14287] = { is = "ability", lvl = 60, key = "arcaneshot", cd = 6, spell = 7, ranged = true, read = "hit" }, -- Arcane Shot
+			[2643] = { is = "ability", lvl = 18, key = "multishot", cd = 6, aoe = true, ranged = true, weapon = "plain", read = "cap" }, -- Multi-Shot
+			[1978] = { is = "ability", lvl = 4, key = "serpentsting", cost = 15, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[13549] = { is = "ability", lvl = 10, key = "serpentsting", cost = 30, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[13550] = { is = "ability", lvl = 18, key = "serpentsting", cost = 50, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[13551] = { is = "ability", lvl = 26, key = "serpentsting", cost = 80, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[13552] = { is = "ability", lvl = 34, key = "serpentsting", cost = 115, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[13553] = { is = "ability", lvl = 42, key = "serpentsting", cost = 150, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[13554] = { is = "ability", lvl = 50, key = "serpentsting", cost = 190, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[13555] = { is = "ability", lvl = 58, key = "serpentsting", cost = 230, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[25295] = { is = "ability", lvl = 60, key = "serpentsting", cost = 250, spell = 4, secs = 15, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425728] = { is = "ability", lvl = 4, key = "serpentsting", spell = 4, dshare = 0.32, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425729] = { is = "ability", lvl = 10, key = "serpentsting", spell = 4, dshare = 0.5, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425730] = { is = "ability", lvl = 18, key = "serpentsting", spell = 4, dshare = 0.74, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425732] = { is = "ability", lvl = 26, key = "serpentsting", spell = 4, dshare = 0.8, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425733] = { is = "ability", lvl = 34, key = "serpentsting", spell = 4, dshare = 0.8, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425734] = { is = "ability", lvl = 42, key = "serpentsting", spell = 4, dshare = 0.8, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425735] = { is = "ability", lvl = 50, key = "serpentsting", spell = 4, dshare = 0.8, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425736] = { is = "ability", lvl = 58, key = "serpentsting", spell = 4, dshare = 0.8, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[425737] = { is = "ability", lvl = 60, key = "serpentsting", spell = 4, dshare = 0.8, secs = 12, lasts = true, ranged = true, read = "dot -" }, -- Serpent Sting
+			[1310687] = { is = "ability", lvl = 40, key = "snipershot", cost = 365, cd = 15, ranged = true, weapon = "plain", read = "add - - -" }, -- Sniper Shot
+			[1310785] = { is = "ability", lvl = 48, key = "snipershot", cost = 365, cd = 15, ranged = true, weapon = "plain", read = "add - - -" }, -- Sniper Shot
+			[1310786] = { is = "ability", lvl = 58, key = "snipershot", cost = 365, cd = 15, ranged = true, weapon = "plain", read = "add - - -" }, -- Sniper Shot
+			[1510] = { is = "ability", lvl = 40, key = "volley", cost = 350, spell = 7, secs = 6, aoe = true, channel = true, ranged = true, read = "tick - - -" }, -- Volley
+			[14294] = { is = "ability", lvl = 50, key = "volley", cost = 420, spell = 7, secs = 6, aoe = true, channel = true, ranged = true, read = "tick - - -" }, -- Volley
+			[14295] = { is = "ability", lvl = 58, key = "volley", cost = 490, spell = 7, secs = 6, aoe = true, channel = true, ranged = true, read = "tick - - -" }, -- Volley
+		},
 	},
 	-- a passive's id -> what it does to the crits of which abilities
 	talents = {
@@ -331,6 +372,9 @@ BT.Upgrades.SpellData = {
 			[14079] = { crit = 45, nth = 1, of = "improvedambush", keys = { ambush = true } }, -- Improved Ambush
 			[14128] = { more = 6, nth = 1, of = "lethality", keys = { backstab = true, ghostlystrike = true, hemorrhage = true, sinisterstrike = true } }, -- Lethality
 			[1224716] = { crit = 30, nth = 1, of = "puncturingwounds", keys = { backstab = true } }, -- Puncturing Wounds
+		},
+		HUNTER = {
+			[19485] = { more = 30, nth = 1, of = "mortalshots", keys = { aimedshot = true, arcaneshot = true, multishot = true, serpentsting = true, snipershot = true, volley = true } }, -- Mortal Shots
 		},
 	},
 	-- aura id -> the stats it raises, by percent (MOD_TOTAL_STAT_PERCENTAGE)

@@ -49,6 +49,7 @@ M.AP_PER_DPS = 14
 -- (gametables/combatratings.txt). A set bonus or a "Use:" that gives it
 -- comes from the tables as UPGRADES_DEFENSE.
 M.PER_DEFENSE = 0.04
+M.RANGED_POWER_PER = { agility = 2 }
 -- THE REST OF WHAT AN ITEM CAN HAVE (Josh 2026-11-17, of the stats that
 -- counted for nothing: "We should consider resists in the tanking stats so
 -- they aren't completely ignored. Attack power vs type should be divided by
@@ -199,6 +200,40 @@ function M.Swap(now, rates, worn, new, weapons)
 	local perHit = ap / M.AP_PER_DPS * now.weaponSpeed
 	after.damageMin = now.damageMin + perHit
 	after.damageMax = now.damageMax + perHit
+
+	-- 5b. A RANGED WEAPON'S DAMAGE FOLLOWS RANGED ATTACK POWER (the hunter).
+	-- The game has no call for what a stat gives of it, so the original
+	-- game's rule is used: 2 for a point of agility (M.RANGED_POWER_PER).
+	-- Attack power on a piece counts for both kinds. Ranged crit and hit
+	-- move as melee's do. `rangedBase`: the weapon's own speed, which is
+	-- what attack power is counted by; `rangedSpeed` is with a quiver's
+	-- haste in it.
+	local rap = get("ITEM_MOD_ATTACK_POWER_SHORT") + get("ITEM_MOD_RANGED_ATTACK_POWER_SHORT")
+	for stat, per in pairs(rates.rangedPowerPer or M.RANGED_POWER_PER) do
+		rap = rap + (gained[stat] or 0) * per
+	end
+	if now.rangedSpeed then
+		local base = now.rangedBase or now.rangedSpeed
+		after.rangedPower = (now.rangedPower or 0) + rap
+		after.rangedMin = now.rangedMin + rap / M.AP_PER_DPS * base
+		after.rangedMax = now.rangedMax + rap / M.AP_PER_DPS * base
+		after.rangedCrit = (now.rangedCrit or now.crit) + (after.crit - now.crit)
+		after.rangedHit = (now.rangedHit or now.hit or 0) + (after.hit - (now.hit or 0))
+		-- a new ranged weapon: what each second of the worn one's speed had
+		-- beyond the weapon's own (attack power and ammunition) is kept
+		local was, will = weapons and weapons.worn, weapons and weapons.new
+		if will and weapons.ranged then
+			local restMin = was and (now.rangedMin - was.min) / was.speed or (now.rangedPower or 0) / M.AP_PER_DPS
+			local restMax = was and (now.rangedMax - was.max) / was.speed or (now.rangedPower or 0) / M.AP_PER_DPS
+			after.rangedMin = will.min + (restMin + rap / M.AP_PER_DPS) * will.speed
+			after.rangedMax = will.max + (restMax + rap / M.AP_PER_DPS) * will.speed
+			after.rangedSpeed = now.rangedSpeed * will.speed / base
+			after.rangedBase = will.speed
+		end
+	end
+	if weapons and weapons.ranged then
+		return after, d
+	end
 
 	-- 6. a new weapon. What is left of today's damage once the worn weapon
 	-- and attack power's share are taken out (nothing, as a rule) is kept.

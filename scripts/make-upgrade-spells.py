@@ -180,8 +180,26 @@ MODEL = {
                     {"finisher": True, "energy": True, "bleed": True}),
         "Slice and Dice": ("ability", ["pct", "t1", "t2", "t3", "t4", "t5"], {"finisher": True, "energy": True, "speed": True}),
     },
+    # THE HUNTER (Josh 2026-11-18: "Commit and work on hunter"). The same sum,
+    # with mana, and its shots in place of swings. More facts:
+    #   ranged  the class fights with a ranged weapon: its Auto Shot is what
+    #           swings are to the others, and a shot's weapon damage is the
+    #           ranged weapon's
+    #   lasts   it is damage over time and nothing else: once each time it
+    #           runs out (Serpent Sting)
+    # A shot that is magic (Arcane Shot) lands and crits as a shot does.
+    # Left out: its melee (Raptor Strike, Mongoose Bite), traps, Black Arrow,
+    # Chimera Shot, Carve, Flanking Strike, Kill Command and Rapid Fire.
+    "HUNTER": {
+        "Aimed Shot": ("ability", ["add"], {"weapon": "plain", "ranged": True}),
+        "Sniper Shot": ("ability", ["add", "-"], {"weapon": "plain", "ranged": True}),
+        "Arcane Shot": ("ability", ["hit"], {"magic": True, "ranged": True}),
+        "Multi-Shot": ("ability", ["cap"], {"weapon": "plain", "aoe": True, "ranged": True}),
+        "Serpent Sting": ("ability", ["dot"], {"magic": True, "lasts": True, "ranged": True}),
+        "Volley": ("ability", ["tick"], {"magic": True, "aoe": True, "channel": True, "ranged": True}),
+    },
 }
-CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1, "MAGE": 128, "ROGUE": 8}
+CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1, "MAGE": 128, "ROGUE": 8, "HUNTER": 4}
 
 # a school's place in the game's list of spell power (GetSpellBonusDamage)
 SCHOOL_AT = {2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
@@ -213,7 +231,7 @@ def magic_bits(spell):
             over += direct_share(int(e["EffectTriggerSpell"])) * ticks
         elif e["EffectAura"] == "226":
             # (each tick is a spell its words name: Blizzard, Flamestrike)
-            ref = re.search(r"\$(\d+)[mM]1", templates.get(spell, ""))
+            ref = re.search(r"\$(\d+)[mMsS]1", templates.get(spell, ""))
             if ref:
                 over += direct_share(int(ref.group(1))) * ticks
     if direct_share(spell) > 0:
@@ -277,7 +295,7 @@ def plan(spell, keys, literal=None):
                 continue
             # (what a spell says outright: its amounts, its total over time,
             # how many it reaches. Anything else is a number of no use here.)
-            if kind not in "sSmMoOiI":
+            if kind not in "sSmMoOiIxX":
                 out.append("-")
                 continue
             ref = int(m.group("spell") or spell)

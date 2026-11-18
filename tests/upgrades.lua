@@ -692,6 +692,73 @@ do
 	check("Lethality is a rogue's, on what builds points", t[14128].more == 6 and t[14128].keys.sinisterstrike and t[14128].keys.backstab)
 end
 
+print("shots and a pet: the hunter")
+do
+	-- (Josh 2026-11-18: "Commit and work on hunter")
+	local h = data.spells.HUNTER
+	check("Aimed Shot is a shot with the ranged weapon", h[20904].ranged == true and h[20904].weapon == "plain" and h[20904].cd == 6)
+	check("Arcane Shot is magic", h[14287].spell == 7)
+	check("Serpent Sting is damage over time and nothing else", h[425737].lasts == true and h[425737].secs == 12)
+	local multi = Rd.Planned(h[2643].read, "Fires several missiles, hitting 3 targets. Multi-Shot shares its cooldown with Aimed Shot.")
+	check("Multi-Shot says how many it hits", multi and multi.cap == 3)
+	local archer = {
+		level = 60, attackPower = 300, armor = 2000, crit = 5, health = 3000, mana = 3000, manaPer5 = 0, damageMin = 100, damageMax = 150,
+		weaponSpeed = 3, haste = 0, dodge = 10, parry = 5, block = 0, blockValue = 0, hit = 0, spellHit = 0, spellCrit = 5, healing = 0,
+		spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }, strength = 50, agility = 200, stamina = 100, intellect = 80, spirit = 60,
+		rangedMin = 200, rangedMax = 300, rangedSpeed = 2.5, rangedBase = 2.9, rangedPower = 700, rangedCrit = 20, rangedHit = 0,
+	}
+	local function with(change)
+		local t = {}
+		for k, v in pairs(archer) do t[k] = v end
+		t.spellDamage = { [2] = 0, [4] = 0, [7] = 0 }
+		change(t)
+		return t
+	end
+	local function kit(more)
+		local a = {}
+		for k, v in pairs(more or {}) do a[k] = v end
+		return { ranged = true, mana = true, heals = {}, seals = {}, at = { spell = 0, healing = 0 }, abilities = a }
+	end
+	local through = 1 - R.ArmorCut(R.EnemyArmor(60), 60)
+	local auto = R.Damage(archer, kit(), { long = true })
+	near("Auto Shot is the ranged weapon's, and none is dodged", auto, 250 * 1.2 * through * 0.95 / 2.5)
+	near("the melee weapon is not in it", R.Damage(with(function(t) t.damageMin, t.damageMax = 300, 400 end), kit(), { long = true }), auto)
+	local pet = with(function(t) t.petDps = 40 end)
+	near("the pet does its own, through armor", R.Damage(pet, kit(), { long = true }), auto + 40 * through)
+	local aimed = kit({ aimedshot = { v = { add = 350 }, cost = 310, cooldown = 6, cast = 2, weapon = "plain" } })
+	-- mana is what runs out: 3000 over three minutes, in shots of 310
+	near("a shot is the ranged weapon's damage and what it adds", R.Damage(archer, aimed, { long = true }) - auto,
+		3000 / 180 / 310 * (250 + 350) * 1.2 * through * 0.95)
+	local arcane = kit({ arcaneshot = { v = { hit = 280 }, cost = 300, cooldown = 6, spell = 7 } })
+	near("a magic shot crits as a shot does, and armor takes none", R.Damage(archer, arcane, { long = true }) - auto,
+		3000 / 180 / 300 * 280 * 1.2 * 0.95)
+	local sting = kit({ serpentsting = { v = { dot = 600 }, cost = 1, spell = 4, secs = 12, lasts = true } })
+	near("Serpent Sting once each time it runs out", R.Damage(archer, sting, { long = true }) - auto, 600 / 12 * 0.95)
+	local multi4 = kit({ multishot = { v = { cap = 3 }, cost = 1, cooldown = 6, weapon = "plain", aoe = true } })
+	near("Multi-Shot reaches as many as it says",
+		R.Damage(archer, multi4, { long = true, enemies = 4 }) - R.Damage(archer, kit(), { long = true, enemies = 4 }),
+		250 * 3 * 1.2 * through * 0.95 / 6)
+	-- the swap math
+	local rates = { attackPowerPer = { strength = 1, agility = 1 }, critPerAgility = 0.02, critPerRating = 1 / 14, hitPerRating = 0.1 }
+	local agile = M.Swap(archer, rates, nil, { ITEM_MOD_AGILITY_SHORT = 10 })
+	near("agility is ranged attack power, 2 a point", agile.rangedPower, 720)
+	near("which is damage by the weapon's own speed", agile.rangedMin, 200 + 20 / 14 * 2.9)
+	near("and ranged crit, as melee's", agile.rangedCrit, 20.2)
+	local powered = M.Swap(archer, rates, nil, { ITEM_MOD_RANGED_ATTACK_POWER_SHORT = 28 })
+	near("ranged attack power on a piece", powered.rangedMax, 300 + 2 * 2.9)
+	near("is none for melee", powered.damageMax, 150)
+	local bow = M.Swap(archer, rates, nil, nil, { worn = { min = 50, max = 100, speed = 2.9 }, new = { min = 80, max = 140, speed = 2.0 }, ranged = true })
+	-- what the worn one had beyond the weapon's own, a second of its speed, is kept
+	near("a new ranged weapon: its damage, and yours by its speed", bow.rangedMin, 80 + (200 - 50) / 2.9 * 2.0)
+	near("its speed, with the quiver's haste kept", bow.rangedSpeed, 2.5 * 2.0 / 2.9)
+	near("and the melee weapon is left alone", bow.damageMin, 100)
+	check("a faster bow of less damage is less a shot, more shots", bow.rangedMax < archer.rangedMax and bow.rangedSpeed < archer.rangedSpeed)
+	local plain = M.Swap(worn, rates, nil, { ITEM_MOD_AGILITY_SHORT = 10 })
+	check("a class with no ranged weapon has none after", plain.rangedMin == nil and plain.rangedPower == nil)
+	check("Mortal Shots is a hunter's, on its shots", data.talents.HUNTER[19485].more == 30 and data.talents.HUNTER[19485].keys.aimedshot)
+	near("its healer number has nothing to stand on", R.Healing(archer, kit()), 0)
+end
+
 print("an item's other effects")
 do
 	check("a trinket's Use, as stats for the time it is up", type(data.uses) == "table" and next(data.uses) ~= nil)

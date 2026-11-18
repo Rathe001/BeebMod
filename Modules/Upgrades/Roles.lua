@@ -364,6 +364,16 @@ R.EVEN_SPEED = { twoHand = 3.3, oneHand = 2.4, dagger = 1.7 }
 -- An ability that needs you behind the enemy is left out of a fight alone,
 -- where the enemy faces you. One that needs stealth is used once a fight.
 -- Not counted: poisons, and a point a talent gives on a crit.
+-- THE HUNTER (Josh 2026-11-18: "Commit and work on hunter"). The same sum,
+-- with mana as a caster has it. Its Auto Shot is what swings are to the
+-- others: the ranged weapon's damage, speed, crit and hit, as the game
+-- shows them. A shot's weapon damage is the ranged weapon's. No shot is
+-- dodged or parried. A shot that is magic (Arcane Shot) lands and crits as
+-- a shot does, and armor takes none of it.
+-- THE PET is counted as it is, from its own sheet, and no gear of yours
+-- moves it. It is there so a change is a share of all your damage.
+-- Not counted: a cast shot holding back the Auto Shot, and the hunter's
+-- melee.
 R.ENERGY = 10
 R.ENERGY_GLOBAL = 1
 R.DUAL_MISS = 19
@@ -449,6 +459,16 @@ local function abilities(s, kit, how, seconds)
 	if s.proc then
 		white = white + s.proc.damage * s.proc.perMinute / 60 * (s.proc.magic and 1 or through)
 	end
+	-- a ranged class: its shots in place of all of that, and its pet
+	if kit.ranged then
+		local speed = s.rangedSpeed or 0
+		average = ((s.rangedMin or 0) + (s.rangedMax or 0)) / 2
+		crit = (s.rangedCrit or s.crit) / 100
+		hit = 1 - math.max(0, 5 - (s.rangedHit or s.hit)) / 100
+		swings = speed > 0 and hit / speed or 0
+		landed = average * (1 + R.MELEE_CRIT * crit) * through
+		white = landed * swings + (s.petDps or 0) * through
+	end
 	-- the weapon as an ability evens it out
 	local own = average - s.attackPower / 14 * s.weaponSpeed
 	local even = own + s.attackPower / 14
@@ -481,6 +501,8 @@ local function abilities(s, kit, how, seconds)
 	end
 	if kit.caster then
 		white = 0
+	end
+	if kit.caster or kit.mana then
 		rage = s.mana / seconds + s.manaPer5 / 5
 		local evo = kit.evocation
 		if evo and seconds >= R.EVOCATION_FROM and (evo.secs or 0) > 0 then
@@ -519,13 +541,22 @@ local function abilities(s, kit, how, seconds)
 				local secs = a.secs or 0
 				takes = a.channel and secs > 0 and secs or math.max(R.GLOBAL, a.cast or 0)
 				local every = math.max(a.cooldown or 0, takes)
+				-- (damage over time and nothing else: once each time it runs out)
+				if a.lasts and secs > 0 then
+					every = math.max(every, secs)
+				end
+				-- (a shot: it lands and crits as a shot does)
+				local chance, adds, land = schoolCrit(a), R.SPELL_CRIT, lands
+				if kit.ranged then
+					chance, adds, land = crit, R.MELEE_CRIT, hit
+				end
 				local direct = (v.hit or 0) + (a.share or 0) * more
 				local over = (v.dot or 0) + (v.tick or 0) * secs + (a.dshare or 0) * more
 				if a.over and secs > 0 then
 					over = over * math.min(1, every / secs)
 				end
 				local reach = a.aoe and math.min(enemies, v.cap or enemies) or 1
-				gain = (math.max(0, direct) * crits(a, R.SPELL_CRIT, schoolCrit(a)) + math.max(0, over)) * lands * reach
+				gain = (math.max(0, direct) * crits(a, adds, chance) + math.max(0, over)) * land * reach
 				most = 1 / every
 			elseif a.swing then
 				-- with your next swing, in place of it: what it adds, and the

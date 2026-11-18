@@ -189,6 +189,36 @@ function Rd.State()
 		-- (a dagger: some of a rogue's abilities need one)
 		s.dagger = Rd.Dagger(main)
 	end
+	-- A RANGED WEAPON, as the game shows it: its speed with a quiver's haste
+	-- in, its damage with attack power and ammunition in. And the weapon's
+	-- own speed from its tooltip, which is what attack power is counted by.
+	do
+		local speed, low, high = UnitRangedDamage("player")
+		if num(speed) and speed > 0 and num(low) and num(high) then
+			s.rangedSpeed, s.rangedMin, s.rangedMax = speed, low, high
+			local rBase, rUp, rDown = UnitRangedAttackPower("player")
+			s.rangedPower = (num(rBase) or 0) + (num(rUp) or 0) + (num(rDown) or 0)
+			s.rangedCrit = num(GetRangedCritChance and GetRangedCritChance()) or s.crit
+			s.rangedHit = (num(GetHitModifier and GetHitModifier()) or 0) + (num(GetCombatRatingBonus(CR_HIT_RANGED or 7)) or 0)
+			local own = Rd.Weapon(GetInventoryItemLink("player", 18))
+			s.rangedBase = own and own.speed or speed
+		end
+	end
+	-- A PET: what its sheet says it does a second. Kept from when it was
+	-- last out, so a dismissed pet does not change every number.
+	do
+		local db = UP.DB()
+		if UnitExists and UnitExists("pet") then
+			local low, high = UnitDamage("pet")
+			local speed = UnitAttackSpeed("pet")
+			if num(low) and num(high) and num(speed) and speed > 0 then
+				db.pet = { level = s.level, dps = (low + high) / 2 / speed }
+			end
+		end
+		if type(db.pet) == "table" and db.pet.level == s.level then
+			s.petDps = db.pet.dps
+		end
+	end
 	-- A WEAPON IN THE OFF HAND: its swings as the game shows them, which is
 	-- with the off hand's cut taken. Kept with the attack power they were
 	-- read at, so a change in it can move them (Roles.lua).
@@ -524,12 +554,16 @@ local ROLES = {
 			cast = cast / 1000 }
 		for _, fact in ipairs({ "swing", "also", "weapon", "aoe", "dot", "secs", "after", "tank", "shield", "blockvalue",
 			"part", "twohand", "threat", "tmult", "spell", "spell2", "share", "dshare", "over", "channel",
-			"points", "finisher", "dagger", "behind", "opener", "bleed", "speed" }) do
+			"points", "finisher", "dagger", "behind", "opener", "bleed", "speed", "lasts" }) do
 			a[fact] = entry[fact]
 		end
 		-- (energy: it comes at a set rate, Roles.lua)
 		if entry.energy then
 			kit.energy = true
+		end
+		-- (a ranged class: its shots for swings, and mana)
+		if entry.ranged then
+			kit.ranged, kit.mana = true, true
 		end
 		-- (a spell: the class is priced as a caster, by mana and casting time)
 		if entry.spell then
@@ -1151,7 +1185,13 @@ function Rd.Swaps(link)
 				local kind = where(with)
 				swap.off = (kind == "INVTYPE_WEAPON" or kind == "INVTYPE_WEAPONOFFHAND") and Rd.Weapon(with) or false
 			end
-			if slot == 16 then
+			if slot == 18 then
+				-- a ranged weapon: its own damage and speed (Math.lua, 5b)
+				local new = Rd.Weapon(link)
+				if new then
+					swap.weapons = { worn = Rd.Weapon(worn), new = new, ranged = true }
+				end
+			elseif slot == 16 then
 				local new = Rd.Weapon(link)
 				if not new then
 					ok = false
