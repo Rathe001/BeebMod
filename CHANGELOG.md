@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.16.1
 
 - **The game's list of stat changes is back.** 1.16.0 hid it on the
   Equipped tooltip where the role numbers show. It is under an "If
