@@ -256,6 +256,28 @@ local function showClient()
 	end
 end
 
+-- LOOKED FOR AFTER LOGIN, NOT ONLY AT A QUEST EVENT (Josh 2026-11-18, his
+-- screenshot of Questie's list over the dock after a /reload in Ironforge:
+-- "Questie is conflicting with the dock"). Questie builds its tracker some
+-- seconds after login. Ours looked for it each time the list was rebuilt,
+-- which is at a quest event, and standing in a city none comes. So it is
+-- looked for once a second for the first minute (M.Watch). One already
+-- found and showing again is put away too. Returns how many it put away.
+M.LOOK_SECONDS = 60
+function M.LookForOthers()
+	if not BT.Enabled("tracker") then
+		return 0
+	end
+	local n = 0
+	for _, f in ipairs(M.OtherFrames()) do
+		if not hooked[f] or (f.IsShown and f:IsShown() and not faded[f]) then
+			hideOne(f, true)
+			n = n + 1
+		end
+	end
+	return n
+end
+
 -- what a fight held back, done when it ends: the client's tracker hidden
 -- while ours is on, and shown while it is not
 local function settleClient()
@@ -1457,6 +1479,10 @@ function M.Watch()
 		return
 	end
 	M.events = CreateFrame("Frame")
+	-- another addon's tracker, built after login (M.LookForOthers)
+	if C_Timer and C_Timer.NewTicker then
+		C_Timer.NewTicker(1, M.LookForOthers, M.LOOK_SECONDS)
+	end
 	-- (not the loading screen: OnBind draws the list on every one already -
 	-- Josh 2026-09-30, review)
 	-- SUPER_TRACKING_CHANGED (2026-10-17, audit): a quest picked to follow on

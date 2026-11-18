@@ -20258,6 +20258,25 @@ if ok then
 			BT.SetEnabled("tracker", true)
 			_G.Questie_BaseFrame = nil
 			assert(not otf:IsShown(), "(the client's is hidden again)")
+			-- AND WITH NO QUEST EVENT (Josh 2026-11-18: "Questie is conflicting
+			-- with the dock"): built after a /reload in a city, it is found by
+			-- the look that runs after login
+			do
+				local late = _G.CreateFrame("Frame", "Questie_BaseFrame")
+				_G.Questie_BaseFrame = late
+				late:Show()
+				assert(mod.LookForOthers() == 1 and not late:IsShown(), "Questie's tracker is put away with no quest event")
+				assert(mod.LookForOthers() == 0, "and is not touched again while it stays away")
+				late:Show()
+				assert(mod.LookForOthers() == 1 and not late:IsShown(), "one showing again is put away again")
+				BT.SetEnabled("tracker", false)
+				late:Hide()
+				late:Show()
+				assert(mod.LookForOthers() == 0 and late:IsShown(), "ours off, it is left alone")
+				BT.SetEnabled("tracker", true)
+				late:Hide()
+				_G.Questie_BaseFrame = nil
+			end
 
 			-- ONE COLUMN: the level and the counts read at the start of the
 			-- line, not down a column of their own on the right
