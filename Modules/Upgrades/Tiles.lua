@@ -355,6 +355,20 @@ function T.Dump()
 		end
 		out.classes[class] = words
 	end
+	-- (and the crit talents' own words, which say their amounts)
+	out.talents = {}
+	for class, list in pairs(type(data.talents) == "table" and data.talents or {}) do
+		local words = {}
+		for id in pairs(list) do
+			local ok, text = pcall(C_Spell.GetSpellDescription, id)
+			if ok and type(text) == "string" and text ~= "" and not (issecretvalue and issecretvalue(text)) then
+				words[id] = text
+			elseif C_Spell.RequestLoadSpellData then
+				pcall(C_Spell.RequestLoadSpellData, id)
+			end
+		end
+		out.talents[class] = words
+	end
 	BeebModDB = BeebModDB or {}
 	BeebModDB.upgradesDump = out
 	return out.spells

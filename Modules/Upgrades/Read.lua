@@ -85,6 +85,10 @@ end
 
 -- your totals as you stand; nil if the game keeps any of them back
 function Rd.State()
+	-- (a client without the call has nothing to read)
+	if not UnitStat then
+		return nil
+	end
 	local s = { level = UnitLevel("player") }
 	for i, name in ipairs(STATS) do
 		local _, effective = UnitStat("player", i)
@@ -146,6 +150,11 @@ function Rd.State()
 	s.skillShort = Rd.SkillShort(s.level)
 	s.crit = s.crit + s.skillShort * Rd.CRIT_PER_SKILL
 	s.spellCrit = num(GetSpellCritChance(2)) or 0
+	-- (and each school's own, for a caster's spells)
+	s.spellCrits = {}
+	for school = 2, 7 do
+		s.spellCrits[school] = num(GetSpellCritChance(school)) or s.spellCrit
+	end
 	s.hit = (num(GetHitModifier and GetHitModifier()) or 0) + (num(GetCombatRatingBonus(HIT_MELEE)) or 0)
 	s.spellHit = (num(GetSpellHitModifier and GetSpellHitModifier()) or 0) + (num(GetCombatRatingBonus(HIT_SPELL)) or 0)
 	s.dodge = num(GetDodgeChance()) or 0
@@ -500,10 +509,20 @@ local ROLES = {
 		local a = { v = v, cost = paid > 0 and paid or entry.cost or 0, cooldown = cooldown(id) or entry.cd or 0,
 			cast = cast / 1000 }
 		for _, fact in ipairs({ "swing", "also", "weapon", "aoe", "dot", "secs", "after", "tank", "shield", "blockvalue",
-			"part", "twohand", "threat", "tmult" }) do
+			"part", "twohand", "threat", "tmult", "spell", "spell2", "share", "dshare", "over", "channel" }) do
 			a[fact] = entry[fact]
 		end
+		-- (a spell: the class is priced as a caster, by mana and casting time)
+		if entry.spell then
+			kit.caster = true
+		end
 		kit.abilities[entry.key or id] = a
+	end,
+	-- mana given back by a spell of your own (Evocation)
+	mana = function(kit, _, v, entry)
+		if v.pct then
+			kit.evocation = { pct = v.pct, secs = entry.secs, every = entry.cd }
+		end
 	end,
 	-- what gives the class's resource outright (Charge, Bloodrage)
 	rage = function(kit, _, v, entry)
@@ -628,10 +647,52 @@ function Rd.HealShare(entry, amount, healing, level)
 	local own = entry.base + (entry.per or 0) * grown
 	return math.max(0, math.min(share, (amount - own) / healing))
 end
+-- CRIT TALENTS (Josh 2026-11-18: "Let's do the crit"). Each passive in the
+-- tables' list that you know puts what it does on the abilities it touches
+-- (Roles.lua, what crits add). Its amount is the number its description
+-- says now, where that can be read, since your points in a talent change
+-- it; the table's otherwise. Two ranks of one talent: the higher counts.
+-- `known(id)`, `describe(id)`: the game's calls, handed in so this is plain.
+local TALENT = { crit = "critAdd", more = "critMore", after = "critAfter" }
+function Rd.Talents(kit, list, known, describe)
+	if not (kit.abilities and type(list) == "table") then
+		return
+	end
+	local best = {}
+	for id, t in pairs(list) do
+		if known(id) then
+			for what, field in pairs(TALENT) do
+				if t[what] then
+					local said = t.nth and t.nth > 0 and describe and Rd.Numbers(describe(id) or "")[t.nth]
+					local amount = said and said > 0 and said <= 300 and said or t[what]
+					local slot = (t.of or id) .. field
+					if not best[slot] or amount > best[slot].amount then
+						best[slot] = { amount = amount, field = field, keys = t.keys }
+					end
+				end
+			end
+		end
+	end
+	for _, one in pairs(best) do
+		for key in pairs(one.keys) do
+			local a = kit.abilities[key]
+			if a then
+				a[one.field] = (a[one.field] or 0) + one.amount
+			end
+		end
+	end
+end
 -- `kit.unread`: the ids of spells the model prices whose descriptions did
 -- not have the numbers the list says (see LIMIT, above).
 function Rd.Kit(s)
-	local kit = { seals = {}, heals = {}, at = { spell = s.spellDamage[2], healing = s.healing } }
+	-- (`at.spells`: your spell power in every school as the descriptions
+	-- were read, for a caster's spells)
+	local spells = {}
+	for school, amount in pairs(s.spellDamage) do
+		spells[school] = amount
+	end
+	local kit = { seals = {}, heals = {}, at = { spell = s.spellDamage[2], healing = s.healing, spells = spells,
+		crits = s.spellCrits, crit = s.spellCrit } }
 	local heals = {}
 	eachPriced(function(id, item, entry)
 		if not entry or item.isPassive then
@@ -675,6 +736,12 @@ function Rd.Kit(s)
 		end
 	end
 	kit.heals = heals
+	local data = UP.SpellData
+	local _, class = UnitClass("player")
+	Rd.Talents(kit, type(data) == "table" and type(data.talents) == "table" and data.talents[class] or nil, function(id)
+		local ok, known = pcall(IsPlayerSpell or IsSpellKnown, id)
+		return ok and known == true
+	end, words)
 	return kit
 end
 

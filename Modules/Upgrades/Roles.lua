@@ -341,6 +341,7 @@ end
 -- attack power at a set speed, 3.3 for a two-hander and 2.4 for a one-hand
 -- weapon (the original game's).
 R.RAGE = { hit = 7.5, taken = 2.5 }
+R.RAGE_TAKEN = 0.6
 function R.RageFactor(level)
 	return 0.0091107836 * level * level + 3.225598133 * level + 4.2652911
 end
@@ -349,6 +350,41 @@ R.EVEN_SPEED = { twoHand = 3.3, oneHand = 2.4 }
 -- (a tank's stance: every point of threat counts this much. It moves no
 -- comparison; it is here so the number is the game's.)
 R.STANCE_THREAT = 1.3
+
+-- A CASTER (Josh 2026-11-17: "We could do mage next ... I'd rather use
+-- numbers from the game data"). The same sum, with three things changed.
+-- Mana is what is spent: the mana you start with, over the fight, and what
+-- comes back while you cast. Time is spent by casting: a spell takes its
+-- cast time, a channelled one as long as it lasts, and never less than the
+-- 1.5 seconds between spells. There are no swings: a wand is not counted.
+-- A spell's damage is what its description says now, moved by its share of
+-- any spell power gained or lost since (the tables' share). Its hit can
+-- crit and what it does over time cannot. Damage over time that trails a
+-- hit (Fireball's burn) starts over when the spell is cast again, so only
+-- the part that runs before the next cast is counted.
+-- The spells are tried in two orders, the most damage for its mana first
+-- and the most for its time first, and the better sum is kept. A short
+-- fight is short of time and a long one of mana.
+-- EVOCATION is used once in a fight of a minute or more (R.EVOCATION_FROM,
+-- an estimate; its cooldown is longer than any fight here). It gives the
+-- mana its words say, your spirit's regeneration raised by its percent for
+-- as long as it lasts, and that time is not spent casting.
+R.EVOCATION_FROM = 60
+
+-- WHAT CRITS ADD TO AN ABILITY (Josh 2026-11-18, of talents: "Let's do the
+-- crit"). A crit adds a set part of the hit, as much again for a swing and
+-- half for a spell. A talent can change that for some abilities, and the
+-- game's totals do not show it, so Read.lua puts it on each ability from
+-- the tables' list (SpellData.talents):
+--   critAdd    percent more chance to crit (Critical Mass)
+--   critMore   percent more of what a crit adds (Ice Shards, Impale)
+--   critAfter  percent of a crit's whole damage dealt again (Ignite)
+-- Returns what the ability's damage is multiplied by, crits counted.
+local function crits(a, adds, chance)
+	chance = clamp(chance + (a.critAdd or 0) / 100, 0, 1)
+	local each = (1 + adds * (1 + (a.critMore or 0) / 100)) * (1 + (a.critAfter or 0) / 100) - 1
+	return 1 + each * chance
+end
 
 local function abilities(s, kit, how, seconds)
 	how = how or {}
@@ -364,7 +400,7 @@ local function abilities(s, kit, how, seconds)
 	local through = 1 - R.ArmorCut(R.EnemyArmor(s.level), s.level)
 	local swing = s.weaponSpeed / (1 + s.haste / 100)
 	local average = (s.damageMin + s.damageMax) / 2
-	local swings = hit / swing
+	local swings = swing > 0 and hit / swing or 0
 	-- one swing that lands
 	local landed = average * (1 + R.MELEE_CRIT * crit) * through
 	local white = landed * swings
@@ -378,21 +414,49 @@ local function abilities(s, kit, how, seconds)
 	-- what the fight gives a second: rage from the hits landed and taken,
 	-- and from what gives it outright
 	local per = R.RageFactor(s.level)
-	local cut = R.ArmorCut(s.armor, s.level)
-	local avoided = clamp((s.dodge + s.parry + R.ENEMY_MISS) / 100, 0, 0.9)
+	-- What gets through to you is a set part of the enemy's damage, the same
+	-- whatever you wear (R.RAGE_TAKEN, an estimate). Your own armor and
+	-- avoidance are left out on purpose. With them in, every piece of armor
+	-- took a little rage away and showed as a DPS loss (Josh 2026-11-18, a
+	-- shield on a level 1 warrior at -0.1%: "everything should be a gain").
 	local hurt = 0
 	if how.threat then
-		hurt = R.EnemyHit(s.level) / R.ENEMY_SWING * (1 - cut) * (1 - avoided)
+		hurt = R.EnemyHit(s.level) / R.ENEMY_SWING * R.RAGE_TAKEN
 	elseif seconds < R.FIGHT_SECONDS then
 		-- (each of the enemies you fight alone is hitting you)
-		hurt = R.ENEMY_DPS[math.max(1, math.min(#R.ENEMY_DPS, math.floor(s.level)))] * (1 - cut) * (1 - avoided) * enemies
+		hurt = R.ENEMY_DPS[math.max(1, math.min(#R.ENEMY_DPS, math.floor(s.level)))] * R.RAGE_TAKEN * enemies
 	end
+	local free = 1
 	local rage = white * R.RAGE.hit / per + hurt * R.RAGE.taken / per
 	for _, r in pairs(kit.rage or {}) do
 		local times = r.every and math.max(1, seconds / r.every) or 1
 		rage = rage + (r.amount or 0) * times / seconds
 	end
-	local time = 1
+	if kit.caster then
+		white = 0
+		rage = s.mana / seconds + s.manaPer5 / 5
+		local evo = kit.evocation
+		if evo and seconds >= R.EVOCATION_FROM and (evo.secs or 0) > 0 then
+			rage = rage + (s.spiritRegen or 0) * (1 + (evo.pct or 0) / 100) * evo.secs / seconds
+			free = 1 - evo.secs / seconds
+		end
+	end
+	local lands = 1 - math.max(1, 4 - (s.spellHit or 0)) / 100
+	local spellCrit = (s.spellCrit or 0) / 100
+	local was = kit.at and kit.at.spells
+	local function power(from, a)
+		return math.max(from[a.spell] or 0, a.spell2 and from[a.spell2] or 0)
+	end
+	-- (a school's own crit, where it is above the one the state carries:
+	-- as much above it now as when the spells were read)
+	local critsWere, critWas = kit.at and kit.at.crits, kit.at and kit.at.crit
+	local function schoolCrit(a)
+		if not (critsWere and critWas) then
+			return spellCrit
+		end
+		local own = math.max(critsWere[a.spell] or critWas, a.spell2 and critsWere[a.spell2] or critWas)
+		return spellCrit + (own - critWas) / 100
+	end
 
 	local list = {}
 	for _, a in pairs(kit.abilities or {}) do
@@ -400,12 +464,25 @@ local function abilities(s, kit, how, seconds)
 		local usable = not (a.tank and not how.threat) and not (a.shield and not s.shield) and not (a.twohand and not s.twoHand)
 		if usable then
 			local gain, cost, most, takes = 0, a.cost or 0, 0, 0
-			if a.swing then
+			if a.spell then
+				local more = was and power(s.spellDamage, a) - power(was, a) or 0
+				local secs = a.secs or 0
+				takes = a.channel and secs > 0 and secs or math.max(R.GLOBAL, a.cast or 0)
+				local every = math.max(a.cooldown or 0, takes)
+				local direct = (v.hit or 0) + (a.share or 0) * more
+				local over = (v.dot or 0) + (v.tick or 0) * secs + (a.dshare or 0) * more
+				if a.over and secs > 0 then
+					over = over * math.min(1, every / secs)
+				end
+				local reach = a.aoe and math.min(enemies, v.cap or enemies) or 1
+				gain = (math.max(0, direct) * crits(a, R.SPELL_CRIT, schoolCrit(a)) + math.max(0, over)) * lands * reach
+				most = 1 / every
+			elseif a.swing then
 				-- with your next swing, in place of it: what it adds, and the
 				-- rage the plain swing would have given is lost
-				gain = (v.add or 0) * (1 + R.MELEE_CRIT * crit) * through
+				gain = (v.add or 0) * crits(a, R.MELEE_CRIT, crit) * through
 				if a.also and enemies >= 2 then
-					gain = gain + (average + (v.add or 0)) * (1 + R.MELEE_CRIT * crit) * through
+					gain = gain + (average + (v.add or 0)) * crits(a, R.MELEE_CRIT, crit) * through
 				end
 				cost = cost + landed * R.RAGE.hit / per
 				most = swings
@@ -420,7 +497,7 @@ local function abilities(s, kit, how, seconds)
 					+ (v.add or 0) + (v.hit or 0) + (v.appct or 0) / 100 * s.attackPower
 					+ (a.blockvalue and (s.blockValue or 0) or 0)
 				local reach = a.aoe and math.min(enemies, v.cap or enemies) or 1
-				gain = amount * (1 + R.MELEE_CRIT * crit) * through * hit * reach
+				gain = amount * crits(a, R.MELEE_CRIT, crit) * through * hit * reach
 				takes = math.max(R.GLOBAL, a.cast or 0)
 				most = 1 / math.max(a.cooldown or 0, takes)
 				if a.after == "dodge" then
@@ -442,27 +519,39 @@ local function abilities(s, kit, how, seconds)
 			end
 		end
 	end
-	-- the most for its rage first; one that costs none before any
-	table.sort(list, function(a, b)
-		local ea, eb = a.cost > 0 and a.gain / a.cost or math.huge, b.cost > 0 and b.gain / b.cost or math.huge
-		if ea ~= eb then
-			return ea > eb
+	local function spend()
+		local sum, left, time = white, rage, free
+		for _, a in ipairs(list) do
+			local uses = a.most
+			if a.cost > 0 then
+				uses = math.min(uses, left / a.cost)
+			end
+			if a.takes > 0 then
+				uses = math.min(uses, time / a.takes)
+			end
+			uses = math.max(0, uses)
+			sum = sum + uses * a.gain
+			left = left - uses * a.cost
+			time = time - uses * a.takes
 		end
-		return a.gain > b.gain
-	end)
-	local sum = white
-	for _, a in ipairs(list) do
-		local uses = a.most
-		if a.cost > 0 then
-			uses = math.min(uses, rage / a.cost)
-		end
-		if a.takes > 0 then
-			uses = math.min(uses, time / a.takes)
-		end
-		uses = math.max(0, uses)
-		sum = sum + uses * a.gain
-		rage = rage - uses * a.cost
-		time = time - uses * a.takes
+		return sum
+	end
+	local function order(by)
+		table.sort(list, function(a, b)
+			local ea, eb = a[by] > 0 and a.gain / a[by] or math.huge, b[by] > 0 and b.gain / b[by] or math.huge
+			if ea ~= eb then
+				return ea > eb
+			end
+			return a.gain > b.gain
+		end)
+	end
+	-- the most for its rage or mana first; one that costs none before any
+	order("cost")
+	local sum = spend()
+	if kit.caster then
+		-- and the most for its time first: the better of the two
+		order("takes")
+		sum = math.max(sum, spend())
 	end
 	if how.threat then
 		sum = sum * R.STANCE_THREAT
@@ -504,7 +593,7 @@ local function damage(s, kit, how, crusader, seconds)
 	local through = 1 - R.ArmorCut(R.EnemyArmor(s.level), s.level)
 	local swing = s.weaponSpeed / (1 + s.haste / 100)
 	local average = (s.damageMin + s.damageMax) / 2
-	local swings = hit / swing
+	local swings = swing > 0 and hit / swing or 0
 
 	-- white hits cost nothing
 	local white = average * (1 + R.MELEE_CRIT * crit) * hit * through / swing

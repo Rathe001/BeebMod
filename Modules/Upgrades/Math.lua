@@ -177,12 +177,13 @@ function M.Swap(now, rates, worn, new, weapons)
 	after.healing = now.healing + both + get("ITEM_MOD_SPELL_HEALING_DONE_SHORT")
 	local rating = get("ITEM_MOD_CRIT_RATING_SHORT") * (rates.critPerRating or 0)
 	after.crit = after.crit + rating
-	after.spellCrit = after.spellCrit + rating
+	-- (and the kind that is for spells only)
+	after.spellCrit = after.spellCrit + rating + get("ITEM_MOD_CRIT_SPELL_RATING_SHORT") * (rates.critPerRating or 0)
 	after.manaPer5 = now.manaPer5 + get("ITEM_MOD_MANA_REGENERATION_SHORT")
 	after.healthPer5 = (now.healthPer5 or 0) + get("ITEM_MOD_HEALTH_REGEN_SHORT")
 	local hit = get("ITEM_MOD_HIT_RATING_SHORT") * (rates.hitPerRating or 0)
 	after.hit = (now.hit or 0) + hit
-	after.spellHit = (now.spellHit or 0) + hit
+	after.spellHit = (now.spellHit or 0) + hit + get("ITEM_MOD_HIT_SPELL_RATING_SHORT") * (rates.hitPerRating or 0)
 	after.dodge = after.dodge + get("ITEM_MOD_DODGE_RATING_SHORT") * (rates.dodgePerRating or 0)
 	after.parry = (now.parry or 0) + get("ITEM_MOD_PARRY_RATING_SHORT") * (rates.parryPerRating or 0)
 	after.haste = (now.haste or 0) + get("ITEM_MOD_HASTE_RATING_SHORT") * (rates.hastePerRating or 0)

@@ -489,7 +489,125 @@ do
 	for k, v in pairs(fighter) do stronger[k] = v end
 	stronger.attackPower, stronger.damageMin, stronger.damageMax = 440, 150 + 40 / 14 * 3.4, 220 + 40 / 14 * 3.4
 	check("attack power is worth damage", R.Damage(stronger, moves) > d)
+	-- (Josh 2026-11-18, a shield at -0.1% DPS: "everything should be a gain")
+	local armored = {}
+	for k, v in pairs(fighter) do armored[k] = v end
+	armored.armor, armored.dodge, armored.parry = fighter.armor + 500, fighter.dodge + 3, fighter.parry + 3
+	near("armor and avoidance take no damage away", R.Damage(armored, moves), d)
+	check("nor threat", math.abs(R.Threat(armored, moves) - threat) < 0.001)
 	near("four enemies, where no ability says more", R.AoeEnemies(moves), 4)
+end
+
+print("a caster priced by the same sum: the mage")
+do
+	-- (Josh 2026-11-17: "We could do mage next - i do have one of those, but
+	-- I'd rather use numbers from the game data")
+	local m = data.spells.MAGE
+	local ball = m[25306]
+	check("Fireball is known by its id, as a Fire spell", ball and ball.is == "ability" and ball.spell == 3 and ball.over == true)
+	near("its share of spell power is the table's", ball.share, 1)
+	local read = Rd.Planned(ball.read, "Hurls a fiery ball that causes 596 to 760 Fire damage and an additional 76 Fire damage over 8 sec.")
+	near("its hit is the middle of what it says", read.hit or 0, 678)
+	near("and its burn", read.dot or 0, 76)
+	near("Arcane Missiles' share is every missile's", m[10212].dshare, 1.43)
+	check("and it is channelled for as long as it lasts", m[10212].channel == true and m[10212].secs == 5)
+	near("Blizzard's share is every second's", m[10187].dshare, 0.336)
+	check("Frostfire Bolt has two schools", m[1237313].spell == 3 and m[1237313].spell2 == 5)
+	check("Evocation is mana given back", m[12051].is == "mana" and m[12051].secs == 8)
+	local caster = {
+		level = 60, attackPower = 20, armor = 800, crit = 3, health = 2500, mana = 4000, manaPer5 = 10, spiritRegen = 15,
+		damageMin = 20, damageMax = 30, weaponSpeed = 0, haste = 0, dodge = 4, parry = 0, block = 0, blockValue = 0, hit = 0,
+		spellHit = 0, spellCrit = 8, healing = 0, spellDamage = { [2] = 100, [3] = 100, [4] = 100, [5] = 100, [6] = 100, [7] = 100 },
+	}
+	local function with(change)
+		local t = {}
+		for k, v in pairs(caster) do t[k] = v end
+		t.spellDamage = {}
+		for k, v in pairs(caster.spellDamage) do t.spellDamage[k] = v end
+		change(t)
+		return t
+	end
+	local spells = { caster = true, heals = {}, seals = {}, at = { spell = 100, healing = 0, spells = { [3] = 100, [5] = 100, [7] = 100 } },
+		abilities = {
+			fireball = { v = { hit = 700, dot = 80 }, cost = 400, cast = 3.5, spell = 3, share = 1, secs = 8, over = true },
+			fireblast = { v = { hit = 480 }, cost = 340, cooldown = 8, spell = 3, share = 0.429 },
+			explosion = { v = { hit = 250 }, cost = 390, spell = 7, share = 0.143, aoe = true },
+		} }
+	local long = R.Damage(caster, spells, { long = true })
+	check(("a fight with no weapon to swing still has a number: %.1f"):format(long), long == long and long > 0)
+	-- mana is what runs out over three minutes: 4000 + 2 a second, in Fireballs
+	near("a long fight is short of mana", long, (4000 / 180 + 2) / 400 * (700 * (1 + 0.5 * 0.08) + 80 * 3.5 / 8) * 0.96)
+	local short = with(function(t) t.level = 30 end)
+	local quick, _, _, seconds = R.Damage(short, spells)
+	check("a fight below the top level is short", seconds < 60)
+	check(("and is short of time, so it does far more: %.1f"):format(quick), quick > long * 2)
+	check("spell power in a spell's school is worth damage",
+		R.Damage(with(function(t) t.spellDamage[3] = 150 end), spells, { long = true }) > long)
+	near("and in another school is worth nothing to it",
+		R.Damage(with(function(t) t.spellDamage[5] = 150 end), spells, { long = true }), long)
+	check("spell crit is worth damage", R.Damage(with(function(t) t.spellCrit = 12 end), spells, { long = true }) > long)
+	check("spell hit is worth damage", R.Damage(with(function(t) t.spellHit = 2 end), spells, { long = true }) > long)
+	check("mana is worth damage where it runs out", R.Damage(with(function(t) t.mana = 4500 end), spells, { long = true }) > long)
+	near("attack power is worth nothing", R.Damage(with(function(t) t.attackPower = 200 end), spells, { long = true }), long)
+	local four = R.Damage(short, spells, { enemies = 4 })
+	check(("more enemies, more damage, by what reaches them: %.1f against %.1f"):format(four, quick), four > quick)
+	spells.evocation = { pct = 1500, secs = 8 }
+	check("Evocation gives a long fight more mana", R.Damage(caster, spells, { long = true }) > long)
+	near("and a short one nothing", R.Damage(short, spells), quick)
+	near("its healer number has nothing to stand on", R.Healing(caster, spells), 0)
+	local after = M.Swap(worn, { critPerRating = 1 / 14, hitPerRating = 0.1 }, nil,
+		{ ITEM_MOD_CRIT_SPELL_RATING_SHORT = 14, ITEM_MOD_HIT_SPELL_RATING_SHORT = 10 })
+	near("spell crit rating is spell crit", after.spellCrit, worn.spellCrit + 1)
+	near("and not melee crit", after.crit, worn.crit)
+	near("spell hit rating is spell hit", after.spellHit, (worn.spellHit or 0) + 1)
+end
+
+print("crit talents")
+do
+	-- (Josh 2026-11-18: "Let's do the crit")
+	local t = data.talents
+	check("Critical Mass is a mage's, on its Fire spells", t.MAGE[11115].crit == 2 and t.MAGE[11115].keys.fireball
+		and not t.MAGE[11115].keys.frostbolt)
+	check("Ice Shards is on its Frost spells", t.MAGE[11207].more == 100 and t.MAGE[11207].keys.frostbolt
+		and not t.MAGE[11207].keys.fireball)
+	check("Ignite follows a Fire crit", t.MAGE[11119].after == 40 and t.MAGE[11119].keys.scorch)
+	check("Arcane Mind's amount is its description's second number", t.MAGE[11232].nth == 2)
+	check("Impale is a warrior's, on its abilities", t.WARRIOR[16493].more == 10 and t.WARRIOR[16493].keys.mortalstrike)
+	local function kit()
+		return { caster = true, heals = {}, seals = {}, at = { spell = 0, healing = 0 }, abilities = {
+			fireball = { v = { hit = 100 }, cost = 10, cast = 3, spell = 3 },
+			frostbolt = { v = { hit = 100 }, cost = 10, cast = 3, spell = 5 },
+		} }
+	end
+	local words = { [11115] = "Increases the critical strike chance of your Fire spells by 6%." }
+	local function describe(id) return words[id] end
+	local with = kit()
+	Rd.Talents(with, t.MAGE, function(id) return id == 11115 or id == 11207 or id == 11119 end, describe)
+	near("a talent's amount is what its words say now", with.abilities.fireball.critAdd, 6)
+	near("or the table's, where they say nothing", with.abilities.frostbolt.critMore, 100)
+	near("Ignite is on the Fire spell", with.abilities.fireball.critAfter, 40)
+	check("and not the Frost one", with.abilities.frostbolt.critAfter == nil and with.abilities.frostbolt.critAdd == nil)
+	local none = kit()
+	Rd.Talents(none, t.MAGE, function() return false end, describe)
+	check("a talent you do not have does nothing", none.abilities.fireball.critAdd == nil)
+	local both = { abilities = { overpower = { v = {} } } }
+	Rd.Talents(both, t.WARRIOR, function(id) return id == 12290 or id == 12963 end, describe)
+	near("of two ranks the higher counts", both.abilities.overpower.critAdd, 50)
+	-- in the sum: one Fireball every 3 s, 10% crit, 96% to land
+	local s = { level = 60, attackPower = 0, armor = 0, crit = 0, health = 1, mana = 100000, manaPer5 = 0, damageMin = 0, damageMax = 0,
+		weaponSpeed = 0, haste = 0, dodge = 0, parry = 0, hit = 0, spellHit = 0, spellCrit = 10, healing = 0,
+		spellDamage = { [3] = 0, [5] = 0 } }
+	local fire = kit()
+	fire.abilities.frostbolt = nil
+	near("a spell crit adds half", R.Damage(s, fire, { long = true }), 100 * 1.05 * 0.96 / 3)
+	fire.abilities.fireball.critAdd, fire.abilities.fireball.critAfter = 6, 40
+	near("more chance, and Ignite on each crit", R.Damage(s, fire, { long = true }), 100 * (1 + (1.5 * 1.4 - 1) * 0.16) * 0.96 / 3)
+	local frost = kit()
+	frost.abilities.fireball = nil
+	frost.abilities.frostbolt.critMore = 100
+	near("Ice Shards makes a crit double", R.Damage(s, frost, { long = true }), 100 * 1.1 * 0.96 / 3)
+	frost.at.crits, frost.at.crit = { [5] = 14 }, 10
+	near("a school's own crit is counted", R.Damage(s, frost, { long = true }), 100 * 1.14 * 0.96 / 3)
 end
 
 print("an item's other effects")

@@ -1,4 +1,4 @@
--- Made by scripts/make-upgrade-spells.py on 2026-11-17 from the game's tables
+-- Made by scripts/make-upgrade-spells.py on 2026-11-18 from the game's tables
 -- (wago.tools, product wowf). Do not edit by hand: run the script again.
 local _, BT = ...
 BT.Upgrades = BT.Upgrades or {}
@@ -150,6 +150,132 @@ BT.Upgrades.SpellData = {
 			[11580] = { is = "ability", lvl = 48, key = "thunderclap", cost = 20, cd = 6, aoe = true, read = "- - hit cap" }, -- Thunder Clap
 			[11581] = { is = "ability", lvl = 58, key = "thunderclap", cost = 20, cd = 6, aoe = true, read = "- - hit cap" }, -- Thunder Clap
 			[1680] = { is = "ability", lvl = 36, key = "whirlwind", cost = 25, cd = 10, aoe = true, weapon = "norm", read = "cap -" }, -- Whirlwind
+		},
+		MAGE = {
+			[400574] = { is = "ability", lvl = 20, key = "arcaneblast", spell = 7, share = 0.429, read = "hit hit - - - -" }, -- Arcane Blast
+			[1239696] = { is = "ability", lvl = 30, key = "arcaneblast", spell = 7, share = 0.429, read = "hit hit - - - -" }, -- Arcane Blast
+			[1239697] = { is = "ability", lvl = 40, key = "arcaneblast", spell = 7, share = 0.429, read = "hit hit - - - -" }, -- Arcane Blast
+			[1239699] = { is = "ability", lvl = 50, key = "arcaneblast", spell = 7, share = 0.429, read = "hit hit - - - -" }, -- Arcane Blast
+			[1239700] = { is = "ability", lvl = 60, key = "arcaneblast", spell = 7, share = 0.429, read = "hit hit - - - -" }, -- Arcane Blast
+			[1449] = { is = "ability", lvl = 14, key = "arcaneexplosion", cost = 75, spell = 7, share = 0.143, aoe = true, read = "hit hit -" }, -- Arcane Explosion
+			[8437] = { is = "ability", lvl = 22, key = "arcaneexplosion", cost = 120, spell = 7, share = 0.143, aoe = true, read = "hit hit -" }, -- Arcane Explosion
+			[8438] = { is = "ability", lvl = 30, key = "arcaneexplosion", cost = 185, spell = 7, share = 0.143, aoe = true, read = "hit hit -" }, -- Arcane Explosion
+			[8439] = { is = "ability", lvl = 38, key = "arcaneexplosion", cost = 250, spell = 7, share = 0.143, aoe = true, read = "hit hit -" }, -- Arcane Explosion
+			[10201] = { is = "ability", lvl = 46, key = "arcaneexplosion", cost = 315, spell = 7, share = 0.143, aoe = true, read = "hit hit -" }, -- Arcane Explosion
+			[10202] = { is = "ability", lvl = 54, key = "arcaneexplosion", cost = 390, spell = 7, share = 0.143, aoe = true, read = "hit hit -" }, -- Arcane Explosion
+			[5143] = { is = "ability", lvl = 8, key = "arcanemissiles", cost = 85, spell = 7, dshare = 0.858, secs = 3, channel = true, read = "tick -" }, -- Arcane Missiles
+			[5144] = { is = "ability", lvl = 16, key = "arcanemissiles", cost = 140, spell = 7, dshare = 1.144, secs = 4, channel = true, read = "tick -" }, -- Arcane Missiles
+			[5145] = { is = "ability", lvl = 24, key = "arcanemissiles", cost = 235, spell = 7, dshare = 1.43, secs = 5, channel = true, read = "tick -" }, -- Arcane Missiles
+			[8416] = { is = "ability", lvl = 32, key = "arcanemissiles", cost = 320, spell = 7, dshare = 1.43, secs = 5, channel = true, read = "tick -" }, -- Arcane Missiles
+			[8417] = { is = "ability", lvl = 40, key = "arcanemissiles", cost = 410, spell = 7, dshare = 1.43, secs = 5, channel = true, read = "tick -" }, -- Arcane Missiles
+			[10211] = { is = "ability", lvl = 48, key = "arcanemissiles", cost = 500, spell = 7, dshare = 1.43, secs = 5, channel = true, read = "tick -" }, -- Arcane Missiles
+			[10212] = { is = "ability", lvl = 56, key = "arcanemissiles", cost = 595, spell = 7, dshare = 1.43, secs = 5, channel = true, read = "tick -" }, -- Arcane Missiles
+			[25345] = { is = "ability", lvl = 56, key = "arcanemissiles", cost = 655, spell = 7, dshare = 1.43, secs = 5, channel = true, read = "tick -" }, -- Arcane Missiles
+			[11113] = { is = "ability", lvl = 30, key = "blastwave", cost = 215, cd = 45, spell = 3, share = 0.129, secs = 6, aoe = true, read = "hit hit - -" }, -- Blast Wave
+			[13018] = { is = "ability", lvl = 36, key = "blastwave", cost = 270, cd = 45, spell = 3, share = 0.129, secs = 6, aoe = true, read = "hit hit - -" }, -- Blast Wave
+			[13019] = { is = "ability", lvl = 44, key = "blastwave", cost = 355, cd = 45, spell = 3, share = 0.129, secs = 6, aoe = true, read = "hit hit - -" }, -- Blast Wave
+			[13020] = { is = "ability", lvl = 52, key = "blastwave", cost = 450, cd = 45, spell = 3, share = 0.129, secs = 6, aoe = true, read = "hit hit - -" }, -- Blast Wave
+			[13021] = { is = "ability", lvl = 60, key = "blastwave", cost = 545, cd = 45, spell = 3, share = 0.129, secs = 6, aoe = true, read = "hit hit - -" }, -- Blast Wave
+			[10] = { is = "ability", lvl = 20, key = "blizzard", cost = 320, spell = 5, dshare = 0.336, secs = 8, aoe = true, channel = true, read = "dot -" }, -- Blizzard
+			[6141] = { is = "ability", lvl = 28, key = "blizzard", cost = 520, spell = 5, dshare = 0.336, secs = 8, aoe = true, channel = true, read = "dot -" }, -- Blizzard
+			[8427] = { is = "ability", lvl = 36, key = "blizzard", cost = 720, spell = 5, dshare = 0.336, secs = 8, aoe = true, channel = true, read = "dot -" }, -- Blizzard
+			[10185] = { is = "ability", lvl = 44, key = "blizzard", cost = 935, spell = 5, dshare = 0.336, secs = 8, aoe = true, channel = true, read = "dot -" }, -- Blizzard
+			[10186] = { is = "ability", lvl = 52, key = "blizzard", cost = 1160, spell = 5, dshare = 0.336, secs = 8, aoe = true, channel = true, read = "dot -" }, -- Blizzard
+			[10187] = { is = "ability", lvl = 60, key = "blizzard", cost = 1400, spell = 5, dshare = 0.336, secs = 8, aoe = true, channel = true, read = "dot -" }, -- Blizzard
+			[120] = { is = "ability", lvl = 26, key = "coneofcold", cost = 210, cd = 10, spell = 5, share = 0.129, secs = 6, aoe = true, read = "hit hit - - - - -" }, -- Cone of Cold
+			[8492] = { is = "ability", lvl = 34, key = "coneofcold", cost = 290, cd = 10, spell = 5, share = 0.129, secs = 6, aoe = true, read = "hit hit - - - - -" }, -- Cone of Cold
+			[10159] = { is = "ability", lvl = 42, key = "coneofcold", cost = 380, cd = 10, spell = 5, share = 0.129, secs = 6, aoe = true, read = "hit hit - - - - -" }, -- Cone of Cold
+			[10160] = { is = "ability", lvl = 50, key = "coneofcold", cost = 465, cd = 10, spell = 5, share = 0.129, secs = 6, aoe = true, read = "hit hit - - - - -" }, -- Cone of Cold
+			[10161] = { is = "ability", lvl = 58, key = "coneofcold", cost = 555, cd = 10, spell = 5, share = 0.129, secs = 6, aoe = true, read = "hit hit - - - - -" }, -- Cone of Cold
+			[12051] = { is = "mana", lvl = 20, secs = 8, key = "evocation", cd = 480, threat = 20, tmult = 0, read = "pct -" }, -- Evocation
+			[2136] = { is = "ability", lvl = 6, key = "fireblast", cost = 40, cd = 8, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[2137] = { is = "ability", lvl = 14, key = "fireblast", cost = 75, cd = 8, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[2138] = { is = "ability", lvl = 22, key = "fireblast", cost = 115, cd = 8, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[8412] = { is = "ability", lvl = 30, key = "fireblast", cost = 165, cd = 8, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[8413] = { is = "ability", lvl = 38, key = "fireblast", cost = 220, cd = 8, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[10197] = { is = "ability", lvl = 46, key = "fireblast", cost = 280, cd = 8, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[10199] = { is = "ability", lvl = 54, key = "fireblast", cost = 340, cd = 8, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[400616] = { is = "ability", lvl = 22, key = "fireblast", cost = 115, cd = 15, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[400618] = { is = "ability", lvl = 6, key = "fireblast", cost = 40, cd = 15, spell = 3, share = 0.204, read = "hit hit" }, -- Fire Blast
+			[400619] = { is = "ability", lvl = 14, key = "fireblast", cost = 75, cd = 15, spell = 3, share = 0.332, read = "hit hit" }, -- Fire Blast
+			[400620] = { is = "ability", lvl = 30, key = "fireblast", cost = 165, cd = 15, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[400621] = { is = "ability", lvl = 38, key = "fireblast", cost = 220, cd = 15, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[400622] = { is = "ability", lvl = 46, key = "fireblast", cost = 280, cd = 15, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[400623] = { is = "ability", lvl = 54, key = "fireblast", cost = 340, cd = 15, spell = 3, share = 0.429, read = "hit hit" }, -- Fire Blast
+			[133] = { is = "ability", lvl = 1, key = "fireball", cost = 30, spell = 3, share = 0.429, secs = 4, over = true, read = "hit hit dot -" }, -- Fireball
+			[143] = { is = "ability", lvl = 6, key = "fireball", cost = 45, spell = 3, share = 0.571, secs = 6, over = true, read = "hit hit dot -" }, -- Fireball
+			[145] = { is = "ability", lvl = 12, key = "fireball", cost = 65, spell = 3, share = 0.714, secs = 6, over = true, read = "hit hit dot -" }, -- Fireball
+			[3140] = { is = "ability", lvl = 18, key = "fireball", cost = 95, spell = 3, share = 0.857, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[8400] = { is = "ability", lvl = 24, key = "fireball", cost = 140, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[8401] = { is = "ability", lvl = 30, key = "fireball", cost = 185, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[8402] = { is = "ability", lvl = 36, key = "fireball", cost = 220, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[10148] = { is = "ability", lvl = 42, key = "fireball", cost = 260, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[10149] = { is = "ability", lvl = 48, key = "fireball", cost = 305, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[10150] = { is = "ability", lvl = 54, key = "fireball", cost = 350, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[10151] = { is = "ability", lvl = 60, key = "fireball", cost = 395, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[25306] = { is = "ability", lvl = 60, key = "fireball", cost = 410, spell = 3, share = 1.0, secs = 8, over = true, read = "hit hit dot -" }, -- Fireball
+			[2120] = { is = "ability", lvl = 16, key = "flamestrike", cost = 195, spell = 3, share = 0.157, dshare = 0.128, secs = 8, aoe = true, over = true, read = "hit hit dot -" }, -- Flamestrike
+			[2121] = { is = "ability", lvl = 24, key = "flamestrike", cost = 330, spell = 3, share = 0.157, dshare = 0.128, secs = 8, aoe = true, over = true, read = "hit hit dot -" }, -- Flamestrike
+			[8422] = { is = "ability", lvl = 32, key = "flamestrike", cost = 490, spell = 3, share = 0.157, dshare = 0.128, secs = 8, aoe = true, over = true, read = "hit hit dot -" }, -- Flamestrike
+			[8423] = { is = "ability", lvl = 40, key = "flamestrike", cost = 650, spell = 3, share = 0.157, dshare = 0.128, secs = 8, aoe = true, over = true, read = "hit hit dot -" }, -- Flamestrike
+			[10215] = { is = "ability", lvl = 48, key = "flamestrike", cost = 815, spell = 3, share = 0.157, dshare = 0.128, secs = 8, aoe = true, over = true, read = "hit hit dot -" }, -- Flamestrike
+			[10216] = { is = "ability", lvl = 56, key = "flamestrike", cost = 990, spell = 3, share = 0.157, dshare = 0.128, secs = 8, aoe = true, over = true, read = "hit hit dot -" }, -- Flamestrike
+			[122] = { is = "ability", lvl = 10, key = "frostnova", cost = 55, cd = 25, spell = 5, share = 0.029, secs = 8, aoe = true, read = "hit hit -" }, -- Frost Nova
+			[865] = { is = "ability", lvl = 26, key = "frostnova", cost = 85, cd = 25, spell = 5, share = 0.029, secs = 8, aoe = true, read = "hit hit -" }, -- Frost Nova
+			[6131] = { is = "ability", lvl = 40, key = "frostnova", cost = 115, cd = 25, spell = 5, share = 0.029, secs = 8, aoe = true, read = "hit hit -" }, -- Frost Nova
+			[10230] = { is = "ability", lvl = 54, key = "frostnova", cost = 145, cd = 25, spell = 5, share = 0.029, secs = 8, aoe = true, read = "hit hit -" }, -- Frost Nova
+			[116] = { is = "ability", lvl = 4, key = "frostbolt", cost = 25, spell = 5, share = 0.407, secs = 5, read = "hit hit - -" }, -- Frostbolt
+			[205] = { is = "ability", lvl = 8, key = "frostbolt", cost = 35, spell = 5, share = 0.489, secs = 6, read = "hit hit - -" }, -- Frostbolt
+			[837] = { is = "ability", lvl = 14, key = "frostbolt", cost = 50, spell = 5, share = 0.597, secs = 6, read = "hit hit - -" }, -- Frostbolt
+			[7322] = { is = "ability", lvl = 20, key = "frostbolt", cost = 65, spell = 5, share = 0.706, secs = 7, read = "hit hit - -" }, -- Frostbolt
+			[8406] = { is = "ability", lvl = 26, key = "frostbolt", cost = 100, spell = 5, share = 0.814, secs = 7, read = "hit hit - -" }, -- Frostbolt
+			[8407] = { is = "ability", lvl = 32, key = "frostbolt", cost = 130, spell = 5, share = 0.814, secs = 8, read = "hit hit - -" }, -- Frostbolt
+			[8408] = { is = "ability", lvl = 38, key = "frostbolt", cost = 160, spell = 5, share = 0.814, secs = 8, read = "hit hit - -" }, -- Frostbolt
+			[10179] = { is = "ability", lvl = 44, key = "frostbolt", cost = 195, spell = 5, share = 0.814, secs = 9, read = "hit hit - -" }, -- Frostbolt
+			[10180] = { is = "ability", lvl = 50, key = "frostbolt", cost = 225, spell = 5, share = 0.814, secs = 9, read = "hit hit - -" }, -- Frostbolt
+			[10181] = { is = "ability", lvl = 56, key = "frostbolt", cost = 260, spell = 5, share = 0.814, secs = 9, read = "hit hit - -" }, -- Frostbolt
+			[25304] = { is = "ability", lvl = 60, key = "frostbolt", cost = 290, spell = 5, share = 0.814, secs = 9, read = "hit hit - -" }, -- Frostbolt
+			[401502] = { is = "ability", lvl = 40, key = "frostfirebolt", cost = 205, spell = 3, spell2 = 5, share = 0.814, secs = 9, over = true, read = "hit hit - dot -" }, -- Frostfire Bolt
+			[1237312] = { is = "ability", lvl = 50, key = "frostfirebolt", cost = 285, spell = 3, spell2 = 5, share = 0.814, secs = 9, over = true, read = "hit hit - dot -" }, -- Frostfire Bolt
+			[1237313] = { is = "ability", lvl = 60, key = "frostfirebolt", cost = 370, spell = 3, spell2 = 5, share = 0.814, secs = 9, over = true, read = "hit hit - dot -" }, -- Frostfire Bolt
+			[400640] = { is = "ability", lvl = 28, key = "icelance", cost = 55, cd = 8, spell = 5, read = "hit hit -" }, -- Ice Lance
+			[1240044] = { is = "ability", lvl = 34, key = "icelance", cost = 70, cd = 8, spell = 5, read = "hit hit -" }, -- Ice Lance
+			[1240045] = { is = "ability", lvl = 42, key = "icelance", cost = 105, cd = 8, spell = 5, read = "hit hit -" }, -- Ice Lance
+			[1240046] = { is = "ability", lvl = 48, key = "icelance", cost = 120, cd = 8, spell = 5, read = "hit hit -" }, -- Ice Lance
+			[1240047] = { is = "ability", lvl = 56, key = "icelance", cost = 160, cd = 8, spell = 5, read = "hit hit -" }, -- Ice Lance
+			[1312002] = { is = "ability", lvl = 20, key = "icelance", cost = 45, cd = 8, spell = 5, read = "hit hit -" }, -- Ice Lance
+			[11366] = { is = "ability", lvl = 20, key = "pyroblast", cost = 125, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[12505] = { is = "ability", lvl = 24, key = "pyroblast", cost = 150, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[12522] = { is = "ability", lvl = 30, key = "pyroblast", cost = 195, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[12523] = { is = "ability", lvl = 36, key = "pyroblast", cost = 240, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[12524] = { is = "ability", lvl = 42, key = "pyroblast", cost = 285, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[12525] = { is = "ability", lvl = 48, key = "pyroblast", cost = 335, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[12526] = { is = "ability", lvl = 54, key = "pyroblast", cost = 385, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[18809] = { is = "ability", lvl = 60, key = "pyroblast", cost = 440, spell = 3, share = 1.0, dshare = 0.6, secs = 12, over = true, read = "hit hit dot -" }, -- Pyroblast
+			[2948] = { is = "ability", lvl = 22, key = "scorch", cost = 50, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
+			[8444] = { is = "ability", lvl = 28, key = "scorch", cost = 65, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
+			[8445] = { is = "ability", lvl = 34, key = "scorch", cost = 80, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
+			[8446] = { is = "ability", lvl = 40, key = "scorch", cost = 100, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
+			[10205] = { is = "ability", lvl = 46, key = "scorch", cost = 115, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
+			[10206] = { is = "ability", lvl = 52, key = "scorch", cost = 135, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
+			[10207] = { is = "ability", lvl = 58, key = "scorch", cost = 150, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
+		},
+	},
+	-- a passive's id -> what it does to the crits of which abilities
+	talents = {
+		WARRIOR = {
+			[12290] = { crit = 25, nth = 1, of = "improvedoverpower", keys = { overpower = true } }, -- Improved Overpower
+			[12963] = { crit = 50, nth = 1, of = "improvedoverpower", keys = { overpower = true } }, -- Improved Overpower
+			[16493] = { more = 10, nth = 1, of = "impale", keys = { bloodthirst = true, cleave = true, execute = true, heroicstrike = true, mortalstrike = true, overpower = true, rend = true, revenge = true, shieldslam = true, slam = true, sunderarmor = true, thunderclap = true, whirlwind = true } }, -- Impale
+		},
+		MAGE = {
+			[11108] = { crit = 15, nth = 1, of = "improvedflamestrike", keys = { flamestrike = true } }, -- Improved Flamestrike
+			[11115] = { crit = 2, nth = 1, of = "criticalmass", keys = { blastwave = true, fireball = true, fireblast = true, flamestrike = true, frostfirebolt = true, pyroblast = true, scorch = true } }, -- Critical Mass
+			[11119] = { after = 40, nth = 1, of = "ignite", keys = { blastwave = true, fireball = true, fireblast = true, flamestrike = true, frostfirebolt = true, pyroblast = true, scorch = true } }, -- Ignite
+			[11207] = { more = 100, nth = 1, of = "iceshards", keys = { blizzard = true, coneofcold = true, frostbolt = true, frostfirebolt = true, frostnova = true, icelance = true } }, -- Ice Shards
+			[11232] = { more = 100, nth = 2, of = "arcanemind", keys = { arcaneblast = true, arcaneexplosion = true } }, -- Arcane Mind
+			[11242] = { crit = 6, nth = 1, of = "arcaneimpact", keys = { arcaneblast = true, arcaneexplosion = true } }, -- Arcane Impact
+			[18459] = { crit = 6, nth = 1, of = "incineration", keys = { arcaneblast = true, fireblast = true, icelance = true, scorch = true } }, -- Incineration
 		},
 	},
 	-- aura id -> the stats it raises, by percent (MOD_TOTAL_STAT_PERCENTAGE)

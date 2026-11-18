@@ -114,8 +114,82 @@ MODEL = {
         "Charge": ("rage", ["rage"], {}),
         "Bloodrage": ("rage", ["rage", "more"], {"every": 60}),
     },
+    # THE MAGE (Josh 2026-11-17: "We could do mage next - i do have one of
+    # those, but I'd rather use numbers from the game data"). The same sum
+    # prices it, with mana for rage and casting time for the time. A spell is
+    # an "ability" marked `magic`; its school, its shares of spell power and
+    # how long it lasts are taken from the tables. More facts:
+    #   over     the damage over time trails a hit, and casting it again
+    #            starts it over (Fireball's burn)
+    #   channel  it is cast for as long as it lasts
+    # Keys: hit (damage at once), dot (a total over time), tick (an amount
+    # each second for as long as it lasts), "-".
+    # Left out: spells whose cost is a percent of your mana and whose damage
+    # is worked out from your level (Arcane Barrage, Living Bomb, Balefire
+    # Bolt, Spellfrost Bolt, Frozen Orb, Living Flame, Arcane Surge).
+    "MAGE": {
+        "Fireball": ("ability", ["hit", "dot"], {"magic": True, "over": True}),
+        "Frostbolt": ("ability", ["hit", "hit", "-"], {"magic": True}),
+        "Frostfire Bolt": ("ability", ["hit", "-", "dot"], {"magic": True, "over": True}),
+        "Fire Blast": ("ability", ["hit"], {"magic": True}),
+        "Scorch": ("ability", ["hit"], {"magic": True}),
+        "Pyroblast": ("ability", ["hit", "dot"], {"magic": True, "over": True}),
+        "Arcane Missiles": ("ability", ["tick"], {"magic": True, "channel": True}),
+        "Arcane Blast": ("ability", ["hit", "-", "-"], {"magic": True}),
+        "Ice Lance": ("ability", ["hit", "-"], {"magic": True}),
+        "Arcane Explosion": ("ability", ["hit"], {"magic": True, "aoe": True}),
+        "Flamestrike": ("ability", ["hit", "dot"], {"magic": True, "aoe": True, "over": True}),
+        "Blizzard": ("ability", ["dot"], {"magic": True, "aoe": True, "channel": True}),
+        "Cone of Cold": ("ability", ["hit", "hit", "-", "-", "-", "-"], ["hit", "hit", "-"], {"magic": True, "aoe": True}),
+        "Blast Wave": ("ability", ["hit", "-"], {"magic": True, "aoe": True}),
+        "Frost Nova": ("ability", ["hit", "hit"], {"magic": True, "aoe": True}),
+        # mana given back: "your mana regeneration is active and increased
+        # by 1500%", for as long as it lasts
+        "Evocation": ("mana", ["pct"], {}),
+    },
 }
-CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1}
+CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1, "MAGE": 128}
+
+# a school's place in the game's list of spell power (GetSpellBonusDamage)
+SCHOOL_AT = {2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
+
+
+def direct_share(spell):
+    return max([float(e["EffectBonusCoefficient"]) for e in effects.get(spell, {}).values() if e["Effect"] == "2"] or [0.0])
+
+
+def magic_bits(spell):
+    """A spell's school, its two shares of spell power and how long it lasts."""
+    m = misc.get(spell)
+    mask = int(m["SchoolMask"]) if m else 0
+    at = [SCHOOL_AT[b] for b in sorted(SCHOOL_AT) if mask & b]
+    bits = ["spell = %d" % at[0]] if at else []
+    if len(at) > 1:
+        bits.append("spell2 = %d" % at[1])
+    secs = durations.get(int(m["DurationIndex"]), 0) / 1000 if m else 0
+    over = 0.0
+    for e in effects.get(spell, {}).values():
+        period = float(e["EffectAuraPeriod"]) / 1000
+        if e["Effect"] != "6" or period <= 0 or secs <= 0:
+            continue
+        ticks = round(secs / period)
+        if e["EffectAura"] == "3":
+            over += float(e["EffectBonusCoefficient"]) * ticks
+        elif e["EffectAura"] == "23" and int(e["EffectTriggerSpell"]) > 0:
+            # (each tick casts a spell: Arcane Missiles)
+            over += direct_share(int(e["EffectTriggerSpell"])) * ticks
+        elif e["EffectAura"] == "226":
+            # (each tick is a spell its words name: Blizzard, Flamestrike)
+            ref = re.search(r"\$(\d+)[mM]1", templates.get(spell, ""))
+            if ref:
+                over += direct_share(int(ref.group(1))) * ticks
+    if direct_share(spell) > 0:
+        bits.append("share = %s" % round(direct_share(spell), 4))
+    if over > 0:
+        bits.append("dshare = %s" % round(over, 4))
+    if secs > 0:
+        bits.append("secs = %g" % secs)
+    return bits
 
 # THREAT AN ABILITY ADDS OUTRIGHT, from the VMaNGOS world database's
 # spell_threat table (https://github.com/vmangos/core, GPL-2.0), where its
@@ -227,7 +301,7 @@ for cls, model in MODEL.items():
         # with the highest, whatever order the spellbook lists them in
         if spell in levels:
             bits.append("lvl = %d" % int(levels[spell]["SpellLevel"]))
-        if share(spell) > 0 and entry[0] not in ("ability", "rage"):
+        if share(spell) > 0 and entry[0] not in ("ability", "rage", "mana"):
             bits.append("share = %s" % share(spell))
         # a heal's own amount before any healing power, and the levels it
         # grows over: what is left of its description's amount is healing
@@ -239,7 +313,10 @@ for cls, model in MODEL.items():
                 bits.append("base = %g, per = %g, from = %d, to = %d" % (
                     float(heal[0]["EffectBasePointsF"]), float(heal[0]["EffectRealPointsPerLevel"]),
                     int(lv["BaseLevel"]), int(lv["MaxLevel"])))
-        if entry[0] in ("ability", "rage"):
+        if entry[0] == "mana":
+            m = misc.get(spell)
+            bits.append("secs = %g" % (durations.get(int(m["DurationIndex"]), 0) / 1000 if m else 0))
+        if entry[0] in ("ability", "rage", "mana"):
             # every rank of an ability under one name; its cost and cooldown
             # as the tables have them, for where the game will not say
             bits.append('key = "%s"' % re.sub(r"[^a-z]", "", names[spell].lower()))
@@ -254,10 +331,12 @@ for cls, model in MODEL.items():
             if rules.get("dot"):
                 m = misc.get(spell)
                 bits.append("secs = %g" % (durations.get(int(m["DurationIndex"]), 0) / 1000 if m else 0))
-            if spell in threat:
+            if spell in threat and not rules.get("magic"):
                 bits.append("threat = %g, tmult = %g" % threat[spell])
+            if rules.get("magic"):
+                bits += magic_bits(spell)
             for k, v in sorted(rules.items()):
-                if k == "nocd":
+                if k in ("nocd", "magic"):
                     continue
                 bits.append("%s = %s" % (k, "true" if v is True else ('"%s"' % v if isinstance(v, str) else "%g" % v)))
         bits.append('read = "%s"' % " ".join(read))
@@ -269,6 +348,81 @@ for cls, model in MODEL.items():
             problems += 1
             print("NOT PLANNED: no spell called %s fits the model" % name)
 out.append("\t},")
+
+# ------------------------------------------------------------ crit talents
+# (Josh 2026-11-18, asked whether talents are counted, then: "Let's do the
+# crit".) A passive that raises the crit chance of some spells (Critical
+# Mass) or the damage their crits add (Ice Shards, Impale) is in the tables
+# with the exact spells it touches: its effect has a mask, and each spell
+# says which bits of its class's mask it is. The game's own totals do not
+# show these, since they are not on you but on the spell. So each is listed
+# here with the abilities of the model it touches:
+#   crit   percent added to the spell's crit chance
+#   more   percent added to what a crit adds (100: a spell crit is double)
+#   after  percent of a crit's whole damage dealt again over time (Ignite,
+#          by name: the tables have it as an effect with no meaning of its
+#          own, so its spells are taken to be every Fire spell, as it says)
+#   of     the talent's name, where each rank is a spell of its own: the
+#          highest you know is the one counted
+options = {int(r["SpellID"]): r for r in rows("SpellClassOptions")}
+AFTER_CRIT = {"Ignite": 4}
+
+
+def bits_of(row, prefix):
+    return [int(row[prefix + str(i)]) & 0xFFFFFFFF for i in range(4)]
+
+
+out += ["\t-- a passive's id -> what it does to the crits of which abilities", "\ttalents = {"]
+talents = 0
+for cls, model in MODEL.items():
+    ids = set()
+    for line in class_lines.get(CLASS_MASK[cls], ()):
+        ids |= by_line.get(line, set())
+    priced = {i: re.sub(r"[^a-z]", "", names[i].lower()) for i in ids
+              if names.get(i) in model and model[names[i]][0] == "ability"}
+    found = []
+    # (the class's list has a talent's first rank only: the others are the
+    # spells of the same name)
+    called = {names.get(i) for i in ids}
+    ranks = ids | {i for i in effects if names.get(i) in called and misc.get(i) and int(misc[i]["Attributes_0"]) & 0x40}
+    for spell in sorted(ranks):
+        m = misc.get(spell)
+        if not m or not int(m["Attributes_0"]) & 0x40:
+            continue
+        for e in effects.get(spell, {}).values():
+            what, keys = None, set()
+            if e["EffectAura"] == "107" and e["EffectMiscValue_0"] == "7":
+                what = "crit"
+            elif e["EffectAura"] == "108" and e["EffectMiscValue_0"] == "15":
+                what = "more"
+            elif names.get(spell) in AFTER_CRIT and e["EffectIndex"] == "0":
+                what = "after"
+                keys = {k for i, k in priced.items() if misc.get(i) and int(misc[i]["SchoolMask"]) & AFTER_CRIT[names[spell]]}
+            if what in ("crit", "more"):
+                mask = bits_of(e, "EffectSpellClassMask_")
+                for i, k in priced.items():
+                    o = options.get(i)
+                    if o and any(a & b for a, b in zip(mask, bits_of(o, "SpellClassMask_"))):
+                        keys.add(k)
+            amount = float(e["EffectBasePointsF"])
+            if what and keys and amount > 0:
+                # which number of its description the amount is, so the game's
+                # own words can say it where your points in the talent change it
+                nth, at = 0, 0
+                for t in TOKEN.finditer(templates.get(spell, "")):
+                    at += 1
+                    if t.group("kind") and t.group("kind") in "sSmM" and not t.group("spell") \
+                            and int(t.group("index") or 1) - 1 == int(e["EffectIndex"]):
+                        nth = at
+                        break
+                found.append('\t\t\t[%d] = { %s = %g, nth = %d, of = "%s", keys = { %s } }, -- %s' % (
+                    spell, what, amount, nth, re.sub(r"[^a-z]", "", names[spell].lower()),
+                    ", ".join("%s = true" % k for k in sorted(keys)), names[spell]))
+    if found:
+        talents += len(found)
+        out += ["\t\t%s = {" % cls] + found + ["\t\t},"]
+out.append("\t},")
+print("%d crit talents" % talents)
 
 # ---------------------------------------------------------- stat percents
 STAT = {-1: "all", 0: "strength", 1: "agility", 2: "stamina", 3: "intellect", 4: "spirit"}
