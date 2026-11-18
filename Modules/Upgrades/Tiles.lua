@@ -128,6 +128,13 @@ function T.Compare(link)
 		if swap.twoHand ~= nil then
 			after.twoHand = swap.twoHand
 		end
+		if swap.dagger ~= nil then
+			after.dagger = swap.dagger
+		end
+		-- the off hand's swings after it (Roles.lua, the rogue)
+		if swap.off ~= nil then
+			R.OffHand(after, swap.off)
+		end
 		local worth = price(after, n.kit)
 		local change = {}
 		for key, was in pairs(before) do

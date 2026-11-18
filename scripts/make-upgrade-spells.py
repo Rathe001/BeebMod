@@ -50,7 +50,8 @@ for r in rows("SpellEffect"):
 misc = {int(r["SpellID"]): r for r in rows("SpellMisc")}
 durations = {int(r["ID"]): float(r["Duration"]) for r in rows("SpellDuration")}
 levels = {int(r["SpellID"]): r for r in rows("SpellLevels")}
-powers = {int(r["SpellID"]): r for r in rows("SpellPower")}
+# (a spell's first cost: a finishing move has a second row, for its combo points)
+powers = {int(r["SpellID"]): r for r in rows("SpellPower") if r["OrderIndex"] == "0"}
 cooldowns = {int(r["SpellID"]): r for r in rows("SpellCooldowns")}
 
 # ---------------------------------------------------------------- the model
@@ -147,8 +148,40 @@ MODEL = {
         # by 1500%", for as long as it lasts
         "Evocation": ("mana", ["pct"], {}),
     },
+    # THE ROGUE (Josh 2026-11-18: "Commit, then start on rogue"). The same sum,
+    # with energy for rage. More facts:
+    #   energy    the class spends energy, which comes at a set rate
+    #   points    it awards a combo point
+    #   finisher  it spends combo points: its numbers are one for each count
+    #             of points, p1 to p5 (damage), r1 to r5 with t1 to t5 (a
+    #             bleed's total and its seconds), or pct with t1 to t5 (attack
+    #             speed and its seconds: `speed`)
+    #   dagger    it needs a dagger in the main hand
+    #   behind    it needs you behind the enemy: not while you fight alone
+    #   opener    it needs stealth: once a fight
+    #   literal   a number its words say outright, by which one it is, where
+    #             the tables do not have it as a value ("plus 290")
+    # Keys: pct (a percent of weapon damage), pctdagger (the same with a
+    # dagger), add, dot, "-".
+    # Left out: poisons, Mutilate, Saber Slash, Shiv, Main Gauche, Between
+    # the Eyes, Riposte, Blade Flurry and Adrenaline Rush.
+    "ROGUE": {
+        "Sinister Strike": ("ability", ["add", "-"], {"weapon": "norm", "points": 1, "energy": True}),
+        "Backstab": ("ability", ["pct", "add", "-"],
+                     {"weapon": "norm", "points": 1, "energy": True, "dagger": True, "behind": True}),
+        "Ambush": ("ability", ["pct", "add", "-"], ["pct", "-"],
+                   {"weapon": "norm", "points": 1, "energy": True, "dagger": True, "opener": True, "literal": {1: "add"}}),
+        "Garrote": ("ability", ["dot", "-"], {"dot": True, "points": 1, "energy": True, "opener": True}),
+        "Hemorrhage": ("ability", ["pct", "pctdagger", "-", "-"], {"weapon": "norm", "points": 1, "energy": True}),
+        "Ghostly Strike": ("ability", ["pct", "pctdagger", "-", "-"], {"weapon": "norm", "points": 1, "energy": True}),
+        "Eviscerate": ("ability", ["p1", "p1", "p2", "p2", "p3", "p3", "p4", "p4", "p5", "p5"],
+                       {"finisher": True, "energy": True}),
+        "Rupture": ("ability", ["r1", "t1", "r2", "t2", "r3", "t3", "r4", "t4", "r5", "t5"],
+                    {"finisher": True, "energy": True, "bleed": True}),
+        "Slice and Dice": ("ability", ["pct", "t1", "t2", "t3", "t4", "t5"], {"finisher": True, "energy": True, "speed": True}),
+    },
 }
-CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1, "MAGE": 128}
+CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1, "MAGE": 128, "ROGUE": 8}
 
 # a school's place in the game's list of spell power (GetSpellBonusDamage)
 SCHOOL_AT = {2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
@@ -224,15 +257,16 @@ def ranged(spell, index):
     return e is not None and float(e["Variance"]) > 0
 
 
-def plan(spell, keys):
+def plan(spell, keys, literal=None):
     """The description's numbers, in order: a key for each, "-" to skip."""
     text = templates.get(spell, "")
-    out, values = [], 0
+    out, values, said = [], 0, 0
     for m in TOKEN.finditer(text):
         if m.group("cond") or m.group("var"):
             return None, "a template this cannot plan: " + text[:80]
         if m.group("digits"):
-            out.append("-")
+            said += 1
+            out.append((literal or {}).get(said, "-"))
             continue
         if m.group("expr"):
             count = 1
@@ -289,7 +323,7 @@ for cls, model in MODEL.items():
         for keys in entry[1:]:
             if isinstance(keys, dict):
                 continue
-            read, why = plan(spell, keys)
+            read, why = plan(spell, keys, rules.get("literal"))
             if read is not None:
                 break
         if read is None:
@@ -336,7 +370,7 @@ for cls, model in MODEL.items():
             if rules.get("magic"):
                 bits += magic_bits(spell)
             for k, v in sorted(rules.items()):
-                if k in ("nocd", "magic"):
+                if k in ("nocd", "magic", "literal"):
                     continue
                 bits.append("%s = %s" % (k, "true" if v is True else ('"%s"' % v if isinstance(v, str) else "%g" % v)))
         bits.append('read = "%s"' % " ".join(read))

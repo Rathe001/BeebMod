@@ -610,6 +610,88 @@ do
 	near("a school's own crit is counted", R.Damage(s, frost, { long = true }), 100 * 1.14 * 0.96 / 3)
 end
 
+print("energy and combo points: the rogue")
+do
+	-- (Josh 2026-11-18: "Commit, then start on rogue")
+	local r = data.spells.ROGUE
+	check("Sinister Strike builds a point, for energy", r[11294].points == 1 and r[11294].energy == true and r[11294].cost == 45)
+	check("Backstab needs a dagger, and you behind the enemy", r[25300].dagger == true and r[25300].behind == true)
+	check("Eviscerate is a finishing move, at its energy and not its points", r[31016].finisher == true and r[31016].cost == 35)
+	local evis = Rd.Planned(r[31016].read, "Finishing move that causes damage per combo point, increased by Attack Power:\n"
+		.. "   1 point  : 224-332 damage\n   2 points: 394-502 damage\n   3 points: 564-672 damage\n"
+		.. "   4 points: 734-842 damage\n   5 points: 904-1,012 damage")
+	check("its damage is read for each count of points", evis and evis.p1 == 278 and evis.p3 == 618 and evis.p5 == 958)
+	local rupture = Rd.Planned(r[11275].read, "Finishing move that causes damage over time, increased by your Attack Power.  "
+		.. "Lasts longer per combo point:\n   1 point  : 240 damage over 8 secs\n   2 points: 350 damage over 10 secs\n"
+		.. "   3 points: 480 damage over 12 secs\n   4 points: 630 damage over 14 secs\n   5 points: 800 damage over 16 secs")
+	check("Rupture's total and seconds, for each", rupture and rupture.r1 == 240 and rupture.t1 == 8 and rupture.r5 == 800 and rupture.t5 == 16)
+	local dice = Rd.Planned(r[6774].read, "Finishing move that increases melee attack speed by 30%.  Lasts longer per combo point:\n"
+		.. "   1 point  : 9 seconds\n   2 points: 12 seconds\n   3 points: 15 seconds\n   4 points: 18 seconds\n   5 points: 21 seconds")
+	check("Slice and Dice's percent and seconds", dice and dice.pct == 30 and dice.t1 == 9 and dice.t5 == 21)
+	local ambush = Rd.Planned(r[11269].read, "Ambush the target, causing 250% weapon damage plus 290 to the target.  Must be stealthed "
+		.. "and behind the target.  Requires a dagger in the main hand.  Awards 1 combo point.")
+	check("a number the words say outright is read: Ambush's", ambush and ambush.pct == 250 and ambush.add == 290)
+	local thief = {
+		level = 60, attackPower = 500, armor = 1500, crit = 20, health = 3000, mana = 0, manaPer5 = 0, damageMin = 120, damageMax = 180,
+		weaponSpeed = 2.6, haste = 0, dodge = 15, parry = 5, block = 0, blockValue = 0, hit = 0, spellHit = 0, spellCrit = 0, healing = 0,
+		spellDamage = { [2] = 0 }, dagger = false,
+	}
+	local function with(change)
+		local t = {}
+		for k, v in pairs(thief) do t[k] = v end
+		change(t)
+		return t
+	end
+	local function kit(more)
+		local a = { sinisterstrike = { v = { add = 68 }, cost = 45, weapon = "norm", points = 1 } }
+		for k, v in pairs(more or {}) do a[k] = v end
+		return { energy = true, heals = {}, seals = {}, at = { spell = 0, healing = 0 }, abilities = a }
+	end
+	local none = { energy = true, heals = {}, seals = {}, at = {}, abilities = {} }
+	local white = R.Damage(thief, none)
+	local strikes = R.Damage(thief, kit())
+	-- 10 energy a second in Sinister Strikes of 45, each (the weapon evened out to 2.4 + 68) with 20% crit, through
+	-- armor; 5% miss and 5% are dodged
+	local through = 1 - R.ArmorCut(R.EnemyArmor(60), 60)
+	near("energy is spent at its rate, whatever the gear", strikes - white, 10 / 45 * (150 - 500 / 14 * 2.6 + 500 / 14 * 2.4 + 68) * 1.2 * through * 0.9)
+	local evisKit = kit({ eviscerate = { v = { p1 = 280, p2 = 440, p3 = 600, p4 = 760, p5 = 920 }, cost = 35, finisher = true } })
+	check("a finishing move adds to what builds its points", R.Damage(thief, evisKit) > strikes)
+	local alone = kit({ eviscerate = evisKit.abilities.eviscerate })
+	alone.abilities.sinisterstrike = nil
+	near("and is nothing with nothing to build them", R.Damage(thief, alone), white)
+	local diceKit = kit({ sliceanddice = { v = { pct = 30, t1 = 9, t2 = 12, t3 = 15, t4 = 18, t5 = 21 }, cost = 25, finisher = true, speed = true } })
+	local diced = R.Damage(thief, diceKit)
+	check(("Slice and Dice is worth its share of your swings: %.1f against %.1f"):format(diced, strikes), diced > strikes)
+	check("and no more than that, kept up the whole fight", diced - strikes < white * 0.3 + 0.01)
+	local stab = { backstab = { v = { pct = 150, add = 150 }, cost = 60, weapon = "norm", points = 1, dagger = true, behind = true } }
+	near("Backstab is nothing without a dagger", R.Damage(thief, kit(stab)), strikes)
+	local knife = with(function(t) t.dagger = true end)
+	check("and something with one, in a fight where you can stand behind", R.Damage(knife, kit(stab)) > R.Damage(knife, kit()))
+	local young = with(function(t) t.level, t.dagger = 30, true end)
+	near("but not in a fight alone", R.Damage(young, kit(stab)), R.Damage(young, kit()))
+	local opener = kit({ ambush = { v = { pct = 250, add = 290 }, cost = 60, weapon = "norm", points = 1, dagger = true, opener = true } })
+	local once = R.Damage(knife, opener) - R.Damage(knife, kit())
+	check(("an opener is used once a fight: %.2f"):format(once), once > 0 and once < 15)
+	-- the off hand
+	local both = with(function(t) R.OffHand(t, { min = 60, max = 100, speed = 1.6 }) end)
+	near("an off-hand weapon hits for half, its attack power counted", both.offMin, (60 + 500 / 14 * 1.6) * 0.5)
+	local dualWhite = R.Damage(both, none)
+	-- the main hand misses 19% more; the off hand's swings are added
+	local main = 150 * 1.2 * through / 2.6
+	local off = (80 + 500 / 14 * 1.6) * 0.5 * 1.2 * through / 1.6
+	near("two weapons: both swing, and miss more", dualWhite, (main + off) * (1 - 0.24 - 0.05))
+	local stronger = with(function(t) R.OffHand(t, { min = 60, max = 100, speed = 1.6 }) t.attackPower = 640 end)
+	near("attack power gained since moves the off hand by half", R.Damage(stronger, none) - dualWhite,
+		140 / 14 * 1.6 * 0.5 * 1.2 * through / 1.6 * 0.71)
+	local unarmed = with(function(t) R.OffHand(t, { min = 60, max = 100, speed = 1.6 }) R.OffHand(t, false) end)
+	near("an off hand taken away is gone", R.Damage(unarmed, none), white)
+	check("hit is worth more with two weapons", R.Damage(with(function(t) R.OffHand(t, { min = 60, max = 100, speed = 1.6 }) t.hit = 5 end), none)
+		/ dualWhite > R.Damage(with(function(t) t.hit = 5 end), none) / white)
+	near("its healer number has nothing to stand on", R.Healing(thief, kit()), 0)
+	local t = data.talents.ROGUE
+	check("Lethality is a rogue's, on what builds points", t[14128].more == 6 and t[14128].keys.sinisterstrike and t[14128].keys.backstab)
+end
+
 print("an item's other effects")
 do
 	check("a trinket's Use, as stats for the time it is up", type(data.uses) == "table" and next(data.uses) ~= nil)

@@ -112,10 +112,10 @@ BT.Upgrades.SpellData = {
 			[21551] = { is = "ability", lvl = 48, key = "mortalstrike", cost = 30, cd = 6, weapon = "norm", read = "add - -" }, -- Mortal Strike
 			[21552] = { is = "ability", lvl = 54, key = "mortalstrike", cost = 30, cd = 6, weapon = "norm", read = "add - -" }, -- Mortal Strike
 			[21553] = { is = "ability", lvl = 60, key = "mortalstrike", cost = 30, cd = 6, weapon = "norm", read = "add - -" }, -- Mortal Strike
-			[7384] = { is = "ability", lvl = 12, key = "overpower", cost = 1, cd = 5, threat = 0, tmult = 0.75, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
-			[7887] = { is = "ability", lvl = 28, key = "overpower", cost = 1, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
-			[11584] = { is = "ability", lvl = 44, key = "overpower", cost = 1, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
-			[11585] = { is = "ability", lvl = 60, key = "overpower", cost = 1, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[7384] = { is = "ability", lvl = 12, key = "overpower", cost = 5, cd = 5, threat = 0, tmult = 0.75, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[7887] = { is = "ability", lvl = 28, key = "overpower", cost = 5, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[11584] = { is = "ability", lvl = 44, key = "overpower", cost = 5, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[11585] = { is = "ability", lvl = 60, key = "overpower", cost = 5, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
 			[772] = { is = "ability", lvl = 4, key = "rend", cost = 10, secs = 9, dot = true, read = "dot -" }, -- Rend
 			[6546] = { is = "ability", lvl = 10, key = "rend", cost = 10, secs = 12, dot = true, read = "dot -" }, -- Rend
 			[6547] = { is = "ability", lvl = 20, key = "rend", cost = 10, secs = 15, dot = true, read = "dot -" }, -- Rend
@@ -260,6 +260,56 @@ BT.Upgrades.SpellData = {
 			[10206] = { is = "ability", lvl = 52, key = "scorch", cost = 135, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
 			[10207] = { is = "ability", lvl = 58, key = "scorch", cost = 150, spell = 3, share = 0.429, read = "hit hit" }, -- Scorch
 		},
+		ROGUE = {
+			[8676] = { is = "ability", lvl = 18, key = "ambush", cost = 60, dagger = true, energy = true, opener = true, points = 1, weapon = "norm", read = "pct add -" }, -- Ambush
+			[8724] = { is = "ability", lvl = 26, key = "ambush", cost = 60, dagger = true, energy = true, opener = true, points = 1, weapon = "norm", read = "pct add -" }, -- Ambush
+			[8725] = { is = "ability", lvl = 34, key = "ambush", cost = 60, dagger = true, energy = true, opener = true, points = 1, weapon = "norm", read = "pct add -" }, -- Ambush
+			[11267] = { is = "ability", lvl = 42, key = "ambush", cost = 60, dagger = true, energy = true, opener = true, points = 1, weapon = "norm", read = "pct add -" }, -- Ambush
+			[11268] = { is = "ability", lvl = 50, key = "ambush", cost = 60, dagger = true, energy = true, opener = true, points = 1, weapon = "norm", read = "pct add -" }, -- Ambush
+			[11269] = { is = "ability", lvl = 58, key = "ambush", cost = 60, dagger = true, energy = true, opener = true, points = 1, weapon = "norm", read = "pct add -" }, -- Ambush
+			[53] = { is = "ability", lvl = 4, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[2589] = { is = "ability", lvl = 12, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[2590] = { is = "ability", lvl = 20, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[2591] = { is = "ability", lvl = 28, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[8721] = { is = "ability", lvl = 36, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[11279] = { is = "ability", lvl = 44, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[11280] = { is = "ability", lvl = 52, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[11281] = { is = "ability", lvl = 60, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[25300] = { is = "ability", lvl = 60, key = "backstab", cost = 60, behind = true, dagger = true, energy = true, points = 1, weapon = "norm", read = "pct add -" }, -- Backstab
+			[2098] = { is = "ability", lvl = 1, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[6760] = { is = "ability", lvl = 8, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[6761] = { is = "ability", lvl = 16, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[6762] = { is = "ability", lvl = 24, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[8623] = { is = "ability", lvl = 32, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[8624] = { is = "ability", lvl = 40, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[11299] = { is = "ability", lvl = 48, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[11300] = { is = "ability", lvl = 56, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[31016] = { is = "ability", lvl = 60, key = "eviscerate", cost = 35, energy = true, finisher = true, read = "- p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Eviscerate
+			[703] = { is = "ability", lvl = 14, key = "garrote", cost = 50, secs = 18, dot = true, energy = true, opener = true, points = 1, read = "dot - -" }, -- Garrote
+			[8631] = { is = "ability", lvl = 22, key = "garrote", cost = 50, secs = 18, dot = true, energy = true, opener = true, points = 1, read = "dot - -" }, -- Garrote
+			[8632] = { is = "ability", lvl = 30, key = "garrote", cost = 50, secs = 18, dot = true, energy = true, opener = true, points = 1, read = "dot - -" }, -- Garrote
+			[8633] = { is = "ability", lvl = 38, key = "garrote", cost = 50, secs = 18, dot = true, energy = true, opener = true, points = 1, read = "dot - -" }, -- Garrote
+			[11289] = { is = "ability", lvl = 46, key = "garrote", cost = 50, secs = 18, dot = true, energy = true, opener = true, points = 1, read = "dot - -" }, -- Garrote
+			[11290] = { is = "ability", lvl = 54, key = "garrote", cost = 50, secs = 18, dot = true, energy = true, opener = true, points = 1, read = "dot - -" }, -- Garrote
+			[14278] = { is = "ability", key = "ghostlystrike", cost = 40, cd = 20, energy = true, points = 1, weapon = "norm", read = "pct pctdagger - - - -" }, -- Ghostly Strike
+			[16511] = { is = "ability", lvl = 30, key = "hemorrhage", cost = 35, energy = true, points = 1, weapon = "norm", read = "pct pctdagger - - -" }, -- Hemorrhage
+			[1943] = { is = "ability", lvl = 20, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[8639] = { is = "ability", lvl = 28, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[8640] = { is = "ability", lvl = 36, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[11273] = { is = "ability", lvl = 44, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[11274] = { is = "ability", lvl = 52, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[11275] = { is = "ability", lvl = 60, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[1752] = { is = "ability", lvl = 1, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[1757] = { is = "ability", lvl = 6, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[1758] = { is = "ability", lvl = 14, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[1759] = { is = "ability", lvl = 22, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[1760] = { is = "ability", lvl = 30, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[8621] = { is = "ability", lvl = 38, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[11293] = { is = "ability", lvl = 46, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[11294] = { is = "ability", lvl = 54, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
+			[5171] = { is = "ability", lvl = 10, key = "sliceanddice", cost = 25, energy = true, finisher = true, speed = true, read = "pct - t1 - t2 - t3 - t4 - t5" }, -- Slice and Dice
+			[6774] = { is = "ability", lvl = 42, key = "sliceanddice", cost = 25, energy = true, finisher = true, speed = true, read = "pct - t1 - t2 - t3 - t4 - t5" }, -- Slice and Dice
+		},
 	},
 	-- a passive's id -> what it does to the crits of which abilities
 	talents = {
@@ -276,6 +326,11 @@ BT.Upgrades.SpellData = {
 			[11232] = { more = 100, nth = 2, of = "arcanemind", keys = { arcaneblast = true, arcaneexplosion = true } }, -- Arcane Mind
 			[11242] = { crit = 6, nth = 1, of = "arcaneimpact", keys = { arcaneblast = true, arcaneexplosion = true } }, -- Arcane Impact
 			[18459] = { crit = 6, nth = 1, of = "incineration", keys = { arcaneblast = true, fireblast = true, icelance = true, scorch = true } }, -- Incineration
+		},
+		ROGUE = {
+			[14079] = { crit = 45, nth = 1, of = "improvedambush", keys = { ambush = true } }, -- Improved Ambush
+			[14128] = { more = 6, nth = 1, of = "lethality", keys = { backstab = true, ghostlystrike = true, hemorrhage = true, sinisterstrike = true } }, -- Lethality
+			[1224716] = { crit = 30, nth = 1, of = "puncturingwounds", keys = { backstab = true } }, -- Puncturing Wounds
 		},
 	},
 	-- aura id -> the stats it raises, by percent (MOD_TOTAL_STAT_PERCENTAGE)

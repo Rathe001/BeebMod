@@ -186,6 +186,20 @@ function Rd.State()
 		local main = GetInventoryItemLink("player", 16)
 		local _, _, _, loc = main and C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(main)
 		s.twoHand = loc == "INVTYPE_2HWEAPON"
+		-- (a dagger: some of a rogue's abilities need one)
+		s.dagger = Rd.Dagger(main)
+	end
+	-- A WEAPON IN THE OFF HAND: its swings as the game shows them, which is
+	-- with the off hand's cut taken. Kept with the attack power they were
+	-- read at, so a change in it can move them (Roles.lua).
+	do
+		local _, _, offLow, offHigh = UnitDamage("player")
+		local _, offSpeed = UnitAttackSpeed("player")
+		local has = OffhandHasWeapon and OffhandHasWeapon()
+		if has and num(offLow) and num(offHigh) and num(offSpeed) and offSpeed > 0 then
+			s.dual = true
+			s.offMin, s.offMax, s.offSpeed, s.offAp = offLow, offHigh, offSpeed * (1 + s.haste / 100), s.attackPower
+		end
 	end
 	s.health = num(UnitHealthMax("player"))
 	s.mana = num(UnitPowerMax("player", 0)) or 0
@@ -509,8 +523,13 @@ local ROLES = {
 		local a = { v = v, cost = paid > 0 and paid or entry.cost or 0, cooldown = cooldown(id) or entry.cd or 0,
 			cast = cast / 1000 }
 		for _, fact in ipairs({ "swing", "also", "weapon", "aoe", "dot", "secs", "after", "tank", "shield", "blockvalue",
-			"part", "twohand", "threat", "tmult", "spell", "spell2", "share", "dshare", "over", "channel" }) do
+			"part", "twohand", "threat", "tmult", "spell", "spell2", "share", "dshare", "over", "channel",
+			"points", "finisher", "dagger", "behind", "opener", "bleed", "speed" }) do
 			a[fact] = entry[fact]
+		end
+		-- (energy: it comes at a set rate, Roles.lua)
+		if entry.energy then
+			kit.energy = true
 		end
 		-- (a spell: the class is priced as a caster, by mana and casting time)
 		if entry.spell then
@@ -970,6 +989,15 @@ local SLOTS = {
 	INVTYPE_RANGED = { 18 }, INVTYPE_RANGEDRIGHT = { 18 }, INVTYPE_THROWN = { 18 }, INVTYPE_RELIC = { 18 },
 }
 
+-- whether a weapon is a dagger (the game's item class 2, subclass 15)
+function Rd.Dagger(link)
+	if not (link and C_Item and C_Item.GetItemInfoInstant) then
+		return false
+	end
+	local _, _, _, _, _, class, sub = C_Item.GetItemInfoInstant(link)
+	return class == 2 and sub == 15
+end
+
 local function where(link)
 	if not (link and C_Item and C_Item.GetItemInfoInstant) then
 		return nil
@@ -1107,6 +1135,21 @@ function Rd.Swaps(link)
 				swap.shield = loc == "INVTYPE_SHIELD"
 			elseif with then
 				swap.shield = where(with) == "INVTYPE_SHIELD"
+			end
+			-- whether the main hand is a dagger after it, and what the off
+			-- hand swings with: a weapon's own numbers, or nothing
+			if slot == 16 then
+				swap.dagger = Rd.Dagger(link)
+			elseif with and hand == "main" then
+				swap.dagger = Rd.Dagger(with)
+			end
+			if loc == "INVTYPE_2HWEAPON" then
+				swap.off = false
+			elseif slot == 17 then
+				swap.off = (loc == "INVTYPE_WEAPON" or loc == "INVTYPE_WEAPONOFFHAND") and Rd.Weapon(link) or false
+			elseif with and hand == "off" then
+				local kind = where(with)
+				swap.off = (kind == "INVTYPE_WEAPON" or kind == "INVTYPE_WEAPONOFFHAND") and Rd.Weapon(with) or false
 			end
 			if slot == 16 then
 				local new = Rd.Weapon(link)

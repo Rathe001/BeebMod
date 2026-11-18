@@ -346,7 +346,40 @@ function R.RageFactor(level)
 	return 0.0091107836 * level * level + 3.225598133 * level + 4.2652911
 end
 R.GLOBAL = 1.5
-R.EVEN_SPEED = { twoHand = 3.3, oneHand = 2.4 }
+R.EVEN_SPEED = { twoHand = 3.3, oneHand = 2.4, dagger = 1.7 }
+
+-- THE ROGUE (Josh 2026-11-18: "Commit, then start on rogue"). The same sum
+-- again. None of these is in a game file; they are the original game's:
+--   energy comes at 20 every 2 seconds, whatever you wear (R.ENERGY)
+--   an ability is followed by 1 second before the next (R.ENERGY_GLOBAL)
+--   a dagger's damage is evened out for an ability at a speed of 1.7
+--   a swing with a weapon in each hand misses 19% more (R.DUAL_MISS)
+--   an off-hand weapon hits for half (R.OFF_HAND)
+-- COMBO POINTS. A finishing move is priced with the abilities that build
+-- its points: the one that gives the most for its energy, used as many
+-- times as the finisher takes points, then the finisher. Every count of
+-- points from 1 to 5 is tried and the one that gives the most for its
+-- energy is kept. Slice and Dice is worth its percent of your swings for as
+-- long as it lasts, and Rupture its total. Neither can be on twice at once.
+-- An ability that needs you behind the enemy is left out of a fight alone,
+-- where the enemy faces you. One that needs stealth is used once a fight.
+-- Not counted: poisons, and a point a talent gives on a crit.
+R.ENERGY = 10
+R.ENERGY_GLOBAL = 1
+R.DUAL_MISS = 19
+R.OFF_HAND = 0.5
+-- A state's off hand set to a weapon ({ min, max, speed }, as its tooltip
+-- says), or to none (false)
+function R.OffHand(s, weapon)
+	if not weapon then
+		s.dual, s.offMin, s.offMax, s.offSpeed, s.offAp = false, nil, nil, nil, nil
+		return
+	end
+	local power = s.attackPower / 14 * weapon.speed
+	s.dual = true
+	s.offMin, s.offMax = (weapon.min + power) * R.OFF_HAND, (weapon.max + power) * R.OFF_HAND
+	s.offSpeed, s.offAp = weapon.speed, s.attackPower
+end
 -- (a tank's stance: every point of threat counts this much. It moves no
 -- comparison; it is here so the number is the game's.)
 R.STANCE_THREAT = 1.3
@@ -397,19 +430,30 @@ local function abilities(s, kit, how, seconds)
 		turned = turned + clamp(R.ENEMY_PARRY - (s.expertise or 0), 0, R.ENEMY_PARRY)
 	end
 	local hit = 1 - math.max(0, 5 - s.hit) / 100 - turned / 100
+	-- (a swing, not an ability, with a weapon in each hand)
+	local swingHit = 1 - math.max(0, 5 + (s.dual and R.DUAL_MISS or 0) - s.hit) / 100 - turned / 100
 	local through = 1 - R.ArmorCut(R.EnemyArmor(s.level), s.level)
 	local swing = s.weaponSpeed / (1 + s.haste / 100)
 	local average = (s.damageMin + s.damageMax) / 2
-	local swings = swing > 0 and hit / swing or 0
+	local swings = swing > 0 and swingHit / swing or 0
 	-- one swing that lands
 	local landed = average * (1 + R.MELEE_CRIT * crit) * through
 	local white = landed * swings
+	-- and the off hand's swings: its damage as the game showed it, moved by
+	-- half of any attack power gained since
+	if s.dual and (s.offSpeed or 0) > 0 then
+		local off = ((s.offMin or 0) + (s.offMax or 0)) / 2
+			+ (s.attackPower - (s.offAp or s.attackPower)) / 14 * s.offSpeed * R.OFF_HAND
+		white = white + math.max(0, off) * (1 + R.MELEE_CRIT * crit) * through * swingHit / (s.offSpeed / (1 + s.haste / 100))
+	end
 	if s.proc then
 		white = white + s.proc.damage * s.proc.perMinute / 60 * (s.proc.magic and 1 or through)
 	end
 	-- the weapon as an ability evens it out
 	local own = average - s.attackPower / 14 * s.weaponSpeed
-	local even = own + s.attackPower / 14 * (s.twoHand and R.EVEN_SPEED.twoHand or R.EVEN_SPEED.oneHand)
+	local even = own + s.attackPower / 14
+		* (s.dagger and R.EVEN_SPEED.dagger or s.twoHand and R.EVEN_SPEED.twoHand or R.EVEN_SPEED.oneHand)
+	local global = kit.energy and R.ENERGY_GLOBAL or R.GLOBAL
 
 	-- what the fight gives a second: rage from the hits landed and taken,
 	-- and from what gives it outright
@@ -431,6 +475,9 @@ local function abilities(s, kit, how, seconds)
 	for _, r in pairs(kit.rage or {}) do
 		local times = r.every and math.max(1, seconds / r.every) or 1
 		rage = rage + (r.amount or 0) * times / seconds
+	end
+	if kit.energy then
+		rage = R.ENERGY
 	end
 	if kit.caster then
 		white = 0
@@ -458,11 +505,14 @@ local function abilities(s, kit, how, seconds)
 		return spellCrit + (own - critWas) / 100
 	end
 
-	local list = {}
+	local list, finishers = {}, {}
 	for _, a in pairs(kit.abilities or {}) do
 		local v = a.v or {}
 		local usable = not (a.tank and not how.threat) and not (a.shield and not s.shield) and not (a.twohand and not s.twoHand)
-		if usable then
+			and not (a.dagger and not s.dagger) and not (a.behind and seconds < R.FIGHT_SECONDS)
+		if usable and a.finisher then
+			finishers[#finishers + 1] = a
+		elseif usable then
 			local gain, cost, most, takes = 0, a.cost or 0, 0, 0
 			if a.spell then
 				local more = was and power(s.spellDamage, a) - power(was, a) or 0
@@ -491,14 +541,16 @@ local function abilities(s, kit, how, seconds)
 				-- A bleed, so armor takes none.
 				gain = (v.dot or 0) * hit
 				most = (a.secs and a.secs > 0) and 1 / a.secs or 0
-				takes = R.GLOBAL
+				takes = global
 			else
-				local amount = (a.weapon == "norm" and even or a.weapon == "plain" and average or 0)
+				-- (a percent of the weapon's damage, where its words give one)
+				local part = ((s.dagger and v.pctdagger) or v.pct or 100) / 100
+				local amount = (a.weapon == "norm" and even or a.weapon == "plain" and average or 0) * part
 					+ (v.add or 0) + (v.hit or 0) + (v.appct or 0) / 100 * s.attackPower
 					+ (a.blockvalue and (s.blockValue or 0) or 0)
 				local reach = a.aoe and math.min(enemies, v.cap or enemies) or 1
 				gain = amount * crits(a, R.MELEE_CRIT, crit) * through * hit * reach
-				takes = math.max(R.GLOBAL, a.cast or 0)
+				takes = math.max(global, a.cast or 0)
 				most = 1 / math.max(a.cooldown or 0, takes)
 				if a.after == "dodge" then
 					-- only after the enemy dodges a swing of yours
@@ -514,10 +566,50 @@ local function abilities(s, kit, how, seconds)
 			if how.threat then
 				gain = (gain + (a.threat or 0) * hit) * (a.tmult or 1)
 			end
+			-- (out of stealth: once a fight)
+			if a.opener then
+				most = math.min(most, 1 / seconds)
+			end
 			if gain > 0 and most > 0 then
-				list[#list + 1] = { gain = gain, cost = cost, most = most, takes = takes }
+				list[#list + 1] = { gain = gain, cost = cost, most = most, takes = takes,
+					builds = a.points and not a.opener and (a.cooldown or 0) <= takes and not a.dot }
 			end
 		end
+	end
+	-- a finishing move, with what builds its points (see THE ROGUE, above)
+	local builder = nil
+	for _, one in ipairs(list) do
+		if one.builds and one.cost > 0 and (not builder or one.gain / one.cost > builder.gain / builder.cost) then
+			builder = one
+		end
+	end
+	for _, f in ipairs(builder and finishers or {}) do
+		local v = f.v or {}
+		local best = nil
+		for n = 1, 5 do
+			local gain, cap = 0, nil
+			local lasts = v["t" .. n]
+			if f.speed then
+				if lasts and lasts > 0 then
+					gain, cap = white * (v.pct or 0) / 100 * lasts, 1 / lasts
+				end
+			elseif f.bleed then
+				if v["r" .. n] and lasts and lasts > 0 then
+					gain, cap = v["r" .. n] * hit, 1 / lasts
+				end
+			elseif v["p" .. n] then
+				gain = v["p" .. n] * crits(f, R.MELEE_CRIT, crit) * through * hit
+			end
+			if gain > 0 then
+				local takes = (n + 1) * global
+				local one = { gain = n * builder.gain + gain, cost = n * builder.cost + (f.cost or 0), takes = takes,
+					most = math.min(cap or math.huge, 1 / takes) }
+				if not best or one.gain / one.cost > best.gain / best.cost then
+					best = one
+				end
+			end
+		end
+		list[#list + 1] = best
 	end
 	local function spend()
 		local sum, left, time = white, rage, free
