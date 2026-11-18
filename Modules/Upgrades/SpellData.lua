@@ -293,12 +293,12 @@ BT.Upgrades.SpellData = {
 			[11290] = { is = "ability", lvl = 54, key = "garrote", cost = 50, secs = 18, dot = true, energy = true, opener = true, points = 1, read = "dot - -" }, -- Garrote
 			[14278] = { is = "ability", key = "ghostlystrike", cost = 40, cd = 20, energy = true, points = 1, weapon = "norm", read = "pct pctdagger - - - -" }, -- Ghostly Strike
 			[16511] = { is = "ability", lvl = 30, key = "hemorrhage", cost = 35, energy = true, points = 1, weapon = "norm", read = "pct pctdagger - - -" }, -- Hemorrhage
-			[1943] = { is = "ability", lvl = 20, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
-			[8639] = { is = "ability", lvl = 28, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
-			[8640] = { is = "ability", lvl = 36, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
-			[11273] = { is = "ability", lvl = 44, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
-			[11274] = { is = "ability", lvl = 52, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
-			[11275] = { is = "ability", lvl = 60, key = "rupture", cost = 25, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[1943] = { is = "ability", lvl = 20, key = "rupture", cost = 25, secs = 6, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[8639] = { is = "ability", lvl = 28, key = "rupture", cost = 25, secs = 6, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[8640] = { is = "ability", lvl = 36, key = "rupture", cost = 25, secs = 6, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[11273] = { is = "ability", lvl = 44, key = "rupture", cost = 25, secs = 6, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[11274] = { is = "ability", lvl = 52, key = "rupture", cost = 25, secs = 6, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
+			[11275] = { is = "ability", lvl = 60, key = "rupture", cost = 25, secs = 6, bleed = true, energy = true, finisher = true, read = "- r1 t1 - r2 t2 - r3 t3 - r4 t4 - r5 t5" }, -- Rupture
 			[1752] = { is = "ability", lvl = 1, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
 			[1757] = { is = "ability", lvl = 6, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
 			[1758] = { is = "ability", lvl = 14, key = "sinisterstrike", cost = 45, energy = true, points = 1, weapon = "norm", read = "add -" }, -- Sinister Strike
@@ -351,6 +351,304 @@ BT.Upgrades.SpellData = {
 			[14294] = { is = "ability", lvl = 50, key = "volley", cost = 420, spell = 7, secs = 6, aoe = true, channel = true, ranged = true, read = "tick - - -" }, -- Volley
 			[14295] = { is = "ability", lvl = 58, key = "volley", cost = 490, spell = 7, secs = 6, aoe = true, channel = true, ranged = true, read = "tick - - -" }, -- Volley
 		},
+		WARLOCK = {
+			[980] = { is = "ability", lvl = 8, key = "baneofagony", cost = 25, spell = 6, dshare = 1.596, secs = 24, lasts = true, pet = true, read = "dot -" }, -- Bane of Agony
+			[1014] = { is = "ability", lvl = 18, key = "baneofagony", cost = 50, spell = 6, dshare = 1.596, secs = 24, lasts = true, pet = true, read = "dot -" }, -- Bane of Agony
+			[6217] = { is = "ability", lvl = 28, key = "baneofagony", cost = 90, spell = 6, dshare = 1.596, secs = 24, lasts = true, pet = true, read = "dot -" }, -- Bane of Agony
+			[11711] = { is = "ability", lvl = 38, key = "baneofagony", cost = 130, spell = 6, dshare = 1.596, secs = 24, lasts = true, pet = true, read = "dot -" }, -- Bane of Agony
+			[11712] = { is = "ability", lvl = 48, key = "baneofagony", cost = 170, spell = 6, dshare = 1.596, secs = 24, lasts = true, pet = true, read = "dot -" }, -- Bane of Agony
+			[11713] = { is = "ability", lvl = 58, key = "baneofagony", cost = 215, spell = 6, dshare = 1.596, secs = 24, lasts = true, pet = true, read = "dot -" }, -- Bane of Agony
+			[172] = { is = "ability", lvl = 4, key = "corruption", cost = 35, spell = 6, dshare = 0.8, secs = 12, lasts = true, pet = true, read = "dot -" }, -- Corruption
+			[6222] = { is = "ability", lvl = 14, key = "corruption", cost = 55, spell = 6, dshare = 1.0, secs = 15, lasts = true, pet = true, read = "dot -" }, -- Corruption
+			[6223] = { is = "ability", lvl = 24, key = "corruption", cost = 100, spell = 6, dshare = 1.2, secs = 18, lasts = true, pet = true, read = "dot -" }, -- Corruption
+			[7648] = { is = "ability", lvl = 34, key = "corruption", cost = 160, spell = 6, dshare = 1.2, secs = 18, lasts = true, pet = true, read = "dot -" }, -- Corruption
+			[11671] = { is = "ability", lvl = 44, key = "corruption", cost = 225, spell = 6, dshare = 1.2, secs = 18, lasts = true, pet = true, read = "dot -" }, -- Corruption
+			[11672] = { is = "ability", lvl = 54, key = "corruption", cost = 290, spell = 6, dshare = 1.2, secs = 18, lasts = true, pet = true, read = "dot -" }, -- Corruption
+			[25311] = { is = "ability", lvl = 60, key = "corruption", cost = 340, spell = 6, dshare = 1.2, secs = 18, lasts = true, pet = true, read = "dot -" }, -- Corruption
+			[689] = { is = "ability", lvl = 14, key = "drainlife", cost = 55, spell = 6, period = 1, dshare = 0.5, secs = 5, channel = true, pet = true, read = "tick - -" }, -- Drain Life
+			[699] = { is = "ability", lvl = 22, key = "drainlife", cost = 85, spell = 6, period = 1, dshare = 0.5, secs = 5, channel = true, pet = true, read = "tick - -" }, -- Drain Life
+			[709] = { is = "ability", lvl = 30, key = "drainlife", cost = 135, spell = 6, period = 1, dshare = 0.5, secs = 5, channel = true, pet = true, read = "tick - -" }, -- Drain Life
+			[7651] = { is = "ability", lvl = 38, key = "drainlife", cost = 185, spell = 6, period = 1, dshare = 0.5, secs = 5, channel = true, pet = true, read = "tick - -" }, -- Drain Life
+			[11699] = { is = "ability", lvl = 46, key = "drainlife", cost = 240, spell = 6, period = 1, dshare = 0.5, secs = 5, channel = true, pet = true, read = "tick - -" }, -- Drain Life
+			[11700] = { is = "ability", lvl = 54, key = "drainlife", cost = 300, spell = 6, period = 1, dshare = 0.5, secs = 5, channel = true, pet = true, read = "tick - -" }, -- Drain Life
+			[403677] = { is = "ability", lvl = 14, key = "drainlife", cost = 110, cd = 15, spell = 6, period = 1, dshare = 1.17, secs = 15, channel = true, pet = true, read = "tick -" }, -- Drain Life
+			[403685] = { is = "ability", lvl = 22, key = "drainlife", cost = 170, cd = 15, spell = 6, period = 1, dshare = 1.5, secs = 15, channel = true, pet = true, read = "tick -" }, -- Drain Life
+			[403686] = { is = "ability", lvl = 30, key = "drainlife", cost = 270, cd = 15, spell = 6, period = 1, dshare = 1.5, secs = 15, channel = true, pet = true, read = "tick -" }, -- Drain Life
+			[403687] = { is = "ability", lvl = 38, key = "drainlife", cost = 370, cd = 15, spell = 6, period = 1, dshare = 1.5, secs = 15, channel = true, pet = true, read = "tick -" }, -- Drain Life
+			[403688] = { is = "ability", lvl = 46, key = "drainlife", cost = 480, cd = 15, spell = 6, period = 1, dshare = 1.5, secs = 15, channel = true, pet = true, read = "tick -" }, -- Drain Life
+			[403689] = { is = "ability", lvl = 54, key = "drainlife", cost = 600, cd = 15, spell = 6, period = 1, dshare = 1.5, secs = 15, channel = true, pet = true, read = "tick -" }, -- Drain Life
+			[348] = { is = "ability", lvl = 1, key = "immolate", cost = 25, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[707] = { is = "ability", lvl = 10, key = "immolate", cost = 45, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[1094] = { is = "ability", lvl = 20, key = "immolate", cost = 90, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[2941] = { is = "ability", lvl = 30, key = "immolate", cost = 155, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[11665] = { is = "ability", lvl = 40, key = "immolate", cost = 220, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[11667] = { is = "ability", lvl = 50, key = "immolate", cost = 295, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[11668] = { is = "ability", lvl = 60, key = "immolate", cost = 370, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[25309] = { is = "ability", lvl = 60, key = "immolate", cost = 380, spell = 3, share = 0.2, dshare = 0.65, secs = 15, lasts = true, pet = true, read = "hit dot -" }, -- Immolate
+			[412758] = { is = "ability", lvl = 40, key = "incinerate", cost = 205, spell = 3, share = 0.714, pet = true, read = "hit hit -" }, -- Incinerate
+			[1293812] = { is = "ability", lvl = 50, key = "incinerate", cost = 265, spell = 3, share = 0.714, pet = true, read = "hit hit -" }, -- Incinerate
+			[1293813] = { is = "ability", lvl = 60, key = "incinerate", cost = 325, spell = 3, share = 0.714, pet = true, read = "hit hit -" }, -- Incinerate
+			[1454] = { is = "tap", lvl = 6, key = "lifetap", read = "- mana" }, -- Life Tap
+			[1455] = { is = "tap", lvl = 16, key = "lifetap", read = "- mana" }, -- Life Tap
+			[1456] = { is = "tap", lvl = 26, key = "lifetap", read = "- mana" }, -- Life Tap
+			[11687] = { is = "tap", lvl = 36, key = "lifetap", read = "- mana" }, -- Life Tap
+			[11688] = { is = "tap", lvl = 46, key = "lifetap", read = "- mana" }, -- Life Tap
+			[11689] = { is = "tap", lvl = 56, key = "lifetap", read = "- mana" }, -- Life Tap
+			[5740] = { is = "ability", lvl = 20, key = "rainoffire", cost = 295, spell = 3, dshare = 0.332, secs = 8, aoe = true, channel = true, pet = true, read = "dot -" }, -- Rain of Fire
+			[6219] = { is = "ability", lvl = 34, key = "rainoffire", cost = 605, spell = 3, dshare = 0.332, secs = 8, aoe = true, channel = true, pet = true, read = "dot -" }, -- Rain of Fire
+			[11677] = { is = "ability", lvl = 46, key = "rainoffire", cost = 885, spell = 3, dshare = 0.332, secs = 8, aoe = true, channel = true, pet = true, read = "dot -" }, -- Rain of Fire
+			[11678] = { is = "ability", lvl = 58, key = "rainoffire", cost = 1185, spell = 3, dshare = 0.332, secs = 8, aoe = true, channel = true, pet = true, read = "dot -" }, -- Rain of Fire
+			[5676] = { is = "ability", lvl = 18, key = "searingpain", cost = 45, spell = 3, share = 0.429, pet = true, read = "hit hit" }, -- Searing Pain
+			[17919] = { is = "ability", lvl = 26, key = "searingpain", cost = 68, spell = 3, share = 0.429, pet = true, read = "hit hit" }, -- Searing Pain
+			[17920] = { is = "ability", lvl = 34, key = "searingpain", cost = 91, spell = 3, share = 0.429, pet = true, read = "hit hit" }, -- Searing Pain
+			[17921] = { is = "ability", lvl = 42, key = "searingpain", cost = 118, spell = 3, share = 0.429, pet = true, read = "hit hit" }, -- Searing Pain
+			[17922] = { is = "ability", lvl = 50, key = "searingpain", cost = 141, spell = 3, share = 0.429, pet = true, read = "hit hit" }, -- Searing Pain
+			[17923] = { is = "ability", lvl = 58, key = "searingpain", cost = 168, spell = 3, share = 0.429, pet = true, read = "hit hit" }, -- Searing Pain
+			[686] = { is = "ability", lvl = 1, key = "shadowbolt", cost = 25, spell = 6, share = 0.486, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[695] = { is = "ability", lvl = 6, key = "shadowbolt", cost = 40, spell = 6, share = 0.629, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[705] = { is = "ability", lvl = 12, key = "shadowbolt", cost = 70, spell = 6, share = 0.8, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[1088] = { is = "ability", lvl = 20, key = "shadowbolt", cost = 110, spell = 6, share = 0.857, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[1106] = { is = "ability", lvl = 28, key = "shadowbolt", cost = 160, spell = 6, share = 0.857, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[7641] = { is = "ability", lvl = 36, key = "shadowbolt", cost = 210, spell = 6, share = 0.857, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[11659] = { is = "ability", lvl = 44, key = "shadowbolt", cost = 265, spell = 6, share = 0.857, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[11660] = { is = "ability", lvl = 52, key = "shadowbolt", cost = 315, spell = 6, share = 0.857, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[11661] = { is = "ability", lvl = 60, key = "shadowbolt", cost = 370, spell = 6, share = 0.857, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[25307] = { is = "ability", lvl = 60, key = "shadowbolt", cost = 380, spell = 6, share = 0.857, pet = true, read = "hit hit" }, -- Shadow Bolt
+			[17877] = { is = "ability", lvl = 20, key = "shadowburn", cost = 105, cd = 15, spell = 6, share = 0.429, secs = 8, pet = true, read = "hit hit -" }, -- Shadowburn
+			[18867] = { is = "ability", lvl = 24, key = "shadowburn", cost = 130, cd = 15, spell = 6, share = 0.429, secs = 8, pet = true, read = "hit hit -" }, -- Shadowburn
+			[18868] = { is = "ability", lvl = 32, key = "shadowburn", cost = 190, cd = 15, spell = 6, share = 0.429, secs = 8, pet = true, read = "hit hit -" }, -- Shadowburn
+			[18869] = { is = "ability", lvl = 40, key = "shadowburn", cost = 245, cd = 15, spell = 6, share = 0.429, secs = 8, pet = true, read = "hit hit -" }, -- Shadowburn
+			[18870] = { is = "ability", lvl = 48, key = "shadowburn", cost = 305, cd = 15, spell = 6, share = 0.429, secs = 8, pet = true, read = "hit hit -" }, -- Shadowburn
+			[18871] = { is = "ability", lvl = 56, key = "shadowburn", cost = 365, cd = 15, spell = 6, share = 0.429, secs = 8, pet = true, read = "hit hit -" }, -- Shadowburn
+			[18265] = { is = "ability", lvl = 30, key = "siphonlife", cost = 150, spell = 6, period = 3, dshare = 0.5, secs = 30, lasts = true, pet = true, read = "tick - -" }, -- Siphon Life
+			[18879] = { is = "ability", lvl = 38, key = "siphonlife", cost = 205, spell = 6, period = 3, dshare = 0.5, secs = 30, lasts = true, pet = true, read = "tick - -" }, -- Siphon Life
+			[18880] = { is = "ability", lvl = 48, key = "siphonlife", cost = 285, spell = 6, period = 3, dshare = 0.5, secs = 30, lasts = true, pet = true, read = "tick - -" }, -- Siphon Life
+			[18881] = { is = "ability", lvl = 58, key = "siphonlife", cost = 365, spell = 6, period = 3, dshare = 0.5, secs = 30, lasts = true, pet = true, read = "tick - -" }, -- Siphon Life
+			[6353] = { is = "ability", lvl = 48, key = "soulfire", cost = 305, cd = 60, spell = 3, share = 1.0, pet = true, read = "hit hit" }, -- Soul Fire
+			[17924] = { is = "ability", lvl = 56, key = "soulfire", cost = 335, cd = 60, spell = 3, share = 1.0, pet = true, read = "hit hit" }, -- Soul Fire
+		},
+		PRIEST = {
+			[2944] = { is = "ability", lvl = 20, key = "devouringplague", cost = 215, cd = 24, spell = 6, dshare = 0.8, secs = 24, lasts = true, read = "dot -" }, -- Devouring Plague
+			[19276] = { is = "ability", lvl = 28, key = "devouringplague", cost = 350, cd = 24, spell = 6, dshare = 0.8, secs = 24, lasts = true, read = "dot -" }, -- Devouring Plague
+			[19277] = { is = "ability", lvl = 36, key = "devouringplague", cost = 495, cd = 24, spell = 6, dshare = 0.8, secs = 24, lasts = true, read = "dot -" }, -- Devouring Plague
+			[19278] = { is = "ability", lvl = 44, key = "devouringplague", cost = 645, cd = 24, spell = 6, dshare = 0.8, secs = 24, lasts = true, read = "dot -" }, -- Devouring Plague
+			[19279] = { is = "ability", lvl = 52, key = "devouringplague", cost = 810, cd = 24, spell = 6, dshare = 0.8, secs = 24, lasts = true, read = "dot -" }, -- Devouring Plague
+			[19280] = { is = "ability", lvl = 60, key = "devouringplague", cost = 985, cd = 24, spell = 6, dshare = 0.8, secs = 24, lasts = true, read = "dot -" }, -- Devouring Plague
+			[2061] = { is = "heal:flashHeal", lvl = 20, share = 0.429, base = 194, per = 1.9, from = 20, to = 25, read = "amount amount" }, -- Flash Heal
+			[9472] = { is = "heal:flashHeal", lvl = 26, share = 0.429, base = 249, per = 2.2, from = 26, to = 31, read = "amount amount" }, -- Flash Heal
+			[9473] = { is = "heal:flashHeal", lvl = 32, share = 0.429, base = 312, per = 2.5, from = 32, to = 37, read = "amount amount" }, -- Flash Heal
+			[9474] = { is = "heal:flashHeal", lvl = 38, share = 0.429, base = 383, per = 2.8, from = 38, to = 43, read = "amount amount" }, -- Flash Heal
+			[10915] = { is = "heal:flashHeal", lvl = 44, share = 0.429, base = 507, per = 3.3, from = 44, to = 49, read = "amount amount" }, -- Flash Heal
+			[10916] = { is = "heal:flashHeal", lvl = 50, share = 0.429, base = 644, per = 3.7, from = 50, to = 55, read = "amount amount" }, -- Flash Heal
+			[10917] = { is = "heal:flashHeal", lvl = 56, share = 0.429, base = 825, per = 4.2, from = 56, to = 61, read = "amount amount" }, -- Flash Heal
+			[2060] = { is = "heal:greaterHeal", lvl = 40, share = 0.857, base = 844, per = 5.1, from = 40, to = 45, read = "amount amount" }, -- Greater Heal
+			[10963] = { is = "heal:greaterHeal", lvl = 46, share = 0.857, base = 1099, per = 5.8, from = 46, to = 51, read = "amount amount" }, -- Greater Heal
+			[10964] = { is = "heal:greaterHeal", lvl = 52, share = 0.857, base = 1403, per = 6.6, from = 52, to = 57, read = "amount amount" }, -- Greater Heal
+			[10965] = { is = "heal:greaterHeal", lvl = 58, share = 0.857, base = 1782, per = 7.5, from = 58, to = 63, read = "amount amount" }, -- Greater Heal
+			[25314] = { is = "heal:greaterHeal", lvl = 60, share = 0.857, base = 1960, per = 8.1, from = 60, to = 65, read = "amount amount" }, -- Greater Heal
+			[2054] = { is = "heal:heal", lvl = 16, share = 0.857, base = 270, per = 2, from = 16, to = 21, read = "amount amount" }, -- Heal
+			[2055] = { is = "heal:heal", lvl = 22, share = 0.857, base = 375, per = 2.9, from = 22, to = 27, read = "amount amount" }, -- Heal
+			[6063] = { is = "heal:heal", lvl = 28, share = 0.857, base = 523, per = 4, from = 28, to = 33, read = "amount amount" }, -- Heal
+			[6064] = { is = "heal:heal", lvl = 34, share = 0.857, base = 651, per = 4.5, from = 34, to = 39, read = "amount amount" }, -- Heal
+			[14914] = { is = "ability", lvl = 20, key = "holyfire", cost = 85, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[15261] = { is = "ability", lvl = 60, key = "holyfire", cost = 255, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[15262] = { is = "ability", lvl = 24, key = "holyfire", cost = 95, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[15263] = { is = "ability", lvl = 30, key = "holyfire", cost = 125, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[15264] = { is = "ability", lvl = 36, key = "holyfire", cost = 145, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[15265] = { is = "ability", lvl = 42, key = "holyfire", cost = 170, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[15266] = { is = "ability", lvl = 48, key = "holyfire", cost = 200, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[15267] = { is = "ability", lvl = 54, key = "holyfire", cost = 230, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[2050] = { is = "heal:lesserHeal", lvl = 1, share = 0.429, base = 51, per = 0.3, from = 1, to = 3, read = "amount amount" }, -- Lesser Heal
+			[2052] = { is = "heal:lesserHeal", lvl = 4, share = 0.571, base = 94, per = 0.7, from = 4, to = 9, read = "amount amount" }, -- Lesser Heal
+			[2053] = { is = "heal:lesserHeal", lvl = 10, share = 0.714, base = 163, per = 1.2, from = 10, to = 15, read = "amount amount" }, -- Lesser Heal
+			[8092] = { is = "ability", lvl = 10, key = "mindblast", cost = 50, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[8102] = { is = "ability", lvl = 16, key = "mindblast", cost = 80, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[8103] = { is = "ability", lvl = 22, key = "mindblast", cost = 110, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[8104] = { is = "ability", lvl = 28, key = "mindblast", cost = 150, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[8105] = { is = "ability", lvl = 34, key = "mindblast", cost = 185, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[8106] = { is = "ability", lvl = 40, key = "mindblast", cost = 225, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[10945] = { is = "ability", lvl = 46, key = "mindblast", cost = 265, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[10946] = { is = "ability", lvl = 52, key = "mindblast", cost = 310, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[10947] = { is = "ability", lvl = 58, key = "mindblast", cost = 350, cd = 8, spell = 6, share = 0.429, read = "hit hit" }, -- Mind Blast
+			[15407] = { is = "ability", lvl = 20, key = "mindflay", cost = 45, spell = 6, dshare = 0.501, secs = 3, channel = true, read = "dot - -" }, -- Mind Flay
+			[17311] = { is = "ability", lvl = 28, key = "mindflay", cost = 70, spell = 6, dshare = 0.501, secs = 3, channel = true, read = "dot - -" }, -- Mind Flay
+			[17312] = { is = "ability", lvl = 36, key = "mindflay", cost = 100, spell = 6, dshare = 0.501, secs = 3, channel = true, read = "dot - -" }, -- Mind Flay
+			[17313] = { is = "ability", lvl = 44, key = "mindflay", cost = 135, spell = 6, dshare = 0.501, secs = 3, channel = true, read = "dot - -" }, -- Mind Flay
+			[17314] = { is = "ability", lvl = 52, key = "mindflay", cost = 165, spell = 6, dshare = 0.501, secs = 3, channel = true, read = "dot - -" }, -- Mind Flay
+			[18807] = { is = "ability", lvl = 60, key = "mindflay", cost = 205, spell = 6, dshare = 0.501, secs = 3, channel = true, read = "dot - -" }, -- Mind Flay
+			[589] = { is = "ability", lvl = 4, key = "shadowwordpain", cost = 25, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[594] = { is = "ability", lvl = 10, key = "shadowwordpain", cost = 50, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[970] = { is = "ability", lvl = 18, key = "shadowwordpain", cost = 95, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[992] = { is = "ability", lvl = 26, key = "shadowwordpain", cost = 155, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[2767] = { is = "ability", lvl = 34, key = "shadowwordpain", cost = 230, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[10892] = { is = "ability", lvl = 42, key = "shadowwordpain", cost = 305, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[10893] = { is = "ability", lvl = 50, key = "shadowwordpain", cost = 385, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[10894] = { is = "ability", lvl = 58, key = "shadowwordpain", cost = 470, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
+			[585] = { is = "ability", lvl = 1, key = "smite", cost = 20, spell = 2, share = 0.429, read = "hit hit" }, -- Smite
+			[591] = { is = "ability", lvl = 6, key = "smite", cost = 30, spell = 2, share = 0.571, read = "hit hit" }, -- Smite
+			[598] = { is = "ability", lvl = 14, key = "smite", cost = 60, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
+			[984] = { is = "ability", lvl = 22, key = "smite", cost = 95, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
+			[1004] = { is = "ability", lvl = 30, key = "smite", cost = 140, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
+			[6060] = { is = "ability", lvl = 38, key = "smite", cost = 185, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
+			[10933] = { is = "ability", lvl = 46, key = "smite", cost = 230, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
+			[10934] = { is = "ability", lvl = 54, key = "smite", cost = 280, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
+		},
+		SHAMAN = {
+			[408479] = { is = "ability", lvl = 32, key = "chainlightning", spell = 4, share = 0.357, aoe = true, spec = "caster", read = "hit hit - cap" }, -- Chain Lightning
+			[408481] = { is = "ability", lvl = 40, key = "chainlightning", spell = 4, share = 0.357, aoe = true, spec = "caster", read = "hit hit - cap" }, -- Chain Lightning
+			[408482] = { is = "ability", lvl = 48, key = "chainlightning", spell = 4, share = 0.357, aoe = true, spec = "caster", read = "hit hit - cap" }, -- Chain Lightning
+			[408484] = { is = "ability", lvl = 56, key = "chainlightning", spell = 4, share = 0.357, aoe = true, spec = "caster", read = "hit hit - cap" }, -- Chain Lightning
+			[8042] = { is = "ability", lvl = 4, key = "earthshock", cost = 30, cd = 6, spell = 4, share = 0.386, secs = 2, read = "hit hit -" }, -- Earth Shock
+			[8044] = { is = "ability", lvl = 8, key = "earthshock", cost = 50, cd = 6, spell = 4, share = 0.386, secs = 2, read = "hit hit -" }, -- Earth Shock
+			[8045] = { is = "ability", lvl = 14, key = "earthshock", cost = 85, cd = 6, spell = 4, share = 0.386, secs = 2, read = "hit hit -" }, -- Earth Shock
+			[8046] = { is = "ability", lvl = 24, key = "earthshock", cost = 145, cd = 6, spell = 4, share = 0.386, secs = 2, read = "hit hit -" }, -- Earth Shock
+			[10412] = { is = "ability", lvl = 36, key = "earthshock", cost = 240, cd = 6, spell = 4, share = 0.386, secs = 2, read = "hit hit -" }, -- Earth Shock
+			[10413] = { is = "ability", lvl = 48, key = "earthshock", cost = 345, cd = 6, spell = 4, share = 0.386, secs = 2, read = "hit hit -" }, -- Earth Shock
+			[10414] = { is = "ability", lvl = 60, key = "earthshock", cost = 450, cd = 6, spell = 4, share = 0.386, secs = 2, read = "hit hit -" }, -- Earth Shock
+			[331] = { is = "heal:healingWave", lvl = 1, share = 0.429, base = 39, per = 0.7, from = 1, to = 5, read = "amount amount" }, -- Healing Wave
+			[332] = { is = "heal:healingWave", lvl = 6, share = 0.571, base = 71, per = 1, from = 6, to = 11, read = "amount amount" }, -- Healing Wave
+			[547] = { is = "heal:healingWave", lvl = 12, share = 0.714, base = 131, per = 1.5, from = 12, to = 17, read = "amount amount" }, -- Healing Wave
+			[913] = { is = "heal:healingWave", lvl = 18, share = 0.857, base = 256, per = 2.3, from = 18, to = 23, read = "amount amount" }, -- Healing Wave
+			[939] = { is = "heal:healingWave", lvl = 24, share = 0.857, base = 342, per = 2.7, from = 24, to = 29, read = "amount amount" }, -- Healing Wave
+			[959] = { is = "heal:healingWave", lvl = 32, share = 0.857, base = 484, per = 3.3, from = 32, to = 37, read = "amount amount" }, -- Healing Wave
+			[8005] = { is = "heal:healingWave", lvl = 40, share = 0.857, base = 685, per = 3.9, from = 40, to = 45, read = "amount amount" }, -- Healing Wave
+			[10395] = { is = "heal:healingWave", lvl = 48, share = 0.857, base = 972, per = 4.7, from = 48, to = 53, read = "amount amount" }, -- Healing Wave
+			[10396] = { is = "heal:healingWave", lvl = 56, share = 0.857, base = 1344, per = 5.5, from = 56, to = 61, read = "amount amount" }, -- Healing Wave
+			[25357] = { is = "heal:healingWave", lvl = 60, share = 0.857, base = 1615, per = 5.5, from = 60, to = 65, read = "amount amount" }, -- Healing Wave
+			[8004] = { is = "heal:lesserHealingWave", lvl = 20, share = 0.429, base = 153, per = 1.7, from = 20, to = 25, read = "amount amount" }, -- Lesser Healing Wave
+			[8008] = { is = "heal:lesserHealingWave", lvl = 28, share = 0.429, base = 224, per = 2.1, from = 28, to = 33, read = "amount amount" }, -- Lesser Healing Wave
+			[8010] = { is = "heal:lesserHealingWave", lvl = 36, share = 0.429, base = 304, per = 2.5, from = 36, to = 41, read = "amount amount" }, -- Lesser Healing Wave
+			[10466] = { is = "heal:lesserHealingWave", lvl = 44, share = 0.429, base = 426, per = 3, from = 44, to = 49, read = "amount amount" }, -- Lesser Healing Wave
+			[10467] = { is = "heal:lesserHealingWave", lvl = 52, share = 0.429, base = 608, per = 3.6, from = 52, to = 57, read = "amount amount" }, -- Lesser Healing Wave
+			[10468] = { is = "heal:lesserHealingWave", lvl = 60, share = 0.429, base = 820, per = 4.2, from = 60, to = 65, read = "amount amount" }, -- Lesser Healing Wave
+			[403] = { is = "ability", lvl = 1, key = "lightningbolt", cost = 15, spell = 4, share = 0.429, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[529] = { is = "ability", lvl = 8, key = "lightningbolt", cost = 30, spell = 4, share = 0.571, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[548] = { is = "ability", lvl = 14, key = "lightningbolt", cost = 45, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[915] = { is = "ability", lvl = 20, key = "lightningbolt", cost = 60, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[943] = { is = "ability", lvl = 26, key = "lightningbolt", cost = 85, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[6041] = { is = "ability", lvl = 32, key = "lightningbolt", cost = 110, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[10391] = { is = "ability", lvl = 38, key = "lightningbolt", cost = 135, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[10392] = { is = "ability", lvl = 44, key = "lightningbolt", cost = 160, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[15207] = { is = "ability", lvl = 50, key = "lightningbolt", cost = 190, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[15208] = { is = "ability", lvl = 56, key = "lightningbolt", cost = 220, spell = 4, share = 0.714, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408439] = { is = "ability", lvl = 1, key = "lightningbolt", spell = 4, share = 0.2145, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408440] = { is = "ability", lvl = 8, key = "lightningbolt", spell = 4, share = 0.2855, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408441] = { is = "ability", lvl = 14, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408442] = { is = "ability", lvl = 20, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408443] = { is = "ability", lvl = 26, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408472] = { is = "ability", lvl = 32, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408473] = { is = "ability", lvl = 38, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408474] = { is = "ability", lvl = 44, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408475] = { is = "ability", lvl = 50, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[408477] = { is = "ability", lvl = 56, key = "lightningbolt", spell = 4, share = 0.357, spec = "caster", read = "hit hit" }, -- Lightning Bolt
+			[17364] = { is = "ability", lvl = 40, key = "stormstrike", cd = 8, spec = "melee", weapon = "norm", read = "pct - -" }, -- Stormstrike
+		},
+		DRUID = {
+			[1082] = { is = "ability", lvl = 20, key = "claw", cost = 45, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Claw
+			[3029] = { is = "ability", lvl = 28, key = "claw", cost = 45, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Claw
+			[5201] = { is = "ability", lvl = 38, key = "claw", cost = 45, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Claw
+			[9849] = { is = "ability", lvl = 48, key = "claw", cost = 45, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Claw
+			[9850] = { is = "ability", lvl = 58, key = "claw", cost = 45, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Claw
+			[5229] = { is = "rage", lvl = 12, key = "enrage", cd = 60, every = 60, read = "rage more - - -" }, -- Enrage
+			[22568] = { is = "ability", lvl = 32, key = "ferociousbite", cost = 35, finisher = true, spec = "cat", read = "- - p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Ferocious Bite
+			[22827] = { is = "ability", lvl = 40, key = "ferociousbite", cost = 35, finisher = true, spec = "cat", read = "- - p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Ferocious Bite
+			[22828] = { is = "ability", lvl = 48, key = "ferociousbite", cost = 35, finisher = true, spec = "cat", read = "- - p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Ferocious Bite
+			[22829] = { is = "ability", lvl = 56, key = "ferociousbite", cost = 35, finisher = true, spec = "cat", read = "- - p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Ferocious Bite
+			[31018] = { is = "ability", lvl = 60, key = "ferociousbite", cost = 35, finisher = true, spec = "cat", read = "- - p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Ferocious Bite
+			[1328618] = { is = "ability", lvl = 24, key = "ferociousbite", cost = 35, finisher = true, spec = "cat", read = "- - p1 p1 - p2 p2 - p3 p3 - p4 p4 - p5 p5" }, -- Ferocious Bite
+			[5185] = { is = "heal:healingTouch", lvl = 1, share = 0.429, base = 44, per = 0.8, from = 1, to = 5, read = "amount amount" }, -- Healing Touch
+			[5186] = { is = "heal:healingTouch", lvl = 8, share = 0.571, base = 100, per = 1.3, from = 8, to = 13, read = "amount amount" }, -- Healing Touch
+			[5187] = { is = "heal:healingTouch", lvl = 14, share = 0.714, base = 201, per = 1.9, from = 14, to = 19, read = "amount amount" }, -- Healing Touch
+			[5188] = { is = "heal:healingTouch", lvl = 20, share = 0.857, base = 362, per = 2.7, from = 20, to = 25, read = "amount amount" }, -- Healing Touch
+			[5189] = { is = "heal:healingTouch", lvl = 26, share = 1.0, base = 546, per = 3.5, from = 26, to = 31, read = "amount amount" }, -- Healing Touch
+			[6778] = { is = "heal:healingTouch", lvl = 32, share = 1.0, base = 707, per = 4, from = 32, to = 37, read = "amount amount" }, -- Healing Touch
+			[8903] = { is = "heal:healingTouch", lvl = 38, share = 1.0, base = 898, per = 4.5, from = 38, to = 43, read = "amount amount" }, -- Healing Touch
+			[9758] = { is = "heal:healingTouch", lvl = 44, share = 1.0, base = 1173, per = 5.2, from = 44, to = 49, read = "amount amount" }, -- Healing Touch
+			[9888] = { is = "heal:healingTouch", lvl = 50, share = 1.0, base = 1516, per = 5.9, from = 50, to = 55, read = "amount amount" }, -- Healing Touch
+			[9889] = { is = "heal:healingTouch", lvl = 56, share = 1.0, base = 1920, per = 6.6, from = 56, to = 61, read = "amount amount" }, -- Healing Touch
+			[25297] = { is = "heal:healingTouch", lvl = 60, share = 1.0, base = 2332, per = 7.3, from = 60, to = 65, read = "amount amount" }, -- Healing Touch
+			[16914] = { is = "ability", lvl = 40, key = "hurricane", cost = 880, spell = 4, dshare = 0.3, secs = 10, aoe = true, channel = true, spec = "caster", read = "tick - - -" }, -- Hurricane
+			[17401] = { is = "ability", lvl = 50, key = "hurricane", cost = 1180, spell = 4, dshare = 0.3, secs = 10, aoe = true, channel = true, spec = "caster", read = "tick - - -" }, -- Hurricane
+			[17402] = { is = "ability", lvl = 60, key = "hurricane", cost = 1495, spell = 4, dshare = 0.3, secs = 10, aoe = true, channel = true, spec = "caster", read = "tick - - -" }, -- Hurricane
+			[5570] = { is = "ability", lvl = 20, key = "insectswarm", cost = 45, spell = 4, dshare = 0.948, secs = 12, lasts = true, spec = "caster", read = "- dot -" }, -- Insect Swarm
+			[24974] = { is = "ability", lvl = 30, key = "insectswarm", cost = 85, spell = 4, dshare = 0.948, secs = 12, lasts = true, spec = "caster", read = "- dot -" }, -- Insect Swarm
+			[24975] = { is = "ability", lvl = 40, key = "insectswarm", cost = 100, spell = 4, dshare = 0.948, secs = 12, lasts = true, spec = "caster", read = "- dot -" }, -- Insect Swarm
+			[24976] = { is = "ability", lvl = 50, key = "insectswarm", cost = 140, spell = 4, dshare = 0.948, secs = 12, lasts = true, spec = "caster", read = "- dot -" }, -- Insect Swarm
+			[24977] = { is = "ability", lvl = 60, key = "insectswarm", cost = 160, spell = 4, dshare = 0.948, secs = 12, lasts = true, spec = "caster", read = "- dot -" }, -- Insect Swarm
+			[6807] = { is = "ability", lvl = 10, key = "maul", cost = 15, threat = 0, tmult = 1.75, spec = "bear", swing = true, read = "add" }, -- Maul
+			[6808] = { is = "ability", lvl = 18, key = "maul", cost = 15, spec = "bear", swing = true, read = "add" }, -- Maul
+			[6809] = { is = "ability", lvl = 26, key = "maul", cost = 15, spec = "bear", swing = true, read = "add" }, -- Maul
+			[8972] = { is = "ability", lvl = 34, key = "maul", cost = 15, spec = "bear", swing = true, read = "add" }, -- Maul
+			[9745] = { is = "ability", lvl = 42, key = "maul", cost = 15, spec = "bear", swing = true, read = "add" }, -- Maul
+			[9880] = { is = "ability", lvl = 50, key = "maul", cost = 15, spec = "bear", swing = true, read = "add" }, -- Maul
+			[9881] = { is = "ability", lvl = 58, key = "maul", cost = 15, spec = "bear", swing = true, read = "add" }, -- Maul
+			[8921] = { is = "ability", lvl = 4, key = "moonfire", cost = 25, spell = 7, share = 0.15, dshare = 0.39, secs = 9, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[8924] = { is = "ability", lvl = 10, key = "moonfire", cost = 50, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[8925] = { is = "ability", lvl = 16, key = "moonfire", cost = 75, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[8926] = { is = "ability", lvl = 22, key = "moonfire", cost = 105, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[8927] = { is = "ability", lvl = 28, key = "moonfire", cost = 150, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[8928] = { is = "ability", lvl = 34, key = "moonfire", cost = 190, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[8929] = { is = "ability", lvl = 40, key = "moonfire", cost = 235, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[9833] = { is = "ability", lvl = 46, key = "moonfire", cost = 280, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[9834] = { is = "ability", lvl = 52, key = "moonfire", cost = 325, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[9835] = { is = "ability", lvl = 58, key = "moonfire", cost = 375, spell = 7, share = 0.15, dshare = 0.52, secs = 12, lasts = true, spec = "caster", read = "hit hit dot -" }, -- Moonfire
+			[1822] = { is = "ability", lvl = 24, key = "rake", cost = 40, secs = 9, lasts = true, points = 1, spec = "cat", read = "hit dot - -" }, -- Rake
+			[1823] = { is = "ability", lvl = 34, key = "rake", cost = 40, secs = 9, lasts = true, points = 1, spec = "cat", read = "hit dot - -" }, -- Rake
+			[1824] = { is = "ability", lvl = 44, key = "rake", cost = 40, secs = 9, lasts = true, points = 1, spec = "cat", read = "hit dot - -" }, -- Rake
+			[9904] = { is = "ability", lvl = 54, key = "rake", cost = 40, secs = 9, lasts = true, points = 1, spec = "cat", read = "hit dot - -" }, -- Rake
+			[8936] = { is = "heal:regrowth", lvl = 12, share = 0.286, base = 87, per = 1.8, from = 12, to = 17, read = "amount amount - -" }, -- Regrowth
+			[8938] = { is = "heal:regrowth", lvl = 18, share = 0.286, base = 164, per = 2.5, from = 18, to = 23, read = "amount amount - -" }, -- Regrowth
+			[8939] = { is = "heal:regrowth", lvl = 24, share = 0.286, base = 235, per = 3.1, from = 24, to = 29, read = "amount amount - -" }, -- Regrowth
+			[8940] = { is = "heal:regrowth", lvl = 30, share = 0.286, base = 311, per = 3.6, from = 30, to = 35, read = "amount amount - -" }, -- Regrowth
+			[8941] = { is = "heal:regrowth", lvl = 36, share = 0.286, base = 394, per = 4.1, from = 36, to = 41, read = "amount amount - -" }, -- Regrowth
+			[9750] = { is = "heal:regrowth", lvl = 42, share = 0.286, base = 504, per = 4.7, from = 42, to = 47, read = "amount amount - -" }, -- Regrowth
+			[9856] = { is = "heal:regrowth", lvl = 48, share = 0.286, base = 645, per = 5.3, from = 48, to = 53, read = "amount amount - -" }, -- Regrowth
+			[9857] = { is = "heal:regrowth", lvl = 54, share = 0.286, base = 817, per = 6, from = 54, to = 59, read = "amount amount - -" }, -- Regrowth
+			[9858] = { is = "heal:regrowth", lvl = 60, share = 0.286, base = 1021, per = 6.8, from = 60, to = 65, read = "amount amount - -" }, -- Regrowth
+			[1079] = { is = "ability", lvl = 20, key = "rip", cost = 30, secs = 12, bleed = true, finisher = true, spec = "cat", read = "- r1 - - r2 - - r3 - - r4 - - r5 -" }, -- Rip
+			[9492] = { is = "ability", lvl = 28, key = "rip", cost = 30, secs = 12, bleed = true, finisher = true, spec = "cat", read = "- r1 - - r2 - - r3 - - r4 - - r5 -" }, -- Rip
+			[9493] = { is = "ability", lvl = 36, key = "rip", cost = 30, secs = 12, bleed = true, finisher = true, spec = "cat", read = "- r1 - - r2 - - r3 - - r4 - - r5 -" }, -- Rip
+			[9752] = { is = "ability", lvl = 44, key = "rip", cost = 30, secs = 12, bleed = true, finisher = true, spec = "cat", read = "- r1 - - r2 - - r3 - - r4 - - r5 -" }, -- Rip
+			[9894] = { is = "ability", lvl = 52, key = "rip", cost = 30, secs = 12, bleed = true, finisher = true, spec = "cat", read = "- r1 - - r2 - - r3 - - r4 - - r5 -" }, -- Rip
+			[9896] = { is = "ability", lvl = 60, key = "rip", cost = 30, secs = 12, bleed = true, finisher = true, spec = "cat", read = "- r1 - - r2 - - r3 - - r4 - - r5 -" }, -- Rip
+			[5221] = { is = "ability", lvl = 20, key = "shred", cost = 60, behind = true, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Shred
+			[6800] = { is = "ability", lvl = 30, key = "shred", cost = 60, behind = true, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Shred
+			[8992] = { is = "ability", lvl = 38, key = "shred", cost = 60, behind = true, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Shred
+			[9829] = { is = "ability", lvl = 46, key = "shred", cost = 60, behind = true, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Shred
+			[9830] = { is = "ability", lvl = 54, key = "shred", cost = 60, behind = true, points = 1, spec = "cat", weapon = "plain", read = "pct add -" }, -- Shred
+			[2912] = { is = "ability", lvl = 20, key = "starfire", cost = 95, spell = 7, share = 1.0, spec = "caster", read = "hit hit" }, -- Starfire
+			[8949] = { is = "ability", lvl = 26, key = "starfire", cost = 135, spell = 7, share = 1.0, spec = "caster", read = "hit hit" }, -- Starfire
+			[8950] = { is = "ability", lvl = 34, key = "starfire", cost = 180, spell = 7, share = 1.0, spec = "caster", read = "hit hit" }, -- Starfire
+			[8951] = { is = "ability", lvl = 42, key = "starfire", cost = 230, spell = 7, share = 1.0, spec = "caster", read = "hit hit" }, -- Starfire
+			[9875] = { is = "ability", lvl = 50, key = "starfire", cost = 275, spell = 7, share = 1.0, spec = "caster", read = "hit hit" }, -- Starfire
+			[9876] = { is = "ability", lvl = 58, key = "starfire", cost = 315, spell = 7, share = 1.0, spec = "caster", read = "hit hit" }, -- Starfire
+			[25298] = { is = "ability", lvl = 60, key = "starfire", cost = 340, spell = 7, share = 1.0, spec = "caster", read = "hit hit" }, -- Starfire
+			[769] = { is = "ability", lvl = 34, key = "swipe", cost = 20, aoe = true, spec = "bear", read = "cap hit" }, -- Swipe
+			[779] = { is = "ability", lvl = 16, key = "swipe", cost = 20, threat = 0, tmult = 1.75, aoe = true, spec = "bear", read = "cap hit" }, -- Swipe
+			[780] = { is = "ability", lvl = 24, key = "swipe", cost = 20, aoe = true, spec = "bear", read = "cap hit" }, -- Swipe
+			[9754] = { is = "ability", lvl = 44, key = "swipe", cost = 20, aoe = true, spec = "bear", read = "cap hit" }, -- Swipe
+			[9908] = { is = "ability", lvl = 54, key = "swipe", cost = 20, aoe = true, spec = "bear", read = "cap hit" }, -- Swipe
+			[5176] = { is = "ability", lvl = 1, key = "wrath", cost = 10, spell = 4, share = 0.429, spec = "caster", read = "hit hit" }, -- Wrath
+			[5177] = { is = "ability", lvl = 6, key = "wrath", cost = 20, spell = 4, share = 0.486, spec = "caster", read = "hit hit" }, -- Wrath
+			[5178] = { is = "ability", lvl = 14, key = "wrath", cost = 40, spell = 4, share = 0.571, spec = "caster", read = "hit hit" }, -- Wrath
+			[5179] = { is = "ability", lvl = 22, key = "wrath", cost = 50, spell = 4, share = 0.571, spec = "caster", read = "hit hit" }, -- Wrath
+			[5180] = { is = "ability", lvl = 30, key = "wrath", cost = 70, spell = 4, share = 0.571, spec = "caster", read = "hit hit" }, -- Wrath
+			[6780] = { is = "ability", lvl = 38, key = "wrath", cost = 80, spell = 4, share = 0.571, spec = "caster", read = "hit hit" }, -- Wrath
+			[8905] = { is = "ability", lvl = 46, key = "wrath", cost = 100, spell = 4, share = 0.571, spec = "caster", read = "hit hit" }, -- Wrath
+			[9912] = { is = "ability", lvl = 54, key = "wrath", cost = 120, spell = 4, share = 0.571, spec = "caster", read = "hit hit" }, -- Wrath
+		},
+	},
+	-- class -> way of fighting -> how it is priced, and the talents that mark it
+	specs = {
+		SHAMAN = {
+			melee = { mana = true, marks = { [16255] = true, [16256] = true, [16268] = true, [16269] = true, [17364] = true, [29082] = true, [29084] = true, [29086] = true, [29087] = true, [29088] = true } },
+			caster = { caster = true, marks = { [16035] = true, [16039] = true, [16089] = true, [16120] = true, [16164] = true, [16166] = true, [16579] = true, [16580] = true, [16581] = true, [16582] = true } },
+		},
+		DRUID = {
+			caster = { caster = true, marks = { [16814] = true, [16821] = true, [16845] = true, [16850] = true, [16880] = true, [16896] = true, [16909] = true, [24858] = true } },
+			cat = { energy = true, form = "cat", marks = { [16858] = true, [16859] = true, [16860] = true, [16861] = true, [16862] = true, [16942] = true, [16958] = true, [16966] = true, [16968] = true, [16972] = true, [16998] = true, [17003] = true, [17007] = true } },
+			bear = { form = "bear", tank = true, marks = {  } },
+		},
 	},
 	-- a passive's id -> what it does to the crits of which abilities
 	talents = {
@@ -375,6 +673,27 @@ BT.Upgrades.SpellData = {
 		},
 		HUNTER = {
 			[19485] = { more = 30, nth = 1, of = "mortalshots", keys = { aimedshot = true, arcaneshot = true, multishot = true, serpentsting = true, snipershot = true, volley = true } }, -- Mortal Shots
+		},
+		WARLOCK = {
+			[17927] = { crit = 10, nth = 1, of = "agonizingflames", keys = { searingpain = true } }, -- Agonizing Flames
+			[17959] = { more = 100, nth = 1, of = "ruin", keys = { immolate = true, incinerate = true, rainoffire = true, searingpain = true, shadowbolt = true, shadowburn = true, soulfire = true } }, -- Ruin
+			[18130] = { crit = 5, nth = 1, of = "devastation", keys = { immolate = true, incinerate = true, rainoffire = true, searingpain = true, shadowbolt = true, shadowburn = true, soulfire = true } }, -- Devastation
+		},
+		PRIEST = {
+			[14889] = { crit = 1, nth = 1, of = "holyspecialization", keys = { holyfire = true, smite = true } }, -- Holy Specialization
+			[18544] = { crit = 1, nth = 2, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will
+			[18547] = { crit = 2, nth = 2, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will
+			[18548] = { crit = 3, nth = 2, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will
+			[18549] = { crit = 4, nth = 2, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will
+			[18550] = { crit = 5, nth = 1, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will
+		},
+		SHAMAN = {
+			[16089] = { more = 100, nth = 1, of = "elementalfury", keys = { chainlightning = true, earthshock = true, lightningbolt = true } }, -- Elemental Fury
+			[16120] = { crit = 5, nth = 1, of = "callofthunder", keys = { chainlightning = true, lightningbolt = true } }, -- Call of Thunder
+		},
+		DRUID = {
+			[16821] = { crit = 2, nth = 1, of = "improvedmoonfire", keys = { moonfire = true } }, -- Improved Moonfire
+			[16909] = { more = 20, nth = 1, of = "vengeance", keys = { hurricane = true, insectswarm = true, moonfire = true, starfire = true, wrath = true } }, -- Vengeance
 		},
 	},
 	-- aura id -> the stats it raises, by percent (MOD_TOTAL_STAT_PERCENTAGE)

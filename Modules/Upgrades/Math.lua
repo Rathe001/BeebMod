@@ -196,6 +196,9 @@ function M.Swap(now, rates, worn, new, weapons)
 	after.parry = after.parry + defense * M.PER_DEFENSE
 	after.block = after.block + defense * M.PER_DEFENSE
 
+	-- (attack power a piece gives in a druid's forms only: Roles.lua, R.FormState)
+	after.feralGain = (now.feralGain or 0) + get("ITEM_MOD_FERAL_ATTACK_POWER_SHORT")
+
 	-- 5. weapon damage follows attack power
 	local perHit = ap / M.AP_PER_DPS * now.weaponSpeed
 	after.damageMin = now.damageMin + perHit

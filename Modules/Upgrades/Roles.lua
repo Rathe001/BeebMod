@@ -194,6 +194,11 @@ end
 --     interactions"). Counted when you know the seal: a tank is taken to
 --     have it up.
 function R.Survival(s, kit)
+	-- (a tank's way that is fought in a form: as you would be in it)
+	local _, tank = R.TankSpec(kit)
+	if tank and tank.form then
+		s = R.FormState(s, tank.form) or s
+	end
 	local cut = R.ArmorCut(s.armor, s.level)
 	-- an enemy of your level misses 5% of the time, and crits 5% of the
 	-- time for twice the damage. Each point of Defense over your level's
@@ -413,6 +418,13 @@ R.STANCE_THREAT = 1.3
 -- mana its words say, your spirit's regeneration raised by its percent for
 -- as long as it lasts, and that time is not spent casting.
 R.EVOCATION_FROM = 60
+-- THE WARLOCK (Josh 2026-11-18: "Ok, next class?"). A caster with a pet,
+-- which is counted as the hunter's is. LIFE TAP gives mana for a cast of
+-- its own, so a warlock is not short of mana, only of time. The sum is
+-- done a second way for one that knows it: mana is free, and each spell
+-- takes its own time and the time to tap its cost back. The better of the
+-- two is kept, so a short fight on a full bar is not charged for tapping.
+-- The health Life Tap takes is not counted.
 
 -- WHAT CRITS ADD TO AN ABILITY (Josh 2026-11-18, of talents: "Let's do the
 -- crit"). A crit adds a set part of the hit, as much again for a swing and
@@ -429,9 +441,104 @@ local function crits(a, adds, chance)
 	return 1 + each * chance
 end
 
+-- A CLASS THAT FIGHTS MORE THAN ONE WAY (Josh 2026-11-18: "the player could
+-- either have a melee spec or caster. We need to determine which one by
+-- which talents they have selected. The rotation formula will be completely
+-- different based on that."). `kit.specs` lists the ways, each with how it
+-- is priced; `kit.spec` is the one your talents mark (Read.lua, Rd.Spec),
+-- or nil where they mark none. An ability marked for one way is used in
+-- that way only. With a way marked, the sum is done for it. With none, it
+-- is done for each and the higher kept: a shaman with a two-hander and
+-- strength comes out melee, one with spell power a caster.
+-- THE TANK'S WAY (the druid's bear) is for threat and survival and is never
+-- the DPS number. Threat is its sum where a class has one.
+-- A WAY FOUGHT IN A FORM (cat, bear) has stats that are not yours as you
+-- stand: its attack power, crit, armor and health, and its paws for a
+-- weapon. The game says them only while you are in the form, so they are
+-- kept from then (Read.lua) as what the form adds, and put on here
+-- (R.FormState). A form never seen cannot be priced. A way your talents
+-- mark that cannot be priced gives way to the others.
+function R.TankSpec(kit)
+	for name, spec in pairs(kit and kit.specs or {}) do
+		if spec.tank then
+			return name, spec
+		end
+	end
+	return nil
+end
+-- `s` as it would be in a form. `s.forms[form]`: what the form adds (ap,
+-- crit, health), what it multiplies armor by, and its paws (pawMin, pawMax,
+-- speed). `s.form`: the form you stand in, whose own share is taken off
+-- first. `s.feralGain`: attack power a swap adds in forms only. Nil where
+-- the form has not been seen.
+function R.FormState(s, form)
+	if s.formed == form then
+		return s
+	end
+	local f = s.forms and s.forms[form]
+	if not f then
+		return nil
+	end
+	local from = s.form and s.forms[s.form] or nil
+	local t = {}
+	for k, v in pairs(s) do
+		t[k] = v
+	end
+	t.attackPower = s.attackPower - (from and from.ap or 0) + (f.ap or 0) + (s.feralGain or 0)
+	t.crit = s.crit - (from and from.crit or 0) + (f.crit or 0)
+	t.armor = s.armor / (from and from.armor or 1) * (f.armor or 1)
+	t.health = s.health - (from and from.health or 0) + (f.health or 0)
+	t.weaponSpeed = f.speed
+	t.damageMin = f.pawMin + t.attackPower / 14 * f.speed
+	t.damageMax = f.pawMax + t.attackPower / 14 * f.speed
+	t.dual, t.offSpeed, t.twoHand, t.dagger, t.shield, t.proc = false, nil, false, false, false, nil
+	t.formed = form
+	return t
+end
+
 local function abilities(s, kit, how, seconds)
 	how = how or {}
 	seconds = seconds or R.FIGHT_SECONDS
+	if kit.specs and not how.spec then
+		local tank = R.TankSpec(kit)
+		local function among(only)
+			local best = nil
+			for name, spec in pairs(kit.specs) do
+				local use
+				if how.threat and tank then
+					use = name == tank
+				else
+					use = not spec.tank and (not only or only == name)
+				end
+				if use then
+					local one = {}
+					for k, v in pairs(how) do
+						one[k] = v
+					end
+					one.spec = name
+					local sum = abilities(s, kit, one, seconds)
+					if not best or sum > best then
+						best = sum
+					end
+				end
+			end
+			return best or 0
+		end
+		local marked = kit.spec and kit.specs[kit.spec] and not kit.specs[kit.spec].tank and kit.spec or nil
+		local best = among(marked)
+		if best <= 0 and marked then
+			best = among(nil)
+		end
+		return best
+	end
+	-- (how it is priced: the way's own facts, or the kit's)
+	local mode = how.spec and kit.specs and kit.specs[how.spec] or kit
+	if mode.form then
+		s = R.FormState(s, mode.form)
+		if not s then
+			return 0
+		end
+	end
 	local enemies = how.enemies or 1
 	local crit = s.crit / 100
 	local turned = clamp(R.ENEMY_DODGE - (s.expertise or 0), 0, R.ENEMY_DODGE)
@@ -460,7 +567,7 @@ local function abilities(s, kit, how, seconds)
 		white = white + s.proc.damage * s.proc.perMinute / 60 * (s.proc.magic and 1 or through)
 	end
 	-- a ranged class: its shots in place of all of that, and its pet
-	if kit.ranged then
+	if mode.ranged then
 		local speed = s.rangedSpeed or 0
 		average = ((s.rangedMin or 0) + (s.rangedMax or 0)) / 2
 		crit = (s.rangedCrit or s.crit) / 100
@@ -473,7 +580,7 @@ local function abilities(s, kit, how, seconds)
 	local own = average - s.attackPower / 14 * s.weaponSpeed
 	local even = own + s.attackPower / 14
 		* (s.dagger and R.EVEN_SPEED.dagger or s.twoHand and R.EVEN_SPEED.twoHand or R.EVEN_SPEED.oneHand)
-	local global = kit.energy and R.ENERGY_GLOBAL or R.GLOBAL
+	local global = mode.energy and R.ENERGY_GLOBAL or R.GLOBAL
 
 	-- what the fight gives a second: rage from the hits landed and taken,
 	-- and from what gives it outright
@@ -496,13 +603,14 @@ local function abilities(s, kit, how, seconds)
 		local times = r.every and math.max(1, seconds / r.every) or 1
 		rage = rage + (r.amount or 0) * times / seconds
 	end
-	if kit.energy then
+	if mode.energy then
 		rage = R.ENERGY
 	end
-	if kit.caster then
-		white = 0
+	if mode.caster then
+		-- (no swings, and a pet's own damage where the class has one)
+		white = kit.pet and (s.petDps or 0) * through or 0
 	end
-	if kit.caster or kit.mana then
+	if mode.caster or mode.mana then
 		rage = s.mana / seconds + s.manaPer5 / 5
 		local evo = kit.evocation
 		if evo and seconds >= R.EVOCATION_FROM and (evo.secs or 0) > 0 then
@@ -532,6 +640,7 @@ local function abilities(s, kit, how, seconds)
 		local v = a.v or {}
 		local usable = not (a.tank and not how.threat) and not (a.shield and not s.shield) and not (a.twohand and not s.twoHand)
 			and not (a.dagger and not s.dagger) and not (a.behind and seconds < R.FIGHT_SECONDS)
+			and not (a.spec and how.spec and a.spec ~= how.spec)
 		if usable and a.finisher then
 			finishers[#finishers + 1] = a
 		elseif usable then
@@ -547,11 +656,11 @@ local function abilities(s, kit, how, seconds)
 				end
 				-- (a shot: it lands and crits as a shot does)
 				local chance, adds, land = schoolCrit(a), R.SPELL_CRIT, lands
-				if kit.ranged then
+				if mode.ranged then
 					chance, adds, land = crit, R.MELEE_CRIT, hit
 				end
 				local direct = (v.hit or 0) + (a.share or 0) * more
-				local over = (v.dot or 0) + (v.tick or 0) * secs + (a.dshare or 0) * more
+				local over = (v.dot or 0) + (v.tick or 0) * secs / (a.period or 1) + (a.dshare or 0) * more
 				if a.over and secs > 0 then
 					over = over * math.min(1, every / secs)
 				end
@@ -581,6 +690,11 @@ local function abilities(s, kit, how, seconds)
 					+ (a.blockvalue and (s.blockValue or 0) or 0)
 				local reach = a.aoe and math.min(enemies, v.cap or enemies) or 1
 				gain = amount * crits(a, R.MELEE_CRIT, crit) * through * hit * reach
+				-- (and a bleed behind the hit: armor takes none, and it is
+				-- used once each time it runs out)
+				if v.dot then
+					gain = gain + v.dot * hit
+				end
 				takes = math.max(global, a.cast or 0)
 				most = 1 / math.max(a.cooldown or 0, takes)
 				if a.after == "dodge" then
@@ -593,6 +707,9 @@ local function abilities(s, kit, how, seconds)
 				if a.part then
 					most = most * a.part
 				end
+				if a.lasts and (a.secs or 0) > 0 then
+					most = math.min(most, 1 / a.secs)
+				end
 			end
 			if how.threat then
 				gain = (gain + (a.threat or 0) * hit) * (a.tmult or 1)
@@ -603,7 +720,7 @@ local function abilities(s, kit, how, seconds)
 			end
 			if gain > 0 and most > 0 then
 				list[#list + 1] = { gain = gain, cost = cost, most = most, takes = takes,
-					builds = a.points and not a.opener and (a.cooldown or 0) <= takes and not a.dot }
+					builds = a.points and not a.opener and (a.cooldown or 0) <= takes and not a.dot and not a.lasts }
 			end
 		end
 	end
@@ -619,7 +736,8 @@ local function abilities(s, kit, how, seconds)
 		local best = nil
 		for n = 1, 5 do
 			local gain, cap = 0, nil
-			local lasts = v["t" .. n]
+			-- (how long it lasts at this many points, or however many: Rip)
+			local lasts = v["t" .. n] or f.secs
 			if f.speed then
 				if lasts and lasts > 0 then
 					gain, cap = white * (v.pct or 0) / 100 * lasts, 1 / lasts
@@ -642,20 +760,26 @@ local function abilities(s, kit, how, seconds)
 		end
 		list[#list + 1] = best
 	end
-	local function spend()
+	-- (`tapped`: mana is free, and a spell takes the time to tap its cost back)
+	local tap = kit.lifetap and (kit.lifetap.mana or 0) > 0 and kit.lifetap.mana or nil
+	for _, a in ipairs(list) do
+		a.tapped = a.takes + (tap and a.cost / tap * R.GLOBAL or 0)
+	end
+	local function spend(tapping)
 		local sum, left, time = white, rage, free
 		for _, a in ipairs(list) do
 			local uses = a.most
-			if a.cost > 0 then
+			local takes = tapping and a.tapped or a.takes
+			if a.cost > 0 and not tapping then
 				uses = math.min(uses, left / a.cost)
 			end
-			if a.takes > 0 then
-				uses = math.min(uses, time / a.takes)
+			if takes > 0 then
+				uses = math.min(uses, time / takes)
 			end
 			uses = math.max(0, uses)
 			sum = sum + uses * a.gain
 			left = left - uses * a.cost
-			time = time - uses * a.takes
+			time = time - uses * takes
 		end
 		return sum
 	end
@@ -671,10 +795,14 @@ local function abilities(s, kit, how, seconds)
 	-- the most for its rage or mana first; one that costs none before any
 	order("cost")
 	local sum = spend()
-	if kit.caster then
+	if mode.caster then
 		-- and the most for its time first: the better of the two
 		order("takes")
 		sum = math.max(sum, spend())
+	end
+	if tap then
+		order("tapped")
+		sum = math.max(sum, spend(true))
 	end
 	if how.threat then
 		sum = sum * R.STANCE_THREAT

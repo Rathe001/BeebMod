@@ -198,8 +198,125 @@ MODEL = {
         "Serpent Sting": ("ability", ["dot"], {"magic": True, "lasts": True, "ranged": True}),
         "Volley": ("ability", ["tick"], {"magic": True, "aoe": True, "channel": True, "ranged": True}),
     },
+    # THE WARLOCK (Josh 2026-11-18: "Ok, next class?"). A caster, as the mage
+    # is, with damage over time kept up, a pet, and Life Tap. More facts:
+    #   period  a `tick` is an amount each so many seconds, from the tables
+    #           (Siphon Life: every 3)
+    #   pet     the class fights with a pet
+    # Life Tap is a "tap": its second number is the mana it gives.
+    # Left out: Bane of Doom (one Bane at a time, and Agony is the one
+    # priced), Conflagrate (it uses up Immolate), Hellfire, Drain Soul, Death
+    # Coil, and Chaos Bolt and Shadowflame, whose damage is worked out from
+    # your level.
+    "WARLOCK": {
+        "Shadow Bolt": ("ability", ["hit"], {"magic": True, "pet": True}),
+        "Searing Pain": ("ability", ["hit"], {"magic": True, "pet": True}),
+        "Soul Fire": ("ability", ["hit"], {"magic": True, "pet": True}),
+        "Shadowburn": ("ability", ["hit"], {"magic": True, "pet": True}),
+        "Incinerate": ("ability", ["hit", "-"], {"magic": True, "pet": True}),
+        "Immolate": ("ability", ["hit", "dot"], {"magic": True, "lasts": True, "pet": True}),
+        "Corruption": ("ability", ["dot"], {"magic": True, "lasts": True, "pet": True}),
+        "Bane of Agony": ("ability", ["dot"], {"magic": True, "lasts": True, "pet": True}),
+        "Siphon Life": ("ability", ["tick"], {"magic": True, "lasts": True, "period": True, "pet": True}),
+        "Drain Life": ("ability", ["tick"], {"magic": True, "channel": True, "period": True, "pet": True}),
+        "Rain of Fire": ("ability", ["dot"], {"magic": True, "aoe": True, "channel": True, "pet": True}),
+        "Life Tap": ("tap", ["-", "mana"], {}),
+    },
+    # THE PRIEST (Josh 2026-11-18: "Let's go ahead with that spec work"). A
+    # caster, and a healer by the heals' own sum (Roles.lua, R.FightHealing),
+    # which any class's "heal:" spells go into.
+    # Left out: Renew and the other heals over time, Prayer of Healing,
+    # Penance, Starshards, Shadow Word: Death, Mind Spike and Vampiric Touch.
+    "PRIEST": {
+        "Smite": ("ability", ["hit"], {"magic": True}),
+        "Holy Fire": ("ability", ["hit", "dot"], {"magic": True, "over": True}),
+        "Mind Blast": ("ability", ["hit"], {"magic": True}),
+        "Shadow Word: Pain": ("ability", ["dot"], {"magic": True, "lasts": True}),
+        "Devouring Plague": ("ability", ["dot"], {"magic": True, "lasts": True}),
+        "Mind Flay": ("ability", ["dot", "-"], {"magic": True, "channel": True}),
+        "Lesser Heal": ("heal:lesserHeal", ["amount"]),
+        "Heal": ("heal:heal", ["amount"]),
+        "Greater Heal": ("heal:greaterHeal", ["amount"]),
+        "Flash Heal": ("heal:flashHeal", ["amount"]),
+    },
+    # THE SHAMAN, WHICH FIGHTS TWO WAYS (Josh 2026-11-18: "Shaman and druid
+    # will be difficult since the player could either have a melee spec or
+    # caster. We need to determine which one by which talents they have
+    # selected. The rotation formula will be completely different based on
+    # that."). An ability marked `spec` is used in that way of fighting
+    # only; one with no mark, in every way. The ways themselves are in SPECS,
+    # below.
+    # The three shocks share a cooldown, so one is priced: Earth Shock.
+    # Chain Lightning is counted at full damage on each enemy it reaches;
+    # each jump does less.
+    # Left out: the weapon imbues (Windfury, Rockbiter, Flametongue), totems,
+    # Lightning Shield, Chain Heal (its words change with a talent), Lava
+    # Lash and Molten Blast.
+    "SHAMAN": {
+        "Lightning Bolt": ("ability", ["hit"], {"magic": True, "spec": "caster"}),
+        "Chain Lightning": ("ability", ["hit", "cap"], {"magic": True, "aoe": True, "spec": "caster"}),
+        "Earth Shock": ("ability", ["hit"], {"magic": True}),
+        "Stormstrike": ("ability", ["pct", "-"], {"weapon": "norm", "spec": "melee"}),
+        "Healing Wave": ("heal:healingWave", ["amount"]),
+        "Lesser Healing Wave": ("heal:lesserHealingWave", ["amount"]),
+    },
+    # THE DRUID (Josh 2026-11-18: "Start druid"), which fights three ways: a
+    # caster, a cat (energy and combo points, as the rogue) and a bear (rage,
+    # as the warrior; the tank's way). See SPECS.
+    # A cat's or a bear's weapon damage is its paws', which the game gives
+    # only while you are in the form: Read.lua keeps it from then.
+    # Ferocious Bite's amounts are plain numbers in its words, so each is
+    # named by which number it is (`literal`).
+    # Left out: Rejuvenation and Regrowth's heal over time, Lacerate,
+    # Tiger's Fury, Starsurge, Sunfire, Nourish and Innervate.
+    "DRUID": {
+        "Wrath": ("ability", ["hit"], {"magic": True, "spec": "caster"}),
+        "Starfire": ("ability", ["hit"], {"magic": True, "spec": "caster"}),
+        "Moonfire": ("ability", ["hit", "dot"], {"magic": True, "lasts": True, "spec": "caster"}),
+        "Insect Swarm": ("ability", ["-", "dot"], {"magic": True, "lasts": True, "spec": "caster"}),
+        "Hurricane": ("ability", ["tick", "-"], {"magic": True, "aoe": True, "channel": True, "spec": "caster"}),
+        "Claw": ("ability", ["pct", "add", "-"], {"weapon": "plain", "points": 1, "spec": "cat"}),
+        "Shred": ("ability", ["pct", "add", "-"], {"weapon": "plain", "points": 1, "behind": True, "spec": "cat"}),
+        "Rake": ("ability", ["hit", "dot", "-"], {"points": 1, "lasts": True, "spec": "cat"}),
+        "Rip": ("ability", ["r1", "r2", "r3", "r4", "r5"], {"finisher": True, "bleed": True, "spec": "cat"}),
+        "Ferocious Bite": ("ability", ["-"], {"finisher": True, "spec": "cat", "literal": {
+            2: "p1", 3: "p1", 5: "p2", 6: "p2", 8: "p3", 9: "p3", 11: "p4", 12: "p4", 14: "p5", 15: "p5"}}),
+        "Maul": ("ability", ["add"], {"swing": True, "spec": "bear"}),
+        # (411128 is the cat's Swipe, "250% weapon damage ... 1 combo point":
+        # its two numbers read as how many it reaches and its damage)
+        "Swipe": ("ability", ["cap", "hit"], {"aoe": True, "spec": "bear", "except": [411128]}),
+        "Enrage": ("rage", ["rage", "more"], {"every": 60}),
+        "Healing Touch": ("heal:healingTouch", ["amount"]),
+        "Regrowth": ("heal:regrowth", ["amount", "-"]),
+    },
 }
-CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1, "MAGE": 128, "ROGUE": 8, "HUNTER": 4}
+CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1, "MAGE": 128, "ROGUE": 8, "HUNTER": 4, "WARLOCK": 256, "PRIEST": 16, "SHAMAN": 64,
+              "DRUID": 1024}
+
+# THE WAYS A CLASS FIGHTS, for one that has more than one (see THE SHAMAN).
+# For each: how it is priced (caster: by casting, with no swings; mana: its
+# abilities are paid in mana beside its swings), and `marks`, the talents
+# only that way takes. The one with the most of its marks known is yours.
+# With none known, each is priced and the higher kept, which follows gear.
+SPECS = {
+    "SHAMAN": {
+        "melee": {"mana": True, "marks": ["Stormstrike", "Flurry", "Thundering Strikes", "Two-Handed Axes and Maces",
+                                          "Weapon Mastery", "Spirit Weapons"]},
+        "caster": {"caster": True, "marks": ["Elemental Fury", "Elemental Focus", "Call of Thunder", "Lightning Mastery",
+                                             "Convection", "Concussion"]},
+    },
+    # (`form`: it is fought in a form, whose stats are not yours as you
+    # stand. `tank`: the tank's way, priced for threat and survival, and
+    # never the DPS number.)
+    "DRUID": {
+        "caster": {"caster": True, "marks": ["Moonkin Form", "Moonfury", "Improved Wrath", "Improved Starfire", "Vengeance",
+                                             "Nature's Grace", "Moonglow", "Improved Moonfire"]},
+        "cat": {"energy": True, "form": "cat", "marks": ["Sharpened Claws", "Improved Shred", "Savage Fury", "Feral Aggression",
+                                                         "Predatory Strikes", "Blood Frenzy", "Shredding Attacks",
+                                                         "Heart of the Wild", "Leader of the Pack"]},
+        "bear": {"tank": True, "form": "bear", "marks": []},
+    },
+}
 
 # a school's place in the game's list of spell power (GetSpellBonusDamage)
 SCHOOL_AT = {2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
@@ -209,7 +326,7 @@ def direct_share(spell):
     return max([float(e["EffectBonusCoefficient"]) for e in effects.get(spell, {}).values() if e["Effect"] == "2"] or [0.0])
 
 
-def magic_bits(spell):
+def magic_bits(spell, rules=None):
     """A spell's school, its two shares of spell power and how long it lasts."""
     m = misc.get(spell)
     mask = int(m["SchoolMask"]) if m else 0
@@ -224,7 +341,10 @@ def magic_bits(spell):
         if e["Effect"] != "6" or period <= 0 or secs <= 0:
             continue
         ticks = round(secs / period)
-        if e["EffectAura"] == "3":
+        if (rules or {}).get("period") and not any(b.startswith("period") for b in bits):
+            bits.append("period = %g" % period)
+        # (damage over time, and health taken over time: Siphon Life)
+        if e["EffectAura"] in ("3", "53"):
             over += float(e["EffectBonusCoefficient"]) * ticks
         elif e["EffectAura"] == "23" and int(e["EffectTriggerSpell"]) > 0:
             # (each tick casts a spell: Arcane Missiles)
@@ -278,11 +398,16 @@ def ranged(spell, index):
 def plan(spell, keys, literal=None):
     """The description's numbers, in order: a key for each, "-" to skip."""
     text = templates.get(spell, "")
-    out, values, said = [], 0, 0
+    out, values, said, ended = [], 0, 0, -1
     for m in TOKEN.finditer(text):
         if m.group("cond") or m.group("var"):
             return None, "a template this cannot plan: " + text[:80]
+        was, ended = ended, m.end()
         if m.group("digits"):
+            # (digits after a point that follows a value are the rest of
+            # that one number as the game writes it: "${$m2/100}.1" is "2.1")
+            if was == m.start() - 1 and text[was] == ".":
+                continue
             said += 1
             out.append((literal or {}).get(said, "-"))
             continue
@@ -338,6 +463,9 @@ for cls, model in MODEL.items():
         for keys in entry[1:]:
             if isinstance(keys, dict):
                 rules = keys
+        # (another spell of the same name whose words happen to fit)
+        if spell in rules.get("except", ()):
+            continue
         for keys in entry[1:]:
             if isinstance(keys, dict):
                 continue
@@ -353,7 +481,7 @@ for cls, model in MODEL.items():
         # with the highest, whatever order the spellbook lists them in
         if spell in levels:
             bits.append("lvl = %d" % int(levels[spell]["SpellLevel"]))
-        if share(spell) > 0 and entry[0] not in ("ability", "rage", "mana"):
+        if share(spell) > 0 and entry[0] not in ("ability", "rage", "mana", "tap"):
             bits.append("share = %s" % share(spell))
         # a heal's own amount before any healing power, and the levels it
         # grows over: what is left of its description's amount is healing
@@ -368,7 +496,7 @@ for cls, model in MODEL.items():
         if entry[0] == "mana":
             m = misc.get(spell)
             bits.append("secs = %g" % (durations.get(int(m["DurationIndex"]), 0) / 1000 if m else 0))
-        if entry[0] in ("ability", "rage", "mana"):
+        if entry[0] in ("ability", "rage", "mana", "tap"):
             # every rank of an ability under one name; its cost and cooldown
             # as the tables have them, for where the game will not say
             bits.append('key = "%s"' % re.sub(r"[^a-z]", "", names[spell].lower()))
@@ -380,15 +508,15 @@ for cls, model in MODEL.items():
                 cd = max(float(c["RecoveryTime"]), float(c["CategoryRecoveryTime"])) / 1000
                 if cd > 0 and not rules.get("nocd"):
                     bits.append("cd = %g" % cd)
-            if rules.get("dot"):
+            if rules.get("dot") or ((rules.get("lasts") or rules.get("bleed")) and not rules.get("magic")):
                 m = misc.get(spell)
                 bits.append("secs = %g" % (durations.get(int(m["DurationIndex"]), 0) / 1000 if m else 0))
             if spell in threat and not rules.get("magic"):
                 bits.append("threat = %g, tmult = %g" % threat[spell])
             if rules.get("magic"):
-                bits += magic_bits(spell)
+                bits += magic_bits(spell, rules)
             for k, v in sorted(rules.items()):
-                if k in ("nocd", "magic", "literal"):
+                if k in ("nocd", "magic", "literal", "period", "except"):
                     continue
                 bits.append("%s = %s" % (k, "true" if v is True else ('"%s"' % v if isinstance(v, str) else "%g" % v)))
         bits.append('read = "%s"' % " ".join(read))
@@ -399,6 +527,26 @@ for cls, model in MODEL.items():
         if name not in planned:
             problems += 1
             print("NOT PLANNED: no spell called %s fits the model" % name)
+out.append("\t},")
+
+# ------------------------------------------------------------------ specs
+out += ["\t-- class -> way of fighting -> how it is priced, and the talents that mark it", "\tspecs = {"]
+for cls, ways in SPECS.items():
+    ids = set()
+    for line in class_lines.get(CLASS_MASK[cls], ()):
+        ids |= by_line.get(line, set())
+    out.append("\t\t%s = {" % cls)
+    for way, facts in ways.items():
+        marks = sorted(i for i in ids if names.get(i) in facts["marks"])
+        missing = [m for m in facts["marks"] if not any(names.get(i) == m for i in ids)]
+        if missing:
+            problems += 1
+            print("NO SUCH TALENT for %s %s: %s" % (cls, way, ", ".join(missing)))
+        flags = ", ".join(('%s = "%s"' % (k, facts[k])) if isinstance(facts[k], str) else "%s = true" % k
+                          for k in sorted(facts) if k != "marks")
+        out.append("\t\t\t%s = { %s%smarks = { %s } }," % (way, flags, ", " if flags else "",
+                                                          ", ".join("[%d] = true" % i for i in marks)))
+    out.append("\t\t},")
 out.append("\t},")
 
 # ------------------------------------------------------------ crit talents
@@ -433,11 +581,7 @@ for cls, model in MODEL.items():
     priced = {i: re.sub(r"[^a-z]", "", names[i].lower()) for i in ids
               if names.get(i) in model and model[names[i]][0] == "ability"}
     found = []
-    # (the class's list has a talent's first rank only: the others are the
-    # spells of the same name)
-    called = {names.get(i) for i in ids}
-    ranks = ids | {i for i in effects if names.get(i) in called and misc.get(i) and int(misc[i]["Attributes_0"]) & 0x40}
-    for spell in sorted(ranks):
+    for spell in sorted(ids):
         m = misc.get(spell)
         if not m or not int(m["Attributes_0"]) & 0x40:
             continue

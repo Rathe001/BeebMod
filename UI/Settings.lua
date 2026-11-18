@@ -129,7 +129,7 @@ function S.Build(parent)
 	-- utility with no page of its own, like the two above.
 	local upgrades = stack:Section("Upgrades")
 	S.upgradesRow = W.SwitchRow(upgrades, "Upgrades on gear tooltips",
-		"Shows how much a piece of gear changes your tank, healer and DPS numbers. Paladins, warriors, mages, rogues and hunters for now.",
+		"Shows how much a piece of gear changes your tank, healer and DPS numbers.",
 		function() return BT.Switched("upgrades") end,
 		function(on) BT.SetEnabled("upgrades", on) end)
 

@@ -152,6 +152,13 @@ function T.Compare(link)
 		if n.kit.unread and #n.kit.unread > 0 then
 			notes[#notes + 1] = T.NOTE_SPELLS
 		end
+		-- a way fought in a form that has not been seen yet (Read.lua, Rd.Forms)
+		for _, spec in pairs(n.kit.specs or {}) do
+			if spec.form and not (n.state.forms and n.state.forms[spec.form]) then
+				notes[#notes + 1] = T.NOTE_FORMS
+				break
+			end
+		end
 		out[#out + 1] = { swap = swap, change = change, all = R.Combine(change), seal = select(2, R.Damage(after, n.kit)),
 			note = #notes > 0 and table.concat(notes, " · ") or nil }
 	end
@@ -160,6 +167,7 @@ end
 
 T.NOTE_EFFECT = "One effect is not counted"
 T.NOTE_SPELLS = "Some of your spells could not be read"
+T.NOTE_FORMS = "Go into Cat Form and Bear Form once to count them"
 
 -- what a two-slot piece's rows are called: "ring 1", "ring 2"
 local PAIRS = { [11] = "ring 1", [12] = "ring 2", [13] = "trinket 1", [14] = "trinket 2" }

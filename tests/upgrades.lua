@@ -759,6 +759,251 @@ do
 	near("its healer number has nothing to stand on", R.Healing(archer, kit()), 0)
 end
 
+print("damage over time, a pet and Life Tap: the warlock")
+do
+	-- (Josh 2026-11-18: "Ok, next class?")
+	local w = data.spells.WARLOCK
+	check("Corruption is damage over time and nothing else, in Shadow", w[25311].lasts == true and w[25311].spell == 6 and w[25311].secs == 18)
+	near("its share of spell power is every tick's", w[25311].dshare, 1.2)
+	check("Siphon Life ticks every 3 seconds", w[18881].period == 3 and w[18881].secs == 30)
+	check("Life Tap is mana for a cast", w[11689].is == "tap")
+	local tapped = Rd.Planned(w[11689].read, "Converts 439 Health into 439 Mana for you. Spirit increases the amount converted.")
+	check("and its second number is the mana", tapped and tapped.mana == 439)
+	local lock = {
+		level = 60, attackPower = 20, armor = 800, crit = 3, health = 3000, mana = 4000, manaPer5 = 0, spiritRegen = 10,
+		damageMin = 20, damageMax = 30, weaponSpeed = 0, haste = 0, dodge = 4, parry = 0, block = 0, blockValue = 0, hit = 0,
+		spellHit = 0, spellCrit = 10, healing = 0, spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 },
+	}
+	local function with(change)
+		local t = {}
+		for k, v in pairs(lock) do t[k] = v end
+		t.spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }
+		change(t)
+		return t
+	end
+	local function kit(more)
+		local a = {}
+		for k, v in pairs(more or {}) do a[k] = v end
+		return { caster = true, pet = true, heals = {}, seals = {}, abilities = a,
+			at = { spell = 0, healing = 0, spells = { [3] = 0, [6] = 0 } } }
+	end
+	local through = 1 - R.ArmorCut(R.EnemyArmor(60), 60)
+	near("with no pet out, nothing", R.Damage(lock, kit(), { long = true }), 0)
+	local pet = with(function(t) t.petDps = 50 end)
+	near("the pet does its own, through armor", R.Damage(pet, kit(), { long = true }), 50 * through)
+	local corruption = { v = { dot = 822 }, cost = 1, cast = 2, spell = 6, dshare = 1.2, secs = 18, lasts = true }
+	near("damage over time is kept up, once each time it runs out", R.Damage(lock, kit({ corruption = corruption }), { long = true }),
+		822 / 18 * 0.96)
+	near("and spell power moves it by its share",
+		R.Damage(with(function(t) t.spellDamage[6] = 100 end), kit({ corruption = corruption }), { long = true }), (822 + 120) / 18 * 0.96)
+	local siphon = { v = { tick = 45 }, cost = 1, spell = 6, secs = 30, period = 3, lasts = true }
+	near("an amount every 3 seconds, for as long as it lasts", R.Damage(lock, kit({ siphonlife = siphon }), { long = true }),
+		45 * 30 / 3 / 30 * 0.96)
+	local immolate = { v = { hit = 279, dot = 510 }, cost = 1, cast = 2, spell = 3, secs = 15, lasts = true }
+	near("Immolate: its hit, which can crit, and its burn, each time it runs out",
+		R.Damage(lock, kit({ immolate = immolate }), { long = true }), (279 * 1.05 + 510) / 15 * 0.96)
+	-- Life Tap
+	local bolt = { v = { hit = 500 }, cost = 370, cast = 3, spell = 6, share = 0.857 }
+	local dry = R.Damage(lock, kit({ shadowbolt = bolt }), { long = true })
+	near("without Life Tap a long fight is short of mana", dry, 4000 / 180 / 370 * 500 * 1.05 * 0.96)
+	local tapping = kit({ shadowbolt = bolt })
+	tapping.lifetap = { mana = 440 }
+	-- each bolt takes its 3 seconds and the taps that pay for it
+	near("with it, each spell takes the time to tap its cost back", R.Damage(lock, tapping, { long = true }),
+		500 * 1.05 * 0.96 / (3 + 370 / 440 * 1.5))
+	local young = with(function(t) t.level = 30 end)
+	local quick, _, _, seconds = R.Damage(young, tapping)
+	check("a short fight on a full bar is not charged for tapping", seconds < 60 and math.abs(quick - 500 * 1.05 * 0.96 / 3) < 0.01)
+	check("mana is worth nothing to one that taps, in a long fight",
+		math.abs(R.Damage(with(function(t) t.mana = 6000 end), tapping, { long = true }) - R.Damage(lock, tapping, { long = true })) < 0.01)
+	check("Ruin is a warlock's", data.talents.WARLOCK[17959].more == 100)
+	near("its healer number has nothing to stand on", R.Healing(lock, kit()), 0)
+end
+
+print("a healer by the heals' own sum: the priest")
+do
+	-- (Josh 2026-11-18: "Let's go ahead with that spec work")
+	local p = data.spells.PRIEST
+	check("Greater Heal is a heal, with its own amount from the tables", p[25314].is == "heal:greaterHeal" and p[25314].base == 1960)
+	check("Smite is a Holy spell", p[10934].spell == 2 and p[10934].is == "ability")
+	check("Shadow Word: Pain is damage over time and nothing else", p[10894].lasts == true and p[10894].spell == 6)
+	check("the priest fights one way", data.specs.PRIEST == nil)
+	local healer = { level = 60, mana = 5000, manaPer5 = 30, spiritRegen = 20, spellCrit = 5, healing = 300 }
+	local heals = { at = { healing = 300 }, heals = {
+		{ name = "Greater Heal", amount = 2200, cast = 3, cost = 710, share = 0.857 },
+		{ name = "Flash Heal", amount = 1000, cast = 1.5, cost = 380, share = 0.429 },
+	} }
+	local now = R.FightHealing(healer, heals)
+	check(("a priest's heals give a healer number: %.0f"):format(now), now > 0)
+	local more = {}
+	for k, v in pairs(healer) do more[k] = v end
+	more.healing = 400
+	check("and healing power moves it", R.FightHealing(more, heals) > now)
+end
+
+print("a class that fights two ways: the shaman")
+do
+	-- (Josh 2026-11-18: "the player could either have a melee spec or
+	-- caster. We need to determine which one by which talents they have
+	-- selected. The rotation formula will be completely different based on
+	-- that.")
+	local specs = data.specs.SHAMAN
+	check("the shaman fights two ways", specs.melee and specs.caster and specs.caster.caster == true and specs.melee.mana == true)
+	check("Stormstrike marks melee, and is its ability", specs.melee.marks[17364] and data.spells.SHAMAN[17364].spec == "melee")
+	check("Elemental Fury marks a caster", specs.caster.marks[16089] == true)
+	check("Lightning Bolt is a caster's", data.spells.SHAMAN[403].spec == "caster")
+	check("Earth Shock is used either way", data.spells.SHAMAN[10414].spec == nil)
+	-- which way, by talents
+	near("no talents: no way marked", Rd.Spec(specs, function() return false end) == nil and 1 or 0, 1)
+	check("Stormstrike known: melee", Rd.Spec(specs, function(id) return id == 17364 end) == "melee")
+	check("Elemental Fury known: a caster", Rd.Spec(specs, function(id) return id == 16089 end) == "caster")
+	check("more of one than the other: that one",
+		Rd.Spec(specs, function(id) return id == 17364 or id == 16255 or id == 16089 end) == "melee")
+	check("as many of each: none, and gear decides", Rd.Spec(specs, function(id) return id == 17364 or id == 16089 end) == nil)
+	-- the sums
+	local shaman = {
+		level = 60, attackPower = 600, armor = 3000, crit = 15, health = 3500, mana = 4000, manaPer5 = 0, damageMin = 250, damageMax = 350,
+		weaponSpeed = 3.5, haste = 0, dodge = 5, parry = 5, block = 0, blockValue = 0, hit = 0, spellHit = 0, spellCrit = 5, healing = 0,
+		spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }, twoHand = true,
+	}
+	local function with(change)
+		local t = {}
+		for k, v in pairs(shaman) do t[k] = v end
+		t.spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }
+		change(t)
+		return t
+	end
+	local function kit(spec)
+		return { specs = specs, spec = spec, heals = {}, seals = {}, at = { spell = 0, healing = 0, spells = { [4] = 0 } }, abilities = {
+			lightningbolt = { v = { hit = 450 }, cost = 265, cast = 3, spell = 4, share = 0.857, spec = "caster" },
+			earthshock = { v = { hit = 540 }, cost = 450, cooldown = 6, spell = 4, share = 0.386 },
+			stormstrike = { v = { pct = 150 }, cost = 300, cooldown = 8, weapon = "norm", spec = "melee" },
+		} }
+	end
+	local melee = R.Damage(shaman, kit("melee"), { long = true })
+	local caster = R.Damage(shaman, kit("caster"), { long = true })
+	local white = R.Damage(shaman, { abilities = {}, heals = {}, seals = {}, at = {} }, { long = true })
+	check(("melee swings, with Stormstrike and a shock: %.1f over %.1f of swings"):format(melee, white), melee > white)
+	check(("a caster does not swing: %.1f"):format(caster), caster < white)
+	local strong = with(function(t) t.damageMin, t.damageMax = 350, 450 end)
+	check("a better weapon is worth damage to melee", R.Damage(strong, kit("melee"), { long = true }) > melee)
+	near("and nothing to a caster", R.Damage(strong, kit("caster"), { long = true }), caster)
+	local wise = with(function(t) t.spellDamage[4] = 200 end)
+	check("spell power is worth more to a caster than to melee",
+		R.Damage(wise, kit("caster"), { long = true }) / caster > R.Damage(wise, kit("melee"), { long = true }) / melee)
+	-- no way marked: the higher of the two, which follows gear
+	near("no way marked, a two-hander in hand: melee's number", R.Damage(shaman, kit(nil), { long = true }), melee)
+	local robed = with(function(t)
+		t.damageMin, t.damageMax, t.attackPower, t.mana, t.spellCrit = 40, 60, 100, 9000, 20
+		t.spellDamage[4] = 500
+	end)
+	near("no way marked, spell power and mana: a caster's number", R.Damage(robed, kit(nil), { long = true }),
+		R.Damage(robed, kit("caster"), { long = true }))
+	check("and that is the higher", R.Damage(robed, kit("caster"), { long = true }) > R.Damage(robed, kit("melee"), { long = true }))
+	local short = with(function(t) t.level = 30 end)
+	local d, _, _, seconds = R.Damage(short, kit("melee"))
+	check("a fight below the top level is short, and has a number", seconds < 60 and d > 0)
+	near("a class that fights one way is as it was", R.Damage(shaman, { abilities = {}, heals = {}, seals = {}, at = {} }, { long = true }), white)
+end
+
+print("three ways, two of them in a form: the druid")
+do
+	-- (Josh 2026-11-18: "Start druid")
+	local d = data.spells.DRUID
+	local specs = data.specs.DRUID
+	check("the druid fights three ways", specs.caster.caster == true and specs.cat.energy == true and specs.cat.form == "cat"
+		and specs.bear.tank == true and specs.bear.form == "bear")
+	check("Claw is a cat's, and builds a point", d[9850].spec == "cat" and d[9850].points == 1)
+	check("Maul is a bear's, with its swing", d[9881].spec == "bear" and d[9881].swing == true and d[9881].cost == 15)
+	check("Starfire is a caster's", d[25298].spec == "caster" and d[25298].spell == 7)
+	check("Rip is a finishing move that bleeds for a set time", d[9896].finisher == true and d[9896].bleed == true and d[9896].secs == 12)
+	local bite = Rd.Planned(d[31018].read, "Finishing move that causes damage per combo point and converts each extra point of energy "
+		.. "into 2.1 additional damage.  Damage is increased by your Attack Power.\n   1 point  : 245-321 damage\n"
+		.. "   2 points: 426-502 damage\n   3 points: 607-683 damage\n   4 points: 788-864 damage\n   5 points: 969-1,045 damage")
+	check("Ferocious Bite's amounts are read, though they are plain words", bite and bite.p1 == 283 and bite.p5 == 1007)
+	local rip = Rd.Planned(d[9896].read, "Finishing move that causes damage over time.  Damage increases per combo point and by your "
+		.. "Attack Power:\n   1 point  : 174 damage over 12 sec.\n   2 points: 300 damage over 12 sec.\n"
+		.. "   3 points: 426 damage over 12 sec.\n   4 points: 552 damage over 12 sec.\n   5 points: 678 damage over 12 sec.")
+	check("and Rip's, for each count of points", rip and rip.r1 == 174 and rip.r5 == 678)
+	check("Healing Touch is a heal", d[25297].is == "heal:healingTouch")
+	check("Moonkin Form marks a caster, Shredding Attacks a cat", specs.caster.marks[24858] and next(specs.cat.marks) ~= nil)
+
+	-- the forms, kept from when each was seen
+	local db = {}
+	local standing = { level = 60, attackPower = 200, crit = 8, armor = 1500, health = 3000, damageMin = 90, damageMax = 130, weaponSpeed = 3 }
+	near("out of form, none is known yet", next(Rd.Forms(standing, db)) == nil and 1 or 0, 1)
+	local asCat = { level = 60, form = "cat", attackPower = 520, crit = 14, armor = 1500, health = 3000,
+		damageMin = 55 + 520 / 14, damageMax = 75 + 520 / 14, weaponSpeed = 1 }
+	local seen = Rd.Forms(asCat, db)
+	near("in Cat Form: the attack power it adds", seen.cat.ap, 320)
+	near("its crit", seen.cat.crit, 6)
+	near("and its paws, with attack power's share taken out", seen.cat.pawMin, 55)
+	local asBear = { level = 60, form = "bear", attackPower = 420, crit = 10, armor = 6000, health = 4200,
+		damageMin = 100 + 420 / 14 * 2.5, damageMax = 140 + 420 / 14 * 2.5, weaponSpeed = 2.5 }
+	seen = Rd.Forms(asBear, db)
+	near("in Bear Form: what armor is multiplied by", seen.bear.armor, 4)
+	near("and the health it adds", seen.bear.health, 1200)
+	check("a new level starts over", next(Rd.Forms({ level = 61, form = "cat", attackPower = 1, crit = 1, armor = 1, health = 1,
+		damageMin = 1, damageMax = 2, weaponSpeed = 1 }, { forms = db.forms })) == nil)
+
+	local druid = {
+		level = 60, attackPower = 200, armor = 1500, crit = 8, health = 3000, mana = 4000, manaPer5 = 0, damageMin = 90, damageMax = 130,
+		weaponSpeed = 3, haste = 0, dodge = 8, parry = 0, block = 0, blockValue = 0, hit = 0, spellHit = 0, spellCrit = 6, healing = 0,
+		spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }, forms = seen,
+	}
+	local function with(change)
+		local t = {}
+		for k, v in pairs(druid) do t[k] = v end
+		t.spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }
+		change(t)
+		return t
+	end
+	local cat = R.FormState(druid, "cat")
+	near("as a cat: your attack power and what the form adds", cat.attackPower, 520)
+	near("the paws' swing, not the weapon's", cat.damageMin, 55 + 520 / 14)
+	near("at the cat's speed", cat.weaponSpeed, 1)
+	local inCat = with(function(t) t.form, t.attackPower, t.crit = "cat", 520, 14 end)
+	near("already in Cat Form: nothing is added twice", R.FormState(inCat, "cat").attackPower, 520)
+	near("from Cat Form to a bear: the cat's share comes off first", R.FormState(inCat, "bear").attackPower, 420)
+	near("a bear's armor", R.FormState(druid, "bear").armor, 6000)
+	check("a form never seen cannot be worked out", R.FormState(with(function(t) t.forms = {} end), "cat") == nil)
+	near("attack power for forms only, from a swap", R.FormState(with(function(t) t.feralGain = 70 end), "cat").attackPower, 590)
+
+	local function kit(spec)
+		return { specs = specs, spec = spec, heals = {}, seals = {}, at = { spell = 0, healing = 0, spells = { [4] = 0, [7] = 0 } },
+			rage = { enrage = { amount = 20, every = 60 } }, abilities = {
+				wrath = { v = { hit = 250 }, cost = 120, cast = 2, spell = 4, share = 0.571, spec = "caster" },
+				claw = { v = { pct = 140, add = 115 }, cost = 45, weapon = "plain", points = 1, spec = "cat" },
+				ferociousbite = { v = { p1 = 283, p2 = 464, p3 = 645, p4 = 826, p5 = 1007 }, cost = 35, finisher = true, spec = "cat" },
+				maul = { v = { add = 128 }, cost = 15, swing = true, spec = "bear", threat = 100, tmult = 1 },
+				swipe = { v = { cap = 3, hit = 83 }, cost = 20, aoe = true, spec = "bear" },
+			} }
+	end
+	local asCaster = R.Damage(druid, kit("caster"), { long = true })
+	local asCatDps = R.Damage(druid, kit("cat"), { long = true })
+	check(("a caster's number and a cat's are different sums: %.1f and %.1f"):format(asCaster, asCatDps),
+		asCaster > 0 and asCatDps > 0 and math.abs(asCaster - asCatDps) > 1)
+	local staff = with(function(t) t.damageMin, t.damageMax = 300, 400 end)
+	near("a better weapon is nothing to a cat", R.Damage(staff, kit("cat"), { long = true }), asCatDps)
+	check("attack power is worth damage to a cat",
+		R.Damage(with(function(t) t.attackPower = 300 end), kit("cat"), { long = true }) > asCatDps)
+	near("and nothing to a caster", R.Damage(with(function(t) t.attackPower = 300 end), kit("caster"), { long = true }), asCaster)
+	check("spell power is worth damage to a caster",
+		R.Damage(with(function(t) t.spellDamage[4] = 200 end), kit("caster"), { long = true }) > asCaster)
+	near("and nothing to a cat", R.Damage(with(function(t) t.spellDamage[4] = 200 end), kit("cat"), { long = true }), asCatDps)
+	near("no way marked: the higher of caster and cat", R.Damage(druid, kit(nil), { long = true }), math.max(asCaster, asCatDps))
+	local unseen = with(function(t) t.forms = {} end)
+	near("a cat never seen in its form gives way to the caster", R.Damage(unseen, kit("cat"), { long = true }),
+		R.Damage(unseen, kit("caster"), { long = true }))
+	-- the bear is the tank's way
+	local threat = R.Threat(druid, kit("cat"))
+	local bear = R.FormState(druid, "bear")
+	check(("threat is the bear's sum, whatever the DPS way: %.1f"):format(threat), threat > 0 and threat == R.Threat(druid, kit("caster")))
+	check("the bear is never the DPS number", R.Damage(druid, kit("bear"), { long = true }) == math.max(asCaster, asCatDps))
+	near("survival is as a bear", R.Survival(druid, kit("cat")), R.Survival(bear, { heals = {}, seals = {}, at = {} }))
+	check("which is more than as you stand", R.Survival(druid, kit("cat")) > R.Survival(druid, { heals = {}, seals = {}, at = {} }))
+end
+
 print("an item's other effects")
 do
 	check("a trinket's Use, as stats for the time it is up", type(data.uses) == "table" and next(data.uses) ~= nil)

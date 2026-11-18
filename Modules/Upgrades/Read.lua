@@ -83,6 +83,31 @@ function Rd.SkillShort(level)
 	return math.max(0, level * 5 - rank)
 end
 
+-- A DRUID'S FORMS (Josh 2026-11-18: "Start druid"). A cat's and a bear's
+-- attack power, crit, armor, health and swings are not yours as you stand,
+-- and the game says them only while you are in the form. So what you are
+-- out of any form is kept, and each time you are seen in a form, what it
+-- adds to that is kept too: attack power, crit and health as amounts, armor
+-- as what it is multiplied by, and the paws' own damage and speed. Kept for
+-- your level. Gear changed while in a form makes it a little off until you
+-- are next seen out of one and back in.
+-- (the game's form numbers: cat 1, bear 5, dire bear 8)
+Rd.FORMS = { [1] = "cat", [5] = "bear", [8] = "bear" }
+function Rd.Forms(s, db)
+	db.forms = type(db.forms) == "table" and db.forms.level == s.level and db.forms or { level = s.level, seen = {} }
+	local kept = db.forms
+	if not s.form then
+		kept.base = { ap = s.attackPower, crit = s.crit, armor = s.armor, health = s.health }
+	elseif kept.base and kept.base.armor > 0 and s.weaponSpeed > 0 then
+		local own = s.attackPower / 14 * s.weaponSpeed
+		kept.seen[s.form] = {
+			ap = s.attackPower - kept.base.ap, crit = s.crit - kept.base.crit, armor = s.armor / kept.base.armor,
+			health = s.health - kept.base.health, pawMin = s.damageMin - own, pawMax = s.damageMax - own, speed = s.weaponSpeed,
+		}
+	end
+	return kept.seen
+end
+
 -- your totals as you stand; nil if the game keeps any of them back
 function Rd.State()
 	-- (a client without the call has nothing to read)
@@ -124,7 +149,10 @@ function Rd.State()
 	-- is well short of it, the seal is up: its attack power is taken off and
 	-- the hit worked out again from the weapon (weapon + attack power / 14 x
 	-- speed, which matched the sheet to the decimal in the probe).
-	local weapon = Rd.Weapon(GetInventoryItemLink("player", 16))
+	-- (not in a druid's form: its swings are its paws', at the form's own speed)
+	local form = Rd.FORMS[num(GetShapeshiftFormID and GetShapeshiftFormID()) or 0]
+	s.form = form
+	local weapon = not form and Rd.Weapon(GetInventoryItemLink("player", 16)) or nil
 	if weapon then
 		s.proc = weapon.proc
 		local faster = weapon.speed / s.weaponSpeed
@@ -189,6 +217,8 @@ function Rd.State()
 		-- (a dagger: some of a rogue's abilities need one)
 		s.dagger = Rd.Dagger(main)
 	end
+	-- a druid's forms, kept from when each was last seen (Rd.Forms)
+	s.forms = Rd.Forms(s, UP.DB())
 	-- A RANGED WEAPON, as the game shows it: its speed with a quiver's haste
 	-- in, its damage with attack power and ammunition in. And the weapon's
 	-- own speed from its tooltip, which is what attack power is counted by.
@@ -554,22 +584,34 @@ local ROLES = {
 			cast = cast / 1000 }
 		for _, fact in ipairs({ "swing", "also", "weapon", "aoe", "dot", "secs", "after", "tank", "shield", "blockvalue",
 			"part", "twohand", "threat", "tmult", "spell", "spell2", "share", "dshare", "over", "channel",
-			"points", "finisher", "dagger", "behind", "opener", "bleed", "speed", "lasts" }) do
+			"points", "finisher", "dagger", "behind", "opener", "bleed", "speed", "lasts", "period", "spec" }) do
 			a[fact] = entry[fact]
 		end
 		-- (energy: it comes at a set rate, Roles.lua)
 		if entry.energy then
 			kit.energy = true
 		end
+		-- (a class with a pet: its damage is counted beside yours)
+		if entry.pet then
+			kit.pet = true
+		end
 		-- (a ranged class: its shots for swings, and mana)
 		if entry.ranged then
 			kit.ranged, kit.mana = true, true
 		end
 		-- (a spell: the class is priced as a caster, by mana and casting time)
-		if entry.spell then
+		-- (not for a class that fights more than one way: each way says how
+		-- it is priced, Roles.lua)
+		if entry.spell and not kit.specs then
 			kit.caster = true
 		end
 		kit.abilities[entry.key or id] = a
+	end,
+	-- mana for a cast of its own (Life Tap)
+	tap = function(kit, _, v)
+		if v.mana and v.mana > 0 then
+			kit.lifetap = { mana = v.mana }
+		end
 	end,
 	-- mana given back by a spell of your own (Evocation)
 	mana = function(kit, _, v, entry)
@@ -700,6 +742,29 @@ function Rd.HealShare(entry, amount, healing, level)
 	local own = entry.base + (entry.per or 0) * grown
 	return math.max(0, math.min(share, (amount - own) / healing))
 end
+-- WHICH WAY YOU FIGHT, BY YOUR TALENTS (Josh 2026-11-18: "We need to
+-- determine which one by which talents they have selected"). Each way of a
+-- class lists the talents only it takes. The way with the most of them
+-- known is yours. None known, or two ways level: nil, and the sum follows
+-- your gear (Roles.lua). `known(id)`: the game's call, handed in.
+function Rd.Spec(specs, known)
+	local best, most, level = nil, 0, false
+	for name, spec in pairs(specs) do
+		local n = 0
+		for id in pairs(spec.marks or {}) do
+			if known(id) then
+				n = n + 1
+			end
+		end
+		if n > most then
+			best, most, level = name, n, false
+		elseif n == most and n > 0 then
+			level = true
+		end
+	end
+	return not level and best or nil
+end
+
 -- CRIT TALENTS (Josh 2026-11-18: "Let's do the crit"). Each passive in the
 -- tables' list that you know puts what it does on the abilities it touches
 -- (Roles.lua, what crits add). Its amount is the number its description
@@ -746,6 +811,20 @@ function Rd.Kit(s)
 	end
 	local kit = { seals = {}, heals = {}, at = { spell = s.spellDamage[2], healing = s.healing, spells = spells,
 		crits = s.spellCrits, crit = s.spellCrit } }
+	-- the ways your class fights, where it has more than one, and which is
+	-- yours by your talents (Rd.Spec)
+	do
+		local data = UP.SpellData
+		local _, class = UnitClass("player")
+		local specs = type(data) == "table" and type(data.specs) == "table" and data.specs[class] or nil
+		if type(specs) == "table" then
+			kit.specs = specs
+			kit.spec = Rd.Spec(specs, function(id)
+				local ok, known = pcall(IsPlayerSpell or IsSpellKnown, id)
+				return ok and known == true
+			end)
+		end
+	end
 	local heals = {}
 	eachPriced(function(id, item, entry)
 		if not entry or item.isPassive then
