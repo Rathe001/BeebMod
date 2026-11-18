@@ -896,6 +896,39 @@ function J.BossNames()
 	return bossNames
 end
 
+-- THE DUNGEON AN ENEMY IS IN, FOR ONE KEPT WITH NO ZONE (Josh 2026-11-17, the
+-- journal by zone with 25 enemies under "Unknown zone", Kresh and Lord
+-- Cobrahn among them: ""Unknown zone" seems like it should be wailing
+-- caverns. Not sure why it didnt get picked up here"). Inside a dungeon the
+-- game hides an enemy from addons, and kills there were kept with no zone
+-- until 2026-11-11. An enemy takes its zone from its next kill, so one not
+-- killed since stayed nowhere. The dungeon data says which dungeon each
+-- enemy lives in, by map. The name used is the one the journal's other
+-- enemies of that dungeon were kept under, which is the game's own name for
+-- it ("The Wailing Caverns"); the database's name where there is none yet.
+-- Not for a critter: a rabbit lives in many places.
+function J.DungeonZone(npc)
+	local data = BT.ExpeditionDungeon
+	local d = data and data[npc]
+	local map = d and d[7]
+	if not map or d[2] == "Critter" then
+		return nil
+	end
+	local s = J.Store()
+	local counts, best, most = {}, nil, 0
+	for other, m in pairs(s and s.enemies or {}) do
+		local od = type(m) == "table" and type(m.zone) == "string" and m.zone ~= "" and data[other]
+		if od and od[7] == map and od[2] ~= "Critter" then
+			counts[m.zone] = (counts[m.zone] or 0) + 1
+			if counts[m.zone] > most then
+				best, most = m.zone, counts[m.zone]
+			end
+		end
+	end
+	local name = best or (BT.ExpeditionDungeonMaps and BT.ExpeditionDungeonMaps[map])
+	return type(name) == "string" and name ~= "" and name or nil
+end
+
 function J.Fill(npc, m)
 	if type(npc) ~= "number" or type(m) ~= "table" then
 		return false
@@ -921,6 +954,10 @@ function J.Fill(npc, m)
 			changed = true
 		end
 		set("instance", d[6])
+		if m.zone == nil or m.zone == "" then
+			m.zone = nil
+			set("zone", J.DungeonZone(npc))
+		end
 	end
 	if boss then
 		set("name", boss)
@@ -941,7 +978,7 @@ function J.FillAll()
 	local s = J.Store()
 	local n = 0
 	for npc, m in pairs(s and s.enemies or {}) do
-		if type(m) == "table" and (m.name == nil or m.instance == nil) and J.Fill(npc, m) then
+		if type(m) == "table" and (m.name == nil or m.instance == nil or m.zone == nil or m.zone == "") and J.Fill(npc, m) then
 			n = n + 1
 		end
 	end
