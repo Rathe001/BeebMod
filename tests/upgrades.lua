@@ -827,7 +827,45 @@ do
 	check("Greater Heal is a heal, with its own amount from the tables", p[25314].is == "heal:greaterHeal" and p[25314].base == 1960)
 	check("Smite is a Holy spell", p[10934].spell == 2 and p[10934].is == "ability")
 	check("Shadow Word: Pain is damage over time and nothing else", p[10894].lasts == true and p[10894].spell == 6)
-	check("the priest fights one way", data.specs.PRIEST == nil)
+	-- (Josh 2026-11-18: "Let's do the 2 classes where it changes the answer")
+	local ways = data.specs.PRIEST
+	check("the priest fights two ways", ways.holy.caster == true and ways.shadow.caster == true)
+	check("Shadowform marks shadow", ways.shadow.marks[15473] == true and Rd.Spec(ways, function(id) return id == 15473 end) == "shadow")
+	check("Smite is not cast in Shadowform", p[10934].spec == "holy" and p[10894].spec == nil)
+	local caster = { level = 60, attackPower = 0, armor = 500, crit = 0, health = 2500, mana = 900000, manaPer5 = 0, damageMin = 1,
+		damageMax = 2, weaponSpeed = 2, haste = 0, dodge = 0, parry = 0, hit = 0, spellHit = 0, spellCrit = 10, healing = 0,
+		spellDamage = { [2] = 300, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 } }
+	local function spells(spec)
+		return { specs = ways, spec = spec, heals = {}, seals = {}, at = { spell = 0, healing = 0, spells = { [2] = 300, [6] = 0 } },
+			abilities = {
+				smite = { v = { hit = 600 }, cost = 280, cast = 2.5, spell = 2, share = 0.714, spec = "holy" },
+				mindblast = { v = { hit = 500 }, cost = 350, cast = 1.5, cooldown = 8, spell = 6, share = 0.429 },
+			} }
+	end
+	local holy = R.Damage(caster, spells("holy"), { long = true })
+	local shadow = R.Damage(caster, spells("shadow"), { long = true })
+	check(("shadow casts Shadow spells only: %.1f against %.1f with Smite"):format(shadow, holy), shadow < holy)
+	local function more(school)
+		local t = {}
+		for k, v in pairs(caster) do t[k] = v end
+		t.spellDamage = { [2] = 300, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }
+		t.spellDamage[school] = t.spellDamage[school] + 100
+		return t
+	end
+	near("Holy spell power is nothing to shadow", R.Damage(more(2), spells("shadow"), { long = true }), shadow)
+	check("and something to holy", R.Damage(more(2), spells("holy"), { long = true }) > holy)
+	check("Shadow spell power is worth damage to shadow", R.Damage(more(6), spells("shadow"), { long = true }) > shadow)
+	near("no way marked: everything, the higher", R.Damage(caster, spells(nil), { long = true }), holy)
+	-- Shadowform's crits
+	local form = data.talents.PRIEST[15473]
+	check("Shadowform doubles what a Shadow crit adds, for shadow", form and form.more == 100 and form.spec == "shadow"
+		and form.keys.mindblast and not form.keys.smite)
+	local inForm, outOf = spells("shadow"), spells("holy")
+	local function knows(id) return id == 15473 end
+	Rd.Talents(inForm, data.talents.PRIEST, knows)
+	Rd.Talents(outOf, data.talents.PRIEST, knows)
+	near("it counts for the way in the form", inForm.abilities.mindblast.critMore, 100)
+	check("and not for the other", outOf.abilities.mindblast.critMore == nil)
 	local healer = { level = 60, mana = 5000, manaPer5 = 30, spiritRegen = 20, spellCrit = 5, healing = 300 }
 	local heals = { at = { healing = 300 }, heals = {
 		{ name = "Greater Heal", amount = 2200, cast = 3, cost = 710, share = 0.857 },

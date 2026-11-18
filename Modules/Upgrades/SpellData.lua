@@ -450,14 +450,14 @@ BT.Upgrades.SpellData = {
 			[2055] = { is = "heal:heal", lvl = 22, share = 0.857, base = 375, per = 2.9, from = 22, to = 27, read = "amount amount" }, -- Heal
 			[6063] = { is = "heal:heal", lvl = 28, share = 0.857, base = 523, per = 4, from = 28, to = 33, read = "amount amount" }, -- Heal
 			[6064] = { is = "heal:heal", lvl = 34, share = 0.857, base = 651, per = 4.5, from = 34, to = 39, read = "amount amount" }, -- Heal
-			[14914] = { is = "ability", lvl = 20, key = "holyfire", cost = 85, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
-			[15261] = { is = "ability", lvl = 60, key = "holyfire", cost = 255, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
-			[15262] = { is = "ability", lvl = 24, key = "holyfire", cost = 95, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
-			[15263] = { is = "ability", lvl = 30, key = "holyfire", cost = 125, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
-			[15264] = { is = "ability", lvl = 36, key = "holyfire", cost = 145, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
-			[15265] = { is = "ability", lvl = 42, key = "holyfire", cost = 170, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
-			[15266] = { is = "ability", lvl = 48, key = "holyfire", cost = 200, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
-			[15267] = { is = "ability", lvl = 54, key = "holyfire", cost = 230, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, read = "hit hit dot -" }, -- Holy Fire
+			[14914] = { is = "ability", lvl = 20, key = "holyfire", cost = 85, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
+			[15261] = { is = "ability", lvl = 60, key = "holyfire", cost = 255, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
+			[15262] = { is = "ability", lvl = 24, key = "holyfire", cost = 95, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
+			[15263] = { is = "ability", lvl = 30, key = "holyfire", cost = 125, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
+			[15264] = { is = "ability", lvl = 36, key = "holyfire", cost = 145, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
+			[15265] = { is = "ability", lvl = 42, key = "holyfire", cost = 170, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
+			[15266] = { is = "ability", lvl = 48, key = "holyfire", cost = 200, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
+			[15267] = { is = "ability", lvl = 54, key = "holyfire", cost = 230, spell = 2, share = 0.75, dshare = 0.25, secs = 10, over = true, spec = "holy", read = "hit hit dot -" }, -- Holy Fire
 			[2050] = { is = "heal:lesserHeal", lvl = 1, share = 0.429, base = 51, per = 0.3, from = 1, to = 3, read = "amount amount" }, -- Lesser Heal
 			[2052] = { is = "heal:lesserHeal", lvl = 4, share = 0.571, base = 94, per = 0.7, from = 4, to = 9, read = "amount amount" }, -- Lesser Heal
 			[2053] = { is = "heal:lesserHeal", lvl = 10, share = 0.714, base = 163, per = 1.2, from = 10, to = 15, read = "amount amount" }, -- Lesser Heal
@@ -484,14 +484,14 @@ BT.Upgrades.SpellData = {
 			[10892] = { is = "ability", lvl = 42, key = "shadowwordpain", cost = 305, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
 			[10893] = { is = "ability", lvl = 50, key = "shadowwordpain", cost = 385, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
 			[10894] = { is = "ability", lvl = 58, key = "shadowwordpain", cost = 470, spell = 6, dshare = 1.2, secs = 18, lasts = true, read = "dot -" }, -- Shadow Word: Pain
-			[585] = { is = "ability", lvl = 1, key = "smite", cost = 20, spell = 2, share = 0.429, read = "hit hit" }, -- Smite
-			[591] = { is = "ability", lvl = 6, key = "smite", cost = 30, spell = 2, share = 0.571, read = "hit hit" }, -- Smite
-			[598] = { is = "ability", lvl = 14, key = "smite", cost = 60, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
-			[984] = { is = "ability", lvl = 22, key = "smite", cost = 95, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
-			[1004] = { is = "ability", lvl = 30, key = "smite", cost = 140, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
-			[6060] = { is = "ability", lvl = 38, key = "smite", cost = 185, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
-			[10933] = { is = "ability", lvl = 46, key = "smite", cost = 230, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
-			[10934] = { is = "ability", lvl = 54, key = "smite", cost = 280, spell = 2, share = 0.714, read = "hit hit" }, -- Smite
+			[585] = { is = "ability", lvl = 1, key = "smite", cost = 20, spell = 2, share = 0.429, spec = "holy", read = "hit hit" }, -- Smite
+			[591] = { is = "ability", lvl = 6, key = "smite", cost = 30, spell = 2, share = 0.571, spec = "holy", read = "hit hit" }, -- Smite
+			[598] = { is = "ability", lvl = 14, key = "smite", cost = 60, spell = 2, share = 0.714, spec = "holy", read = "hit hit" }, -- Smite
+			[984] = { is = "ability", lvl = 22, key = "smite", cost = 95, spell = 2, share = 0.714, spec = "holy", read = "hit hit" }, -- Smite
+			[1004] = { is = "ability", lvl = 30, key = "smite", cost = 140, spell = 2, share = 0.714, spec = "holy", read = "hit hit" }, -- Smite
+			[6060] = { is = "ability", lvl = 38, key = "smite", cost = 185, spell = 2, share = 0.714, spec = "holy", read = "hit hit" }, -- Smite
+			[10933] = { is = "ability", lvl = 46, key = "smite", cost = 230, spell = 2, share = 0.714, spec = "holy", read = "hit hit" }, -- Smite
+			[10934] = { is = "ability", lvl = 54, key = "smite", cost = 280, spell = 2, share = 0.714, spec = "holy", read = "hit hit" }, -- Smite
 		},
 		SHAMAN = {
 			[408479] = { is = "ability", lvl = 32, key = "chainlightning", spell = 4, share = 0.357, aoe = true, spec = "caster", read = "hit hit - cap" }, -- Chain Lightning
@@ -644,6 +644,10 @@ BT.Upgrades.SpellData = {
 			melee = { mana = true, marks = { [16255] = true, [16256] = true, [16268] = true, [16269] = true, [17364] = true, [29082] = true, [29084] = true, [29086] = true, [29087] = true, [29088] = true } },
 			caster = { caster = true, marks = { [16035] = true, [16039] = true, [16089] = true, [16120] = true, [16164] = true, [16166] = true, [16579] = true, [16580] = true, [16581] = true, [16582] = true } },
 		},
+		PRIEST = {
+			holy = { caster = true, marks = { [14889] = true, [14898] = true, [14901] = true, [14908] = true, [14909] = true, [14912] = true, [18530] = true, [18544] = true, [18547] = true, [18548] = true, [18549] = true, [18550] = true, [20711] = true } },
+			shadow = { caster = true, marks = { [15257] = true, [15259] = true, [15260] = true, [15268] = true, [15273] = true, [15275] = true, [15286] = true, [15318] = true, [15323] = true, [15324] = true, [15325] = true, [15326] = true, [15473] = true } },
+		},
 		DRUID = {
 			caster = { caster = true, marks = { [16814] = true, [16821] = true, [16845] = true, [16850] = true, [16880] = true, [16896] = true, [16909] = true, [24858] = true } },
 			cat = { energy = true, form = "cat", marks = { [16858] = true, [16859] = true, [16860] = true, [16861] = true, [16862] = true, [16942] = true, [16958] = true, [16966] = true, [16968] = true, [16972] = true, [16998] = true, [17003] = true, [17007] = true } },
@@ -681,6 +685,7 @@ BT.Upgrades.SpellData = {
 		},
 		PRIEST = {
 			[14889] = { crit = 1, nth = 1, of = "holyspecialization", keys = { holyfire = true, smite = true } }, -- Holy Specialization
+			[15473] = { more = 100, nth = 3, of = "shadowform", spec = "shadow", keys = { devouringplague = true, mindblast = true, mindflay = true, shadowwordpain = true } }, -- Shadowform
 			[18544] = { crit = 1, nth = 2, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will
 			[18547] = { crit = 2, nth = 2, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will
 			[18548] = { crit = 3, nth = 2, of = "forceofwill", keys = { holyfire = true, mindblast = true, smite = true } }, -- Force of Will

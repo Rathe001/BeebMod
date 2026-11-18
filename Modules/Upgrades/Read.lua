@@ -778,7 +778,8 @@ function Rd.Talents(kit, list, known, describe)
 	end
 	local best = {}
 	for id, t in pairs(list) do
-		if known(id) then
+		-- (`spec`: a form's, which counts for the way of fighting in it only)
+		if known(id) and (not t.spec or kit.spec == t.spec) then
 			for what, field in pairs(TALENT) do
 				if t[what] then
 					local said = t.nth and t.nth > 0 and describe and Rd.Numbers(describe(id) or "")[t.nth]

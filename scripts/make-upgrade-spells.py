@@ -227,9 +227,13 @@ MODEL = {
     # which any class's "heal:" spells go into.
     # Left out: Renew and the other heals over time, Prayer of Healing,
     # Penance, Starshards, Shadow Word: Death, Mind Spike and Vampiric Touch.
+    # TWO WAYS (Josh 2026-11-18, of specs for the classes where they change
+    # the answer: "Let's do the 2 classes where it changes the answer"). In
+    # Shadowform a priest casts Shadow spells only, so Smite and Holy Fire
+    # are marked for the other way. See SPECS.
     "PRIEST": {
-        "Smite": ("ability", ["hit"], {"magic": True}),
-        "Holy Fire": ("ability", ["hit", "dot"], {"magic": True, "over": True}),
+        "Smite": ("ability", ["hit"], {"magic": True, "spec": "holy"}),
+        "Holy Fire": ("ability", ["hit", "dot"], {"magic": True, "over": True, "spec": "holy"}),
         "Mind Blast": ("ability", ["hit"], {"magic": True}),
         "Shadow Word: Pain": ("ability", ["dot"], {"magic": True, "lasts": True}),
         "Devouring Plague": ("ability", ["dot"], {"magic": True, "lasts": True}),
@@ -304,6 +308,16 @@ SPECS = {
                                           "Weapon Mastery", "Spirit Weapons"]},
         "caster": {"caster": True, "marks": ["Elemental Fury", "Elemental Focus", "Call of Thunder", "Lightning Mastery",
                                              "Convection", "Concussion"]},
+    },
+    # (shadow: Shadow spells only, as in Shadowform. holy: everything, which
+    # is how a priest with no Shadowform fights.)
+    "PRIEST": {
+        "holy": {"caster": True, "marks": ["Holy Specialization", "Spiritual Healing", "Divine Fury", "Searing Light",
+                                           "Force of Will", "Spirit of Redemption", "Spiritual Guidance", "Improved Healing",
+                                           "Improved Renew"]},
+        "shadow": {"caster": True, "marks": ["Shadowform", "Darkness", "Shadow Weaving", "Vampiric Embrace", "Shadow Focus",
+                                             "Shadow Affinity", "Improved Mind Blast", "Blackout",
+                                             "Improved Shadow Word: Pain"]},
     },
     # (`form`: it is fought in a form, whose stats are not yours as you
     # stand. `tank`: the tank's way, priced for threat and survival, and
@@ -566,6 +580,10 @@ out.append("\t},")
 #          highest you know is the one counted
 options = {int(r["SpellID"]): r for r in rows("SpellClassOptions")}
 AFTER_CRIT = {"Ignite": 4}
+# A FORM THAT DOES WHAT A CRIT TALENT DOES, and is not a passive: it counts
+# for the way of fighting that is in it (`spec`). Shadowform: "increasing
+# the critical strike damage bonus of your Shadow spells by 100%".
+IN_FORM = {"Shadowform": "shadow"}
 
 
 def bits_of(row, prefix):
@@ -583,7 +601,7 @@ for cls, model in MODEL.items():
     found = []
     for spell in sorted(ids):
         m = misc.get(spell)
-        if not m or not int(m["Attributes_0"]) & 0x40:
+        if not m or not (int(m["Attributes_0"]) & 0x40 or names.get(spell) in IN_FORM):
             continue
         for e in effects.get(spell, {}).values():
             what, keys = None, set()
@@ -611,8 +629,10 @@ for cls, model in MODEL.items():
                             and int(t.group("index") or 1) - 1 == int(e["EffectIndex"]):
                         nth = at
                         break
-                found.append('\t\t\t[%d] = { %s = %g, nth = %d, of = "%s", keys = { %s } }, -- %s' % (
+                way = IN_FORM.get(names[spell])
+                found.append('\t\t\t[%d] = { %s = %g, nth = %d, of = "%s", %skeys = { %s } }, -- %s' % (
                     spell, what, amount, nth, re.sub(r"[^a-z]", "", names[spell].lower()),
+                    'spec = "%s", ' % way if way else "",
                     ", ".join("%s = true" % k for k in sorted(keys)), names[spell]))
     if found:
         talents += len(found)
