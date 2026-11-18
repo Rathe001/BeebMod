@@ -3216,8 +3216,83 @@ function M.ReadRecipe(data, shopping)
 	end
 	made.id = madeId
 	r.made = made
+	-- (a trainer's: M.TrainerRecipe)
+	if type(data.taught) == "string" then
+		r.profession, r.trainer = data.taught, true
+	end
 	item.recipe = r
 	return item
+end
+
+-- A RECIPE AT A TRAINER (Josh 2026-11-18, of a tailoring trainer's list: "It
+-- looks like our tooltips are not showing in the crafting UI"). The trainer
+-- shows a recipe as a spell with the made item inside it, and a spell with
+-- anything inside it was left as the game wrote it. As this client sends
+-- one (his record of Tailoring: Soft-soled Linen Boots, the same day):
+--   "Tailoring: Soft-soled Linen Boots", in the game's gold
+--   a blank
+--   "Reagents: |nBolt of Linen Cloth (5), Light Leather (2), Fine Thread",
+--     each one you are short of in red
+--   a NestedBlock line: tooltipType 0 (an item), tooltipID the made item's id
+--   the made item's own lines, its name first with a line break before it
+-- That is a recipe's card with its parts in another order. So the lines are
+-- put in the order a recipe item has them (M.ReadRecipe) and the card is
+-- written as one. The name takes the made item's colour, for the band. What
+-- a trainer's recipe does not say is left off: the skill it needs, and
+-- whether you can learn it. Nil for anything that is not this shape.
+function M.TrainerRecipe(data)
+	if type(data) ~= "table" or type(data.lines) ~= "table" then
+		return nil
+	end
+	local LT = (Enum and Enum.TooltipDataLineType) or {}
+	if LT.NestedBlock == nil then
+		return nil
+	end
+	local block = nil
+	for i, line in ipairs(data.lines) do
+		if type(line) == "table" and plainLine(line.type) == LT.NestedBlock and type(plainLine(line.tooltipID)) == "number"
+			and (plainLine(line.tooltipType) or 0) == 0 then
+			block = i
+			break
+		end
+	end
+	local head = type(data.lines[1]) == "table" and data.lines[1] or nil
+	local made = block and type(data.lines[block + 1]) == "table" and data.lines[block + 1] or nil
+	local name = head and plainLine(head.leftText)
+	if not (block and block > 1 and made and type(name) == "string" and name ~= "") then
+		return nil
+	end
+	local lines = {}
+	local first = {}
+	for k, v in pairs(head) do
+		first[k] = v
+	end
+	first.leftColor = made.leftColor or head.leftColor
+	lines[1] = first
+	-- what it is made of: the one line before the item with a list in it
+	local materials = nil
+	for i = 2, block - 1 do
+		local left = type(data.lines[i]) == "table" and plainLine(data.lines[i].leftText)
+		if type(left) == "string" and left:find("|n", 1, true) then
+			materials = M.Bare((left:gsub("^.-|n", ""))):gsub("^%s+", "")
+		end
+	end
+	for i = block, #data.lines do
+		lines[#lines + 1] = data.lines[i]
+	end
+	lines[#lines + 1] = { type = LT.ItemSpellTriggerLearn, leftText = "Use: Teaches you" }
+	if materials and materials ~= "" then
+		lines[#lines + 1] = { leftText = materials }
+	end
+	local out = {}
+	for k, v in pairs(data) do
+		out[k] = v
+	end
+	out.lines = lines
+	out.id = plainLine(data.lines[block].tooltipID)
+	-- ("Tailoring: Soft-soled Linen Boots": the profession is before the colon)
+	out.taught = name:match("^(.-):%s") or ""
+	return out
 end
 
 -- Your rank in a profession, by its name, and whether the game could be
@@ -3241,6 +3316,10 @@ end
 -- What a recipe's one tag says, and whether you have its profession:
 -- "Already known", "Can learn", or why you cannot.
 function M.RecipeState(r)
+	-- (a trainer's recipe says nothing of whether you can learn it)
+	if r.trainer then
+		return nil, true
+	end
 	local rank, asked = nil, false
 	if r.profession then
 		rank, asked = M.ProfessionRank(r.profession)
@@ -6915,6 +6994,14 @@ function M.ComposeSpell(tip, data, kind)
 	-- name. A second block the same tooltip adds ("Next rank:") is left as
 	-- the client wrote it, under the card.
 	local head = nil
+	-- a trainer's recipe, with the made item inside it: a recipe's card
+	if kind == "spell" and M.TILES_LOOK then
+		local recipe = M.TrainerRecipe(data)
+		if recipe and M.ReadRecipe(recipe, false) then
+			M.ComposeItem(tip, recipe)
+			return
+		end
+	end
 	if kind == "spell" then
 		head = M.AppendedHead(tip, data)
 		if head == nil or (head and tip.beebsSpellCard) then

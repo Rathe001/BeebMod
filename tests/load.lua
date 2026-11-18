@@ -12824,6 +12824,46 @@ if ok then
 				local pool, used = T.TagPool(tip)
 				assert(used == 1 and pool[1].text._text == "NEEDS TAILORING 125", "why you cannot learn it: " .. tostring(pool[1].text._text))
 			end
+			-- A RECIPE AT A TRAINER (Josh 2026-11-18: "our tooltips are not showing
+			-- in the crafting UI"): a spell with the made item inside it, as his
+			-- record of Tailoring: Soft-soled Linen Boots has it
+			do
+				local gold = { r = 1, g = 0.82, b = 0 }
+				local function boots()
+					return { id = 3845, type = 1, lines = {
+						{ type = LT.SpellName or 13, leftText = "Tailoring: Soft-soled Linen Boots", leftColor = gold, lineIndex = 1 },
+						{ type = LT.None, leftText = "", rightText = "", leftColor = white, lineIndex = 1 },
+						{ type = LT.None, leftText = "Reagents: |n|cffff2020Bolt of Linen Cloth (5)|r, |cffff2020Light Leather (2)|r, Fine Thread",
+							leftColor = white, wrapText = true, lineIndex = 2 },
+						{ type = LT.NestedBlock, leftText = "", tooltipType = 0, tooltipID = 4312, lineIndex = 2 },
+						{ type = LT.ItemName, leftText = "\nSoft-soled Linen Boots", leftColor = green, lineIndex = 3 },
+						{ type = LT.ItemBinding, leftText = "Binds when equipped", leftColor = white, lineIndex = 4 },
+						{ type = LT.EquipSlot, leftText = "Feet", rightText = "Cloth", leftColor = white, lineIndex = 5 },
+						{ type = LT.None, leftText = "20 Armor", leftColor = white, lineIndex = 6 },
+						{ type = LT.None, leftText = "+2 Stamina", leftColor = white, lineIndex = 7 },
+						{ type = LT.UsageRequirement, leftText = "Requires Level 11", leftColor = white, lineIndex = 9 },
+					} }
+				end
+				local as = mod.TrainerRecipe(boots())
+				assert(as and as.taught == "Tailoring" and as.id == 4312, "a trainer's recipe is known for one")
+				local got = mod.ReadRecipe(as)
+				assert(got and got.recipe.trainer and got.recipe.made.name == "Soft-soled Linen Boots" and got.recipe.made.armor == "20",
+					"and the made item is read out of it")
+				assert(#got.recipe.materials == 3 and got.recipe.materials[1][1] == "Bolt of Linen Cloth" and got.recipe.materials[1][2] == 5
+					and got.recipe.materials[3][1] == "Fine Thread" and got.recipe.materials[3][2] == 1, "its reagents are the materials")
+				assert(mod.TrainerRecipe({ lines = { { type = LT.None, leftText = "Fireball", lineIndex = 1 } } }) == nil,
+					"a plain spell is not one")
+				local tipT, tt = makeTip("TrainerTip")
+				mod.ComposeSpell(tipT, boots(), "spell")
+				local said = table.concat(tt.lines, " | ")
+				assert(tt.lines[1] == "Tailoring: Soft-soled Linen Boots" and tt.lines[2] == "Tailoring recipe",
+					"the card says the recipe, and what it is: " .. said)
+				assert(said:find("MAKES", 1, true) and said:find("20 Armor | +2 Stamina", 1, true), "what it makes: " .. said)
+				assert(said:find("MATERIALS", 1, true) and not said:find("Reagents", 1, true) and not said:find("Teaches you", 1, true),
+					"the reagents as materials, and none of the game's own line: " .. said)
+				local _, usedT = T.TagPool(tipT)
+				assert(usedT == 0, "no tag for whether you can learn it: a trainer's recipe does not say")
+			end
 			-- the profession is yours, with the skill: what you carry of what it needs
 			_G.GetNumSkillLines = function() return 2 end
 			_G.GetSkillLineInfo = function(i)
