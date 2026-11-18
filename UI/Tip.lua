@@ -363,7 +363,16 @@ function Builder:Graph(series, tall)
 		end
 		return m
 	end
-	for _, s in ipairs(series or {}) do
+	-- A BAND EACH (Josh 2026-11-17, a graph that looked like one flat line:
+	-- "Is the fps graph broken here?"). Each line is scaled to its own range,
+	-- and a steady figure is drawn at the middle of its room. All three had
+	-- the whole height for their room, so three steady figures were three
+	-- lines at the same height, one on top of the other. Each now has its own
+	-- share of the height, in the order given, top to bottom, and cannot
+	-- cross into another's.
+	local count = math.max(1, #(series or {}))
+	local band = tall / count
+	for k, s in ipairs(series or {}) do
 		local vals = s.values or {}
 		local lo, hi = math.huge, -math.huge
 		for _, v in ipairs(vals) do
@@ -379,7 +388,7 @@ function Builder:Graph(series, tall)
 			-- a reading's place, down from the tooltip's top
 			local function at(i)
 				local x = PAD + w - (#vals - i) * step
-				local y = top + tall - GRAPH_PAD - (vals[i] - lo) / (hi - lo) * (tall - GRAPH_PAD * 2)
+				local y = top + k * band - GRAPH_PAD - (vals[i] - lo) / (hi - lo) * (band - GRAPH_PAD * 2)
 				return x, y
 			end
 			local c = colourOf(s.color)

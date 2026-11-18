@@ -215,7 +215,8 @@ function M.Tip(owner)
 			{ home or "-", "home ms", tone(hs, "home") },
 			{ world or "-", "world ms", tone(ws, "world") },
 		})
-		t:Graph(M.Series(), 40)
+		-- (taller than it was, 40: each of the three lines has a third of it)
+		t:Graph(M.Series(), 54)
 		t:Note(("Last 2 minutes. Home latency is chat and the auction house. World latency is combat. "
 			.. "Above about %d ms, casts and swings feel late."):format(M.LATE))
 	end })

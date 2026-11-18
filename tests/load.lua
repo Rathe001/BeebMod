@@ -3101,16 +3101,19 @@ if ok then
 			-- them a bit tighter against the title")
 			-- (and since 2026-11-17 a short blank under them, where the band
 			-- ends: M.UNIT.GAP)
-			assert(#lines == 4 and lines[4] == BT.UnitTip.TAG_BLANK,
-				("seven lines become three and the gap under the band, not %d: %s"):format(#lines, table.concat(lines, " | ")))
-			-- with no rows under who it is, the band runs to the bottom (Josh
-			-- 2026-11-17: "Players have a black bar on the bottom now"); with a
-			-- row under it, it is left where it ends
-			assert(tips.UnitLookEnd(tip) == true, "nothing under the gap: the band is the whole tooltip")
-			tip:AddLine("a row another module wrote")
+			-- (and the guild under that gap, in the body: Josh 2026-11-17,
+			-- "the guild name on player tooltips should be moved into the body
+			-- instead of header")
+			assert(#lines == 4 and lines[3] == BT.UnitTip.TAG_BLANK and lines[4]:find("<Nightwatch>", 1, true),
+				("seven lines become the name, the tags, the gap and the guild, not %d: %s"):format(#lines, table.concat(lines, " | ")))
+			-- with a row under who it is, the band ends over it; with none, it
+			-- runs to the bottom (Josh 2026-11-17: "Players have a black bar on
+			-- the bottom now")
+			assert(tips.UnitLookEnd(tip) == false, "the guild is under the band")
+			tips.TILES_LOOK = false
 			tips.Compose(tip, "target")
-			tip:AddLine("a row another module wrote")
-			assert(tips.UnitLookEnd(tip) == false, "a row under the gap: the band ends over it")
+			assert(#lines == 3 and lines[3]:find("<Nightwatch>", 1, true), "in the look before, the guild straight under the tags")
+			tips.TILES_LOOK = true
 			tips.Compose(tip, "target")
 			assert(lines[1]:find("Beeb Bob", 1, true) and lines[1]:find("60", 1, true),
 				"the name and the level share the first line: " .. lines[1])
@@ -3131,7 +3134,8 @@ if ok then
 			-- THE GUILD IN GREEN (Josh 2026-09-29), under the tags in its old
 			-- style (Josh 2026-10-17: "Guild name should be below that in the
 			-- old green style <Codex>")
-			assert(lines[3] == "|cff40ff40<Nightwatch>|r", "and the guild under them, green: " .. lines[3])
+			-- (under the band's gap since 2026-11-17: the fourth line)
+			assert(lines[4] == "|cff40ff40<Nightwatch>|r", "and the guild under them, green: " .. tostring(lines[4]))
 			assert(not tip.NineSlice:IsShown(), "the client's own border is hidden, not covered")
 			assert(tip.bmShadow and #tip.bmShadow == 16, "and a drop shadow under it, four rings")
 			assert(BT.Dock.Frame().bmShadow, "and the right panel wears the same one")
@@ -3142,7 +3146,7 @@ if ok then
 			BT.settings.tooltips = BT.settings.tooltips or {}
 			BT.settings.tooltips.guild = false
 			tips.Compose(tip, "target")
-			assert(lines[3]:find("Nightwatch", 1, true), "the guild shows whatever was saved: " .. lines[3])
+			assert(lines[4]:find("Nightwatch", 1, true), "the guild shows whatever was saved: " .. tostring(lines[4]))
 			BT.settings.tooltips.guild = nil
 
 			-- and switching the module off puts the client's border back
@@ -3798,6 +3802,37 @@ if ok then
 			assert(BT.settings.questDrops[2032]["Small Spider Leg"] and not BT.settings.questDrops[2032]["Ruined Pelt"],
 				"under the enemy it came from")
 			assert(hover("Mangy Nightsaber", "Cat", 2032), "and after that the cat wears the row")
+			-- A GUESS BY FAMILY GIVES WAY TO THE CORPSES (Josh 2026-11-17, a
+			-- Highland Scytheclaw with a "Thicket Raptor Hide" row: "I don't think
+			-- they drop the ticket raptor hides"). A Giant Wood Spider is a spider
+			-- by family and not by name: after six of its corpses with no leg on
+			-- them, its row goes. A Webwood Spider, one by name, keeps its row.
+			do
+				local hadMisses = BT.settings.questMisses
+				BT.settings.questMisses = nil
+				assert(hover("Giant Wood Lurker", "Spider", 3001), "a spider by family has the row to begin with")
+				_G.GetNumLootItems = function() return 1 end
+				_G.GetLootSlotInfo = function() return 1, "Ruined Pelt", 1 end
+				for corpse = 1, mod.MISSES do
+					_G.GetLootSourceInfo = function() return ("Creature-0-1-1-1-3001-00000000%02d"):format(corpse), 1 end
+					mod.LearnDrops()
+					mod.LearnDrops() -- the same corpse looted again is no second miss
+				end
+				assert(BT.settings.questMisses[3001]["Small Spider Leg"] == mod.MISSES, "one miss a corpse: "
+					.. tostring(BT.settings.questMisses[3001]["Small Spider Leg"]))
+				assert(not hover("Giant Wood Lurker", "Spider", 3001), "six corpses without it: the row goes")
+				for corpse = 1, mod.MISSES do
+					_G.GetLootSourceInfo = function() return ("Creature-0-1-1-1-3002-00000000%02d"):format(corpse), 1 end
+					mod.LearnDrops()
+				end
+				assert(hover("Webwood Spider", "Spider", 3002), "one that is a spider by name keeps its row")
+				-- and looting it there once brings the row back
+				_G.GetLootSlotInfo = function() return 1, "Small Spider Leg", 1 end
+				_G.GetLootSourceInfo = function() return "Creature-0-1-1-1-3001-0000000099", 1 end
+				mod.LearnDrops()
+				assert(hover("Giant Wood Lurker", "Spider", 3001), "looted there once, the row is back")
+				BT.settings.questMisses = hadMisses
+			end
 			-- A QUEST-ONLY ITEM IS THE CLIENT'S: the client would have said so if
 			-- a spider dropped it (an item made up here, so the list below
 			-- doesn't know it)
@@ -12291,7 +12326,12 @@ if ok then
 			body:SetPoint("LEFT", 10, 0)
 			tip.NumLines = function() return 2 end
 
+			-- (the name at its full size: one set smaller hangs the line under
+			-- it lower still, which has a step of its own)
+			local least = mod.B.NAME_LEAST
+			mod.B.NAME_LEAST = 99
 			mod.Compose(tip, "target")
+			mod.B.NAME_LEAST = least
 			local at = (body._points or {}).LEFT
 			-- line 2 is the tags': hung two pixels lower than the client hung it
 			-- (Josh 2026-10-17: "Can I get like 2px more margin above the tags?")
@@ -12622,8 +12662,20 @@ if ok then
 					faction = i
 				end
 			end
-			assert(job and faction and job < faction,
-				"the job on a line under them, then the faction in small print: " .. table.concat(lines, " | "))
+			-- (UNDER THE BAND, Josh 2026-11-17, of a pet's owner: "The green tag
+			-- should be moved to the content area, same as guild names for
+			-- players": the faction stays on the band, the job is the first
+			-- line under it)
+			-- (and the faction under the job, later that day: "I think
+			-- "Ironforge" and the quests should go into a content area as well")
+			local gap = nil
+			for i, text in ipairs(lines) do
+				if text == BT.UnitTip.TAG_BLANK and job and i < job then
+					gap = i
+				end
+			end
+			assert(job and faction and gap and job < faction,
+				"under the band: the job, then the faction in small print: " .. table.concat(lines, " | "))
 			-- in the style of a player's guild (Josh 2026-10-17: "Maybe we should
 			-- have the NPC <Banker> line in the same style as a guild name")
 			assert(lines[job] == mod.GUILD:format("<Stormpike Guard Recruitment Officer>"),
@@ -12801,6 +12853,47 @@ if ok then
 				"an item with nothing inside it is no recipe")
 			_G.Enum.TooltipDataLineType, _G.GetNumSkillLines, _G.GetSkillLineInfo, _G.C_Item = keep.kinds, keep.lines, keep.info, keep.item
 		end },
+		{ "a quest you can hand in has the game's yellow mark on Questie's row", function()
+			-- (Josh 2026-11-17: "Can you make the "?" in the tooltip the same
+			-- yellow as the game world one? Only for completed quests")
+			local mod = BT.GetModule("tooltips")
+			local icon = "|TInterface\\Addons\\Questie\\Icons\\tooltip_complete.png:14:14:0:0:32:32:0:32:0:32:128:128:128|t"
+			local done = icon .. "|cff808080[22] Alchemical Hazards |cff00ff00(Complete)|r|r"
+			local out = mod.QuestMarkText(done)
+			assert(out and out:find(":0:32:0:32:255:209:0|t", 1, true) and out:find("Alchemical Hazards", 1, true),
+				"the mark in the game's yellow: " .. tostring(out))
+			assert(mod.QuestMarkText(out) == nil, "once")
+			assert(mod.QuestMarkText(icon .. "[22] Alchemical Hazards") == nil, "not a quest still to be finished")
+			assert(mod.QuestMarkText("[22] Alchemical Hazards (Complete)") == nil and mod.QuestMarkText(nil) == nil,
+				"nor a row with no mark")
+		end },
+		{ "a unit's long name is set smaller before its tooltip is made wider", function()
+			-- (Josh 2026-11-17: "Are we able to scale player/npc names similarly
+			-- to the items, so tooltips don't increase in width?")
+			local mod = BT.GetModule("tooltips")
+			BT.SetEnabled("tooltips", true)
+			local keep = { name = _G.UnitName, get = _G.GetUnitName, player = _G.UnitIsPlayer }
+			local who = "Sida"
+			_G.UnitIsPlayer = function() return false end
+			_G.UnitName = function() return who end
+			_G.GetUnitName = function() return who end
+			local tip = _G.GameTooltip
+			local function size()
+				local _, s = _G.GameTooltipTextLeft1:GetFont()
+				return s
+			end
+			mod.Compose(tip, "target")
+			local full, usual = size(), tip._minWidth
+			who = "Highlord Bolvar Fordragon"
+			mod.Compose(tip, "target")
+			assert(size() < full and size() >= BT.Fonts.Size(mod.B.NAME_LEAST), "set smaller, to a point: " .. tostring(size()))
+			assert(tip._minWidth and usual and tip._minWidth < usual * 1.4,
+				"and the tooltip not half as wide again: " .. tostring(tip._minWidth) .. " against " .. tostring(usual))
+			who = "Sida"
+			mod.Compose(tip, "target")
+			assert(size() == full and tip._minWidth == usual, "a short name after it at the full size and the usual width")
+			_G.UnitName, _G.GetUnitName, _G.UnitIsPlayer = keep.name, keep.get, keep.player
+		end },
 		{ "a world object has the band", function()
 			-- (Josh 2026-11-17: Tin Vein and Solid Chest in the plain look)
 			local mod = BT.GetModule("tooltips")
@@ -12820,7 +12913,83 @@ if ok then
 			lines = { "Sack of Oats", "\194\160", "Handful of Oats 6/8" }
 			assert(mod.ObjectLook(tip, 1) == true and mod.UnitLookEnd(tip) == false,
 				"one a quest wants: the band ends over the quest's rows")
+			-- LINES WRITTEN LATER END THE WHOLE BAND (Josh 2026-11-17, another
+			-- addon's quest row lying on an NPC's band)
+			lines = { "Tin Vein", "Mining" }
+			tip.GetTop = function() return 100 end
+			_G.ObjectBandTipTextLeft2.GetBottom = function() return 70 end
+			assert(mod.ObjectLook(tip, nil) == true and mod.UnitLookAgain(tip) == false, "nothing written since: left alone")
+			lines = { "Tin Vein", "Mining", "\194\160", "? [24] Digging Through the Ooze" }
+			assert(mod.UnitLookAgain(tip) == true, "a row written after: the band ends under who it is")
+			assert(mod.UnitLookAgain(tip) == false, "once")
 			_G.GameTooltip = keep
+		end },
+		{ "a set piece's set is a box of its own on the card", function()
+			-- (Josh 2026-11-17: "Proceed step 6"; the lines as the game has
+			-- written a set since 1.x)
+			local mod = BT.GetModule("tooltips")
+			local keep = _G.Enum.TooltipDataLineType
+			_G.Enum.TooltipDataLineType = { None = 0, SellPrice = 11, ItemBinding = 20, EquipSlot = 21, ItemName = 22 }
+			local LT = _G.Enum.TooltipDataLineType
+			local gold, grey, worn = { r = 1, g = 0.82, b = 0 }, { r = 0.5, g = 0.5, b = 0.5 }, { r = 1, g = 1, b = 0.59 }
+			local green, white = { r = 0, g = 1, b = 0 }, { r = 1, g = 1, b = 1 }
+			local data = { id = 10399, lines = {
+				{ type = LT.ItemName, leftText = "Blackened Defias Armor", leftColor = { r = 0, g = 0.44, b = 0.87 }, lineIndex = 1 },
+				{ type = LT.ItemBinding, leftText = "Binds when equipped", leftColor = white, lineIndex = 2 },
+				{ type = LT.EquipSlot, leftText = "Chest", rightText = "Leather", leftColor = white, lineIndex = 3 },
+				{ type = LT.None, leftText = "92 Armor", leftColor = white, lineIndex = 4 },
+				{ type = LT.None, leftText = "+11 Agility", leftColor = white, lineIndex = 5 },
+				{ type = LT.None, leftText = "Defias Leather (2/5)", leftColor = gold, lineIndex = 7 },
+				{ type = LT.None, leftText = "  Blackened Defias Armor", leftColor = worn, lineIndex = 8 },
+				{ type = LT.None, leftText = "  Blackened Defias Belt", leftColor = worn, lineIndex = 9 },
+				{ type = LT.None, leftText = "  Blackened Defias Boots", leftColor = grey, lineIndex = 10 },
+				{ type = LT.None, leftText = "(2) Set: +10 Armor.", leftColor = green, lineIndex = 12 },
+				{ type = LT.None, leftText = "(3) Set: +15 Attack Power.", leftColor = grey, lineIndex = 13 },
+			} }
+			local item = mod.ReadItem(data)
+			assert(item and item.set and item.set.name == "Defias Leather" and item.set.have == 2 and item.set.need == 5,
+				"the set's name and how many you wear")
+			assert(#item.set.pieces == 3 and item.set.pieces[1].worn and item.set.pieces[2].worn and not item.set.pieces[3].worn
+				and item.set.pieces[3].text == "Blackened Defias Boots", "its pieces, and which you wear")
+			assert(#item.set.bonuses == 2 and item.set.bonuses[1].active and not item.set.bonuses[2].active, "its bonuses, and which count")
+			assert(#item.rest == 0 and #item.stats == 1, "none of it left among the other lines")
+			-- the look before keeps the set's lines where the game put them
+			mod.TILES_LOOK = false
+			local old = mod.ReadItem(data)
+			mod.TILES_LOOK = true
+			assert(old and not old.set and #old.rest >= 5, "in the look before, the game's own lines")
+			-- and written on the card: the set's name with the count at its
+			-- right, the pieces, the bonuses
+			local tip = _G.CreateFrame("Frame")
+			local lines, rights = {}, {}
+			tip.GetName = function() return "SetTip" end
+			tip.ClearLines = function() lines, rights = {}, {} end
+			tip.AddLine = function(_, text) lines[#lines + 1] = tostring(text) end
+			tip.AddDoubleLine = function(_, l, r)
+				lines[#lines + 1] = tostring(l)
+				rights[#lines] = r
+			end
+			tip.NumLines = function() return #lines end
+			for i = 1, 40 do
+				_G["SetTipTextLeft" .. i] = _G.CreateFrame("FontString")
+				_G["SetTipTextRight" .. i] = _G.CreateFrame("FontString")
+			end
+			mod.ComposeItem(tip, data)
+			local all = table.concat(lines, " | ")
+			local at = nil
+			for i, line in ipairs(lines) do
+				if line == "Defias Leather" then
+					at = i
+				end
+			end
+			assert(at and rights[at] == "2 / 5", "the set's name, and how many you wear at its right: " .. all)
+			assert(lines[at + 1] == "  Blackened Defias Armor" and lines[at + 3] == "  Blackened Defias Boots"
+				and lines[at + 4] == "(2) Set: +10 Armor." and lines[at + 5] == "(3) Set: +15 Attack Power.",
+				"its pieces, then its bonuses: " .. all)
+			for _, msg in ipairs(BT.moduleErrors or {}) do
+				assert(not tostring(msg):find("WriteItemB", 1, true), "the card wrote without a fault: " .. tostring(msg))
+			end
+			_G.Enum.TooltipDataLineType = keep
 		end },
 		{ "a comparison card is written once a redraw", function()
 			local mod = BT.GetModule("tooltips")
@@ -13041,6 +13210,25 @@ if ok then
 				end
 				local drawn = table.concat(said, " | ")
 				assert(drawn:find("63 | ITEM LEVEL", 1, true), "its level large, its two words under it: " .. drawn)
+				-- A NAME IS NEVER CUT (Josh 2026-11-17: "We can't truncate since
+				-- there is no way to see the full title ... The header should
+				-- always be the same height"): set smaller, then the card wider
+				do
+					local _, fullSize = _G["TilesTipTextLeft1"]:GetFont()
+					local long = reaper()
+					local name = "Archmage Antonidas: The Unabridged Autobiography"
+					long.lines[1].leftText = name
+					mod.ComposeItem(tipB, long)
+					local _, smallSize = _G["TilesTipTextLeft1"]:GetFont()
+					assert(tb.lines[1] == name, "the whole name: " .. tostring(tb.lines[1]))
+					assert(smallSize < fullSize and smallSize >= BT.Fonts.Size(mod.B.NAME_LEAST),
+						"set smaller, to a point: " .. tostring(smallSize))
+					assert(tipB._minWidth and tipB._minWidth > mod.B.CAP_WORN,
+						"and the card as wide as it needs: " .. tostring(tipB._minWidth))
+					mod.ComposeItem(tipB, reaper())
+					local _, again = _G["TilesTipTextLeft1"]:GetFont()
+					assert(again == fullSize and tb.lines[1] == "Arcanite Reaper", "a short name after it at the full size")
+				end
 				-- AS THE GAME LISTS THEM (Josh 2026-11-16: "I'm not a fan of the
 				-- stats being in 2 columns. Can we make that part look more like the
 				-- default tooltip?"): one to a line, speed at the damage's right
@@ -13271,6 +13459,31 @@ if ok then
 			assert(rule and rule._shown ~= false and rule._points.BOTTOMLEFT.rel == headFs, "over a rule")
 			assert(cells(shop) == cells(tip) and figs(shop) == "53.8 DPS | 63 ILVL", "the card's own above it as it was")
 			assert(mod.FoldDelta(tip) == nil, "a tooltip with no changes is left alone")
+			-- HIDDEN WHERE UPGRADES SAYS IT (Josh 2026-11-17: "Hide it"): in
+			-- the look, with the Upgrades module on and your class covered,
+			-- the game's list is emptied, the blank line over it too
+			do
+				local up, keepCovers, keepOn = BT.Upgrades, BT.Upgrades.Covers, BT.Enabled("upgrades")
+				assert(mod.HidesDelta() == false, "not in the look before")
+				mod.TILES_LOOK = true
+				BT.SetEnabled("upgrades", true)
+				up.Covers = function() return false end
+				assert(mod.HidesDelta() == false, "nor for a class Upgrades does not cover")
+				up.Covers = function() return true end
+				assert(mod.HidesDelta() == true, "where Upgrades covers your class")
+				append(" ")
+				append("If you replace this item, the following stat changes will occur:")
+				append("|cff00ff00+3|r Strength")
+				local at = mod.FoldDelta(shop)
+				assert(at == #st.lines - 1, "the list found")
+				for i = at - 1, #st.lines do
+					assert(_G["ShoppingTooltip1TextLeft" .. i]._text == "", "its lines emptied: " .. i)
+				end
+				assert(mod.ItemBits(shop).deltaRule._shown == false, "and its rule put away")
+				up.Covers = keepCovers
+				BT.SetEnabled("upgrades", keepOn)
+				mod.TILES_LOOK = false
+			end
 			-- (Josh 2026-10-17: "The compare tooltip is broken. Looks like the
 			-- content is under the background?"): the client's tab is looked
 			-- for among its children, and ours are not it
@@ -14176,15 +14389,17 @@ if ok then
 					"3.0 HPS | 1.50 per mana | 45 healing over 15 sec" },
 				-- a finishing move's range is its middle, not its top, and the 5 of
 				-- "2.5" is not a number of its own
+				-- (AT ITS MOST POINTS since 2026-11-17: the line with the most
+				-- combo points is the one read, and the card says how many)
 				{ "Eviscerate", "35 Energy", "Instant", "Finishing move that causes damage per combo point:\n   1 point  : 6-11 damage\n   2 points: 12-16 damage",
-					"2.4 DPS | 0.24 per energy | 8.5 damage" },
+					"4.0 DPS | 0.40 per energy | 14 damage at 2 points" },
 				{ "Ferocious Bite", "35 Energy", "Instant", "Finishing move that causes damage per combo point and converts each extra point of energy into 2.5 additional damage.\n   1 point  : 14-30 damage",
-					"6.3 DPS | 0.63 per energy | 22 damage" },
+					"6.3 DPS | 0.63 per energy | 22 damage at 1 point" },
 				-- a bleed is no faster than it ticks, however soon the energy is back
 				{ "Garrote", "50 Energy", "Instant", "Garrote the enemy, silencing them for 3 sec and causing 144 damage over 18 sec. Must be stealthed and behind the target.",
 					"8.0 DPS | 2.88 per energy | 144 damage over 18 sec" },
 				{ "Rip", "30 Energy", "Instant", "Finishing move that causes damage over time.  Damage increases per combo point:\n   1 point  : 42 damage over 12 sec",
-					"3.5 DPS | 1.40 per energy | 42 damage over 12 sec" },
+					"3.5 DPS | 1.40 per energy | 42 damage over 12 sec at 1 point" },
 				-- a totem's minute is how long, not how much: 6 every 2 seconds of it
 				{ "Healing Stream Totem", "40 Mana", "Instant", "Summons a Healing Stream Totem with 5 health at the feet of the caster for 1 min that heals group members within 20 yards for 6 every 2 seconds.",
 					"3.0 HPS | 4.50 per mana | 180 healing over 1 min" },

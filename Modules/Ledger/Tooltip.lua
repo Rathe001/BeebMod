@@ -38,6 +38,8 @@ end
 
 -- the note: its size, its ink, and how many lines it may take
 T.NOTE_SIZE, T.NOTE_LINES = 12, 2
+-- the quiet line under the tiles: where and when you last grouped or dueled
+T.LAST_SIZE = 10
 T.NOTE_INK = { 0.94, 0.92, 0.84 }
 -- the other rows' words: what you wrote in ink, what happened in a quieter one
 local INK2 = { 0.73, 0.78, 0.76 }
@@ -80,6 +82,49 @@ function T.Fill(tip, unit)
 	local Tip = BT.UnitTip
 	local tint = violet()
 
+	-- YOUR RATING, THE TIMES YOU GROUPED AND YOUR DUELS, AS TILES (Josh
+	-- 2026-11-17, the tooltips in the item card's look; the canvas's player
+	-- has the three as tiles). They were a row each. Where the Tooltips
+	-- module draws the row (M.UnitTiles), each is a number with a word under
+	-- it, and where and when you last grouped or dueled is one quiet line
+	-- below. Where it does not (the look off, the module off), the rows are
+	-- written as before.
+	local tiled = false
+	do
+		local tiles = {}
+		if p.rating then
+			tiles[#tiles + 1] = { value = ("%d / 5"):format(p.rating), label = "Rating" }
+		end
+		local grouped = tonumber(p.grouped) or 0
+		if grouped >= 1 and BT.LedgerGroups then
+			tiles[#tiles + 1] = { value = tostring(grouped), label = "Grouped" }
+		end
+		local won, lost = tonumber(p.duelsWon) or 0, tonumber(p.duelsLost) or 0
+		if won + lost >= 1 and BT.LedgerDuels then
+			tiles[#tiles + 1] = { value = ("%d – %d"):format(won, lost), label = "Duels" }
+		end
+		local mod = BT.GetModule and BT.GetModule("tooltips")
+		if #tiles > 0 and mod and mod.UnitTiles and mod.UnitTiles(tip, tiles) then
+			tiled = true
+			local last = {}
+			if grouped >= 1 and BT.LedgerGroups then
+				local when = U.Since(p.groupedAt)
+				if type(p.groupedWhere) == "string" and p.groupedWhere ~= "" then
+					last[#last + 1] = ("Last grouped in %s, %s"):format(p.groupedWhere, when)
+				else
+					last[#last + 1] = ("Last grouped %s"):format(when)
+				end
+			end
+			if won + lost >= 1 and BT.LedgerDuels then
+				last[#last + 1] = (#last > 0 and "last duel %s" or "Last duel %s"):format(U.Since(p.duelAt))
+			end
+			if #last > 0 then
+				tip:AddLine(table.concat(last, " · "), INK2[1], INK2[2], INK2[3], true)
+				Tip.SizeLine(tip, tip:NumLines(), T.LAST_SIZE, nil, "text")
+			end
+		end
+	end
+
 	if p.note then
 		local i = Tip.Row(tip, "note", tint, p.note, T.NOTE_INK, nil, nil, true)
 		Tip.SizeLine(tip, i, T.NOTE_SIZE, nil, "quote")
@@ -113,18 +158,20 @@ function T.Fill(tip, unit)
 		hidePills()
 	end
 
-	if p.rating then
-		Tip.Row(tip, "rating", tint, ("Rated %d/5"):format(p.rating), Tip.INK)
-	end
-	-- how often you grouped with them, and the last time and place
-	local grouped = BT.LedgerGroups and BT.LedgerGroups.Line(p)
-	if grouped then
-		Tip.Row(tip, "grouped", tint, grouped, INK2)
-	end
-	-- and your duels with them (Modules/Ledger/Duels.lua)
-	local duels = BT.LedgerDuels and BT.LedgerDuels.Line(p)
-	if duels then
-		Tip.Row(tip, "duels", tint, duels, INK2)
+	if not tiled then
+		if p.rating then
+			Tip.Row(tip, "rating", tint, ("Rated %d/5"):format(p.rating), Tip.INK)
+		end
+		-- how often you grouped with them, and the last time and place
+		local grouped = BT.LedgerGroups and BT.LedgerGroups.Line(p)
+		if grouped then
+			Tip.Row(tip, "grouped", tint, grouped, INK2)
+		end
+		-- and your duels with them (Modules/Ledger/Duels.lua)
+		local duels = BT.LedgerDuels and BT.LedgerDuels.Line(p)
+		if duels then
+			Tip.Row(tip, "duels", tint, duels, INK2)
+		end
 	end
 
 	-- the box is measured when it is shown, and everything above was added

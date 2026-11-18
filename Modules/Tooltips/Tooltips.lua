@@ -1333,6 +1333,36 @@ function M.Drops()
 	return s.questDrops
 end
 
+-- A GUESS BY THE KIND OF ENEMY GIVES WAY TO WHAT ITS CORPSES HELD (Josh
+-- 2026-11-17, a Highland Scytheclaw with a "Thicket Raptor Hide 0/4" row:
+-- "Ive been killing these raptors for a while. I don't think they drop the
+-- ticket raptor hides"). The item is new to this game, so the database has
+-- no list for it and it was matched by name: "raptor" is in the item's
+-- name, and a Scytheclaw is a raptor by family, so every raptor got the
+-- row. The enemy's own name shares no word with the item.
+--
+-- So each corpse you loot is counted. For every enemy in the loot window
+-- and every item a quest still wants, a corpse without the item is one
+-- miss, kept by enemy and item (M.Misses). An item matched only by the
+-- enemy's family, not by its name, loses its row on that enemy after
+-- M.MISSES corpses without it. Looting it there once brings the row back
+-- for good (M.Drops), and a match by the enemy's own name is kept whatever
+-- the count: "Webwood Venom Sac" stays on a Webwood Lurker.
+-- A corpse with nothing on it opens no loot window and is not counted.
+M.MISSES = 6
+function M.Misses()
+	local s = BT.settings
+	if not s then
+		return nil
+	end
+	if type(s.questMisses) ~= "table" then
+		s.questMisses = {}
+	end
+	return s.questMisses
+end
+-- the corpses counted this session, so one looted twice is one miss
+local counted, countedN = {}, 0
+
 -- the loot window open: each item a quest still wants, under every enemy it
 -- came from. Nothing else is kept.
 function M.LearnDrops()
@@ -1353,15 +1383,21 @@ function M.LearnDrops()
 		return 0
 	end
 	local n = 0
+	-- every corpse in the window, and which wanted items each held
+	local corpses = {}
 	local okN, count = pcall(GetNumLootItems)
 	for slot = 1, (okN and tonumber(count)) or 0 do
 		local okI, _, name = pcall(GetLootSlotInfo, slot)
-		if okI and type(name) == "string" and not (issecretvalue and issecretvalue(name)) and wanted[name] then
-			local r = { pcall(GetLootSourceInfo, slot) }
-			-- guid, quantity, guid, quantity, ...
-			for i = 2, #r, 2 do
-				local npc = r[1] and npcOf(r[i])
-				if npc then
+		local plain = okI and type(name) == "string" and not (issecretvalue and issecretvalue(name))
+		local r = { pcall(GetLootSourceInfo, slot) }
+		-- guid, quantity, guid, quantity, ...
+		for i = 2, #r, 2 do
+			local guid = r[1] and r[i] or nil
+			local npc = guid and npcOf(guid)
+			if npc and not (issecretvalue and issecretvalue(guid)) then
+				corpses[guid] = corpses[guid] or { npc = npc, held = {} }
+				if plain and wanted[name] then
+					corpses[guid].held[name] = true
 					drops[npc] = drops[npc] or {}
 					if not drops[npc][name] then
 						drops[npc][name] = true
@@ -1369,6 +1405,25 @@ function M.LearnDrops()
 					end
 				end
 			end
+		end
+	end
+	-- a corpse without a wanted item is a miss for it, once a corpse
+	local misses = M.Misses()
+	if misses then
+		for guid, corpse in pairs(corpses) do
+			if not counted[guid] then
+				counted[guid] = true
+				countedN = countedN + 1
+				for name in pairs(wanted) do
+					if not corpse.held[name] and not (drops[corpse.npc] and drops[corpse.npc][name]) then
+						misses[corpse.npc] = misses[corpse.npc] or {}
+						misses[corpse.npc][name] = math.min(99, (misses[corpse.npc][name] or 0) + 1)
+					end
+				end
+			end
+		end
+		if countedN > 500 then
+			counted, countedN = {}, 0
 		end
 	end
 	return n
@@ -1407,19 +1462,28 @@ function M.WithItemQuests(unit, quests)
 	end
 	local npc = npcOf(plainText(UnitGUID, unit))
 	local learnt = npc and M.Drops() and M.Drops()[npc] or nil
-	local own = wordsOf(plainText(UnitName, unit))
-	wordsOf(plainText(UnitCreatureFamily, unit), own)
+	-- its own name's words, and its family's: a match by the name is kept,
+	-- one by the family alone gives way to the corpses' count (M.MISSES)
+	local named = wordsOf(plainText(UnitName, unit))
+	local family = wordsOf(plainText(UnitCreatureFamily, unit))
+	local missed = npc and M.Misses() and M.Misses()[npc] or nil
 	for _, o in ipairs(itemObjectives) do
 		local match = learnt and learnt[o.text]
 		local known = M.KnownDrops(o.text)
 		if not match and known then
 			match = npc ~= nil and known[npc] or false
 		elseif not match and not questOnly(o.text) then
+			local byFamily = false
 			for word in pairs(wordsOf(o.text)) do
-				if own[word] then
+				if named[word] then
 					match = true
 					break
+				elseif family[word] then
+					byFamily = true
 				end
+			end
+			if not match and byFamily then
+				match = not (missed and (missed[o.text] or 0) >= M.MISSES)
 			end
 		end
 		if match and not said[o.text] then
@@ -1684,8 +1748,30 @@ function M.HideUnitBits(tip)
 				part:Hide()
 			end
 		end
+		-- and a row of tiles another module asked for (M.UnitTiles)
+		for _, f in ipairs(u.tb and u.tb.tileBacks or {}) do
+			f:Hide()
+		end
+		u.tiles = nil
 	end
 end
+-- the band from the tooltip's top to under line `last`; false where the
+-- game will not say where they are
+local function layUnitBand(tip, u, last)
+	local top = BT.Pill.Number(tip.GetTop and tip:GetTop(), nil)
+	local fs = last and BT.UnitTip.LineOf(tip, last)
+	local low = fs and BT.Pill.Number(fs.GetBottom and fs:GetBottom(), nil)
+	if not (top and low and top > low) then
+		return false
+	end
+	u.band:ClearAllPoints()
+	u.band:SetPoint("TOPLEFT", tip, "TOPLEFT", 1, -1)
+	u.band:SetPoint("TOPRIGHT", tip, "TOPRIGHT", -1, -1)
+	u.band:SetHeight(top - low + M.UNIT.BAND_UNDER)
+	u.band:Show()
+	return true
+end
+
 -- `colour`: the band's; `last`: the last line of who it is; `level`: true
 -- where the level is said; `fighting`: true where the health bar is shown
 function M.UnitLook(tip, colour, last, level, fighting)
@@ -1706,17 +1792,9 @@ function M.UnitLook(tip, colour, last, level, fighting)
 		u = { band = band, strip = strip, cap = cap }
 		unitBits[tip] = u
 	end
-	local top = BT.Pill.Number(tip.GetTop and tip:GetTop(), nil)
-	local fs = last and T.LineOf(tip, last)
-	local low = fs and BT.Pill.Number(fs.GetBottom and fs:GetBottom(), nil)
-	u.band:SetColorTexture(colour[1], colour[2], colour[3], M.B.BAND)
-	if top and low and top > low then
-		u.band:ClearAllPoints()
-		u.band:SetPoint("TOPLEFT", tip, "TOPLEFT", 1, -1)
-		u.band:SetPoint("TOPRIGHT", tip, "TOPRIGHT", -1, -1)
-		u.band:SetHeight(top - low + U2.BAND_UNDER)
-		u.band:Show()
-	else
+	u.band:SetColorTexture(colour[1], colour[2], colour[3], colour[4] or M.B.BAND)
+	u.whole = nil
+	if not layUnitBand(tip, u, last) then
 		u.band:Hide()
 	end
 	local right = level and T.LineOf(tip, 1, "TextRight")
@@ -1732,6 +1810,11 @@ function M.UnitLook(tip, colour, last, level, fighting)
 	end
 	-- for M.UnitLookEnd, once every module has written its rows
 	u.identityEnd, u.fighting = last, fighting and true or false
+	-- (the last unit's tiles go: whoever wants a row asks again, M.UnitTiles)
+	for _, f in ipairs(u.tb and u.tb.tileBacks or {}) do
+		f:Hide()
+	end
+	u.tiles = nil
 	if fighting then
 		u.strip:ClearAllPoints()
 		u.strip:SetPoint("BOTTOMLEFT", tip, "BOTTOMLEFT", 1, 1)
@@ -1766,10 +1849,87 @@ function M.UnitLookEnd(tip)
 	u.band:SetPoint("TOPLEFT", tip, "TOPLEFT", 1, -1)
 	u.band:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1, u.fighting and (M.UNIT.STRIP_H + 1) or 1)
 	u.band:Show()
+	u.whole = true
 	return true
+end
+
+-- LINES WRITTEN LATER END THE WHOLE BAND (Josh 2026-11-17, an NPC whose
+-- quest, "[24] Digging Through the Ooze", lay on the band: "the quests
+-- should go into a content area as well"). That row is another addon's. It
+-- was written after every module here had had its turn, when the tooltip
+-- had nothing under who it is and the band had been run to the bottom. The
+-- band then grew with the tooltip and lay behind the row. So when the
+-- tooltip changes size, a band over the whole of it is looked at again. If
+-- lines now follow, it ends under who it is.
+function M.UnitLookAgain(tip)
+	local u = tip and unitBits[tip]
+	if not (u and u.whole and u.identityEnd and u.band.IsShown and u.band:IsShown()) then
+		return false
+	end
+	local lines = BT.Pill.Number(tip.NumLines and tip:NumLines(), 0)
+	if lines <= u.identityEnd + 1 then
+		return false
+	end
+	if layUnitBand(tip, u, u.identityEnd) then
+		u.whole = nil
+		return true
+	end
+	return false
+end
+
+-- A QUEST YOU CAN HAND IN HAS THE GAME'S YELLOW MARK (Josh 2026-11-17, an NPC
+-- under a yellow "?" whose tooltip row had a pale one: "Can you make the "?"
+-- in the tooltip the same yellow as the game world one? Only for completed
+-- quests"). The row is Questie's. It draws the "?" as a picture tinted by
+-- how hard the quest is for your level, which for an old quest is grey. On a
+-- row that says the quest is complete, the tint is changed to the yellow of
+-- the mark over the NPC's head. Any other row is left as Questie wrote it.
+-- (English only: the row is known by Questie's word "Complete".)
+M.QUEST_MARK = "255:209:0"
+function M.QuestMarkText(text)
+	if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then
+		return nil
+	end
+	if not (text:find("tooltip_complete.png", 1, true) and text:find("Complete)", 1, true)) then
+		return nil
+	end
+	local out, n = text:gsub("(tooltip_complete%.png:[%d:]-):%d+:%d+:%d+|t", "%1:" .. M.QUEST_MARK .. "|t", 1)
+	return (n > 0 and out ~= text) and out or nil
+end
+function M.QuestMarks(tip)
+	local n = 0
+	if not (M.TILES_LOOK and tip and tip.NumLines and BT.Enabled("tooltips")) then
+		return n
+	end
+	for i = 2, BT.Pill.Number(tip:NumLines(), 0) do
+		local fs = BT.UnitTip.LineOf(tip, i)
+		local ok, text = pcall(function() return fs and fs.GetText and fs:GetText() end)
+		local yellow = ok and M.QuestMarkText(text) or nil
+		if yellow then
+			fs:SetText(yellow)
+			n = n + 1
+		end
+	end
+	return n
+end
+
+if GameTooltip and GameTooltip.HookScript then
+	pcall(GameTooltip.HookScript, GameTooltip, "OnSizeChanged", function(tip)
+		local ok, err = pcall(M.UnitLookAgain, tip)
+		if not ok then
+			BT.Err("tooltips.band: " .. tostring(err))
+		end
+		ok, err = pcall(M.QuestMarks, tip)
+		if not ok then
+			BT.Err("tooltips.mark: " .. tostring(err))
+		end
+	end)
 end
 BT.OnUnitTooltip("tooltips", 99, function(tip)
 	M.UnitLookEnd(tip)
+	if M.LayUnitTiles then
+		M.LayUnitTiles(tip)
+	end
 end)
 
 -- A WORLD OBJECT'S BAND (Josh 2026-11-17, screenshots of Tin Vein and Solid
@@ -1779,7 +1939,13 @@ end)
 -- name and the words under it where quest rows follow, and over the whole
 -- tooltip where nothing does. `identityEnd`: its last line before the
 -- quest's rows, or nil for all of it.
-M.OBJECT_BAND = { 0.62, 0.66, 0.64 }
+--
+-- DARK AMBER, NOT GREY (Josh 2026-11-17, Bruiseweed with "Requires
+-- Herbalism" in the game's red: "gray has poor contrast with the red"). The
+-- band was a grey wash, which lifted the ground under the red words to a
+-- mid grey. It is now the gold of the object's name, thin enough that the
+-- ground stays dark: the red reads on it as it does on a plain tooltip.
+M.OBJECT_BAND = { 1, 0.82, 0, 0.12 }
 function M.ObjectLook(tip, identityEnd)
 	if not (M.TILES_LOOK and tip and tip == rawget(_G, "GameTooltip")) then
 		return false
@@ -1935,9 +2101,27 @@ function M.Compose(tip, unit)
 	if M.TILES_LOOK then
 		HEADER, LEVEL = M.UNIT.NAME, M.UNIT.LEVEL
 	end
+	-- A LONG NAME IS SET SMALLER BEFORE THE TOOLTIP IS MADE WIDER (Josh
+	-- 2026-11-17, Highlord Bolvar Fordragon's tooltip half as wide again as a
+	-- player's: "Are we able to scale player/npc names similarly to the
+	-- items, so tooltips don't increase in width? I'd like to have a
+	-- consistent, or at least mostly consistent tooltip width"). As on an
+	-- item's card: the name goes down half a point at a time, to
+	-- M.B.NAME_LEAST, until it fits the usual width. Only a name still too
+	-- long at that size widens the tooltip. What the smaller name gives up
+	-- in height is put back below (`lost`), so the tags and the rows stay
+	-- where they are on any other unit.
+	local lost = 0
 	if not (issecretvalue and issecretvalue(name)) then
-		local needs = BT.UnitTip.Measure(name, HEADER, "name") + BT.UnitTip.Measure("    " .. level, LEVEL, "name")
-			+ rankW + PAD_X + PAD_LEFT + 14
+		local beside = BT.UnitTip.Measure("    " .. level, LEVEL, "name") + rankW + PAD_X + PAD_LEFT + 14
+		if M.TILES_LOOK then
+			local full = HEADER
+			while HEADER > M.B.NAME_LEAST and BT.UnitTip.Measure(name, HEADER, "name") + beside > MIN_W do
+				HEADER = math.max(M.B.NAME_LEAST, HEADER - 0.5)
+			end
+			lost = math.max(0, BT.Fonts.Size(full) - BT.Fonts.Size(HEADER))
+		end
+		local needs = BT.UnitTip.Measure(name, HEADER, "name") + beside
 		width = math.max(MIN_W, math.min(MAX_W, math.floor(needs)))
 	end
 
@@ -1965,19 +2149,47 @@ function M.Compose(tip, unit)
 	-- who they are with, under them, in the guild's own green: a player's
 	-- guild, or an NPC's job (Josh 2026-10-17: "Maybe we should have the NPC
 	-- <Banker> line in the same style as a guild name for players?")
+	-- A PLAYER'S GUILD UNDER THE BAND, NOT ON IT (Josh 2026-11-17: "Thinking
+	-- the guild name on player tooltips should be moved into the body instead
+	-- of header, so it matches the other tooltips a bit better"). On the band
+	-- it was a line of bright green on the class's colour. In the look a
+	-- player's band has the name and the tags, and the guild is the first
+	-- line under it. (An NPC's job stayed on its band until later that day.)
+	-- AND AN NPC'S (Josh 2026-11-17, a hunter's pet with "<Zeheva
+	-- Dragonslayer's Pet>" on its band: "The green tag should be moved to the
+	-- content area, same as guild names for players"). An NPC's job and a
+	-- pet's owner are written by the game the way a guild is, so they go
+	-- under the band as well.
 	local with = about.guild or about.title
-	if with then
+	local guildBelow = M.TILES_LOOK and with ~= nil
+	if with and not guildBelow then
 		tip:AddLine(M.GUILD:format("<" .. with .. ">"))
 		sizeLine(tip, BT.Pill.Number(tip:NumLines(), 2), BT.UnitTip.ROW)
 	end
 	-- whatever else the client had to say, as small print under them
-	if #facts > 0 then
-		tip:AddLine(table.concat(facts, " · "), DIM[1], DIM[2], DIM[3])
-		sizeLine(tip, BT.Pill.Number(tip:NumLines(), 2), FOOT)
+	-- UNDER THE BAND AS WELL, IN THE LOOK (Josh 2026-11-17, an NPC with
+	-- "Ironforge" on its band: "I think "Ironforge" and the quests should go
+	-- into a content area as well"). The band is the name and the tags. What
+	-- the game says besides, such as the faction an NPC belongs to, is
+	-- written after the gap, under the guild or job.
+	local function smallPrint(below)
+		local function one(text)
+			tip:AddLine(text, DIM[1], DIM[2], DIM[3])
+			local at = BT.Pill.Number(tip:NumLines(), 2)
+			sizeLine(tip, at, FOOT)
+			if below then
+				BT.UnitTip.Indent(tip, at, BODY_INDENT)
+			end
+		end
+		if #facts > 0 then
+			one(table.concat(facts, " · "))
+		end
+		for _, line in ipairs(small) do
+			one(line)
+		end
 	end
-	for _, line in ipairs(small) do
-		tip:AddLine(line, DIM[1], DIM[2], DIM[3])
-		sizeLine(tip, BT.Pill.Number(tip:NumLines(), 2), FOOT)
+	if not M.TILES_LOOK then
+		smallPrint(false)
 	end
 	indentBody(tip)
 	-- the last line of who it is: the band ends under it (M.UnitLook)
@@ -1995,6 +2207,15 @@ function M.Compose(tip, unit)
 		tip:AddLine(BT.UnitTip.TAG_BLANK)
 		BT.UnitTip.SizeLine(tip, BT.Pill.Number(tip:NumLines(), 1), M.UNIT.GAP, nil, "text")
 	end
+	if guildBelow then
+		tip:AddLine(M.GUILD:format("<" .. with .. ">"))
+		local at = BT.Pill.Number(tip:NumLines(), 2)
+		sizeLine(tip, at, BT.UnitTip.ROW)
+		BT.UnitTip.Indent(tip, at, BODY_INDENT)
+	end
+	if M.TILES_LOOK then
+		smallPrint(true)
+	end
 	-- TWO PIXELS MORE ABOVE THE TAGS (Josh 2026-10-17: "Can I get like 2px
 	-- more margin above the tags?"): their first line hung that much lower
 	-- off the name, and everything under it with it. No spacer line does it:
@@ -2002,6 +2223,18 @@ function M.Compose(tip, unit)
 	-- small to read.
 	if firstTags then
 		BT.UnitTip.Indent(tip, firstTags, BODY_INDENT, nil, -M.TAG_DROP)
+	end
+	-- A SMALLER NAME IN THE SAME ROOM (see `lost`, above): the name half of
+	-- what it lost lower, in the middle of its old room; the level beside
+	-- it lifted back to where it always is; the line under the name the
+	-- other half lower, and every line after it with it.
+	if lost > 0 then
+		local drop = lost / 2
+		BT.UnitTip.Indent(tip, 1, 0, nil, -drop)
+		BT.UnitTip.Indent(tip, 1, 0, "TextRight", drop)
+		if BT.Pill.Number(tip:NumLines(), 1) >= 2 then
+			BT.UnitTip.Indent(tip, 2, BODY_INDENT, nil, -drop - (firstTags == 2 and M.TAG_DROP or 0))
+		end
 	end
 
 	-- the rows: the quests it counts for, then your kills of it
@@ -2065,6 +2298,8 @@ function M.Compose(tip, unit)
 		-- and the two pixels the tags were dropped by, which the client does
 		-- not count when it measures the lines
 		local room = (fighting and (M.HEALTH_H + 1) or 0) + (firstTags and M.TAG_DROP or 0)
+		-- (and what a smaller name lost, which the client does not count either)
+		room = room + lost
 		if M.TILES_LOOK and fighting then
 			-- (the strip in place of the two pixel line)
 			room = room - (M.HEALTH_H + 1) + M.UNIT.STRIP_H + 2
@@ -2810,6 +3045,23 @@ function M.ReadItem(data, shopping)
 				-- a blank the client spaced with: our own spacing stands in
 			elseif kind ~= nil and kind == LT.ItemEnchantmentPermanent then
 				item.effects[#item.effects + 1] = { head = "Enchant", text = left, rgb = lc }
+			elseif M.TILES_LOOK and not item.set and lc and lc[1] > 0.9 and lc[2] > 0.7 and lc[3] < 0.3
+				and bare:match("^.+ %(%d+/%d+%)$") then
+				-- A SET, KEPT TOGETHER (Josh 2026-11-17, working down what was
+				-- left of the redesign: "Proceed step 6", gems and set pieces).
+				-- The game writes a set as its name with a count in gold, "Defias
+				-- Leather (2/5)", its pieces under it a little way in, grey
+				-- where you do not wear one, then each bonus, grey until you
+				-- wear enough. They were read as lines of no kind and came out
+				-- in the grey box with other addons' lines. In the look they
+				-- are a box of their own (M.WriteItemB). The look before keeps
+				-- them where the game put them.
+				local name, have, need = bare:match("^(.+) %((%d+)/(%d+)%)$")
+				item.set = { name = name, have = tonumber(have), need = tonumber(need), pieces = {}, bonuses = {} }
+			elseif item.set and #item.set.bonuses == 0 and left:find("^%s+%S") then
+				-- (looked for before the facts: "  Blackened Defias Armor" would
+				-- read as an armor figure)
+				item.set.pieces[#item.set.pieces + 1] = { text = bare:match("^%s*(.-)%s*$"), worn = lc ~= nil and lc[1] > 0.8 }
 			elseif bare:find(P.dps) then
 				item.dps = bare:match(P.dps)
 			elseif right and bare:find(P.damage) and right:find("%d") then
@@ -2832,6 +3084,8 @@ function M.ReadItem(data, shopping)
 				item.durability = { now = tonumber(now), most = tonumber(most), text = now .. "/" .. most }
 			elseif bare:find(P.maker) then
 				item.maker = bare:match(P.maker)
+			elseif item.set and (bare:find(P.setBonus) or bare:find(P.setBonusGrey)) then
+				item.set.bonuses[#item.set.bonuses + 1] = { text = bare, active = isGreen(lc) }
 			elseif bare:find(P.setBonus) or bare:find(P.setBonusGrey) then
 				-- a set's bonus stays with the set's name and pieces above it,
 				-- in the client's order: green as it is, it is not an enchant
@@ -3739,6 +3993,70 @@ function M.PaintTileBack(f, fill)
 	f.flat:Show()
 end
 
+-- A ROW OF TILES ON A UNIT'S TOOLTIP, FOR ANOTHER MODULE (Josh 2026-11-17,
+-- working down what was left of the redesign: the canvas's player has the
+-- Ledger's rating, groups and duels as three tiles, and they were still
+-- rows). A module asks for the row as it writes its part of the tooltip;
+-- the tiles are laid once every module has had its turn and the tooltip
+-- has its width (the hook at order 99, with M.UnitLookEnd).
+--   tiles = { { value = "4 / 5", label = "Rating", rgb = nil }, ... }
+-- Returns the line kept for them, or nil where the look is off or the
+-- tooltip has no pieces of ours (then the module writes its rows).
+M.UNIT_TILES_INSET = 10
+function M.UnitTiles(tip, tiles)
+	local u = tip and unitBits[tip]
+	if not (M.TILES_LOOK and u and type(tiles) == "table" and #tiles > 0 and tip.AddLine and BT.Enabled("tooltips")) then
+		return nil
+	end
+	local T = BT.UnitTip
+	tip:AddLine(T.TAG_BLANK)
+	local line = BT.Pill.Number(tip:NumLines(), 1)
+	T.SizeLine(tip, line, lineFor(M.B.TILE_H), nil, "text")
+	u.tiles = { line = line, list = tiles }
+	return line
+end
+function M.LayUnitTiles(tip)
+	local u = tip and unitBits[tip]
+	local set = u and u.tiles
+	if not set then
+		return 0
+	end
+	local T, B, I = BT.UnitTip, M.B, M.ITEM
+	local at = T.LineOf(tip, set.line)
+	if not at then
+		return 0
+	end
+	local left = BT.Pill.Number(at.GetLeft and at:GetLeft(), nil)
+	local right = BT.Pill.Number(tip.GetRight and tip:GetRight(), nil)
+	local inner = (left and right and right - left > 60) and (right - left - M.UNIT_TILES_INSET) or 180
+	u.tb = u.tb or { holder = tip }
+	local n = #set.list
+	local w = (inner - B.TILE_GAP * (n - 1)) / n
+	for i, t in ipairs(set.list) do
+		local bg = M.TileBack(u.tb, i)
+		bg:SetPoint("TOPLEFT", at, "TOPLEFT", math.floor((i - 1) * (w + B.TILE_GAP) + 0.5), 0)
+		bg:SetSize(math.floor(w), B.TILE_H - 2)
+		M.PaintTileBack(bg, B.TILE_FILL)
+		bg.num = bg.num or bg:CreateFontString(nil, "OVERLAY")
+		bg.cap = bg.cap or bg:CreateFontString(nil, "OVERLAY")
+		local ink = t.rgb or ITEM_INK
+		BT.Fonts.Set(bg.num, "name", B.BIG)
+		bg.num:SetText(tostring(t.value or ""))
+		bg.num:SetTextColor(ink[1], ink[2], ink[3])
+		bg.num:ClearAllPoints()
+		bg.num:SetPoint("TOP", bg, "TOP", 0, -7)
+		BT.Fonts.Set(bg.cap, "name", I.FIG_LABEL)
+		bg.cap:SetText(tostring(t.label or ""):upper())
+		bg.cap:SetTextColor(ITEM_HEAD[1], ITEM_HEAD[2], ITEM_HEAD[3])
+		bg.cap:ClearAllPoints()
+		bg.cap:SetPoint("TOP", bg.num, "BOTTOM", 0, -3)
+	end
+	for i = n + 1, #(u.tb.tileBacks or {}) do
+		u.tb.tileBacks[i]:Hide()
+	end
+	return n
+end
+
 -- THE BAND AND THE STRIP, EACH A HEIGHT AND NOT THREE ANCHORS. They were
 -- pinned to the tooltip's top left, its right middle and a line's bottom,
 -- which is one anchor too many: the client made each as tall as the whole
@@ -4006,6 +4324,7 @@ function M.StatList(item)
 end
 
 -- Writes `item` on `tip` in the new look. Returns true.
+M.VENDOR_POUCH = "|TInterface\\GossipFrame\\VendorGossipIcon:11:11:0:0|t "
 function M.WriteItemB(tip, item, icon, level)
 	local T, I, B = BT.UnitTip, M.ITEM, M.B
 	local c = card(tip)
@@ -4029,11 +4348,16 @@ function M.WriteItemB(tip, item, icon, level)
 	end
 
 	-- 1. WHAT IT IS
+	-- NO RED WORDS ON THE BAND (Josh 2026-11-17, Knight's Lance with "Polearm
+	-- - Two-Hand" in red on an uncommon item's green band: "Red text on green
+	-- background is difficult to read"). A kind you cannot use was written
+	-- in the game's red, which reads on a plain tooltip and not on a band of
+	-- a quality's colour. The CAN'T USE tag beside it says the same on a
+	-- dark fill of its own, so the words keep the line's quiet colour.
 	local sub = {}
-	for _, part in ipairs({ { item.kind, item.kindRgb }, { item.slot, item.slotRgb } }) do
-		local words, rgb = part[1], part[2]
-		if words then
-			sub[#sub + 1] = isRed(rgb) and hex(rgb, words) or words
+	for _, part in ipairs({ item.kind, item.slot }) do
+		if part then
+			sub[#sub + 1] = part
 		end
 	end
 	if #sub == 0 then
@@ -4082,13 +4406,22 @@ function M.WriteItemB(tip, item, icon, level)
 	end
 	local room = cap - I.INSET - off - levelWide
 	local shown = item.name
-	if T.Measure(shown, size, "name") > room then
-		local cut = shown
-		while #cut > 4 and T.Measure(cut .. "...", size, "name") > room do
-			cut = cut:sub(1, -2)
-		end
-		shown = cut:gsub("%s+$", "") .. "..."
+	-- A NAME IS NEVER CUT (Josh 2026-11-17, "Archmage Antonidas: The U...":
+	-- "We can't truncate since there is no way to see the full title. We can
+	-- adjust the font size, but if we do that it should not change the space
+	-- the title takes up. The header should always be the same height").
+	-- A name too long for its room is set smaller, half a point at a time,
+	-- down to B.NAME_LEAST. If it is still too long the card is made wider
+	-- than its cap, as wide as the name needs. What the smaller name gives
+	-- up in height is put back (`drop`, below), so the icon, the line under
+	-- the name, the tags and everything after them stay where they are on
+	-- any other card.
+	local full = size
+	while size > B.NAME_LEAST and T.Measure(shown, size, "name") > room do
+		size = math.max(B.NAME_LEAST, size - 0.5)
 	end
+	local lost = math.max(0, BT.Fonts.Size(full) - BT.Fonts.Size(size))
+	local drop = lost / 2
 	-- how it binds, whether it is unique, and "Can't use", as tags on a third
 	-- line beside the icon (M.ItemTags)
 	c.tall = true
@@ -4106,17 +4439,39 @@ function M.WriteItemB(tip, item, icon, level)
 	c.header(shown, q, icon, sub, item.edgeRgb, {}, tags)
 	T.SizeLine(tip, 1, size, nil, "name")
 	T.SizeLine(tip, 2, B.SUB, nil, "text")
+	if lost > 0 then
+		-- THE SMALLER NAME IN THE SAME ROOM: the blank at its right is as
+		-- small, so the line is no taller than the name. The name sits half
+		-- of what it lost lower, in the middle of its old room. The line
+		-- under it sits the other half lower, where it always is. The icon
+		-- hangs off the name, so it is lifted back by as much.
+		T.SizeLine(tip, 1, size, "TextRight", "text")
+		T.Indent(tip, 1, 0, nil, -drop)
+		T.Indent(tip, 2, 0, nil, -drop)
+		local l1 = T.LineOf(tip, 1)
+		if icon and l1 and b.icon.ClearAllPoints then
+			b.icon:ClearAllPoints()
+			b.icon:SetPoint("TOPLEFT", l1, "TOPLEFT", -c.off, 1 + drop)
+		end
+	end
 	local floor = math.min(I.MIN_W, cap)
-	local needs = math.min(cap, math.max(c.needs(shown, sub, {}) + levelWide,
-		T.Measure(shown, size, "name") + off + levelWide + I.INSET + 2))
+	-- (no wider than the cap for anything but the name itself, at the size
+	-- it was given: that much is needed whatever the cap)
+	local needs = math.max(math.min(cap, c.needs(shown, sub, {}) + levelWide),
+		T.Measure(shown, size, "name") + off + levelWide + I.INSET + 2)
 	c.headNeeds = needs
 
 	-- the rest of the icon's height, the band's foot and some air
 	-- (Josh's Strong Fishing Pole, 2026-11-16: "Spacing seems off here". With
 	-- no tags there are two lines beside a 40 pixel icon, not three, so the
 	-- band ran down to the tiles' top edge. The gap is larger then.)
+	-- (and what a smaller name lost, so the card is as tall as any other;
+	-- the line after this one is lifted by as much, further down)
 	tip:AddLine(" ")
-	T.SizeLine(tip, c.last(), lineFor(c.tagLine and B.HEAD_GAP or B.HEAD_GAP_BARE), nil, "text")
+	T.SizeLine(tip, c.last(), lineFor((c.tagLine and B.HEAD_GAP or B.HEAD_GAP_BARE) + lost), nil, "text")
+	-- (the last line of the head: a card with nothing written after it has
+	-- no body, see ROOM BEFORE THE FOOT below)
+	local headEnd = c.last()
 
 	local laid = {}
 	local function keep(h, what)
@@ -4300,8 +4655,37 @@ function M.WriteItemB(tip, item, icon, level)
 			T.SizeLine(tip, c.last(), I.QUIET, nil, "text")
 		end
 	end
-	if item.flavour then
+	-- THE SET IT BELONGS TO, IN A BOX OF ITS OWN (M.ReadItem): the set's
+	-- name with how many you wear at its right, its pieces (the ones you
+	-- wear bright, the rest quiet), then each bonus, green once it counts
+	if item.set then
+		local set = item.set
 		spacer()
+		spacer()
+		row(set.name, { 1, 0.82, 0 }, ("%d / %d"):format(set.have or 0, set.need or 0), ITEM_SUB)
+		local from = c.last()
+		T.SizeLine(tip, c.last(), I.FOOT, "TextRight", "text")
+		for _, piece in ipairs(set.pieces) do
+			row("  " .. piece.text, piece.worn and ITEM_INK or ITEM_SUB)
+			T.SizeLine(tip, c.last(), I.FOOT, nil, "text")
+		end
+		for _, bonus in ipairs(set.bonuses) do
+			row(bonus.text, bonus.active and ITEM_GREEN or ITEM_SUB, nil, nil, true)
+			T.SizeLine(tip, c.last(), I.FOOT, nil, "text")
+		end
+		boxes[#boxes + 1] = { from = from, to = c.last() }
+		spacer()
+	end
+	if item.flavour then
+		-- EVEN ROOM OVER AND UNDER IT (Josh 2026-11-17, a book whose card is
+		-- its head, its quote and the other addons' box: "less padding on the
+		-- rp quote. It is also slightly off from being vertically centered").
+		-- The line before it parts it from the facts above. Where it is the
+		-- first thing under the head, the head's own gap is that room, and
+		-- the line made the room over the quote larger than the room under.
+		if c.last() > headEnd then
+			spacer()
+		end
 		local f = item.flavourRgb or { 1, 0.82, 0 }
 		tip:AddLine(item.flavour, f[1], f[2], f[3], true)
 		T.SizeLine(tip, c.last(), I.FLAVOUR, nil, "quote")
@@ -4318,7 +4702,12 @@ function M.WriteItemB(tip, item, icon, level)
 	-- blank space at the bottom"). Two blank lines were always added here,
 	-- to part the facts from the other addons' rows and the foot. A spell's
 	-- card has neither, and the two lines were left under its last words.
-	if #item.rest > 0 or item.durability or item.price or item.footText or item.maker or #item.notes > 0 then
+	-- NOR WHERE NOTHING IS ABOVE IT (Josh 2026-11-17, Copper Ore, whose card
+	-- is its head and then other lines: "Can we collapse the gap ... if there
+	-- is nothing to put there?"). An item with no facts, tiles or words had
+	-- the head's gap and then these two lines, with nothing between them.
+	if c.last() > headEnd
+		and (#item.rest > 0 or item.durability or item.price or item.footText or item.maker or #item.notes > 0) then
 		spacer()
 		spacer()
 	end
@@ -4340,7 +4729,11 @@ function M.WriteItemB(tip, item, icon, level)
 				boxTo = c.last()
 			end
 		end
-		if boxFrom then
+		-- ROOM UNDER THE BOX ONLY WHERE THE FOOT FOLLOWS (Josh 2026-11-17, the
+		-- same book, which has no price: "Footer can be collapsed since there
+		-- is no content"). These lines part the box from the foot's strip.
+		-- With no foot they were an empty strip's worth of room at the bottom.
+		if boxFrom and (item.durability or item.price or item.footText or item.maker or #item.notes > 0) then
 			spacer()
 			spacer()
 			spacer()
@@ -4358,7 +4751,13 @@ function M.WriteItemB(tip, item, icon, level)
 		if d then
 			worn = hasBar and T.TAG_BLANK or d.text
 		end
-		tip:AddDoubleLine(worn, #right > 0 and table.concat(right, " · ") or " ", ITEM_SUB[1], ITEM_SUB[2], ITEM_SUB[3],
+		-- THE VENDOR'S POUCH BEFORE THE PRICE (Josh 2026-11-17, Tin Ore with an
+		-- auction price in the box above and the vendor's in the foot: "Can
+		-- we add the vendor icon (pouch) before the vendor price on item
+		-- tooltips?"). The picture the game puts over a vendor's head, so the
+		-- foot's coins read as what a vendor pays.
+		local pouch = item.price and M.VENDOR_POUCH or ""
+		tip:AddDoubleLine(worn, #right > 0 and (pouch .. table.concat(right, " · ")) or " ", ITEM_SUB[1], ITEM_SUB[2], ITEM_SUB[3],
 			ITEM_SUB[1], ITEM_SUB[2], ITEM_SUB[3])
 		footLine = c.last()
 		T.SizeLine(tip, footLine, B.FOOT, nil, "text")
@@ -4368,7 +4767,7 @@ function M.WriteItemB(tip, item, icon, level)
 			needs = math.max(needs, T.Measure(M.Bare(item.footText), B.FOOT, "text") + I.INSET + 4)
 		end
 		needs = math.max(needs, (hasBar and (I.BAR_W + I.BAR_GAP + T.Measure(d.text, B.FOOT, "text")) or 0)
-			+ T.Measure(table.concat(right, " · "), B.FOOT, "text") + 24 + I.INSET)
+			+ T.Measure(table.concat(right, " · "), B.FOOT, "text") + 24 + I.INSET + (item.price and 14 or 0))
 	end
 	if item.maker then
 		tip:AddLine(("Made by %s"):format(item.maker), ITEM_MAKER[1], ITEM_MAKER[2], ITEM_MAKER[3])
@@ -4389,7 +4788,12 @@ function M.WriteItemB(tip, item, icon, level)
 		T.SizeLine(tip, c.last(), B.FOOT_UNDER, nil, "text")
 	end
 
-	local inner = c.finish(floor, math.min(cap, needs))
+	-- (a smaller name: the head's gap was made taller by what the name lost,
+	-- to keep the card's height, and the body starts where it always does)
+	if lost > 0 and c.last() > headEnd then
+		T.Indent(tip, headEnd + 1, 0, nil, lost)
+	end
+	local inner = c.finish(floor, math.max(math.min(cap, needs), c.headNeeds or 0))
 	-- LESS UNDER THE FOOT (Josh 2026-11-16: "Need less padding on the bottom
 	-- of the footer"). The room under the foot's words is the tooltip's own
 	-- lower padding, which the card does not draw. So where there is a foot,
@@ -4416,7 +4820,7 @@ function M.WriteItemB(tip, item, icon, level)
 	local r1, r2 = T.LineOf(tip, 1, "TextRight"), T.LineOf(tip, 2, "TextRight")
 	if level and r1 and r2 then
 		local num = bSay(b, tostring(level), ITEM_INK, B.LEVEL, false, "name")
-		num:SetPoint("TOPRIGHT", r1, "TOPRIGHT", 0, 2)
+		num:SetPoint("TOPRIGHT", r1, "TOPRIGHT", 0, 2 + drop)
 		local cap = bSay(b, levelLabel, ITEM_HEAD, I.FIG_LABEL, false, "name")
 		cap:SetPoint("TOPRIGHT", num, "BOTTOMRIGHT", 0, -3)
 	end
@@ -4975,11 +5379,39 @@ function M.SettleSpared()
 		end
 	end
 end
+-- THE LIST IS LOOKED FOR EVERY FRAME, NOT ONLY WHEN THE GAME WRITES IT (Josh
+-- 2026-11-17, after it was to be hidden: ""If you replace this item" is still
+-- shown, but everything else looks good"). It was hidden from a hook that
+-- runs as the game fills a comparison tooltip, and only on a fill the card
+-- was written on. In the look the card is not written on every fill
+-- (M.Spared), and his screenshots had the list untouched under the card. So
+-- while a comparison tooltip shows, its lines are looked through each frame
+-- and the list is emptied wherever it is found (M.FoldDelta, which finds
+-- nothing once it has).
+function M.HideDeltaShown()
+	if not M.HidesDelta() then
+		return 0
+	end
+	local n = 0
+	for _, name in ipairs({ "ShoppingTooltip1", "ShoppingTooltip2" }) do
+		local tip = rawget(_G, name)
+		if tip and tip.IsShown and tip:IsShown() then
+			local ok, head = pcall(M.FoldDelta, tip)
+			if not ok then
+				BT.Err("tooltips.delta: " .. tostring(head))
+			elseif head then
+				n = n + 1
+			end
+		end
+	end
+	return n
+end
 if GameTooltip and GameTooltip.HookScript then
 	pcall(GameTooltip.HookScript, GameTooltip, "OnUpdate", function()
 		if next(spare) then
 			M.SettleSpared()
 		end
+		M.HideDeltaShown()
 	end)
 end
 
@@ -5012,11 +5444,24 @@ local function isDeltaHead(text)
 	return text:find("^If you replace this item") ~= nil
 end
 
+-- HIDDEN WHERE UPGRADES SAYS IT (Josh 2026-11-17, asked whether to keep the
+-- list now that the three role numbers do its job: "Hide it"). Where the
+-- Upgrades module is on and covers your class, the list is emptied: the
+-- game's lines cannot be taken off a tooltip, so each is left with no words
+-- at the smallest size, and the game squeezes blank lines at a tooltip's
+-- end. Anywhere else (the module off, a class it does not cover yet) the
+-- list is all there is, and it is folded into the card as before.
+function M.HidesDelta()
+	local up = BT.Upgrades
+	return M.TILES_LOOK and BT.Enabled("upgrades") and type(up) == "table" and type(up.Covers) == "function"
+		and up.Covers() == true
+end
+
 -- Folds the stat changes on a comparison tooltip the card was written on;
 -- returns the line that heads them, or nil
 function M.FoldDelta(tip)
 	local b = bitsOf[tip]
-	if not (b and tip.NumLines) then
+	if not tip.NumLines then
 		return nil
 	end
 	local T, I = BT.UnitTip, M.ITEM
@@ -5024,7 +5469,9 @@ function M.FoldDelta(tip)
 	local head = nil
 	for i = 2, n do
 		local fs = T.LineOf(tip, i)
-		if fs and isDeltaHead(fs:GetText()) then
+		-- (words the game keeps secret are not the heading)
+		local ok, text = pcall(function() return fs and fs:GetText() end)
+		if ok and type(text) == "string" and not (issecretvalue and issecretvalue(text)) and isDeltaHead(text) then
 			head = i
 			break
 		end
@@ -5036,6 +5483,29 @@ function M.FoldDelta(tip)
 		return type(text) ~= "string" or text:find("^%s*$") ~= nil
 	end
 	local above = T.LineOf(tip, head - 1)
+	if M.HidesDelta() then
+		local from = (above and blank(above:GetText())) and head - 1 or head
+		for i = from, n do
+			for _, side in ipairs({ "TextLeft", "TextRight" }) do
+				local line = T.LineOf(tip, i, side)
+				if line and line.SetText then
+					line:SetText("")
+				end
+			end
+			T.SizeLine(tip, i, 1, nil, "text")
+		end
+		if b and b.deltaRule then
+			b.deltaRule:Hide()
+		end
+		M.composing = true
+		pcall(tip.Show, tip)
+		M.composing = false
+		return head
+	end
+	-- (the fold is drawn with the card's own parts: no card, nothing folded)
+	if not b then
+		return nil
+	end
 	if above and blank(above:GetText()) then
 		T.SizeLine(tip, head - 1, I.SPACER, nil, "text")
 	end
@@ -5317,10 +5787,10 @@ function M.ReadSpell(data, kind, fresh, enemy, head)
 	-- comes to a second where it works over time; it costs nothing, so has
 	-- no per mana
 	do
-		local label, value, amount, over, weapon, after, bonus, hit
+		local label, value, amount, over, weapon, after, bonus, hit, points
 		local found = nil
 		for _, r in ipairs(spell.rows) do
-			label, value, amount, over, weapon, after, bonus, hit = M.SpellAmount(r.text, M.IsShot(spell.range))
+			label, value, amount, over, weapon, after, bonus, hit, points = M.SpellAmount(r.text, M.IsShot(spell.range))
 			if label then
 				found = r
 				break
@@ -5343,13 +5813,15 @@ function M.ReadSpell(data, kind, fresh, enemy, head)
 		if label then
 			spell.amount = { value, label }
 			local said = amount and ((adds and "+" or "") .. M.Middle(amount)) or value
-			table.insert(spell.facts, 1, { text = ("%s %s%s%s"):format(said, label:lower(),
-				type(over) == "number" and (" over " .. M.Lasting(over)) or "", weapon and " with your weapon" or ""),
+			-- (a finishing move's, with how many combo points it is for)
+			table.insert(spell.facts, 1, { text = ("%s %s%s%s%s"):format(said, label:lower(),
+				type(over) == "number" and (" over " .. M.Lasting(over)) or "", weapon and " with your weapon" or "",
+				points and (" at %d point%s"):format(points, points == 1 and "" or "s") or ""),
 				amount = true })
 			-- A DESCRIPTION THAT SAYS NO MORE GOES (Josh 2026-10-17: "Let's go
 			-- with your recommendation for hidin the paragraph descriptions"):
 			-- one sentence, and after its amount nothing but how long
-			if found.desc and M.SaysNoMore(found.text, after) then
+			if found.desc and not points and M.SaysNoMore(found.text, after) then
 				found.hidden = true
 			end
 		end
@@ -5885,10 +6357,45 @@ end
 -- damage is in it, what follows the amount, what it adds to a plain hit of
 -- the weapon where that is a number, and whether it lands on a hit, so has
 -- no rate (M.ON_A_HIT). Nil where it says no amount.
+-- A FINISHING MOVE AT ITS MOST POINTS (Josh 2026-11-17, working down what
+-- was left: "Proceed"). A finishing move lists what it does at each number
+-- of combo points:
+--     1 point  : 6-10 damage
+--     ...
+--     5 points: 26-30 damage
+-- The first amount in the words was taken, so Eviscerate's card said what
+-- it does at 1 point, which is how it is used least. The line with the
+-- most points is read now, and the card says how many points that is.
+-- A line with a percent in it is not such a list (Death Mark's "60% stored,
+-- 1,605 damage cap"), and is left to be read as before.
+-- Returns how many points, and that line's words; nil where there is no list.
+function M.FinisherLine(text)
+	local most, words = nil, nil
+	for points, rest in text:gmatch("(%d) points?%s*:%s*([^\n]*)") do
+		points = tonumber(points)
+		if rest:find("%%") then
+			return nil
+		end
+		if points and (not most or points > most) then
+			most, words = points, rest
+		end
+	end
+	return most, words
+end
+
 -- `shot`: the weapon in it is the ranged one (M.IsShot).
+-- For a finishing move, a ninth answer: how many combo points the amount
+-- is for (M.FinisherLine).
 function M.SpellAmount(text, shot)
 	if type(text) ~= "string" then
 		return nil
+	end
+	local points, line = M.FinisherLine(text)
+	if points and line and not line:find("%d points?%s*:") then
+		local label, value, amount, over, weapon, after, bonus, hit = M.SpellAmount(line, shot)
+		if label then
+			return label, value, amount, over, weapon, after, bonus, hit, points
+		end
 	end
 	local wl, wv, wa, wo, ww, wafter, wbonus = weaponAmount(text, shot)
 	if wl then
