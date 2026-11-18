@@ -37,6 +37,39 @@ local M = {}
 UP.Math = M
 
 M.AP_PER_DPS = 14
+-- DEFENSE (Josh 2026-11-17: "Defense is a main tanking stat... I think we
+-- should consider it. Each point of Defense provides 0.04% reduction in
+-- incoming critical hit chance, as well as small increases to dodge, parry,
+-- and block"). The character sheet has the same number, and says one more
+-- thing a point does: "Decreases chance to be hit and critically hit"
+-- (PaperDollFrameStats.lua, STAT_PER_DEFENSE = 0.04). So a point is 0.04% of
+-- dodge, of parry and of block, 0.04% less chance to be hit and 0.04% less
+-- chance to be critically hit. An item has it as a stat of its own, in
+-- rating, and the game's table makes 1 rating 1 Defense at every level
+-- (gametables/combatratings.txt). A set bonus or a "Use:" that gives it
+-- comes from the tables as UPGRADES_DEFENSE.
+M.PER_DEFENSE = 0.04
+-- THE REST OF WHAT AN ITEM CAN HAVE (Josh 2026-11-17, of the stats that
+-- counted for nothing: "We should consider resists in the tanking stats so
+-- they aren't completely ignored. Attack power vs type should be divided by
+-- however many types there are. So +50 attack power vs undead would only
+-- count as +10 if there are 5 types. Expertise should have a value for dps
+-- and tank threat").
+--   resistances: kept by school for the tank's sum (Roles.lua). The schools
+--     as UnitResistance numbers them: fire 2, nature 3, frost 4, shadow 5,
+--     arcane 6. An item has one as RESISTANCE<n>_NAME or under the school's
+--     name; a stat with RESISTANCE and ALL in its name is all five.
+--   attack power against a kind of enemy: the amount over M.ENEMY_KINDS, as
+--     plain attack power. The game has eight kinds of enemy you fight:
+--     beast, demon, dragonkin, elemental, giant, humanoid, mechanical and
+--     undead.
+--   expertise: each point takes 0.25% off an enemy's chance to dodge or
+--     parry you (classic's), kept in percent for Roles.lua.
+M.RESIST = { RESISTANCE2_NAME = 2, RESISTANCE3_NAME = 3, RESISTANCE4_NAME = 4, RESISTANCE5_NAME = 5, RESISTANCE6_NAME = 6,
+	ITEM_MOD_FIRE_RESISTANCE_SHORT = 2, ITEM_MOD_NATURE_RESISTANCE_SHORT = 3, ITEM_MOD_FROST_RESISTANCE_SHORT = 4,
+	ITEM_MOD_SHADOW_RESISTANCE_SHORT = 5, ITEM_MOD_ARCANE_RESISTANCE_SHORT = 6 }
+M.ENEMY_KINDS = 8
+M.PER_EXPERTISE = 0.25
 M.ARMOR_PER_AGILITY = 2
 
 -- spell schools as GetSpellBonusDamage numbers them
@@ -113,6 +146,26 @@ function M.Swap(now, rates, worn, new, weapons)
 
 	-- 4. what the piece gives outright
 	ap = ap + get("ITEM_MOD_ATTACK_POWER_SHORT")
+	-- (and attack power against one kind of enemy, as its share of plain)
+	after.resist = {}
+	for school = 2, 6 do
+		after.resist[school] = now.resist and now.resist[school] or 0
+	end
+	for key, v in pairs(d) do
+		if type(key) == "string" then
+			if (key:find("ATTACK_POWER_VS", 1, true) or key:find("ATTACK_POWER_VERSUS", 1, true)) and not key:find("RANGED", 1, true) then
+				ap = ap + v / M.ENEMY_KINDS
+			elseif M.RESIST[key] then
+				after.resist[M.RESIST[key]] = after.resist[M.RESIST[key]] + v
+			elseif key:find("RESISTANCE", 1, true) and key:find("ALL", 1, true) then
+				for school = 2, 6 do
+					after.resist[school] = after.resist[school] + v
+				end
+			end
+		end
+	end
+	after.expertise = (now.expertise or 0)
+		+ get("ITEM_MOD_EXPERTISE_RATING_SHORT") * (rates.expertisePerRating or 0.1) * M.PER_EXPERTISE
 	after.attackPower = now.attackPower + ap
 	after.armor = after.armor + get("RESISTANCE0_NAME")
 	local both = get("ITEM_MOD_SPELL_POWER_SHORT")
@@ -133,6 +186,13 @@ function M.Swap(now, rates, worn, new, weapons)
 	after.dodge = after.dodge + get("ITEM_MOD_DODGE_RATING_SHORT") * (rates.dodgePerRating or 0)
 	after.parry = (now.parry or 0) + get("ITEM_MOD_PARRY_RATING_SHORT") * (rates.parryPerRating or 0)
 	after.haste = (now.haste or 0) + get("ITEM_MOD_HASTE_RATING_SHORT") * (rates.hastePerRating or 0)
+	-- Defense: what it adds to dodge, parry and block here; what it takes
+	-- off an enemy's chance to hit and to crit is the tank's sum (Roles.lua)
+	local defense = get("ITEM_MOD_DEFENSE_SKILL_RATING_SHORT") * (rates.defensePerRating or 1) + get("UPGRADES_DEFENSE")
+	after.defense = (now.defense or 0) + defense
+	after.dodge = after.dodge + defense * M.PER_DEFENSE
+	after.parry = after.parry + defense * M.PER_DEFENSE
+	after.block = after.block + defense * M.PER_DEFENSE
 
 	-- 5. weapon damage follows attack power
 	local perHit = ap / M.AP_PER_DPS * now.weaponSpeed

@@ -5,10 +5,11 @@
 -- and an item's stats. Math.lua and Roles.lua take what this hands them and
 -- call nothing.
 --
--- PALADIN ONLY, ENGLISH ONLY, for now: a spell's numbers are read out of its
--- description's words ("Heals a friendly target for 376 to 417."), because
--- those words are the game's own answer with your spell power and talents
--- already counted (probe, 2026-11-16).
+-- PALADIN ONLY, for now. A spell is found by its id and its numbers are
+-- taken from its description by their place in it, not by its words
+-- (2026-11-17, SpellData.lua; see YOUR SPELLS, below). The description is
+-- still what is read, because it is the game's own answer with your spell
+-- power and talents already counted (probe, 2026-11-16).
 local _, BT = ...
 BT.Upgrades = BT.Upgrades or {}
 local UP = BT.Upgrades
@@ -150,6 +151,24 @@ function Rd.State()
 	s.dodge = num(GetDodgeChance()) or 0
 	s.parry = num(GetParryChance()) or 0
 	s.block = num(GetBlockChance and GetBlockChance()) or 0
+	-- DEFENSE OVER YOUR LEVEL'S OWN: what gear and buffs add. The skill
+	-- itself is taken as full for your level, as a weapon's is (Josh
+	-- 2026-11-16, of weapon skill: "We should just assume max"), so it is
+	-- the sheet's second number that counts.
+	-- your resistances, by school (fire 2, nature 3, frost 4, shadow 5,
+	-- arcane 6), and your expertise in percent off an enemy's dodge
+	s.resist = {}
+	for school = 2, 6 do
+		local _, total = UnitResistance("player", school)
+		s.resist[school] = num(total) or 0
+	end
+	s.expertise = num(GetExpertisePercent and GetExpertisePercent())
+		or ((num(GetExpertise and GetExpertise()) or 0) * 0.25)
+	s.defense = 0
+	if UnitDefenseSkill then
+		local _, added = UnitDefenseSkill("player")
+		s.defense = math.max(0, num(added) or 0)
+	end
 	s.blockValue = num(GetShieldBlock and GetShieldBlock()) or 0
 	s.shield = C_PaperDollInfo and C_PaperDollInfo.OffhandHasShield and C_PaperDollInfo.OffhandHasShield() and true or false
 	s.health = num(UnitHealthMax("player"))
@@ -225,6 +244,10 @@ function Rd.Rates(s)
 	r.parryPerRating = perRating(CR_PARRY or 4, 15)
 	r.hastePerRating = perRating(CR_HASTE_MELEE or 18, 10)
 	r.blockPerRating = perRating(CR_BLOCK or 5, 5)
+	-- (rating for a point of expertise: the table's 10)
+	r.expertisePerRating = perRating(CR_EXPERTISE or 24, 10)
+	-- (rating for a point of Defense, not for 1%: the table's 1)
+	r.defensePerRating = perRating(CR_DEFENSE_SKILL or 2, 1)
 	return r
 end
 
@@ -233,7 +256,7 @@ local function words(id)
 	if type(text) ~= "string" or secret(text) then
 		return ""
 	end
-	return (text:gsub(",", ""))
+	return text
 end
 
 local function cost(id)
@@ -242,80 +265,221 @@ local function cost(id)
 	return first and num(first.cost) or 0
 end
 
-local function middle(a, b)
-	a, b = tonumber(a), tonumber(b)
-	return a and b and (a + b) / 2 or nil
+-- ---------------------------------------------------------------------------
+-- YOUR SPELLS, FOUND BY ID AND READ BY POSITION (Josh 2026-11-17: "Anything
+-- else we can use from the game files? Spell names/ids would be nice", then
+-- "Let's proceed with the rework")
+-- ---------------------------------------------------------------------------
+--
+-- A spell was found by its English name and its numbers were picked out of
+-- English sentences ("causes 43.2% weapon damage plus an additional 16 to
+-- 23"). Both are gone. SpellData.lua, made from the game's own tables by
+-- scripts/make-upgrade-spells.py, lists every rank of each spell the model
+-- prices by id, and for each one what its description's numbers are in the
+-- order it says them: "percent holy holy" for the sentence above.
+--
+-- The live amounts still come from the description. It is the only place
+-- the game says them with your talents and buffs counted: the table has
+-- Holy Strike at 32% weapon damage where his read 43.2%. So the description
+-- is asked for, every number in it is taken in order, and the list says
+-- which is which. No word of it is read.
+--
+-- LIMIT: a translation that says a spell's numbers in another order than
+-- the English would be read wrongly. A count that does not match the list
+-- is caught, and that spell is left out of the kit.
+
+-- one number as a description writes it: "1,234", "43.2", and the other way
+-- round as some languages do ("1.234", "43,2")
+function Rd.Number(str)
+	if type(str) ~= "string" then
+		return nil
+	end
+	str = str:gsub("[%.,]+$", "")
+	local dots, commas = select(2, str:gsub("%.", "")), select(2, str:gsub(",", ""))
+	if dots > 0 and commas > 0 then
+		-- both: the one that comes last is the decimal mark
+		local lastDot, lastComma = str:find("%.[^%.]*$"), str:find(",[^,]*$")
+		if lastDot > lastComma then
+			str = str:gsub(",", "")
+		else
+			str = str:gsub("%.", ""):gsub(",", ".")
+		end
+	elseif dots + commas > 0 then
+		-- one kind: thousands where exactly three digits follow each, as in
+		-- "1,234"; a decimal mark otherwise
+		local mark = dots > 0 and "%." or ","
+		local thousands = str:find("^%d%d?%d?" .. ("(" .. mark .. "%d%d%d)"):rep(dots + commas) .. "$") ~= nil
+		if thousands then
+			str = str:gsub(mark, "")
+		else
+			str = str:gsub(",", ".")
+		end
+	end
+	return tonumber(str)
 end
 
--- name -> what to read out of the description, and where it goes in the kit
-local SPELLS = {
-	["Holy Strike"] = function(kit, id, text)
-		local percent, low, high = text:match("causes ([%d%.]+)%% weapon damage plus an additional (%d+) to (%d+)")
-		local seconds = num(GetSpellBaseCooldown and GetSpellBaseCooldown(id))
-		if percent and seconds and seconds > 0 then
-			kit.holyStrike = { percent = tonumber(percent) / 100, holy = middle(low, high), cost = cost(id), cooldown = seconds / 1000 }
+-- every number in a description, in the order it says them
+function Rd.Numbers(text)
+	local out = {}
+	if type(text) ~= "string" then
+		return out
+	end
+	text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+	for found in text:gmatch("%d[%d%.,]*") do
+		out[#out + 1] = Rd.Number(found)
+	end
+	return out
+end
+
+-- A description's numbers by what they are (`read`: a word for each number,
+-- "-" for one not used; the same word twice is a range, and its middle is
+-- kept). Nil where the description has another count of numbers than the
+-- list: a spell whose words changed is not guessed at.
+function Rd.Planned(read, text)
+	local numbers = Rd.Numbers(text)
+	local keys = {}
+	for key in tostring(read or ""):gmatch("%S+") do
+		keys[#keys + 1] = key
+	end
+	if #keys ~= #numbers then
+		return nil
+	end
+	local sum, count = {}, {}
+	for i, key in ipairs(keys) do
+		if key ~= "-" and numbers[i] then
+			sum[key] = (sum[key] or 0) + numbers[i]
+			count[key] = (count[key] or 0) + 1
+		end
+	end
+	local out = {}
+	for key, total in pairs(sum) do
+		out[key] = total / count[key]
+	end
+	return out
+end
+
+-- the generated list for your class, or an empty one
+function Rd.Spells()
+	local data = UP.SpellData
+	local _, class = UnitClass("player")
+	return type(data) == "table" and type(data.spells) == "table" and data.spells[class] or {}
+end
+
+-- every spell in your spellbook, lowest rank first: fn(id, item, entry),
+-- where `entry` is the generated list's for a spell the model prices
+local function eachSpell(fn)
+	if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then
+		return
+	end
+	local known = Rd.Spells()
+	local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+	for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+		local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
+		if type(info) == "table" then
+			local first = (info.itemIndexOffset or 0) + 1
+			for index = first, first + (info.numSpellBookItems or 0) - 1 do
+				local item = C_SpellBook.GetSpellBookItemInfo(index, bank)
+				if type(item) == "table" then
+					local id = item.actionID or item.spellID
+					if type(id) == "number" and not secret(id) then
+						local spell = type(item.spellID) == "number" and not secret(item.spellID) and item.spellID or nil
+						fn(id, item, known[id] or (spell and known[spell]) or nil)
+					end
+				end
+			end
+		end
+	end
+end
+
+-- THE HIGHEST RANK YOU KNOW, WHATEVER ORDER THE SPELLBOOK IS IN (Josh
+-- 2026-11-17, asked which rank is used, then "Do we still need to fix those
+-- 2 bugs from before this refactor?"). The last rank read for a spell was
+-- kept, which is the highest only while the spellbook lists ranks lowest
+-- first. The generated list has the level each rank is learned at, so the
+-- spells the model prices are gathered and handed over lowest level first:
+-- fn(id, item, entry), the highest rank of each spell last.
+function Rd.ByRank(found)
+	table.sort(found, function(a, b)
+		local la, lb = a.entry.lvl or 0, b.entry.lvl or 0
+		if la ~= lb then
+			return la < lb
+		end
+		return a.at < b.at
+	end)
+	return found
+end
+local function eachPriced(fn)
+	local found = {}
+	eachSpell(function(id, item, entry)
+		if entry then
+			found[#found + 1] = { id = id, item = item, entry = entry, at = #found + 1 }
+		end
+	end)
+	for _, one in ipairs(Rd.ByRank(found)) do
+		fn(one.id, one.item, one.entry)
+	end
+end
+
+local function cooldown(id)
+	local ms = num(GetSpellBaseCooldown and GetSpellBaseCooldown(id))
+	return ms and ms > 0 and ms / 1000 or nil
+end
+
+-- what a spell is to the model -> where its numbers go in the kit
+-- (`v`: its description's numbers by what they are, Rd.Planned)
+local ROLES = {
+	holyStrike = function(kit, id, v, entry)
+		local seconds = cooldown(id)
+		if v.percent and v.holy and seconds then
+			kit.holyStrike = { percent = v.percent / 100, holy = v.holy, cost = cost(id), cooldown = seconds,
+				share = entry.share }
 		end
 	end,
-	["Judgement"] = function(kit, id)
-		local seconds = num(GetSpellBaseCooldown and GetSpellBaseCooldown(id))
-		if seconds and seconds > 0 then
-			kit.judgement = { cost = cost(id), cooldown = seconds / 1000 }
+	judgement = function(kit, id)
+		local seconds = cooldown(id)
+		if seconds then
+			kit.judgement = { cost = cost(id), cooldown = seconds }
 		end
 	end,
 	-- "doing 16 Holy damage over 8 sec ... will take an additional 49 damage
 	-- over 8 sec": both parts, for each enemy in it
-	["Consecration"] = function(kit, id, text)
-		local first = text:match("doing (%d+) Holy damage over")
-		local second = text:match("additional (%d+) damage over")
-		local seconds = num(GetSpellBaseCooldown and GetSpellBaseCooldown(id))
-		if first and seconds and seconds > 0 then
-			kit.consecration = { total = tonumber(first) + (tonumber(second) or 0), cost = cost(id), cooldown = seconds / 1000 }
+	consecration = function(kit, id, v)
+		local seconds = cooldown(id)
+		if v.first and seconds then
+			kit.consecration = { total = v.first + (v.second or 0), cost = cost(id), cooldown = seconds }
 		end
 	end,
 	-- "Increases all threat generated by 33%, and all threat generated by
 	-- your Holy attacks by an additional 90%."
-	["Righteous Fury"] = function(kit, _, text)
-		local all = text:match("all threat generated by (%d+)%%")
-		local holy = text:match("Holy attacks by an additional (%d+)%%")
-		if all then
-			kit.righteousFury = { all = 1 + tonumber(all) / 100, holy = 1 + (tonumber(holy) or 0) / 100 }
+	righteousFury = function(kit, _, v)
+		if v.all then
+			kit.righteousFury = { all = 1 + v.all / 100, holy = 1 + (v.holy or 0) / 100 }
 		end
 	end,
-	-- "...Unleashing this Seal's energy will judge an enemy for 40 sec,
-	-- increasing Holy damage taken by up to 58."
-	["Seal of the Crusader"] = function(kit, id, text)
-		local holy = text:match("Holy damage taken by up to (%d+)")
-		if holy then
-			kit.crusader = { holy = tonumber(holy), cost = cost(id) }
+	-- "...granting 104 melee attack power ... Unleashing this Seal's energy
+	-- will judge an enemy for 40 sec, increasing Holy damage taken by up to 58."
+	crusader = function(kit, id, v)
+		if v.holy then
+			kit.crusader = { holy = v.holy, cost = cost(id), power = v.ap }
 		end
 	end,
-	["Seal of Command"] = function(kit, id, text)
-		local percent = text:match("equal to (%d+)%% of normal weapon damage")
-		if percent then
-			kit.seals.command = { percent = tonumber(percent) / 100, cost = cost(id),
-				judge = middle(text:match("instantly causing (%d+) to (%d+) Holy damage")) }
+	command = function(kit, id, v)
+		if v.percent then
+			kit.seals.command = { percent = v.percent / 100, cost = cost(id), judge = v.judge }
 		end
 	end,
-	["Seal of Righteousness"] = function(kit, id, text)
-		local low, high = text:match("additional (%d+) to (%d+) Holy damage")
-		if low then
-			kit.seals.righteousness = { low = tonumber(low), high = tonumber(high), cost = cost(id),
-				judge = middle(text:match("will cause (%d+) to (%d+) Holy damage")) }
+	righteousness = function(kit, id, v)
+		if v.low and v.high then
+			kit.seals.righteousness = { low = v.low, high = v.high, cost = cost(id), judge = v.judge }
 		end
 	end,
-	["Seal of Fury"] = function(kit, id, text)
-		local hit = text:match("additional (%d+) Holy damage")
-		if hit then
-			kit.seals.fury = { hit = tonumber(hit), cost = cost(id),
-				judge = middle(text:match("inflicts (%d+) to (%d+) Holy damage")) }
+	fury = function(kit, id, v)
+		if v.hit then
+			kit.seals.fury = { hit = v.hit, cost = cost(id), judge = v.judge }
 		end
 	end,
 }
--- heals, with each one's share of spell power (SpellEffect table)
-local HEALS = { ["Holy Light"] = 0.714, ["Flash of Light"] = 0.429 }
 
--- What your spells do now. Every rank is in the spellbook, lowest first, so
--- the last one read for a name is the highest you know.
 -- A BUFF OR A PASSIVE THAT MULTIPLIES A STAT (Josh's chat lines, 2026-11-16,
 -- with Blessing of Kings up: "expected intellect 76.0 after that swap. The
 -- game says 77.0", and his own reading of it: "Probably because I have
@@ -324,10 +488,13 @@ local HEALS = { ["Holy Light"] = 0.714, ["Flash of Light"] = 0.429 }
 -- Math.lua has had a multiplier for each stat from the start; nothing ever
 -- filled it in.
 --
--- The game has no call for it. So the words are read: each buff on you, and
--- each passive in your spellbook, is looked up and its description searched
--- for "stats by N%" or "<a stat> by N%". Buffs cannot be read in combat, so
--- what was found last is kept until they can.
+-- The game has no call for it. Each buff on you and each passive in your
+-- spellbook is looked up by id in the generated list of auras that raise a
+-- stat by a percent (SpellData.stats, from the game's tables). One that is
+-- not in the list has its English words searched as before, for "stats by
+-- N%" or "<a stat> by N%": a talent the tables file under another kind of
+-- effect. Buffs cannot be read in combat, so what was found last is kept
+-- until they can.
 local multipliers, multipliersAt = nil, nil
 local function percents(text, into)
 	text = text:lower()
@@ -339,6 +506,22 @@ local function percents(text, into)
 			into[name] = (into[name] or 1) * (1 + n / 100)
 		end
 	end
+end
+-- one aura or passive's share, by id from the tables or else by its words
+function Rd.StatPercents(id, into, text)
+	local data = UP.SpellData
+	local listed = type(data) == "table" and type(data.stats) == "table" and data.stats[id]
+	if type(listed) == "table" then
+		for _, name in ipairs(STATS) do
+			local n = listed[name] or listed.all
+			if n then
+				into[name] = (into[name] or 1) * (1 + n / 100)
+			end
+		end
+		return true
+	end
+	percents(text or words(id), into)
+	return false
 end
 function Rd.Multipliers()
 	local t = GetTime()
@@ -358,25 +541,15 @@ function Rd.Multipliers()
 		end
 		local id = aura.spellId
 		if type(id) == "number" and not secret(id) then
-			percents(words(id), found)
+			Rd.StatPercents(id, found)
 		end
 	end
 	-- and your passives
-	if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines then
-		local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
-		for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
-			local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
-			if type(info) == "table" then
-				local first = (info.itemIndexOffset or 0) + 1
-				for index = first, first + (info.numSpellBookItems or 0) - 1 do
-					local item = C_SpellBook.GetSpellBookItemInfo(index, bank)
-					if type(item) == "table" and item.isPassive and item.spellID and not secret(item.spellID) then
-						percents(words(item.actionID or item.spellID), found)
-					end
-				end
-			end
+	eachSpell(function(id, item)
+		if item.isPassive then
+			Rd.StatPercents(id, found)
 		end
-	end
+	end)
 	multipliers, multipliersAt = found, t
 	return found
 end
@@ -390,56 +563,67 @@ function Rd.CrusaderPower()
 		return crusaderPower
 	end
 	crusaderAt, crusaderPower = t, nil
-	if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then
-		return nil
-	end
-	local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
-	for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
-		local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
-		if type(info) == "table" then
-			local first = (info.itemIndexOffset or 0) + 1
-			for index = first, first + (info.numSpellBookItems or 0) - 1 do
-				local item = C_SpellBook.GetSpellBookItemInfo(index, bank)
-				if type(item) == "table" and item.name == "Seal of the Crusader" then
-					local ap = words(item.actionID or item.spellID):match("granting (%d+) melee attack power")
-					crusaderPower = tonumber(ap) or crusaderPower
-				end
-			end
+	eachPriced(function(id, _, entry)
+		if entry and entry.is == "crusader" then
+			local v = Rd.Planned(entry.read, words(id))
+			crusaderPower = v and v.ap or crusaderPower
 		end
-	end
+	end)
 	return crusaderPower
 end
 
+-- What your spells do now. Every rank is in the spellbook, lowest first, so
+-- the last one read for a spell is the highest you know.
+-- EVERY RANK OF A HEAL IS KEPT (Josh 2026-11-17: "Let's fix 1-4"). Only the
+-- highest rank of each heal was priced. A lower rank is often the better
+-- heal for its mana, and more so the more healing power you have, so the
+-- healer's number sold healing power short. Each rank you know is a heal of
+-- its own now, and the model picks among them (R.FightHealing).
+-- A RANK'S SHARE OF HEALING POWER IS WORKED OUT FROM WHAT IT SAYS. The table
+-- gives every rank of Holy Light the same share, 0.714. The game cuts it for
+-- the lowest ranks: at 68 healing power his first rank said 63.5, which is
+-- its own 46 and a share of 0.25. So where the tables give a rank's own
+-- amount (base, and what it grows by a level) and you have healing power
+-- enough to measure with, the share is what is left of the description's
+-- amount over your healing power, and never more than the table's.
+Rd.SHARE_FROM = 30
+function Rd.HealShare(entry, amount, healing, level)
+	local share = entry.share or 0
+	if not (entry.base and healing and healing >= Rd.SHARE_FROM and amount) then
+		return share
+	end
+	local grown = math.max(0, math.min((entry.to or 0) - (entry.from or 0), (level or 0) - (entry.from or 0)))
+	local own = entry.base + (entry.per or 0) * grown
+	return math.max(0, math.min(share, (amount - own) / healing))
+end
+-- `kit.unread`: the ids of spells the model prices whose descriptions did
+-- not have the numbers the list says (see LIMIT, above).
 function Rd.Kit(s)
 	local kit = { seals = {}, heals = {}, at = { spell = s.spellDamage[2], healing = s.healing } }
-	if not (C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines) then
-		return kit
-	end
-	local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
 	local heals = {}
-	for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
-		local info = C_SpellBook.GetSpellBookSkillLineInfo(line)
-		if type(info) == "table" then
-			local first = (info.itemIndexOffset or 0) + 1
-			for index = first, first + (info.numSpellBookItems or 0) - 1 do
-				local item = C_SpellBook.GetSpellBookItemInfo(index, bank)
-				if type(item) == "table" and not item.isPassive and type(item.name) == "string" and not secret(item.name) then
-					local id = item.actionID or item.spellID
-					if SPELLS[item.name] then
-						SPELLS[item.name](kit, id, words(id))
-					elseif HEALS[item.name] then
-						local amount = middle(words(id):match("for (%d+) to (%d+)"))
-						local spell = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(id)
-						local cast = type(spell) == "table" and num(spell.castTime) or 0
-						if amount then
-							heals[item.name] = { name = item.name, amount = amount, share = HEALS[item.name],
-								cast = cast / 1000, cost = cost(id) }
-						end
-					end
-				end
-			end
+	eachPriced(function(id, item, entry)
+		if not entry or item.isPassive then
+			return
 		end
-	end
+		local v = Rd.Planned(entry.read, words(id))
+		if not v then
+			kit.unread = kit.unread or {}
+			kit.unread[#kit.unread + 1] = id
+			return
+		end
+		local heal = entry.is:match("^heal:(.+)$")
+		if heal then
+			local spell = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(id)
+			local cast = type(spell) == "table" and num(spell.castTime) or 0
+			if v.amount then
+				local name = type(item.name) == "string" and not secret(item.name) and item.name or heal
+				heals[#heals + 1] = { name = name, amount = v.amount, cast = cast / 1000, cost = cost(id), id = id,
+					share = Rd.HealShare(entry, v.amount, s.healing, s.level) }
+			end
+		elseif ROLES[entry.is] then
+			ROLES[entry.is](kit, id, v, entry)
+		end
+	end)
 	-- HOLY STRIKE READS HIGHER UNDER SEAL OF THE CRUSADER (the same fights:
 	-- "60.5% weapon damage plus 38" with the seal up, "43.2% plus 19.5"
 	-- without). What it says with the seal down is kept, and used while the
@@ -452,17 +636,30 @@ function Rd.Kit(s)
 		local kept = db.holyStrike
 		if type(kept) == "table" and kept.level == s.level then
 			strike.percent = kept.percent
-			strike.holy = kept.holy + 0.429 * (s.spellDamage[2] - kept.spell)
+			strike.holy = kept.holy + (strike.share or 0.429) * (s.spellDamage[2] - kept.spell)
 		else
 			-- never seen without it: the weapon share is 1.4 times too high
 			strike.percent = strike.percent / 1.4
 		end
 	end
-	for _, h in pairs(heals) do
-		kit.heals[#kit.heals + 1] = h
-	end
+	kit.heals = heals
 	return kit
 end
+
+-- A LINE OF THE GAME'S OWN, AS A PATTERN (2026-11-17, with the spells): a
+-- weapon's damage, its speed and a shield's block are lines of an item's
+-- tooltip, written from the client's own sentences ("%s - %s Damage"). The
+-- sentence is asked of the client and each %s or %d in it stands for a
+-- number, so the line is known in whatever language the client speaks.
+-- `fallback`: the English, for a client without the sentence.
+local function shape(key, fallback)
+	local text = type(_G[key]) == "string" and not secret(_G[key]) and _G[key] or fallback
+	text = text:gsub("%%%d%$", "%%")
+	text = text:gsub("[%^%$%(%)%.%[%]%*%+%-%?]", "%%%0")
+	text = text:gsub("%%[sd]", "([%%d%%.,]+)")
+	return "^" .. text
+end
+Rd.Shape = shape
 
 function Rd.ItemStats(link)
 	local stats = link and C_Item and C_Item.GetItemStats and C_Item.GetItemStats(link)
@@ -482,13 +679,94 @@ function Rd.ItemStats(link)
 		local data = C_TooltipInfo and C_TooltipInfo.GetHyperlink and C_TooltipInfo.GetHyperlink(link)
 		for _, line in ipairs(type(data) == "table" and type(data.lines) == "table" and data.lines or {}) do
 			local left = line.leftText
-			local block = type(left) == "string" and not secret(left) and left:match("^(%d+) Block$")
+			local block = type(left) == "string" and not secret(left) and left:match(shape("SHIELD_BLOCK_TEMPLATE", "%d Block") .. "$")
 			if block then
-				out.UPGRADES_BLOCK = tonumber(block)
+				out.UPGRADES_BLOCK = Rd.Number(block)
 			end
 		end
 	end
 	return out
+end
+
+-- AN ITEM'S OTHER EFFECTS (Josh 2026-11-17: "Let's fix 1-4"; an item with a
+-- "Use:" or the third piece of a set had counted for nothing).
+--
+-- Rd.Priced is what an item is priced as: its stats, and what its "Use:"
+-- gives where that is a stat, for the share of the time it can be up (a
+-- trinket with 20 seconds of 150 attack power every 2 minutes is 25 attack
+-- power). The list is SpellData.uses, from the game's tables. The swap check
+-- still uses Rd.ItemStats: a "Use:" is not on your sheet until pressed.
+function Rd.Priced(link)
+	local out = Rd.ItemStats(link)
+	local data = UP.SpellData
+	local id = link and C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(link)
+	local use = type(id) == "number" and type(data) == "table" and type(data.uses) == "table" and data.uses[id]
+	for k, v in pairs(type(use) == "table" and use or {}) do
+		out[k] = (out[k] or 0) + v
+	end
+	return out
+end
+-- true for an item with an effect that is not counted (SpellData.partly):
+-- the tooltip says so
+function Rd.Partly(link)
+	local data = UP.SpellData
+	local id = link and C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(link)
+	return type(id) == "number" and type(data) == "table" and type(data.partly) == "table" and data.partly[id] ~= nil
+end
+
+-- A SET'S BONUSES, GAINED AND LOST. Putting `link` on in place of `off`
+-- changes how many pieces of a set you wear. Each bonus that starts or
+-- stops counting is found (SpellData.sets, SpellData.setOf): `worn`, the
+-- pieces of each set on you now, by set. Returns the stats of the bonuses
+-- lost, of those gained, and true where one of them is not a stat and so
+-- is not counted. Pure: `pieces` and the ids are handed in.
+function Rd.SetChange(data, pieces, newId, offIds)
+	local lost, gained, partly = {}, {}, false
+	if not (type(data) == "table" and type(data.sets) == "table" and type(data.setOf) == "table") then
+		return lost, gained, partly
+	end
+	local delta = {}
+	local newSet = newId and data.setOf[newId]
+	if newSet then
+		delta[newSet] = (delta[newSet] or 0) + 1
+	end
+	for _, id in pairs(offIds or {}) do
+		local set = data.setOf[id]
+		if set then
+			delta[set] = (delta[set] or 0) - 1
+		end
+	end
+	for set, change in pairs(delta) do
+		local before = pieces[set] or 0
+		local after = before + change
+		for _, bonus in ipairs(change ~= 0 and data.sets[set] or {}) do
+			local had, has = before >= bonus[1], after >= bonus[1]
+			if had ~= has then
+				if type(bonus[2]) ~= "table" then
+					partly = true
+				else
+					local into = had and lost or gained
+					for k, v in pairs(bonus[2]) do
+						into[k] = (into[k] or 0) + v
+					end
+				end
+			end
+		end
+	end
+	return lost, gained, partly
+end
+-- the pieces of each set on you now, by set
+function Rd.SetPieces()
+	local data = UP.SpellData
+	local pieces = {}
+	for slot = 1, 19 do
+		local id = GetInventoryItemID and GetInventoryItemID("player", slot)
+		local set = type(id) == "number" and type(data) == "table" and type(data.setOf) == "table" and data.setOf[id]
+		if set then
+			pieces[set] = (pieces[set] or 0) + 1
+		end
+	end
+	return pieces
 end
 
 -- a weapon's own damage and speed, from its tooltip's words
@@ -501,21 +779,24 @@ function Rd.Weapon(link)
 	for _, line in ipairs(data.lines) do
 		local left, right = line.leftText, line.rightText
 		if type(left) == "string" and not secret(left) then
-			local low, high = left:gsub(",", ""):match("^([%d%.]+) %- ([%d%.]+) Damage")
+			local low, high = left:match(shape("DAMAGE_TEMPLATE", "%s - %s Damage"))
 			if low and not w.min then
-				w.min, w.max = tonumber(low), tonumber(high)
+				w.min, w.max = Rd.Number(low), Rd.Number(high)
 			end
 		end
 		if type(right) == "string" and not secret(right) then
-			local speed = right:match("Speed ([%d%.]+)")
+			local speed = right:match(shape("SPEED", "Speed") .. " ([%d%.,]+)")
 			if speed then
-				w.speed = tonumber(speed)
+				w.speed = Rd.Number(speed)
 			end
 		end
-		if type(left) == "string" and not secret(left) and left:find("^Chance on hit:") then
+		if type(left) == "string" and not secret(left) and left:find(shape("ITEM_SPELL_TRIGGER_ONPROC", "Chance on hit:")) then
 			w.proc = Rd.Proc(left, link)
 		end
 	end
+	-- its chance on hit from the game's tables, where it is listed there:
+	-- the words are then not needed (Rd.ListedProc)
+	w.proc = Rd.ListedProc(link) or w.proc
 	if w.min and w.max and w.speed then
 		return w
 	end
@@ -542,6 +823,19 @@ end
 -- GUESS: 2 a minute, for every weapon. Two proc weapons then compare by
 -- what a proc does.
 Rd.PROC_PER_MINUTE = 2
+-- WHAT IT DOES, FROM THE GAME'S TABLES (2026-11-17, SpellData.procs: every
+-- weapon's chance on hit, its damage added up from its spell's effects and
+-- whether it is magic). A weapon listed there needs none of its words read.
+-- One that is not listed is read from its line, in English, as before.
+function Rd.ListedProc(link)
+	local data = UP.SpellData
+	local id = link and C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(link)
+	local listed = type(id) == "number" and type(data) == "table" and type(data.procs) == "table" and data.procs[id]
+	if type(listed) ~= "table" then
+		return nil
+	end
+	return { damage = listed[1], magic = listed[2] and true or false, perMinute = Rd.PROC_PER_MINUTE, item = id }
+end
 function Rd.Proc(text, link)
 	text = text:gsub(",", "")
 	local damage, magic = 0, false
@@ -586,6 +880,49 @@ local function where(link)
 end
 Rd.Where = where
 
+-- THE OTHER HAND, FROM YOUR BAGS (Josh 2026-11-17, a shield in his bags with
+-- a two-hander worn, and no numbers on it: "Is there any way we can show
+-- Upgrades for situations like this? We would need to combine mainhand and
+-- offhand and compare against the 2h"). A shield cannot go on beside a
+-- two-hander, so there was no swap to price. The game's own comparison
+-- already answers this: it picks a one-hand weapon from your bags to go
+-- with the shield ("With Death Speaker Scepter equipped in your
+-- main-hand"), and Shift-C goes through the others. The same call says
+-- which, so the numbers are for the pair the game is showing: the
+-- two-hander off, the hovered piece and its partner on. The other way
+-- round too: a one-hand weapon hovered is paired with an off hand from
+-- your bags.
+-- Returns the partner's link and which hand it is for ("main" or "off"),
+-- or nil where the game pairs it with nothing.
+function Rd.Partner(link)
+	local E = Enum and Enum.TooltipComparisonMethod
+	if not (link and E and C_TooltipComparison and C_TooltipComparison.GetItemComparisonInfo) then
+		return nil
+	end
+	local ok, info = pcall(C_TooltipComparison.GetItemComparisonInfo, { hyperlink = link })
+	if not ok or type(info) ~= "table" or secret(info.method) then
+		return nil
+	end
+	local hand = (info.method == E.WithBagMainHandItem and "main") or (info.method == E.WithBagOffHandItem and "off") or nil
+	local list = info.additionalItems
+	if not hand or type(list) ~= "table" or #list == 0 then
+		return nil
+	end
+	-- the one the game is showing now (Shift-C moves its count along)
+	local index = 1
+	local shown = rawget(_G, "TooltipComparisonManager")
+	if type(shown) == "table" and type(shown.comparisonIndex) == "number" and type(shown.compareInfo) == "table"
+		and shown.compareInfo.method == info.method then
+		index = shown.comparisonIndex
+	end
+	local item = list[index] or list[1]
+	local partner = type(item) == "table" and (item.hyperlink or (item.guid and C_Item.GetItemLinkByGUID and C_Item.GetItemLinkByGUID(item.guid)))
+	if type(partner) ~= "string" or secret(partner) then
+		return nil
+	end
+	return partner, hand
+end
+
 -- THE SWAPS THIS ITEM COULD BE. Each is what comes off (one piece, or the
 -- main hand and the off hand for a two-hander) and, for a weapon, both
 -- weapons' own damage. A ring or trinket gives two. Nothing for an item you
@@ -603,31 +940,78 @@ function Rd.Swaps(link)
 		end
 	end
 	local out = {}
+	local partner, hand = Rd.Partner(link)
 	for _, slot in ipairs(slots) do
 		local worn = GetInventoryItemLink("player", slot)
 		local off = { worn }
 		local ok = worn ~= link
+		-- the piece from your bags that goes on with it (Rd.Partner)
+		local with = nil
+		local main = GetInventoryItemLink("player", 16)
 		if loc == "INVTYPE_2HWEAPON" then
 			off[#off + 1] = GetInventoryItemLink("player", 17)
-		elseif slot == 17 and where(GetInventoryItemLink("player", 16)) == "INVTYPE_2HWEAPON" then
-			ok = false
+		elseif slot == 17 and where(main) == "INVTYPE_2HWEAPON" then
+			-- an off hand with a two-hander worn: the two-hander comes off,
+			-- this and a main hand from your bags go on
+			if partner and hand == "main" then
+				with, worn, off = partner, main, { main }
+			else
+				ok = false
+			end
+		elseif slot == 16 and where(main) == "INVTYPE_2HWEAPON" and partner and hand == "off" then
+			-- a one-hand weapon with a two-hander worn: an off hand from
+			-- your bags goes on with it
+			with = partner
 		end
 		if ok then
 			local stats = {}
+			local offIds = {}
 			for _, l in pairs(off) do
-				for k, v in pairs(Rd.ItemStats(l)) do
+				for k, v in pairs(Rd.Priced(l)) do
 					stats[k] = (stats[k] or 0) + v
 				end
+				offIds[#offIds + 1] = C_Item.GetItemInfoInstant(l)
 			end
 			local swap = { slot = slot, worn = stats, wornLink = worn }
+			-- the set bonuses the change starts or stops: those lost come off
+			-- with the worn piece, those gained go on with the new one
+			local lost, gained, partly = Rd.SetChange(UP.SpellData, Rd.SetPieces(), (C_Item.GetItemInfoInstant(link)), offIds)
+			for k, v in pairs(lost) do
+				stats[k] = (stats[k] or 0) + v
+			end
+			swap.gains = gained
+			-- an effect of the new piece or of a worn one that is not counted
+			swap.partly = partly or Rd.Partly(link)
+			-- its partner from your bags: priced with it (Tiles.lua)
+			if with then
+				swap.with = with
+				swap.partly = swap.partly or Rd.Partly(with)
+				local _, more, alsoPartly = Rd.SetChange(UP.SpellData, Rd.SetPieces(), (C_Item.GetItemInfoInstant(with)), {})
+				for k, v in pairs(more) do
+					gained[k] = (gained[k] or 0) + v
+				end
+				swap.partly = swap.partly or alsoPartly
+			end
+			for _, l in pairs(off) do
+				swap.partly = swap.partly or Rd.Partly(l)
+			end
 			-- whether a shield is worn after it: a two-hander takes it off
 			if loc == "INVTYPE_2HWEAPON" then
 				swap.shield = false
 			elseif slot == 17 then
 				swap.shield = loc == "INVTYPE_SHIELD"
+			elseif with then
+				swap.shield = where(with) == "INVTYPE_SHIELD"
 			end
 			if slot == 16 then
 				local new = Rd.Weapon(link)
+				if not new then
+					ok = false
+				end
+				swap.weapons = { worn = Rd.Weapon(worn), new = new }
+			elseif with then
+				-- (an off hand hovered: the weapon that changes is its partner)
+				local new = Rd.Weapon(with)
 				if not new then
 					ok = false
 				end

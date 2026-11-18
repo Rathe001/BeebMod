@@ -18,7 +18,8 @@
 -- FROM THE GAME: every amount in the kit (spell descriptions count your
 -- spell power and talents), and each spell's share of spell power, from the
 -- client's SpellEffect table (build 70888).
--- GUESSED, AND MARKED WHERE USED: the enemy's armor, Seal of Command's hits
+-- FROM THE GAME'S ExpectedStat TABLE: an enemy's armor and damage by level.
+-- GUESSED, AND MARKED WHERE USED: Seal of Command's hits
 -- per minute, which hits can crit, the fight's length, the share of a fight
 -- a healer is not casting, Consecration's share of spell power.
 local _, BT = ...
@@ -29,15 +30,91 @@ local R = {}
 UP.Roles = R
 
 R.FIGHT_SECONDS = 180
--- GUESS: an enemy of your level has 50 armor per level
-R.ENEMY_ARMOR_PER_LEVEL = 50
--- GUESS: it hits for 3 a level before your armor, every 2 seconds
-R.ENEMY_HIT_PER_LEVEL = 3
+-- AN ENEMY'S ARMOR AND DAMAGE, FROM THE GAME'S OWN TABLE, LEVEL BY LEVEL
+-- (Josh 2026-11-17, of two numbers fitted to his fights as so much a level:
+-- "Keep in mind all those damage, health, armor, etc values will all scale
+-- with level. Are we not able to examine the game files and use real
+-- values?"). They are in the client: the ExpectedStat table (wago.tools,
+-- product wowf, build 1.60.1) has, for each level, what a creature of that
+-- level is expected to have. CreatureArmor and CreatureAutoAttackDps are
+-- copied here for levels 1 to 70. Its ArmorConstant is 400 + 85 a level,
+-- the same sum R.ArmorCut uses, which is how the table is known to be this
+-- game's and in use.
+--
+-- Checked against 160 recorded fights (Fights.lua):
+--   armor: a level 24 enemy has 1,002, which leaves a level 30's white hits
+--     0.75 of their damage. The fights gave 0.71 to 0.79.
+--   damage: a level 24 enemy does 20.05 a second before armor. Less the 16%
+--     that missed or was dodged or parried, that is 16.8. 61 solo fights
+--     against normal enemies of that level gave 16.6.
+-- They do not rise evenly: armor is 41 a level at 24 and 59 a level at 60.
+R.ENEMY_ARMOR = {
+	20, 21, 46, 82, 126, 180, 245, 322, 412, 518,
+	545, 580, 615, 650, 685, 721, 756, 791, 826, 861,
+	897, 932, 967, 1002, 1037, 1072, 1108, 1142, 1177, 1212,
+	1247, 1283, 1317, 1353, 1387, 1494, 1607, 1724, 1849, 1980,
+	2117, 2262, 2414, 2574, 2742, 2798, 2853, 2907, 2963, 3018,
+	3072, 3128, 3183, 3237, 3292, 3348, 3402, 3457, 3512, 3566,
+	3622, 3677, 3731, 3786, 3840, 3895, 3950, 4005, 4059, 4113,
+}
+R.ENEMY_DPS = {
+	0.77, 1.16, 1.63, 2.25, 3.01, 4.00, 5.18, 6.02, 6.91, 7.62,
+	8.60, 9.84, 10.71, 11.81, 12.85, 13.59, 14.56, 15.25, 16.18, 17.10,
+	17.75, 18.60, 19.23, 20.05, 20.83, 21.49, 22.35, 23.00, 23.82, 24.69,
+	25.32, 26.08, 26.74, 27.51, 28.26, 28.94, 29.85, 30.63, 31.59, 32.59,
+	34.14, 36.29, 38.71, 41.91, 43.99, 44.90, 46.02, 46.93, 48.03, 49.20,
+	50.16, 51.39, 52.37, 53.56, 54.68, 55.76, 56.94, 58.03, 59.22, 60.45,
+	61.53, 62.75, 63.86, 65.08, 66.34, 67.43, 68.72, 69.89, 71.22, 72.48,
+}
+-- and its health (CreatureHealth, the same table): how long a fight with
+-- it lasts (R.FightSeconds)
+R.ENEMY_HEALTH = {
+	42, 55, 71, 86, 102, 120, 137, 156, 180, 208,
+	239, 272, 307, 345, 385, 427, 473, 521, 572, 629,
+	677, 731, 787, 846, 909, 975, 1040, 1109, 1177, 1242,
+	1308, 1374, 1443, 1512, 1586, 1660, 1737, 1814, 1897, 1981,
+	2061, 2146, 2231, 2317, 2402, 2495, 2587, 2681, 2779, 2909,
+	3040, 3174, 3317, 3458, 3602, 3755, 3909, 4105, 4234, 4365,
+	4496, 4629, 4763, 4453, 4581, 4711, 4846, 4984, 5123, 5265,
+}
+local function ofLevel(list, level)
+	level = math.floor(tonumber(level) or 1)
+	return list[math.max(1, math.min(#list, level))]
+end
+-- the armor of an enemy of `level`
+function R.EnemyArmor(level)
+	return ofLevel(R.ENEMY_ARMOR, level)
+end
+function R.EnemyHealth(level)
+	return ofLevel(R.ENEMY_HEALTH, level)
+end
+-- AN ELITE HITS HARDER THAN THE TABLE'S ENEMY, and the tank's number is
+-- about elites. How much harder is the server's and in no file. MEASURED:
+-- 13 solo fights against elites of level 29 gave 25.1 a second before
+-- armor, where the table's 23.8 less 16% avoided is 20.0. That is 1.25.
+-- Dungeon elites are not measured: in a group the hits are not all on you.
+-- (The table set gives dungeons a damage share of 1.2, ExpectedStatMod 489.
+-- Whether an elite's own share comes on top of it is not known.)
+R.ELITE_DAMAGE = 1.25
+-- one hit every 2 seconds (GUESS: the meter gives totals, not hits)
 R.ENEMY_SWING = 2
+-- what an elite of `level` hits for, before your armor
+function R.EnemyHit(level)
+	return ofLevel(R.ENEMY_DPS, level) * R.ELITE_DAMAGE * R.ENEMY_SWING
+end
+-- an enemy of your level: 5% to miss you, 5% to crit you (classic's; the
+-- character sheet's Defense tooltip speaks of both)
+R.ENEMY_MISS, R.ENEMY_CRIT = 5, 5
+-- and what it does against your swings (classic's, for an enemy of your level)
+R.ENEMY_DODGE, R.ENEMY_PARRY = 5, 5
+R.PER_DEFENSE = 0.04
 -- Seal of Fury's absorb, as its description says: half the Holy damage
 R.FURY_ABSORB = 0.5
 R.STRENGTH_PER_BLOCK = 20
--- GUESS: classic's 7 hits a minute. The table gives no rate for the seal.
+-- Classic's 7 hits a minute. The table gives no rate for the seal: its rows
+-- (SpellAuraOptions, 20375) are classic's own, a chance of 100 once a second,
+-- and classic kept the 7 on the server. 32 fights under the seal alone
+-- (2026-11-17) give 6.1 to 7.0 a minute, depending on the enemy's armor.
 R.COMMAND_PER_MINUTE = 7
 R.SEAL_SECONDS = 30
 R.AOE_ENEMIES = 4
@@ -69,10 +146,27 @@ local function clamp(v, low, high)
 	return math.max(low, math.min(high, v))
 end
 
--- TANK: the physical damage it takes to kill you
+-- MAGIC IN WHAT A TANK TAKES (Josh 2026-11-17: "We should consider resists
+-- in the tanking stats so they aren't completely ignored"). The tank's
+-- number was physical damage alone, so a resistance was worth nothing.
+-- A JUDGEMENT, not the game's math: R.MAGIC_SHARE of what an enemy does is
+-- taken to be magic, split evenly over the five schools that can be
+-- resisted. Armor, dodge, parry and block do nothing against it. A
+-- resistance takes off, on average, three quarters of its share of 5 a
+-- level (classic's: 150 at level 30 is 75%, the most there is).
+-- The share is of what the enemy does before anything is taken off. Armor
+-- and avoidance take most of the physical part, so 5% of the whole is about
+-- an eighth of what a tank ends up taking.
+R.MAGIC_SHARE = 0.05
+R.RESIST_MOST = 0.75
+function R.Resisted(resist, level)
+	return clamp((resist or 0) / (5 * math.max(1, level or 1)), 0, 1) * R.RESIST_MOST
+end
+
+-- TANK: the damage it takes to kill you
 -- WITH A SHIELD, two more things take damage off, and both need to know how
--- hard the enemy hits (GUESS: R.ENEMY_HIT_PER_LEVEL before armor, one hit
--- every R.ENEMY_SWING seconds):
+-- hard the enemy hits (R.EnemyHit before armor, one hit every
+-- R.ENEMY_SWING seconds):
 --   block: your block chance, times the share of a hit your block value
 --     covers
 --   Seal of Fury: "each attack also grants an absorb shield equal to 50% of
@@ -82,19 +176,33 @@ end
 --     have it up.
 function R.Survival(s, kit)
 	local cut = R.ArmorCut(s.armor, s.level)
-	-- an enemy of your level misses 5% of the time
-	local avoided = clamp((s.dodge + s.parry + 5) / 100, 0, 0.9)
-	local life = s.health / (1 - cut) / (1 - avoided)
-	local landed = R.ENEMY_HIT_PER_LEVEL * s.level * (1 - cut)
-	local taken = landed * (1 - avoided) / R.ENEMY_SWING
+	-- an enemy of your level misses 5% of the time, and crits 5% of the
+	-- time for twice the damage. Each point of Defense over your level's
+	-- own is 0.04% more of the first and less of the second (Math.lua,
+	-- M.PER_DEFENSE; your dodge, parry and block have their share already).
+	local defense = math.max(0, s.defense or 0) * R.PER_DEFENSE
+	local avoided = clamp((s.dodge + s.parry + R.ENEMY_MISS + defense) / 100, 0, 0.9)
+	local crits = 1 + clamp(R.ENEMY_CRIT - defense, 0, R.ENEMY_CRIT) / 100
+	-- the share of an enemy's physical damage that costs you health
+	local physical = (1 - cut) * (1 - avoided) * crits
+	local landed = R.EnemyHit(s.level) * (1 - cut)
+	local taken = landed * (1 - avoided) * crits / R.ENEMY_SWING
 	-- HEALTH PER 5 SECONDS FROM GEAR (Josh 2026-11-16, of Sustaining Ring:
 	-- "Is health per 5 seconds included in our tank calculations?"). It
 	-- comes back all through a fight, so it is counted as the share of the
 	-- damage taken that it gives back. No shield needed.
 	local back = clamp((s.healthPer5 or 0) / 5 / taken, 0, 0.5)
-	life = life / (1 - back)
+	physical = physical * (1 - back)
+	-- and of its magic, by school (see MAGIC IN WHAT A TANK TAKES)
+	local magic = 0
+	for school = 2, 6 do
+		magic = magic + (1 - R.Resisted(s.resist and s.resist[school], s.level)) / 5
+	end
+	local function life(share)
+		return s.health / ((1 - R.MAGIC_SHARE) * share + R.MAGIC_SHARE * magic)
+	end
 	if not s.shield then
-		return life
+		return life(physical)
 	end
 	local blocked = clamp((s.block or 0) / 100, 0, 1) * clamp((s.blockValue or 0) / landed, 0, 1)
 	local absorbed = 0
@@ -105,7 +213,7 @@ function R.Survival(s, kit)
 		local each = fury.hit + R.SHARE.furyHit * (s.spellDamage[2] - kit.at.spell)
 		absorbed = clamp(swings * each * R.FURY_ABSORB / taken, 0, 0.5)
 	end
-	return life / (1 - blocked) / (1 - absorbed)
+	return life(physical * (1 - blocked) * (1 - absorbed))
 end
 
 -- HEALER: healing per second from the heal that gives the most
@@ -195,8 +303,10 @@ end
 --   white, holy: what a point of each kind of damage counts for (1 and 1).
 --     Threat is damage with Righteous Fury's weights.
 -- White hits are physical. Everything else a paladin does here is Holy.
-local function damage(s, kit, how, crusader)
+-- `seconds`: how long the fight is (R.FightSeconds)
+local function damage(s, kit, how, crusader, seconds)
 	how = how or {}
+	seconds = seconds or R.FIGHT_SECONDS
 	local enemies, forWhite, forHoly = how.enemies or 1, how.white or 1, how.holy or 1
 	local holy = s.spellDamage[2]
 	-- Judgement of the Crusader on the enemy is spell power for Holy damage
@@ -204,9 +314,18 @@ local function damage(s, kit, how, crusader)
 	local debuff = crusader and crusader.holy or 0
 	local more = holy - kit.at.spell + debuff
 	local crit, spellCrit = s.crit / 100, s.spellCrit / 100
-	local hit = 1 - math.max(0, 5 - s.hit) / 100
+	-- EXPERTISE (Josh 2026-11-17: "Expertise should have a value for dps and
+	-- tank threat"). An enemy of your level dodges 5% of your swings, and
+	-- parries 5% of those from the front, which is where a tank stands. A
+	-- swing dodged or parried was not in the sums at all, so expertise had
+	-- nothing to take off. Each percent of it takes one off each.
+	local turned = clamp(R.ENEMY_DODGE - (s.expertise or 0), 0, R.ENEMY_DODGE)
+	if how.front then
+		turned = turned + clamp(R.ENEMY_PARRY - (s.expertise or 0), 0, R.ENEMY_PARRY)
+	end
+	local hit = 1 - math.max(0, 5 - s.hit) / 100 - turned / 100
 	local spellHit = 1 - math.max(1, 4 - s.spellHit) / 100
-	local through = 1 - R.ArmorCut(R.ENEMY_ARMOR_PER_LEVEL * s.level, s.level)
+	local through = 1 - R.ArmorCut(R.EnemyArmor(s.level), s.level)
 	local swing = s.weaponSpeed / (1 + s.haste / 100)
 	local average = (s.damageMin + s.damageMax) / 2
 	local swings = hit / swing
@@ -222,10 +341,10 @@ local function damage(s, kit, how, crusader)
 
 	-- mana a second the fight can pay: the pool spread over the fight, and
 	-- what comes back while casting
-	local budget = s.mana / R.FIGHT_SECONDS + s.manaPer5 / 5
+	local budget = s.mana / seconds + s.manaPer5 / 5
 	-- the opening seal and Judgement that put the debuff up are paid once
 	if crusader and kit.judgement then
-		budget = math.max(0, budget - (crusader.cost + kit.judgement.cost) / R.FIGHT_SECONDS)
+		budget = math.max(0, budget - (crusader.cost + kit.judgement.cost) / seconds)
 	end
 
 	local spells = {}
@@ -253,7 +372,7 @@ local function damage(s, kit, how, crusader)
 		end
 		local amount = (seal.judge + share * more) * (1 + R.SPELL_CRIT * spellCrit) * spellHit
 		-- one Judgement of the fight went on the debuff
-		local left = crusader and (1 - j.cooldown / R.FIGHT_SECONDS) or 1
+		local left = crusader and clamp(1 - j.cooldown / seconds, 0, 1) or 1
 		return { dps = amount * left / j.cooldown, mana = j.cost / j.cooldown, needsSeal = true }
 	end
 
@@ -334,16 +453,62 @@ end
 -- 25 his Judgement gained. So the rotation is priced with the debuff up and
 -- without, and the better one is the answer. It costs the opening seal's
 -- mana and one Judgement of the fight.
+--
+-- HOW LONG THE FIGHT IS (Josh 2026-11-17, asked whether the model suits a
+-- player leveling from 1 to 60 and "constantly upgrading their gear": "Let's
+-- fix 1-4"). Every fight was 180 seconds, with the mana pool spread over all
+-- of it, so the spells were rationed. His fights against enemies of his
+-- level lasted 10 to 20 seconds, and in a fight that short the pool is not
+-- what limits you. Intellect and mana were worth too much to the DPS number
+-- and spell power too little.
+--
+-- So below R.TOP_LEVEL the fight is as long as it takes to kill a normal
+-- enemy of your level: its health from the game's table (R.EnemyHealth),
+-- over the damage you do in a fight that long. The two depend on each
+-- other, so it is worked out a few times over until it settles. At level 30
+-- it comes to about 18 seconds, as his fights did. Each fight starts with a
+-- full pool: eating and drinking between fights are left out (his words: "I
+-- don't think we should worry about eating or drinking at this time").
+--
+-- The long fight stays where it belongs: at the top level, and for threat,
+-- which is a tank's and so a group's (`how.long`, or weights for threat).
+R.TOP_LEVEL = 60
+R.SHORTEST_FIGHT = 6
+function R.FightSeconds(s, kit, how)
+	how = how or {}
+	if how.long or (how.white or 1) ~= 1 or (how.holy or 1) ~= 1 or (s.level or R.TOP_LEVEL) >= R.TOP_LEVEL then
+		return R.FIGHT_SECONDS
+	end
+	local health = R.EnemyHealth(s.level) * (how.enemies or 1)
+	local seconds = 20
+	for _ = 1, 12 do
+		local dps = damage(s, kit, how, nil, seconds)
+		if not dps or dps <= 0 then
+			return R.FIGHT_SECONDS
+		end
+		local next = clamp(health / dps, R.SHORTEST_FIGHT, R.FIGHT_SECONDS)
+		if math.abs(next - seconds) < 0.01 then
+			seconds = next
+			break
+		end
+		-- (half way each time: it settles and does not swing)
+		seconds = (seconds + next) / 2
+	end
+	return seconds
+end
+-- Returns the damage a second, the seal it is with, whether the Crusader's
+-- Judgement opens it, and how long the fight was taken to be.
 function R.Damage(s, kit, how)
-	local plain, seal = damage(s, kit, how, nil)
+	local seconds = R.FightSeconds(s, kit, how)
+	local plain, seal = damage(s, kit, how, nil, seconds)
 	local c = kit.crusader
 	if c and c.holy and c.holy > 0 and kit.judgement then
-		local with, sealWith = damage(s, kit, how, c)
+		local with, sealWith = damage(s, kit, how, c, seconds)
 		if with > plain then
-			return with, sealWith, true
+			return with, sealWith, true, seconds
 		end
 	end
-	return plain, seal, false
+	return plain, seal, false, seconds
 end
 
 -- TANK, THREAT: damage on one enemy, counted as Righteous Fury counts it.
@@ -351,9 +516,9 @@ end
 function R.Threat(s, kit)
 	local f = kit.righteousFury
 	if not f then
-		return R.Damage(s, kit)
+		return R.Damage(s, kit, { front = true, long = true })
 	end
-	return R.Damage(s, kit, { white = f.all, holy = f.all * f.holy })
+	return R.Damage(s, kit, { white = f.all, holy = f.all * f.holy, front = true })
 end
 
 -- ONE NUMBER A ROLE (Josh 2026-11-16: "Do you think it would make sense to

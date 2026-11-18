@@ -57,6 +57,14 @@ local function paladin()
 	local _, class = UnitClass("player")
 	return class == "PALADIN"
 end
+-- true where the role numbers are worked out for your class: the Tooltips
+-- module then hides the game's own list of stat changes (M.HidesDelta)
+function UP.Covers()
+	-- (a class the model has spells for: SpellData.lua)
+	local data = UP.SpellData
+	local _, class = UnitClass("player")
+	return paladin() and type(data) == "table" and type(data.spells) == "table" and data.spells[class] ~= nil
+end
 
 -- your totals, rates and kit, read at most twice a second
 local seen, seenAt
@@ -99,7 +107,17 @@ function T.Compare(link)
 	local before = price(n.state, n.kit)
 	local out = {}
 	for _, swap in ipairs(Rd.Swaps(link)) do
-		local after = M.Swap(n.state, n.rates, swap.worn, Rd.ItemStats(link), swap.weapons)
+		-- the new piece as it is priced: its stats, what its "Use:" gives,
+		-- and any set bonus it starts (Rd.Priced, Rd.SetChange)
+		local new = Rd.Priced(link)
+		for k, v in pairs(swap.gains or {}) do
+			new[k] = (new[k] or 0) + v
+		end
+		-- and the piece from your bags that goes on with it (Rd.Partner)
+		for k, v in pairs(swap.with and Rd.Priced(swap.with) or {}) do
+			new[k] = (new[k] or 0) + v
+		end
+		local after = M.Swap(n.state, n.rates, swap.worn, new, swap.weapons)
 		if swap.shield ~= nil then
 			after.shield = swap.shield
 		end
@@ -109,10 +127,25 @@ function T.Compare(link)
 			change[key] = R.Change(was, worth[key])
 		end
 		-- `all` is the one number a role (R.Combine); `change` its parts
-		out[#out + 1] = { swap = swap, change = change, all = R.Combine(change), seal = select(2, R.Damage(after, n.kit)) }
+		-- WHAT THE NUMBERS LEAVE OUT, SAID OVER THE TILES (Josh 2026-11-17:
+		-- "Let's fix 1-4"). An effect that is not a stat cannot be priced,
+		-- and a spell whose description did not read is left out of the
+		-- sums. Either way the numbers were shown as if they were whole.
+		local notes = {}
+		if swap.partly then
+			notes[#notes + 1] = T.NOTE_EFFECT
+		end
+		if n.kit.unread and #n.kit.unread > 0 then
+			notes[#notes + 1] = T.NOTE_SPELLS
+		end
+		out[#out + 1] = { swap = swap, change = change, all = R.Combine(change), seal = select(2, R.Damage(after, n.kit)),
+			note = #notes > 0 and table.concat(notes, " · ") or nil }
 	end
 	return out
 end
+
+T.NOTE_EFFECT = "One effect is not counted"
+T.NOTE_SPELLS = "Some of your spells could not be read"
 
 -- what a two-slot piece's rows are called: "ring 1", "ring 2"
 local PAIRS = { [11] = "ring 1", [12] = "ring 2", [13] = "trinket 1", [14] = "trinket 2" }
@@ -160,6 +193,16 @@ function T.TilesFor(found, shift)
 		local group = {}
 		if #found > 1 then
 			group.head = one.swap.wornLink and ("In place of " .. named(one.swap.wornLink)) or "In the empty slot"
+		end
+		-- (the piece from your bags the numbers are with, as the game's own
+		-- comparison says it: "With Death Speaker Scepter")
+		if one.swap.with then
+			local words = "With " .. named(one.swap.with)
+			group.head = group.head and (group.head .. " · " .. words) or words
+		end
+		-- (what the numbers leave out, as the row's heading or after it)
+		if one.note then
+			group.head = group.head and (group.head .. " · " .. one.note) or one.note
 		end
 		for _, role in ipairs(ROLES) do
 			local first, second = role[1], SECOND[role[1]]
@@ -229,15 +272,18 @@ function T.Cells(tip, data, shopping)
 	-- worked out again. The answer for an item is kept until something it
 	-- stands on changes (your gear, buffs, stats, spells or level: `stale`
 	-- below), and for T.KEEP seconds at most.
+	-- (kept by the item and its partner from your bags: Shift-C changes the
+	-- partner, and the numbers with it)
 	local t = GetTime()
-	local found = kept[l]
+	local key = l .. "|" .. tostring(Rd.Partner(l) or "")
+	local found = kept[key]
 	if not (found and t - found.at < T.KEEP) then
 		found = T.Compare(l)
 		if not found or #found == 0 then
 			return nil
 		end
 		found.at = t
-		kept[l] = found
+		kept[key] = found
 	end
 	local cells = {}
 	if #found > 1 then

@@ -105,6 +105,7 @@ Modules\Fishing\Fishing.lua
 Modules\Vendor\Vendor.lua
 Modules\Upgrades\Math.lua
 Modules\Upgrades\Roles.lua
+Modules\Upgrades\SpellData.lua
 Modules\Upgrades\Read.lua
 Modules\Upgrades\Tiles.lua
 Modules\Upgrades\Fights.lua

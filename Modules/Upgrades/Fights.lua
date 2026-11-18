@@ -152,7 +152,10 @@ frame:SetScript("OnEvent", function(_, event, _, _, spellID)
 		C_Timer.After(1.5, finish)
 	elseif spellID and not secret(spellID) then
 		local name = C_Spell and C_Spell.GetSpellName and plain(C_Spell.GetSpellName(spellID))
-		if name and name:find("^Seal of ") then
+		-- (a seal by its id in the generated list, not by its English name)
+		local entry = Rd.Spells()[spellID]
+		local SEALS = { crusader = true, command = true, righteousness = true, fury = true }
+		if name and entry and SEALS[entry.is] then
 			seal = name
 			if fight then
 				fight.seals = fight.seals or {}
