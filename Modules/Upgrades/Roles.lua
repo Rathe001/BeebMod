@@ -129,6 +129,12 @@ function R.AoeEnemies(kit)
 	if c and type(c.cap) == "number" and c.cap > most then
 		most = c.cap
 	end
+	for _, a in pairs(kit and kit.abilities or {}) do
+		local cap = a.aoe and a.v and a.v.cap
+		if type(cap) == "number" and cap > most then
+			most = cap
+		end
+	end
 	return most
 end
 -- crits: a melee crit doubles, a spell crit adds half
@@ -311,6 +317,159 @@ function R.FightHealing(s, kit)
 	return best
 end
 
+-- ---------------------------------------------------------------------------
+-- A CLASS PRICED BY ITS ABILITIES (Josh 2026-11-17: "move on to the other
+-- classes", and of the first: "Warrior sounds good to start")
+-- ---------------------------------------------------------------------------
+--
+-- The paladin's sums below were written spell by spell. A class after it is
+-- priced by one sum over a list of its abilities (kit.abilities, from
+-- SpellData.lua by way of Read.lua): what each does, what it costs, how
+-- often it can be used. The sum spends what the fight gives, a second of
+-- time and so much of the class's resource, on whichever ability gives the
+-- most for its cost, then the next, until one of the two runs out.
+--
+-- THE WARRIOR'S RAGE is the one thing here that is in no game file. The
+-- original game's rule is used, and Forever's may differ:
+--   a hit you land gives its damage x 7.5 over a number for your level
+--   a hit you take gives its damage x 2.5 over the same number
+--   that number is 0.0091 x level squared + 3.2256 x level + 4.2653
+-- What an enemy does to you is the game's table (R.ENEMY_DPS): a normal
+-- enemy while you level alone, an elite for a tank, nothing in a long
+-- fight where someone else is hit.
+-- A weapon's damage "evened out" for an ability is its own damage plus your
+-- attack power at a set speed, 3.3 for a two-hander and 2.4 for a one-hand
+-- weapon (the original game's).
+R.RAGE = { hit = 7.5, taken = 2.5 }
+function R.RageFactor(level)
+	return 0.0091107836 * level * level + 3.225598133 * level + 4.2652911
+end
+R.GLOBAL = 1.5
+R.EVEN_SPEED = { twoHand = 3.3, oneHand = 2.4 }
+-- (a tank's stance: every point of threat counts this much. It moves no
+-- comparison; it is here so the number is the game's.)
+R.STANCE_THREAT = 1.3
+
+local function abilities(s, kit, how, seconds)
+	how = how or {}
+	seconds = seconds or R.FIGHT_SECONDS
+	local enemies = how.enemies or 1
+	local crit = s.crit / 100
+	local turned = clamp(R.ENEMY_DODGE - (s.expertise or 0), 0, R.ENEMY_DODGE)
+	local dodged = turned / 100
+	if how.front then
+		turned = turned + clamp(R.ENEMY_PARRY - (s.expertise or 0), 0, R.ENEMY_PARRY)
+	end
+	local hit = 1 - math.max(0, 5 - s.hit) / 100 - turned / 100
+	local through = 1 - R.ArmorCut(R.EnemyArmor(s.level), s.level)
+	local swing = s.weaponSpeed / (1 + s.haste / 100)
+	local average = (s.damageMin + s.damageMax) / 2
+	local swings = hit / swing
+	-- one swing that lands
+	local landed = average * (1 + R.MELEE_CRIT * crit) * through
+	local white = landed * swings
+	if s.proc then
+		white = white + s.proc.damage * s.proc.perMinute / 60 * (s.proc.magic and 1 or through)
+	end
+	-- the weapon as an ability evens it out
+	local own = average - s.attackPower / 14 * s.weaponSpeed
+	local even = own + s.attackPower / 14 * (s.twoHand and R.EVEN_SPEED.twoHand or R.EVEN_SPEED.oneHand)
+
+	-- what the fight gives a second: rage from the hits landed and taken,
+	-- and from what gives it outright
+	local per = R.RageFactor(s.level)
+	local cut = R.ArmorCut(s.armor, s.level)
+	local avoided = clamp((s.dodge + s.parry + R.ENEMY_MISS) / 100, 0, 0.9)
+	local hurt = 0
+	if how.threat then
+		hurt = R.EnemyHit(s.level) / R.ENEMY_SWING * (1 - cut) * (1 - avoided)
+	elseif seconds < R.FIGHT_SECONDS then
+		-- (each of the enemies you fight alone is hitting you)
+		hurt = R.ENEMY_DPS[math.max(1, math.min(#R.ENEMY_DPS, math.floor(s.level)))] * (1 - cut) * (1 - avoided) * enemies
+	end
+	local rage = white * R.RAGE.hit / per + hurt * R.RAGE.taken / per
+	for _, r in pairs(kit.rage or {}) do
+		local times = r.every and math.max(1, seconds / r.every) or 1
+		rage = rage + (r.amount or 0) * times / seconds
+	end
+	local time = 1
+
+	local list = {}
+	for _, a in pairs(kit.abilities or {}) do
+		local v = a.v or {}
+		local usable = not (a.tank and not how.threat) and not (a.shield and not s.shield) and not (a.twohand and not s.twoHand)
+		if usable then
+			local gain, cost, most, takes = 0, a.cost or 0, 0, 0
+			if a.swing then
+				-- with your next swing, in place of it: what it adds, and the
+				-- rage the plain swing would have given is lost
+				gain = (v.add or 0) * (1 + R.MELEE_CRIT * crit) * through
+				if a.also and enemies >= 2 then
+					gain = gain + (average + (v.add or 0)) * (1 + R.MELEE_CRIT * crit) * through
+				end
+				cost = cost + landed * R.RAGE.hit / per
+				most = swings
+			elseif a.dot then
+				-- over time, said as a total: once each time it runs out.
+				-- A bleed, so armor takes none.
+				gain = (v.dot or 0) * hit
+				most = (a.secs and a.secs > 0) and 1 / a.secs or 0
+				takes = R.GLOBAL
+			else
+				local amount = (a.weapon == "norm" and even or a.weapon == "plain" and average or 0)
+					+ (v.add or 0) + (v.hit or 0) + (v.appct or 0) / 100 * s.attackPower
+					+ (a.blockvalue and (s.blockValue or 0) or 0)
+				local reach = a.aoe and math.min(enemies, v.cap or enemies) or 1
+				gain = amount * (1 + R.MELEE_CRIT * crit) * through * hit * reach
+				takes = math.max(R.GLOBAL, a.cast or 0)
+				most = 1 / math.max(a.cooldown or 0, takes)
+				if a.after == "dodge" then
+					-- only after the enemy dodges a swing of yours
+					most = math.min(most, dodged / swing)
+				elseif a.after == "avoid" then
+					-- only after you block, dodge or parry a swing of its
+					most = math.min(most, clamp((s.dodge + s.parry + (s.shield and s.block or 0)) / 100, 0, 1) / R.ENEMY_SWING)
+				end
+				if a.part then
+					most = most * a.part
+				end
+			end
+			if how.threat then
+				gain = (gain + (a.threat or 0) * hit) * (a.tmult or 1)
+			end
+			if gain > 0 and most > 0 then
+				list[#list + 1] = { gain = gain, cost = cost, most = most, takes = takes }
+			end
+		end
+	end
+	-- the most for its rage first; one that costs none before any
+	table.sort(list, function(a, b)
+		local ea, eb = a.cost > 0 and a.gain / a.cost or math.huge, b.cost > 0 and b.gain / b.cost or math.huge
+		if ea ~= eb then
+			return ea > eb
+		end
+		return a.gain > b.gain
+	end)
+	local sum = white
+	for _, a in ipairs(list) do
+		local uses = a.most
+		if a.cost > 0 then
+			uses = math.min(uses, rage / a.cost)
+		end
+		if a.takes > 0 then
+			uses = math.min(uses, time / a.takes)
+		end
+		uses = math.max(0, uses)
+		sum = sum + uses * a.gain
+		rage = rage - uses * a.cost
+		time = time - uses * a.takes
+	end
+	if how.threat then
+		sum = sum * R.STANCE_THREAT
+	end
+	return sum
+end
+
 -- DAMAGE, AND THE SEAL THAT GIVES IT. `how` (all optional):
 --   enemies: how many stand in Consecration (1)
 --   white, holy: what a point of each kind of damage counts for (1 and 1).
@@ -320,6 +479,10 @@ end
 local function damage(s, kit, how, crusader, seconds)
 	how = how or {}
 	seconds = seconds or R.FIGHT_SECONDS
+	-- (a class priced by its abilities: the sum above)
+	if kit.abilities then
+		return abilities(s, kit, how, seconds), nil
+	end
 	local enemies, forWhite, forHoly = how.enemies or 1, how.white or 1, how.holy or 1
 	local holy = s.spellDamage[2]
 	-- Judgement of the Crusader on the enemy is spell power for Holy damage
@@ -494,7 +657,7 @@ R.TOP_LEVEL = 60
 R.SHORTEST_FIGHT = 6
 function R.FightSeconds(s, kit, how)
 	how = how or {}
-	if how.long or (how.white or 1) ~= 1 or (how.holy or 1) ~= 1 or (s.level or R.TOP_LEVEL) >= R.TOP_LEVEL then
+	if how.long or how.threat or (how.white or 1) ~= 1 or (how.holy or 1) ~= 1 or (s.level or R.TOP_LEVEL) >= R.TOP_LEVEL then
 		return R.FIGHT_SECONDS
 	end
 	local health = R.EnemyHealth(s.level) * (how.enemies or 1)
@@ -532,6 +695,10 @@ end
 -- TANK, THREAT: damage on one enemy, counted as Righteous Fury counts it.
 -- Without Righteous Fury it is plain damage.
 function R.Threat(s, kit)
+	-- (a class priced by its abilities: each one's own threat is in its sum)
+	if kit.abilities then
+		return R.Damage(s, kit, { threat = true, front = true, long = true })
+	end
 	local f = kit.righteousFury
 	if not f then
 		return R.Damage(s, kit, { front = true, long = true })

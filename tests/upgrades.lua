@@ -449,6 +449,49 @@ do
 	near("and both parts", (cons.first or 0) + (cons.second or 0), 98)
 end
 
+print("a class priced by its abilities: the warrior")
+do
+	-- (Josh 2026-11-17: "Warrior sounds good to start. We can just leave
+	-- healing at 0.0")
+	local w = data.spells.WARRIOR
+	check("Heroic Strike is known by its id, as a swing's", w[25286] and w[25286].is == "ability" and w[25286].swing == true)
+	check("and by its lower ranks under the same name", w[78] and w[78].key == w[25286].key)
+	local strike = Rd.Planned(w[25286].read, "A strong attack that increases melee damage by 157 and causes a high amount of threat.")
+	near("what it adds to a swing", strike.add or 0, 157)
+	local clap = Rd.Planned(w[11581].read, "Blasts nearby enemies with thunder, increasing the time between their attacks by 10% for "
+		.. "30 sec and doing 103 damage to them. Will affect up to 4 targets.")
+	near("Thunder Clap's damage", clap.hit or 0, 103)
+	near("and how many it reaches", clap.cap or 0, 4)
+	local fighter = {
+		level = 40, attackPower = 400, armor = 2500, crit = 12, health = 2400, mana = 0, manaPer5 = 0,
+		damageMin = 150, damageMax = 220, weaponSpeed = 3.4, haste = 0, dodge = 6, parry = 5, block = 0, blockValue = 0, hit = 0,
+		spellHit = 0, spellCrit = 0, healing = 0, spellDamage = { [2] = 0 }, twoHand = true, shield = false,
+	}
+	local moves = { heals = {}, seals = {}, at = { healing = 0, spell = 0 }, rage = { charge = { amount = 12 } }, abilities = {
+		heroicstrike = { v = { add = 80 }, cost = 15, swing = true, threat = 120, tmult = 1 },
+		mortalstrike = { v = { add = 85 }, cost = 30, cooldown = 6, weapon = "norm" },
+		whirlwind = { v = { cap = 4 }, cost = 25, cooldown = 10, weapon = "norm", aoe = true },
+		sunderarmor = { v = {}, cost = 15, threat = 200, tmult = 1, tank = true },
+	} }
+	local plain = { heals = {}, seals = {}, at = {}, abilities = {} }
+	local d, _, _, seconds = R.Damage(fighter, moves)
+	local white = R.Damage(fighter, plain)
+	check(("abilities add to the swings: %.1f against %.1f"):format(d, white), d > white * 1.15 and d < white * 3)
+	check("a fight below the top level is short", seconds < 60)
+	local one = R.Damage(fighter, moves, { long = true })
+	local four = R.Damage(fighter, moves, { enemies = 4, long = true })
+	check(("more enemies, more damage, by what reaches them: %.1f against %.1f"):format(four, one), four > one)
+	local threat = R.Threat(fighter, moves)
+	check(("threat counts what a tank's abilities add outright: %.1f"):format(threat), threat > one * R.STANCE_THREAT)
+	near("its healer number has nothing to stand on", R.Healing(fighter, moves), 0)
+	check("and so shows no change", R.Change(R.FightHealing(fighter, moves), R.FightHealing(fighter, moves)) == nil)
+	local stronger = {}
+	for k, v in pairs(fighter) do stronger[k] = v end
+	stronger.attackPower, stronger.damageMin, stronger.damageMax = 440, 150 + 40 / 14 * 3.4, 220 + 40 / 14 * 3.4
+	check("attack power is worth damage", R.Damage(stronger, moves) > d)
+	near("four enemies, where no ability says more", R.AoeEnemies(moves), 4)
+end
+
 print("an item's other effects")
 do
 	check("a trinket's Use, as stats for the time it is up", type(data.uses) == "table" and next(data.uses) ~= nil)

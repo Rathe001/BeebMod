@@ -80,6 +80,77 @@ BT.Upgrades.SpellData = {
 			[20308] = { is = "crusader", lvl = 52, read = "- ap - - holy" }, -- Seal of the Crusader
 			[21082] = { is = "crusader", lvl = 6, read = "- ap - - holy" }, -- Seal of the Crusader
 		},
+		WARRIOR = {
+			[2687] = { is = "rage", lvl = 10, key = "bloodrage", cd = 60, every = 60, read = "rage more -" }, -- Bloodrage
+			[23881] = { is = "ability", lvl = 40, key = "bloodthirst", cost = 30, cd = 6, read = "appct add - -" }, -- Bloodthirst
+			[23892] = { is = "ability", lvl = 48, key = "bloodthirst", cost = 30, cd = 6, read = "appct add - -" }, -- Bloodthirst
+			[23893] = { is = "ability", lvl = 54, key = "bloodthirst", cost = 30, cd = 6, read = "appct add - -" }, -- Bloodthirst
+			[23894] = { is = "ability", lvl = 60, key = "bloodthirst", cost = 30, cd = 6, read = "appct add - -" }, -- Bloodthirst
+			[100] = { is = "rage", lvl = 4, key = "charge", cd = 15, read = "rage -" }, -- Charge
+			[6178] = { is = "rage", lvl = 26, key = "charge", cd = 15, read = "rage -" }, -- Charge
+			[11578] = { is = "rage", lvl = 46, key = "charge", cd = 15, read = "rage -" }, -- Charge
+			[845] = { is = "ability", lvl = 20, key = "cleave", cost = 20, threat = 10, tmult = 1, also = 1, swing = true, read = "add" }, -- Cleave
+			[7369] = { is = "ability", lvl = 30, key = "cleave", cost = 20, threat = 40, tmult = 1, also = 1, swing = true, read = "add" }, -- Cleave
+			[11608] = { is = "ability", lvl = 40, key = "cleave", cost = 20, threat = 60, tmult = 1, also = 1, swing = true, read = "add" }, -- Cleave
+			[11609] = { is = "ability", lvl = 50, key = "cleave", cost = 20, threat = 70, tmult = 1, also = 1, swing = true, read = "add" }, -- Cleave
+			[20569] = { is = "ability", lvl = 60, key = "cleave", cost = 20, threat = 100, tmult = 1, also = 1, swing = true, read = "add" }, -- Cleave
+			[5308] = { is = "ability", lvl = 24, key = "execute", cost = 15, part = 0.2, read = "hit - -" }, -- Execute
+			[20658] = { is = "ability", lvl = 32, key = "execute", cost = 15, part = 0.2, read = "hit - -" }, -- Execute
+			[20660] = { is = "ability", lvl = 40, key = "execute", cost = 15, part = 0.2, read = "hit - -" }, -- Execute
+			[20661] = { is = "ability", lvl = 48, key = "execute", cost = 15, part = 0.2, read = "hit - -" }, -- Execute
+			[20662] = { is = "ability", lvl = 56, key = "execute", cost = 15, part = 0.2, read = "hit - -" }, -- Execute
+			[78] = { is = "ability", lvl = 1, key = "heroicstrike", cost = 15, threat = 20, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[284] = { is = "ability", lvl = 8, key = "heroicstrike", cost = 15, threat = 39, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[285] = { is = "ability", lvl = 16, key = "heroicstrike", cost = 15, threat = 59, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[1608] = { is = "ability", lvl = 24, key = "heroicstrike", cost = 15, threat = 78, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[11564] = { is = "ability", lvl = 32, key = "heroicstrike", cost = 15, threat = 98, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[11565] = { is = "ability", lvl = 40, key = "heroicstrike", cost = 15, threat = 118, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[11566] = { is = "ability", lvl = 48, key = "heroicstrike", cost = 15, threat = 137, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[11567] = { is = "ability", lvl = 56, key = "heroicstrike", cost = 15, threat = 145, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[25286] = { is = "ability", lvl = 60, key = "heroicstrike", cost = 15, threat = 175, tmult = 1, swing = true, read = "add" }, -- Heroic Strike
+			[12294] = { is = "ability", lvl = 40, key = "mortalstrike", cost = 30, cd = 6, weapon = "norm", read = "add - -" }, -- Mortal Strike
+			[21551] = { is = "ability", lvl = 48, key = "mortalstrike", cost = 30, cd = 6, weapon = "norm", read = "add - -" }, -- Mortal Strike
+			[21552] = { is = "ability", lvl = 54, key = "mortalstrike", cost = 30, cd = 6, weapon = "norm", read = "add - -" }, -- Mortal Strike
+			[21553] = { is = "ability", lvl = 60, key = "mortalstrike", cost = 30, cd = 6, weapon = "norm", read = "add - -" }, -- Mortal Strike
+			[7384] = { is = "ability", lvl = 12, key = "overpower", cost = 1, cd = 5, threat = 0, tmult = 0.75, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[7887] = { is = "ability", lvl = 28, key = "overpower", cost = 1, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[11584] = { is = "ability", lvl = 44, key = "overpower", cost = 1, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[11585] = { is = "ability", lvl = 60, key = "overpower", cost = 1, cd = 5, after = "dodge", weapon = "norm", read = "add" }, -- Overpower
+			[772] = { is = "ability", lvl = 4, key = "rend", cost = 10, secs = 9, dot = true, read = "dot -" }, -- Rend
+			[6546] = { is = "ability", lvl = 10, key = "rend", cost = 10, secs = 12, dot = true, read = "dot -" }, -- Rend
+			[6547] = { is = "ability", lvl = 20, key = "rend", cost = 10, secs = 15, dot = true, read = "dot -" }, -- Rend
+			[6548] = { is = "ability", lvl = 30, key = "rend", cost = 10, secs = 18, dot = true, read = "dot -" }, -- Rend
+			[11572] = { is = "ability", lvl = 40, key = "rend", cost = 10, secs = 21, dot = true, read = "dot -" }, -- Rend
+			[11573] = { is = "ability", lvl = 50, key = "rend", cost = 10, secs = 21, dot = true, read = "dot -" }, -- Rend
+			[11574] = { is = "ability", lvl = 60, key = "rend", cost = 10, secs = 21, dot = true, read = "dot -" }, -- Rend
+			[6572] = { is = "ability", lvl = 14, key = "revenge", cost = 5, cd = 5, threat = 63, tmult = 2.25, after = "avoid", tank = true, read = "hit hit" }, -- Revenge
+			[6574] = { is = "ability", lvl = 24, key = "revenge", cost = 5, cd = 5, threat = 108, tmult = 2.25, after = "avoid", tank = true, read = "hit hit" }, -- Revenge
+			[7379] = { is = "ability", lvl = 34, key = "revenge", cost = 5, cd = 5, threat = 153, tmult = 2.25, after = "avoid", tank = true, read = "hit hit" }, -- Revenge
+			[11600] = { is = "ability", lvl = 44, key = "revenge", cost = 5, cd = 5, threat = 198, tmult = 2.25, after = "avoid", tank = true, read = "hit hit" }, -- Revenge
+			[11601] = { is = "ability", lvl = 54, key = "revenge", cost = 5, cd = 5, threat = 243, tmult = 2.25, after = "avoid", tank = true, read = "hit hit" }, -- Revenge
+			[25288] = { is = "ability", lvl = 60, key = "revenge", cost = 5, cd = 5, threat = 270, tmult = 2.25, after = "avoid", tank = true, read = "hit hit" }, -- Revenge
+			[23922] = { is = "ability", lvl = 40, key = "shieldslam", cost = 20, cd = 6, threat = 178, tmult = 1, blockvalue = true, shield = true, tank = true, read = "hit hit - -" }, -- Shield Slam
+			[23923] = { is = "ability", lvl = 48, key = "shieldslam", cost = 20, cd = 6, threat = 203, tmult = 1, blockvalue = true, shield = true, tank = true, read = "hit hit - -" }, -- Shield Slam
+			[23924] = { is = "ability", lvl = 54, key = "shieldslam", cost = 20, cd = 6, threat = 229, tmult = 1, blockvalue = true, shield = true, tank = true, read = "hit hit - -" }, -- Shield Slam
+			[23925] = { is = "ability", lvl = 60, key = "shieldslam", cost = 20, cd = 6, threat = 254, tmult = 1, blockvalue = true, shield = true, tank = true, read = "hit hit - -" }, -- Shield Slam
+			[1464] = { is = "ability", lvl = 30, key = "slam", cost = 15, weapon = "plain", read = "add" }, -- Slam
+			[8820] = { is = "ability", lvl = 38, key = "slam", cost = 15, weapon = "plain", read = "add" }, -- Slam
+			[11604] = { is = "ability", lvl = 46, key = "slam", cost = 15, weapon = "plain", read = "add" }, -- Slam
+			[11605] = { is = "ability", lvl = 54, key = "slam", cost = 15, weapon = "plain", read = "add" }, -- Slam
+			[1240193] = { is = "ability", lvl = 20, key = "slam", cost = 15, weapon = "plain", read = "add" }, -- Slam
+			[7386] = { is = "ability", lvl = 10, key = "sunderarmor", cost = 15, threat = 45, tmult = 1, tank = true, read = "- - -" }, -- Sunder Armor
+			[7405] = { is = "ability", lvl = 22, key = "sunderarmor", cost = 15, threat = 99, tmult = 1, tank = true, read = "- - -" }, -- Sunder Armor
+			[8380] = { is = "ability", lvl = 34, key = "sunderarmor", cost = 15, threat = 153, tmult = 1, tank = true, read = "- - -" }, -- Sunder Armor
+			[11596] = { is = "ability", lvl = 46, key = "sunderarmor", cost = 15, threat = 207, tmult = 1, tank = true, read = "- - -" }, -- Sunder Armor
+			[11597] = { is = "ability", lvl = 58, key = "sunderarmor", cost = 15, threat = 261, tmult = 1, tank = true, read = "- - -" }, -- Sunder Armor
+			[6343] = { is = "ability", lvl = 6, key = "thunderclap", cost = 20, cd = 6, threat = 0, tmult = 2.5, aoe = true, read = "- - hit cap" }, -- Thunder Clap
+			[8198] = { is = "ability", lvl = 18, key = "thunderclap", cost = 20, cd = 6, aoe = true, read = "- - hit cap" }, -- Thunder Clap
+			[8204] = { is = "ability", lvl = 28, key = "thunderclap", cost = 20, cd = 6, aoe = true, read = "- - hit cap" }, -- Thunder Clap
+			[8205] = { is = "ability", lvl = 38, key = "thunderclap", cost = 20, cd = 6, aoe = true, read = "- - hit cap" }, -- Thunder Clap
+			[11580] = { is = "ability", lvl = 48, key = "thunderclap", cost = 20, cd = 6, aoe = true, read = "- - hit cap" }, -- Thunder Clap
+			[11581] = { is = "ability", lvl = 58, key = "thunderclap", cost = 20, cd = 6, aoe = true, read = "- - hit cap" }, -- Thunder Clap
+			[1680] = { is = "ability", lvl = 36, key = "whirlwind", cost = 25, cd = 10, aoe = true, weapon = "norm", read = "cap -" }, -- Whirlwind
+		},
 	},
 	-- aura id -> the stats it raises, by percent (MOD_TOTAL_STAT_PERCENTAGE)
 	stats = {

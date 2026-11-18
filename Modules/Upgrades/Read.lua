@@ -171,6 +171,13 @@ function Rd.State()
 	end
 	s.blockValue = num(GetShieldBlock and GetShieldBlock()) or 0
 	s.shield = C_PaperDollInfo and C_PaperDollInfo.OffhandHasShield and C_PaperDollInfo.OffhandHasShield() and true or false
+	-- (a two-hander: some abilities need one, and a weapon's damage is
+	-- evened out for an ability by which it is)
+	do
+		local main = GetInventoryItemLink("player", 16)
+		local _, _, _, loc = main and C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(main)
+		s.twoHand = loc == "INVTYPE_2HWEAPON"
+	end
 	s.health = num(UnitHealthMax("player"))
 	s.mana = num(UnitPowerMax("player", 0)) or 0
 	if not s.health then
@@ -479,6 +486,29 @@ local ROLES = {
 		if v.hit then
 			kit.seals.fury = { hit = v.hit, cost = cost(id), judge = v.judge }
 		end
+	end,
+	-- AN ABILITY OF A CLASS PRICED BY ITS ABILITIES (Roles.lua): its numbers
+	-- as its description has them now, its cost and cooldown as the game
+	-- says them, or as the tables do where it will not, and the plain facts
+	-- about it from the generated list. Every rank is under one name, so the
+	-- highest you know is the one kept.
+	ability = function(kit, id, v, entry)
+		kit.abilities = kit.abilities or {}
+		local spell = C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(id)
+		local cast = type(spell) == "table" and num(spell.castTime) or 0
+		local paid = cost(id)
+		local a = { v = v, cost = paid > 0 and paid or entry.cost or 0, cooldown = cooldown(id) or entry.cd or 0,
+			cast = cast / 1000 }
+		for _, fact in ipairs({ "swing", "also", "weapon", "aoe", "dot", "secs", "after", "tank", "shield", "blockvalue",
+			"part", "twohand", "threat", "tmult" }) do
+			a[fact] = entry[fact]
+		end
+		kit.abilities[entry.key or id] = a
+	end,
+	-- what gives the class's resource outright (Charge, Bloodrage)
+	rage = function(kit, _, v, entry)
+		kit.rage = kit.rage or {}
+		kit.rage[entry.key or #kit.rage + 1] = { amount = (v.rage or 0) + (v.more or 0), every = entry.every }
 	end,
 }
 
@@ -998,6 +1028,12 @@ function Rd.Swaps(link)
 				swap.partly = swap.partly or Rd.Partly(l)
 			end
 			-- whether a shield is worn after it: a two-hander takes it off
+			-- (whether a two-hander is worn after it)
+			if loc == "INVTYPE_2HWEAPON" then
+				swap.twoHand = true
+			elseif slot == 16 or with then
+				swap.twoHand = false
+			end
 			if loc == "INVTYPE_2HWEAPON" then
 				swap.shield = false
 			elseif slot == 17 then

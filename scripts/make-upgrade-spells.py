@@ -6,7 +6,11 @@
 #            ItemEffect ItemXItemEffect ItemSparse ItemSet ItemSetSpell; do
 #     curl -o $t.csv "https://wago.tools/db2/$t/csv?product=wowf"
 #   done
-#   py -I scripts/make-upgrade-spells.py <the folder they are in>
+#   py -I scripts/make-upgrade-spells.py <the folder they are in> [mangos.sqlite]
+#
+# (SpellPower too. The second argument is the VMaNGOS database's sqlite file,
+# for the threat a tank's abilities add: see scripts/make-dungeon-names.py for
+# where it comes from. Without it no ability has threat of its own.)
 #
 # Run it again after a patch that changes spells. The file it makes is
 # shipped: Upgrades finds your spells by id in it, in any language.
@@ -46,6 +50,8 @@ for r in rows("SpellEffect"):
 misc = {int(r["SpellID"]): r for r in rows("SpellMisc")}
 durations = {int(r["ID"]): float(r["Duration"]) for r in rows("SpellDuration")}
 levels = {int(r["SpellID"]): r for r in rows("SpellLevels")}
+powers = {int(r["SpellID"]): r for r in rows("SpellPower")}
+cooldowns = {int(r["SpellID"]): r for r in rows("SpellCooldowns")}
 
 # ---------------------------------------------------------------- the model
 # class -> spell name -> (what it is to the model, what each value in its
@@ -70,8 +76,56 @@ MODEL = {
         "Holy Light": ("heal:holyLight", ["amount"]),
         "Flash of Light": ("heal:flashOfLight", ["amount"]),
     },
+    # THE WARRIOR (Josh 2026-11-17: "Warrior sounds good to start. We can just
+    # leave healing at 0.0"). Its abilities are priced by one shared sum
+    # (Roles.lua, the abilities' engine), so each is an "ability" with what
+    # its numbers are and a few plain facts about how it is used, as a last
+    # entry in braces:
+    #   swing    it goes out with your next swing, in place of it
+    #   also     it hits one more enemy beside the first
+    #   weapon   your weapon's damage is in it: "norm" as the game evens it
+    #            out by weapon kind, "plain" as it is
+    #   aoe      it hits every enemy near, up to `cap` where its words say
+    #   dot      it is damage over time, said as a total
+    #   after    it can only follow something: the enemy's "dodge", or your
+    #            own "avoid" (a block, dodge or parry)
+    #   tank     it is a tank's: priced for threat only
+    #   shield   it needs a shield; blockvalue: your block value is added
+    #   part     the part of a fight it can be used in (Execute: the last fifth)
+    #   twohand  it needs a two-handed weapon
+    # Keys: add (damage on top of a weapon's), hit (its own damage), appct
+    # (a percent of your attack power), dot, cap, rage, "-".
+    "WARRIOR": {
+        "Heroic Strike": ("ability", ["add"], {"swing": True}),
+        "Cleave": ("ability", ["add"], {"swing": True, "also": 1}),
+        "Mortal Strike": ("ability", ["add", "-"], {"weapon": "norm"}),
+        "Bloodthirst": ("ability", ["appct", "add", "-"], {}),
+        # (the tables give Slam a shared cooldown it does not have in play)
+        "Slam": ("ability", ["add"], {"weapon": "plain", "nocd": True}),
+        "Whirlwind": ("ability", ["cap"], {"weapon": "norm", "aoe": True}),
+        "Rend": ("ability", ["dot"], {"dot": True}),
+        "Thunder Clap": ("ability", ["-", "hit", "cap"], {"aoe": True}),
+        "Overpower": ("ability", ["add"], {"weapon": "norm", "after": "dodge"}),
+        "Revenge": ("ability", ["hit", "hit"], {"after": "avoid", "tank": True}),
+        "Shield Slam": ("ability", ["hit", "-"], {"shield": True, "blockvalue": True, "tank": True}),
+        "Execute": ("ability", ["hit"], {"part": 0.2}),
+        "Sunder Armor": ("ability", ["-"], {"tank": True}),
+        # what gives rage outright: once a fight, or every so many seconds
+        "Charge": ("rage", ["rage"], {}),
+        "Bloodrage": ("rage", ["rage", "more"], {"every": 60}),
+    },
 }
-CLASS_MASK = {"PALADIN": 2}
+CLASS_MASK = {"PALADIN": 2, "WARRIOR": 1}
+
+# THREAT AN ABILITY ADDS OUTRIGHT, from the VMaNGOS world database's
+# spell_threat table (https://github.com/vmangos/core, GPL-2.0), where its
+# sqlite file is given as a second argument. The client's tables have no
+# such list. It is the original game's, and Forever's may differ.
+threat = {}
+if len(sys.argv) > 2:
+    import sqlite3
+    for entry, amount, mult in sqlite3.connect(sys.argv[2]).execute("select entry, threat, multiplier from spell_threat"):
+        threat[entry] = (amount, mult)
 
 class_lines = {}
 line_names = {int(r["ID"]): r["DisplayName_lang"] for r in rows("SkillLine") if r["CategoryID"] == "7"}
@@ -86,7 +140,7 @@ TOKEN = re.compile(
     r"(?P<expr>\$\{[^}]*\})"
     r"|(?P<cond>\$\?)"
     r"|(?P<var>\$<[^>]*>)"
-    r"|\$(?:/\d+;)?(?P<spell>\d*)(?P<kind>[sSmMdDaAtTxXnNiIuUeEhHrRbBqQoO])(?P<index>\d?)"
+    r"|\$(?:[/*]\d+;)?(?P<spell>\d*)(?P<kind>[sSmMdDaAtTxXnNiIuUeEhHrRbBqQoOfF])(?P<index>\d?)"
     r"|(?P<digits>\d[\d,.]*)"
 )
 
@@ -113,7 +167,9 @@ def plan(spell, keys):
             if kind in "dD":
                 out.append("-")
                 continue
-            if kind not in "sSmM":
+            # (what a spell says outright: its amounts, its total over time,
+            # how many it reaches. Anything else is a number of no use here.)
+            if kind not in "sSmMoOiI":
                 out.append("-")
                 continue
             ref = int(m.group("spell") or spell)
@@ -152,7 +208,13 @@ for cls, model in MODEL.items():
         if not entry:
             continue
         read, why = None, None
+        rules = {}
         for keys in entry[1:]:
+            if isinstance(keys, dict):
+                rules = keys
+        for keys in entry[1:]:
+            if isinstance(keys, dict):
+                continue
             read, why = plan(spell, keys)
             if read is not None:
                 break
@@ -165,7 +227,7 @@ for cls, model in MODEL.items():
         # with the highest, whatever order the spellbook lists them in
         if spell in levels:
             bits.append("lvl = %d" % int(levels[spell]["SpellLevel"]))
-        if share(spell) > 0:
+        if share(spell) > 0 and entry[0] not in ("ability", "rage"):
             bits.append("share = %s" % share(spell))
         # a heal's own amount before any healing power, and the levels it
         # grows over: what is left of its description's amount is healing
@@ -177,6 +239,27 @@ for cls, model in MODEL.items():
                 bits.append("base = %g, per = %g, from = %d, to = %d" % (
                     float(heal[0]["EffectBasePointsF"]), float(heal[0]["EffectRealPointsPerLevel"]),
                     int(lv["BaseLevel"]), int(lv["MaxLevel"])))
+        if entry[0] in ("ability", "rage"):
+            # every rank of an ability under one name; its cost and cooldown
+            # as the tables have them, for where the game will not say
+            bits.append('key = "%s"' % re.sub(r"[^a-z]", "", names[spell].lower()))
+            p = powers.get(spell)
+            if p and float(p["ManaCost"]) > 0:
+                bits.append("cost = %g" % (float(p["ManaCost"]) / (10 if p["PowerType"] == "1" else 1)))
+            c = cooldowns.get(spell)
+            if c:
+                cd = max(float(c["RecoveryTime"]), float(c["CategoryRecoveryTime"])) / 1000
+                if cd > 0 and not rules.get("nocd"):
+                    bits.append("cd = %g" % cd)
+            if rules.get("dot"):
+                m = misc.get(spell)
+                bits.append("secs = %g" % (durations.get(int(m["DurationIndex"]), 0) / 1000 if m else 0))
+            if spell in threat:
+                bits.append("threat = %g, tmult = %g" % threat[spell])
+            for k, v in sorted(rules.items()):
+                if k == "nocd":
+                    continue
+                bits.append("%s = %s" % (k, "true" if v is True else ('"%s"' % v if isinstance(v, str) else "%g" % v)))
         bits.append('read = "%s"' % " ".join(read))
         out.append("\t\t\t[%d] = { %s }, -- %s" % (spell, ", ".join(bits), names[spell]))
         count += 1
@@ -330,7 +413,6 @@ def lua_stats(stats):
 
 WORN = {1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 25, 26, 28}
 sparse = {int(r["ID"]): r for r in rows("ItemSparse")}
-cooldowns = {int(r["SpellID"]): r for r in rows("SpellCooldowns")}
 uses, partly, equips = {}, set(), {}
 for r in rows("ItemEffect"):
     item = item_of.get(int(r["ID"]))

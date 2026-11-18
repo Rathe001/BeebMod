@@ -126,8 +126,8 @@ frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 frame:SetScript("OnEvent", function(_, event, _, _, spellID)
 	if event == "PLAYER_REGEN_DISABLED" then
-		local _, class = UnitClass("player")
-		if class ~= "PALADIN" or not UP.On() then
+		-- (any class the model has spells for)
+		if not UP.On() or not (UP.Covers and UP.Covers()) then
 			return
 		end
 		local ok, s = pcall(Rd.State)

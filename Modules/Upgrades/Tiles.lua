@@ -53,9 +53,13 @@ end
 local GREEN, RED, GREY = "|cff1eff00", "|cffff5a4d", "|cff9aa5a0"
 local ROLES = { { "tank", "tank" }, { "healer", "healer" }, { "dps", "DPS" } }
 
+-- A CLASS THE MODEL HAS SPELLS FOR (2026-11-17, when the warrior came after
+-- the paladin: it was "a paladin" everywhere). SpellData.lua has a list for
+-- each such class.
 local function paladin()
+	local data = UP.SpellData
 	local _, class = UnitClass("player")
-	return class == "PALADIN"
+	return type(data) == "table" and type(data.spells) == "table" and data.spells[class] ~= nil
 end
 -- true where the role numbers are worked out for your class: the Tooltips
 -- module then hides the game's own list of stat changes (M.HidesDelta)
@@ -120,6 +124,9 @@ function T.Compare(link)
 		local after = M.Swap(n.state, n.rates, swap.worn, new, swap.weapons)
 		if swap.shield ~= nil then
 			after.shield = swap.shield
+		end
+		if swap.twoHand ~= nil then
+			after.twoHand = swap.twoHand
 		end
 		local worth = price(after, n.kit)
 		local change = {}
@@ -316,6 +323,43 @@ function T.Cells(tip, data, shopping)
 end
 
 BT.OnItemCells(T.Cells)
+
+-- EVERY SPELL THE MODEL PRICES, AS THE GAME DESCRIBES IT NOW, FOR THE RECORD
+-- (Josh 2026-11-17, of the warrior: "I dont have a warrior character"). The
+-- game describes any class's spell by its id, to any character. So the
+-- Testing page's Record writes down the description of every spell in the
+-- generated list, for every class in it. A class's reading can then be
+-- checked from the saved file with no character of that class. A spell the
+-- game has not loaded yet is asked for and counted as waiting: Record again
+-- a few seconds later has it.
+function T.Dump()
+	local data = UP.SpellData
+	if not (UP.On() and type(data) == "table" and type(data.spells) == "table" and C_Spell and C_Spell.GetSpellDescription) then
+		return nil
+	end
+	local out = { at = date("%Y-%m-%d %H:%M:%S"), classes = {}, waiting = 0, spells = 0 }
+	for class, list in pairs(data.spells) do
+		local words = {}
+		for id in pairs(list) do
+			local ready = not C_Spell.IsSpellDataCached or C_Spell.IsSpellDataCached(id)
+			local ok, text = pcall(C_Spell.GetSpellDescription, id)
+			if ready and ok and type(text) == "string" and text ~= "" and not (issecretvalue and issecretvalue(text)) then
+				words[id] = text
+				out.spells = out.spells + 1
+			else
+				out.waiting = out.waiting + 1
+				if C_Spell.RequestLoadSpellData then
+					pcall(C_Spell.RequestLoadSpellData, id)
+				end
+			end
+		end
+		out.classes[class] = words
+	end
+	BeebModDB = BeebModDB or {}
+	BeebModDB.upgradesDump = out
+	return out.spells
+end
+BT.Record("upgradesDump", T.Dump, "upgrades")
 
 -- pressing or letting go of Shift over an item draws its tooltip again
 local shift = CreateFrame("Frame")
