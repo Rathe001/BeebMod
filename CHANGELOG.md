@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.16.0
 
 - **Upgrades on gear tooltips.** A piece of gear now shows how much it
   would change you as a tank, a healer and a damage dealer, in percent. It
