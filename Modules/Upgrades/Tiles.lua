@@ -69,8 +69,8 @@ local function covered()
 	end
 	return covers
 end
--- true where the role numbers are worked out for your class: the Tooltips
--- module then hides the game's own list of stat changes (M.HidesDelta)
+-- true where the role numbers are worked out for your class (Fights.lua
+-- keeps fights only then)
 UP.Covers = covered
 
 -- your totals, rates and kit, read at most twice a second

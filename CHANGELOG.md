@@ -3,6 +3,16 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **The game's list of stat changes is back.** 1.16.0 hid it on the
+  Equipped tooltip where the role numbers show. It is under an "If
+  replaced" heading again.
+- **Encounter notes: no tooltip on the tab while they are open.**
+- **Fixed: a trinket that did not say it was one.** Some worn items had
+  "Miscellaneous" under the name and no slot. The slot is now there, such
+  as "Trinket".
+
 ## 1.16.0
 
 - **Upgrades on gear tooltips.** A piece of gear now shows how much it

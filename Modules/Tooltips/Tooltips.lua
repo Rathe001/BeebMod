@@ -3639,9 +3639,24 @@ function M.ItemClass(id)
 	if type(id) ~= "number" or type(get) ~= "function" then
 		return nil
 	end
-	local ok, _, kind, sub = pcall(get, id)
+	local ok, _, kind, sub, loc, _, class, subclass = pcall(get, id)
 	if not ok then
 		return nil
+	end
+	-- SOMETHING WORN WHOSE SLOT LINE WAS NOT READ (Josh 2026-11-18, of a
+	-- Satchel of Potions whose card said "Miscellaneous": "This item doesn't
+	-- say it is a trinket anywhere"). The slot is asked of the game: its word
+	-- alone for a trinket, ring or neck, whose kind is "Miscellaneous", and
+	-- after the kind for the rest ("Cloth · Chest").
+	loc = plainLine(loc)
+	local slot = type(loc) == "string" and loc ~= "" and not NOT_WORN[loc] and _G[loc] or nil
+	if type(slot) == "string" and slot ~= "" then
+		sub = plainLine(sub)
+		local plain = plainLine(class) == 4 and plainLine(subclass) == 0
+		if plain or type(sub) ~= "string" or sub == "" then
+			return { slot }
+		end
+		return { sub, slot }
 	end
 	for _, words in ipairs({ plainLine(sub) or false, plainLine(kind) or false }) do
 		if type(words) == "string" and words ~= "" then
@@ -5334,33 +5349,30 @@ function M.SettleSpared()
 		end
 	end
 end
--- THE LIST IS LOOKED FOR EVERY FRAME, NOT ONLY WHEN THE GAME WRITES IT (Josh
--- 2026-11-17, after it was to be hidden: ""If you replace this item" is still
--- shown, but everything else looks good"). It was hidden from a hook that
--- runs as the game fills a comparison tooltip, and only on a fill the card
--- was written on. In the look the card is not written on every fill
--- (M.Spared), and his screenshots had the list untouched under the card. So
--- while a comparison tooltip shows, its lines are looked through each frame
--- and the list is emptied wherever it is found (M.FoldDelta, which finds
--- nothing once it has).
--- NOT EVERY LINE EVERY FRAME (review 2026-11-18). Each frame a tooltip was
--- up this made a table, asked the class twice, and went through every line
--- of each comparison tooltip. A comparison tooltip is now looked through
--- for M.DELTA_SECONDS after the game clears or shows it, which is when the
--- list can be written, and until the list has been found once. `due`: the
--- time each is looked through until. Called with `all`, every shown one is
--- looked through whatever its time.
+-- THE LIST IS LOOKED FOR AFTER THE GAME WRITES IT, NOT ONLY AS IT FILLS (Josh
+-- 2026-11-17: ""If you replace this item" is still shown"). The list was
+-- dealt with from a hook that runs as the game fills a comparison tooltip,
+-- and only on a fill the card was written on. In the look the card is not
+-- written on every fill (M.Spared), and his screenshots had the list
+-- untouched under the card. So a comparison tooltip is looked through for
+-- M.DELTA_SECONDS after the game clears or shows it, which is when the list
+-- can be written, and until the list has been found and folded once
+-- (M.FoldDelta, which finds nothing once it has). `due`: the time each is
+-- looked through until. Called with `all`, every shown one is looked through
+-- whatever its time.
+-- SHOWN AGAIN (Josh 2026-11-18: "I think we should unhide the "changes if
+-- you equip this item" section. It is part of the default UI and users are
+-- used to looking for it"). For a day the list was emptied where Upgrades
+-- covered your class. It is folded into the card everywhere now, under the
+-- role numbers.
 M.DELTA_SECONDS = 0.5
 local COMPARISONS = { "ShoppingTooltip1", "ShoppingTooltip2" }
 local due = {}
-function M.HideDeltaShown(all)
+function M.FoldDeltaShown(all)
 	if all == nil then
 		all = true
 	end
 	if not all and next(due) == nil then
-		return 0
-	end
-	if not M.HidesDelta() then
 		return 0
 	end
 	local n = 0
@@ -5403,7 +5415,7 @@ if GameTooltip and GameTooltip.HookScript then
 			M.SettleSpared()
 		end
 		if next(due) then
-			M.HideDeltaShown(false)
+			M.FoldDeltaShown(false)
 		end
 	end)
 end
@@ -5437,19 +5449,6 @@ local function isDeltaHead(text)
 	return text:find("^If you replace this item") ~= nil
 end
 
--- HIDDEN WHERE UPGRADES SAYS IT (Josh 2026-11-17, asked whether to keep the
--- list now that the three role numbers do its job: "Hide it"). Where the
--- Upgrades module is on and covers your class, the list is emptied: the
--- game's lines cannot be taken off a tooltip, so each is left with no words
--- at the smallest size, and the game squeezes blank lines at a tooltip's
--- end. Anywhere else (the module off, a class it does not cover yet) the
--- list is all there is, and it is folded into the card as before.
-function M.HidesDelta()
-	local up = BT.Upgrades
-	return M.TILES_LOOK and BT.Enabled("upgrades") and type(up) == "table" and type(up.Covers) == "function"
-		and up.Covers() == true
-end
-
 -- Folds the stat changes on a comparison tooltip the card was written on;
 -- returns the line that heads them, or nil
 function M.FoldDelta(tip)
@@ -5476,25 +5475,6 @@ function M.FoldDelta(tip)
 		return type(text) ~= "string" or text:find("^%s*$") ~= nil
 	end
 	local above = T.LineOf(tip, head - 1)
-	if M.HidesDelta() then
-		local from = (above and blank(above:GetText())) and head - 1 or head
-		for i = from, n do
-			for _, side in ipairs({ "TextLeft", "TextRight" }) do
-				local line = T.LineOf(tip, i, side)
-				if line and line.SetText then
-					line:SetText("")
-				end
-			end
-			T.SizeLine(tip, i, 1, nil, "text")
-		end
-		if b and b.deltaRule then
-			b.deltaRule:Hide()
-		end
-		M.composing = true
-		pcall(tip.Show, tip)
-		M.composing = false
-		return head
-	end
 	-- (the fold is drawn with the card's own parts: no card, nothing folded)
 	if not b then
 		return nil

@@ -13537,27 +13537,25 @@ if ok then
 			assert(rule and rule._shown ~= false and rule._points.BOTTOMLEFT.rel == headFs, "over a rule")
 			assert(cells(shop) == cells(tip) and figs(shop) == "53.8 DPS | 63 ILVL", "the card's own above it as it was")
 			assert(mod.FoldDelta(tip) == nil, "a tooltip with no changes is left alone")
-			-- HIDDEN WHERE UPGRADES SAYS IT (Josh 2026-11-17: "Hide it"): in
-			-- the look, with the Upgrades module on and your class covered,
-			-- the game's list is emptied, the blank line over it too
+			-- SHOWN WHERE UPGRADES SAYS ITS NUMBERS TOO (Josh 2026-11-18: "I
+			-- think we should unhide the "changes if you equip this item"
+			-- section"): in the look, with the Upgrades module on and your
+			-- class covered, the game's list is folded as anywhere else
 			do
 				local up, keepCovers, keepOn = BT.Upgrades, BT.Upgrades.Covers, BT.Enabled("upgrades")
-				assert(mod.HidesDelta() == false, "not in the look before")
+				assert(mod.HidesDelta == nil and mod.HideDeltaShown == nil, "nothing hides the list")
 				mod.TILES_LOOK = true
 				BT.SetEnabled("upgrades", true)
-				up.Covers = function() return false end
-				assert(mod.HidesDelta() == false, "nor for a class Upgrades does not cover")
 				up.Covers = function() return true end
-				assert(mod.HidesDelta() == true, "where Upgrades covers your class")
 				append(" ")
 				append("If you replace this item, the following stat changes will occur:")
 				append("|cff00ff00+3|r Strength")
 				local at = mod.FoldDelta(shop)
 				assert(at == #st.lines - 1, "the list found")
-				for i = at - 1, #st.lines do
-					assert(_G["ShoppingTooltip1TextLeft" .. i]._text == "", "its lines emptied: " .. i)
-				end
-				assert(mod.ItemBits(shop).deltaRule._shown == false, "and its rule put away")
+				assert(_G["ShoppingTooltip1TextLeft" .. at]._text == "IF REPLACED"
+					and _G["ShoppingTooltip1TextLeft" .. (at + 1)]._text == "|cff00ff00+3|r Strength",
+					"its heading and its lines kept")
+				assert(mod.ItemBits(shop).deltaRule._shown ~= false, "under its rule")
 				up.Covers = keepCovers
 				BT.SetEnabled("upgrades", keepOn)
 				mod.TILES_LOOK = false
@@ -13606,9 +13604,25 @@ if ok then
 						return id, "Consumable", "Potion"
 					elseif id == 2840 then
 						return id, "Trade Goods", "Trade Goods"
+					elseif id == 900001 then
+						return id, "Armor", "Miscellaneous", "INVTYPE_TRINKET", 1, 4, 0
+					elseif id == 900002 then
+						return id, "Armor", "Cloth", "INVTYPE_CHEST", 1, 4, 1
+					elseif id == 900003 then
+						return id, "Container", "Bag", "INVTYPE_BAG", 1, 1, 0
 					end
 				end,
 			}
+			-- something worn whose slot line was not read says its slot
+			do
+				local Tt = BT.GetModule("tooltips")
+				local had = { _G.INVTYPE_TRINKET, _G.INVTYPE_CHEST }
+				_G.INVTYPE_TRINKET, _G.INVTYPE_CHEST = "Trinket", "Chest"
+				assert(table.concat(Tt.ItemClass(900001), " · ") == "Trinket", "a trinket says Trinket, not Miscellaneous")
+				assert(table.concat(Tt.ItemClass(900002), " · ") == "Cloth · Chest", "armour says its kind and its slot")
+				assert(table.concat(Tt.ItemClass(900003), " · ") == "Bag", "a bag is not worn")
+				_G.INVTYPE_TRINKET, _G.INVTYPE_CHEST = had[1], had[2]
+			end
 			local tip = _G.CreateFrame("Frame")
 			local t = { lines = {}, rights = {}, offsets = {}, colours = {} }
 			tip.GetName = function() return "ShapeTip" end

@@ -931,14 +931,21 @@ function M.Build()
 		end
 		E.SetOpen(not E.IsOpen())
 		M.Update()
+		-- the click that opens them puts the tab's tooltip away
+		if E.IsOpen() and GameTooltip then
+			GameTooltip:Hide()
+		end
 	end)
 	tab:SetScript("OnEnter", function(self)
 		self.hovered = true
 		E.PaintTab()
-		if BT.Tip then
+		-- NO TOOLTIP WHILE THE NOTES ARE OPEN (Josh 2026-11-18: "remove the
+		-- hover tooltip on the encounter notes when it is open"): the panel
+		-- beside the tab says what it is
+		if BT.Tip and not E.IsOpen() then
 			BT.Tip.Show(self, { build = function(t)
 				t:Header({ icon = false, name = "Encounter notes" })
-				t:Foot({ { "Click", E.IsOpen() and "hide" or "show" } })
+				t:Foot({ { "Click", "show" } })
 			end })
 		end
 	end)
