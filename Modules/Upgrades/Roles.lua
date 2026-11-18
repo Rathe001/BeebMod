@@ -240,12 +240,27 @@ function R.Survival(s, kit)
 	return life(physical * (1 - blocked) * (1 - absorbed))
 end
 
+-- A HEAL'S CRITS, WITH TALENTS (Josh 2026-11-18: "Let's finish the paladin
+-- stuff"). A heal crit adds half. A talent can raise one heal's chance
+-- (`critAdd`, Improved Flash of Light) or what a crit adds (`critMore`, Holy
+-- Power), and Read.lua puts those on the heal. Returns what the heal's
+-- amount is multiplied by, and its chance to crit.
+local function healCrits(s, h)
+	local chance = clamp((s.spellCrit + (h.critAdd or 0)) / 100, 0, 1)
+	return 1 + R.SPELL_CRIT * (1 + (h.critMore or 0) / 100) * chance, chance
+end
+-- What a heal costs, with the mana a crit gives back (`kit.back`, the share
+-- of the cost: Illumination). So crit is worth mana to a healer who has it.
+local function healCost(kit, h, chance)
+	return math.max(h.cost or 0, 0) * (1 - clamp((kit.back or 0) * chance, 0, 0.9))
+end
+
 -- HEALER: healing per second from the heal that gives the most
 function R.Healing(s, kit)
 	local best, name = 0, nil
 	local more = s.healing - kit.at.healing
 	for _, h in ipairs(kit.heals or {}) do
-		local amount = (h.amount + h.share * more) * (1 + R.SPELL_CRIT * s.spellCrit / 100)
+		local amount = (h.amount + h.share * more) * healCrits(s, h)
 		local per = amount / math.max(h.cast, 1.5)
 		if per > best then
 			best, name = per, h.name
@@ -266,7 +281,8 @@ function R.Sustain(s, kit)
 	local best = 0
 	for _, h in ipairs(kit.heals or {}) do
 		if h.cost > 0 then
-			local per = (h.amount + h.share * more) * (1 + R.SPELL_CRIT * s.spellCrit / 100) / h.cost
+			local by, chance = healCrits(s, h)
+			local per = (h.amount + h.share * more) * by / healCost(kit, h, chance)
 			best = math.max(best, per)
 		end
 	end
@@ -293,9 +309,10 @@ function R.FightHealing(s, kit)
 	local mana = s.mana + R.FIGHT_SECONDS * (s.manaPer5 / 5 + R.NOT_CASTING * (s.spiritRegen or 0))
 	local heals = {}
 	for _, h in ipairs(kit.heals or {}) do
+		local by, chance = healCrits(s, h)
 		heals[#heals + 1] = {
-			amount = (h.amount + h.share * more) * (1 + R.SPELL_CRIT * s.spellCrit / 100),
-			cast = math.max(h.cast, 1.5), cost = math.max(h.cost or 0, 0),
+			amount = (h.amount + h.share * more) * by,
+			cast = math.max(h.cast, 1.5), cost = healCost(kit, h, chance),
 		}
 	end
 	local best = 0
@@ -581,6 +598,10 @@ local function abilities(s, kit, how, seconds)
 	local even = own + s.attackPower / 14
 		* (s.dagger and R.EVEN_SPEED.dagger or s.twoHand and R.EVEN_SPEED.twoHand or R.EVEN_SPEED.oneHand)
 	local global = mode.energy and R.ENERGY_GLOBAL or R.GLOBAL
+	-- (a swap that changes the kind of weapon held, with a weapon
+	-- specialization: Math.lua. Weapon damage has its lift in it already;
+	-- this is for the amounts a description gives.)
+	local lifted = s.liftPhysical or 1
 
 	-- what the fight gives a second: rage from the hits landed and taken,
 	-- and from what gives it outright
@@ -670,24 +691,24 @@ local function abilities(s, kit, how, seconds)
 			elseif a.swing then
 				-- with your next swing, in place of it: what it adds, and the
 				-- rage the plain swing would have given is lost
-				gain = (v.add or 0) * crits(a, R.MELEE_CRIT, crit) * through
+				gain = (v.add or 0) * lifted * crits(a, R.MELEE_CRIT, crit) * through
 				if a.also and enemies >= 2 then
-					gain = gain + (average + (v.add or 0)) * crits(a, R.MELEE_CRIT, crit) * through
+					gain = gain + (average + (v.add or 0) * lifted) * crits(a, R.MELEE_CRIT, crit) * through
 				end
 				cost = cost + landed * R.RAGE.hit / per
 				most = swings
 			elseif a.dot then
 				-- over time, said as a total: once each time it runs out.
 				-- A bleed, so armor takes none.
-				gain = (v.dot or 0) * hit
+				gain = (v.dot or 0) * lifted * hit
 				most = (a.secs and a.secs > 0) and 1 / a.secs or 0
 				takes = global
 			else
 				-- (a percent of the weapon's damage, where its words give one)
 				local part = ((s.dagger and v.pctdagger) or v.pct or 100) / 100
 				local amount = (a.weapon == "norm" and even or a.weapon == "plain" and average or 0) * part
-					+ (v.add or 0) + (v.hit or 0) + (v.appct or 0) / 100 * s.attackPower
-					+ (a.blockvalue and (s.blockValue or 0) or 0)
+					+ ((v.add or 0) + (v.hit or 0) + (v.appct or 0) / 100 * s.attackPower
+						+ (a.blockvalue and (s.blockValue or 0) or 0)) * lifted
 				local reach = a.aoe and math.min(enemies, v.cap or enemies) or 1
 				gain = amount * crits(a, R.MELEE_CRIT, crit) * through * hit * reach
 				-- (and a bleed behind the hit: armor takes none, and it is
@@ -830,6 +851,10 @@ local function damage(s, kit, how, crusader, seconds)
 	local debuff = crusader and crusader.holy or 0
 	local more = holy - kit.at.spell + debuff
 	local crit, spellCrit = s.crit / 100, s.spellCrit / 100
+	-- (a swap that changes the kind of weapon held, with a talent that lifts
+	-- Holy damage for one kind: Math.lua, A WEAPON SPECIALIZATION. Weapon
+	-- damage has its lift in it already.)
+	local lifted = s.liftHoly or 1
 	-- EXPERTISE (Josh 2026-11-17: "Expertise should have a value for dps and
 	-- tank threat"). An enemy of your level dodges 5% of your swings, and
 	-- parries 5% of those from the front, which is where a tank stands. A
@@ -870,7 +895,7 @@ local function damage(s, kit, how, crusader, seconds)
 	-- Holy, so armor takes none
 	if kit.holyStrike then
 		local k = kit.holyStrike
-		local amount = (k.percent * average + k.holy + R.SHARE.holyStrike * (more - debuff)) * (1 + R.MELEE_CRIT * crit) * hit
+		local amount = (k.percent * average + (k.holy + R.SHARE.holyStrike * (more - debuff)) * lifted) * (1 + R.MELEE_CRIT * crit) * hit
 		spells[#spells + 1] = { dps = amount / k.cooldown, mana = k.cost / k.cooldown }
 	end
 	-- Consecration: the same damage to every enemy in it, no crits
@@ -882,7 +907,7 @@ local function damage(s, kit, how, crusader, seconds)
 		local each = k.total + R.SHARE.consecration * (more - debuff)
 		local full = math.min(enemies, k.cap or enemies)
 		local part = (k.first and k.total > 0) and k.first / k.total or 1
-		local amount = (each * full + each * part * (enemies - full) + R.SHARE.consecration * debuff) * spellHit
+		local amount = (each * full + each * part * (enemies - full) + R.SHARE.consecration * debuff) * spellHit * lifted
 		spells[#spells + 1] = { dps = amount / k.cooldown, mana = k.cost / k.cooldown }
 	end
 
@@ -891,10 +916,36 @@ local function damage(s, kit, how, crusader, seconds)
 		if not (j and seal.judge) then
 			return nil
 		end
-		local amount = (seal.judge + share * more) * (1 + R.SPELL_CRIT * spellCrit) * spellHit
+		local amount = (seal.judge + share * more) * (1 + R.SPELL_CRIT * spellCrit) * spellHit * lifted
 		-- one Judgement of the fight went on the debuff
 		local left = crusader and clamp(1 - j.cooldown / seconds, 0, 1) or 1
-		return { dps = amount * left / j.cooldown, mana = j.cost / j.cooldown, needsSeal = true }
+		-- (`kit.judgeBack`: the share of the judged seal's cost a Judgement
+		-- gives back, Sanctified Judgement)
+		local paid = math.max(0, j.cost - (kit.judgeBack or 0) * (seal.cost or 0))
+		return { dps = amount * left / j.cooldown, mana = paid / j.cooldown, needsSeal = true,
+			crits = spellCrit * spellHit * left / j.cooldown }
+	end
+	-- VENGEANCE (the same day). "Increases your Physical and Holy damage dealt
+	-- by 3% for 30 sec after landing a non-periodic critical strike. Stacks up
+	-- to 3 times." Everything a paladin does here is one or the other, so it
+	-- multiplies the whole sum, and crit is worth more for it.
+	-- AN ESTIMATE of how many stacks are up on average: your crits a second
+	-- (swings, Holy Strike, Seal of Command's hits, Judgement) times how long
+	-- one lasts, levelling off at the most there can be. A fight starts with
+	-- none, so a short fight has less time with them.
+	local function vengeance(seal)
+		local v = kit.vengeance
+		if not (v and (v.pct or 0) > 0 and (v.secs or 0) > 0) then
+			return 1
+		end
+		local rate = swings * crit + (seal and seal.crits or 0) + (seal and seal.judge and seal.judge.crits or 0)
+		if kit.holyStrike then
+			rate = rate + crit * hit / kit.holyStrike.cooldown
+		end
+		local d = v.secs
+		local window = seconds <= d and seconds / 2 or d - d * d / (2 * seconds)
+		local most = math.max(1, v.stacks or 1)
+		return 1 + v.pct / 100 * most * (1 - math.exp(-rate * window / most))
 	end
 
 	local seals = {}
@@ -903,21 +954,21 @@ local function damage(s, kit, how, crusader, seconds)
 		-- hits per minute are counted on the weapon's own speed, so a slow
 		-- weapon lands the same number of bigger hits
 		local chance = clamp(R.COMMAND_PER_MINUTE * s.weaponSpeed / 60, 0, 1)
-		local amount = (k.command.percent * average + R.SHARE.commandHit * (holy + debuff)) * (1 + R.MELEE_CRIT * crit)
+		local amount = (k.command.percent * average + R.SHARE.commandHit * (holy + debuff) * lifted) * (1 + R.MELEE_CRIT * crit)
 		seals.command = { dps = swings * chance * amount, mana = k.command.cost / R.SEAL_SECONDS,
-			judge = judge(k.command, R.SHARE.commandJudge) }
+			judge = judge(k.command, R.SHARE.commandJudge), crits = swings * chance * crit }
 	end
 	if k.righteousness then
 		-- the description gives the hit on the fastest and the slowest
 		-- weapon; GUESS: 1.5 and 4.0 seconds, straight line between
 		local t = clamp((s.weaponSpeed - 1.5) / 2.5, 0, 1)
-		local amount = k.righteousness.low + (k.righteousness.high - k.righteousness.low) * t
-			+ R.SHARE.righteousnessHit * more
+		local amount = (k.righteousness.low + (k.righteousness.high - k.righteousness.low) * t
+			+ R.SHARE.righteousnessHit * more) * lifted
 		seals.righteousness = { dps = swings * amount, mana = k.righteousness.cost / R.SEAL_SECONDS,
 			judge = judge(k.righteousness, R.SHARE.righteousnessJudge) }
 	end
 	if k.fury then
-		local amount = k.fury.hit + R.SHARE.furyHit * more
+		local amount = (k.fury.hit + R.SHARE.furyHit * more) * lifted
 		seals.fury = { dps = swings * amount, mana = k.fury.cost / R.SEAL_SECONDS,
 			judge = judge(k.fury, R.SHARE.furyJudge) }
 	end
@@ -941,7 +992,17 @@ local function damage(s, kit, how, crusader, seconds)
 		if seal and seal.judge then
 			rest[#rest + 1] = seal.judge
 		end
-		table.sort(rest, function(a, b) return a.dps / a.mana > b.dps / b.mana end)
+		-- (one that costs nothing before any)
+		local function worth(a)
+			return a.mana > 0 and a.dps / a.mana or math.huge
+		end
+		table.sort(rest, function(a, b)
+			local wa, wb = worth(a), worth(b)
+			if wa ~= wb then
+				return wa > wb
+			end
+			return a.dps > b.dps
+		end)
 		for _, a in ipairs(rest) do
 			local f = a.mana > 0 and clamp(left / a.mana, 0, 1) or 1
 			if a.needsSeal then
@@ -950,7 +1011,7 @@ local function damage(s, kit, how, crusader, seconds)
 			sum = sum + f * a.dps
 			left = left - f * a.mana
 		end
-		return forWhite * white + forHoly * sum
+		return (forWhite * white + forHoly * sum) * vengeance(seal)
 	end
 
 	local best, name = total(nil), nil

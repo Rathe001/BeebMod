@@ -1042,6 +1042,169 @@ do
 	check("which is more than as you stand", R.Survival(druid, kit("cat")) > R.Survival(druid, { heals = {}, seals = {}, at = {} }))
 end
 
+print("the paladin's talents")
+do
+	-- (Josh 2026-11-18: "Let's finish the paladin stuff")
+	local words = {
+		[20049] = "Increases your Physical and Holy damage dealt by 3% for 30 sec after landing a non-periodic critical strike.  Stacks up to 3 times.",
+		[1311074] = "Gives your Judgement ability a 100% chance to return 60% of the Mana cost of the judged seal.",
+		[25956] = "Decreases the cooldown of your Judgement ability by 2 sec.",
+		[20210] = "After getting a critical effect from your Flash of Light, Holy Light, Light's Vigil, or Holy Shock heal spell you have a 100% chance to gain Mana equal to 50% of the base cost of the spell.",
+		[5923] = "Increases the critical strike healing bonus of your Holy spells by 20%.",
+		[20249] = "Increases the critical effect chance of your Flash of Light spell by 6%.",
+	}
+	local function read(ids)
+		local k = { judgement = { cost = 30, cooldown = 10 }, heals = {
+			{ name = "Holy Light", key = "holyLight", amount = 300, cast = 2.5, cost = 110, share = 0.714 },
+			{ name = "Flash of Light", key = "flashOfLight", amount = 100, cast = 1.5, cost = 50, share = 0.429 },
+		} }
+		Rd.PaladinTalents(k, function(id) return ids[id] == true end, function(id) return words[id] end)
+		return k
+	end
+	local none = read({})
+	check("no talents: nothing is put on", none.vengeance == nil and none.back == nil and none.judgeBack == nil
+		and none.judgement.cooldown == 10 and none.heals[2].critAdd == nil)
+	local all = read({ [20049] = true, [1311074] = true, [25956] = true, [20210] = true, [5923] = true, [20249] = true })
+	check("Vengeance: 3% for 30 seconds, up to 3 times", all.vengeance.pct == 3 and all.vengeance.secs == 30 and all.vengeance.stacks == 3)
+	near("Sanctified Judgement: 60% of the seal's mana back", all.judgeBack, 0.6)
+	near("Improved Judgement: 2 seconds off", all.judgement.cooldown, 8)
+	near("Illumination: half a heal's cost back after a crit", all.back, 0.5)
+	check("Holy Power is on every heal", all.heals[1].critMore == 20 and all.heals[2].critMore == 20)
+	check("Improved Flash of Light is on Flash of Light only", all.heals[2].critAdd == 6 and all.heals[1].critAdd == nil)
+
+	-- damage
+	local function copy(t)
+		local c = {}
+		for k, v in pairs(t) do c[k] = v end
+		return c
+	end
+	local function crit(n)
+		local t = copy(worn)
+		t.crit = worn.crit + n
+		return t
+	end
+	local plain = R.Damage(worn, kit, { long = true })
+	kit.vengeance = { pct = 3, secs = 30, stacks = 3 }
+	local lifted = R.Damage(worn, kit, { long = true })
+	check(("Vengeance lifts the whole sum, by less than all three stacks: %.2f%%"):format((lifted / plain - 1) * 100),
+		lifted > plain and lifted < plain * 1.09)
+	local gain = R.Damage(crit(5), kit, { long = true }) / lifted
+	kit.vengeance = nil
+	check("and crit is worth more with it", gain > R.Damage(crit(5), kit, { long = true }) / plain)
+	kit.vengeance = { pct = 3, secs = 30, stacks = 3 }
+	local alone, _, _, seconds = R.Damage(worn, kit)
+	kit.vengeance = nil
+	local without = R.Damage(worn, kit)
+	check(("a short fight has less of it: %.0f seconds"):format(seconds), seconds < 60 and alone / without < lifted / plain)
+	-- Judgement's mana back: more of the rotation fits the mana
+	local poor = copy(worn)
+	poor.mana, poor.manaPer5 = 300, 0
+	local tight = R.Damage(poor, kit, { long = true })
+	kit.judgeBack = 0.6
+	check("Sanctified Judgement is worth damage where mana is short", R.Damage(poor, kit, { long = true }) > tight)
+	kit.judgeBack = nil
+	near("and the sum is as it was without the talents", R.Damage(worn, kit, { long = true }), plain)
+
+	-- healing
+	local healer = { level = 60, mana = 3000, manaPer5 = 20, spiritRegen = 10, spellCrit = 10, healing = 200 }
+	local function heals(talents)
+		local k = read(talents)
+		k.at = { healing = 200 }
+		return k
+	end
+	local base = R.FightHealing(healer, heals({}))
+	near("a heal with no talents is as it was", R.Healing(healer, heals({})), 300 * 1.05 / 2.5)
+	check("Illumination: more healing from the same mana", R.FightHealing(healer, heals({ [20210] = true })) > base)
+	local sharp = copy(healer)
+	sharp.spellCrit = 20
+	check("and crit is worth more to a healer with it",
+		R.FightHealing(sharp, heals({ [20210] = true })) / R.FightHealing(healer, heals({ [20210] = true }))
+			> R.FightHealing(sharp, heals({})) / base)
+	near("Holy Power: a crit adds 60% in place of 50%", R.Healing(healer, heals({ [5923] = true })), 300 * 1.06 / 2.5)
+	local flash = heals({ [20249] = true })
+	table.remove(flash.heals, 1)
+	near("Improved Flash of Light: it crits 16% of the time, not 10%", R.Healing(healer, flash), 100 * 1.08 / 1.5)
+end
+
+print("talents that change what gear gives")
+do
+	-- (Josh 2026-11-18: "Let's add those 2-3 you recommend")
+	local said = {
+		[20143] = "Increases your armor value from items by 10%.",
+		[20148] = "Increases the amount of damage absorbed by your shield by 30%.",
+		[16253] = "Increases your chance to block attacks with a shield by 5% and increases the amount blocked by 25%.",
+		[20111] = "Increases the Physical and Holy damage you deal by 6%, and reduces all threat you generate by 20% while a two-handed melee weapon is equipped.",
+		[20196] = "Increases the damage you deal with one-handed melee weapons by 4%.",
+		[12163] = "Increases the damage you deal with two-handed melee weapons by 5%.",
+	}
+	local function gear(ids)
+		return Rd.GearTalents(function(id) return ids[id] == true end, function(id) return said[id] end)
+	end
+	check("no talents: nothing", next(gear({})) == nil)
+	local g = gear({ [20143] = true, [20148] = true, [20111] = true, [20196] = true })
+	check("Toughness, at the percent its words say", g.armor == 10)
+	check("Shield Specialization", g.block == 30)
+	check("the shaman's says the amount second", gear({ [16253] = true }).block == 25)
+	check("the paladin's two-handed one lifts Holy too", g.twoHand.pct == 6 and g.twoHand.holy == true)
+	check("its one-handed one does not", g.oneHand.pct == 4 and g.oneHand.holy == nil)
+	check("the warrior's two-handed one is physical only", gear({ [12163] = true }).twoHand.holy == nil)
+	near("a two-hander is lifted by 6%", M.Lift(g, true), 1.06)
+	near("a one-hander by 4%", M.Lift(g, false), 1.04)
+	near("and Holy damage by the two-handed one only", M.Lift(g, false, true), 1)
+
+	-- armor and block value from a piece
+	local plate = { RESISTANCE0_NAME = 100, UPGRADES_BLOCK = 20 }
+	local tough = { armorFromItems = 1.1, blockValue = 1.3 }
+	for k, v in pairs(rates) do tough[k] = tough[k] or v end
+	near("100 armor on a piece is 110 with Toughness", M.Swap(worn, tough, nil, plate).armor - worn.armor, 110)
+	near("and 100 without", M.Swap(worn, rates, nil, plate).armor - worn.armor, 100)
+	near("20 block on a shield is 26 with Shield Specialization",
+		M.Swap(worn, tough, nil, plate).blockValue - (worn.blockValue or 0), 26)
+
+	-- a weapon specialization. Worn: a one-hander, 28-52 at 2.8, with 4% on it.
+	local function copy(t)
+		local c = {}
+		for k, v in pairs(t) do c[k] = v end
+		return c
+	end
+	local held = copy(worn)
+	held.lifts, held.weaponLift, held.twoHand = g, 1.04, false
+	held.damageMin, held.damageMax = worn.damageMin * 1.04, worn.damageMax * 1.04
+	local same = M.Swap(held, rates, nil, nil, { worn = { min = 28, max = 52, speed = 2.8 }, new = { min = 38, max = 62, speed = 2.8 }, lift = 1.04 })
+	near("another one-hander with 10 more damage: 10.4 more", same.damageMin - held.damageMin, 10.4)
+	local two = M.Swap(held, rates, nil, nil, { worn = { min = 28, max = 52, speed = 2.8 }, new = { min = 28, max = 52, speed = 2.8 }, lift = 1.06 })
+	near("the same weapon as a two-hander: 6% in place of 4%", two.damageMin / held.damageMin, 1.06 / 1.04)
+	near("attack power gained is lifted too", M.Swap(held, rates, nil, { ITEM_MOD_ATTACK_POWER_SHORT = 14 }).damageMin - held.damageMin,
+		2.8 * 1.04)
+	near("with no talent a swap is as it was", M.Swap(worn, rates, nil, nil,
+		{ worn = { min = 28, max = 52, speed = 2.8 }, new = { min = 38, max = 62, speed = 2.8 } }).damageMin - worn.damageMin, 10)
+	-- and what is Holy follows the kind of weapon
+	local before = R.Damage(worn, kit, { long = true })
+	local lifted = copy(worn)
+	lifted.liftHoly = 1.06
+	local gain = R.Damage(lifted, kit, { long = true }) / before
+	check(("Holy damage lifted 6%% lifts the sum by less, since swings are not Holy: %.2f%%"):format((gain - 1) * 100),
+		gain > 1 and gain < 1.06)
+	-- a warrior's ability: the amount its words give
+	local fighter = { level = 60, attackPower = 1000, armor = 3000, crit = 20, health = 4000, mana = 0, manaPer5 = 0, damageMin = 200,
+		damageMax = 300, weaponSpeed = 3.4, haste = 0, dodge = 5, parry = 5, block = 0, blockValue = 0, hit = 0, spellHit = 0,
+		spellCrit = 0, healing = 0, spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 }, twoHand = true }
+	local moves = { heals = {}, seals = {}, at = {}, abilities = { mortalstrike = { v = { add = 160 }, cost = 30, cooldown = 6, weapon = "norm" } } }
+	local plain = R.Damage(fighter, moves, { long = true })
+	local more = copy(fighter)
+	more.liftPhysical = 1.05
+	check("a physical ability's own amount is lifted, its weapon damage is not twice",
+		R.Damage(more, moves, { long = true }) > plain and R.Damage(more, moves, { long = true }) < plain * 1.05)
+
+	-- a stat percent from a talent, at your rank
+	local into = {}
+	Rd.TalentPercents({ strength = 2 }, 10, into)
+	near("Divine Strength with 5 points is 10%, not the first rank's 2%", into.strength, 1.1)
+	into = {}
+	Rd.TalentPercents({ strength = 2 }, nil, into)
+	near("words that give none: the tables' own", into.strength, 1.02)
+end
+
 print("an item's other effects")
 do
 	check("a trinket's Use, as stats for the time it is up", type(data.uses) == "table" and next(data.uses) ~= nil)

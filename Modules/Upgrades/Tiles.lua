@@ -121,7 +121,18 @@ function T.Compare(link)
 		for k, v in pairs(swap.with and Rd.Priced(swap.with) or {}) do
 			new[k] = (new[k] or 0) + v
 		end
+		-- (a weapon specialization: the kind of weapon held after the swap)
+		local hands = swap.twoHand
+		if hands == nil then
+			hands = n.state.twoHand
+		end
+		local lifts = n.state.lifts
+		if swap.weapons and not swap.weapons.ranged then
+			swap.weapons.lift = M.Lift(lifts, hands)
+		end
 		local after = M.Swap(n.state, n.rates, swap.worn, new, swap.weapons)
+		after.liftPhysical = M.Lift(lifts, hands) / M.Lift(lifts, n.state.twoHand)
+		after.liftHoly = M.Lift(lifts, hands, true) / M.Lift(lifts, n.state.twoHand, true)
 		if swap.shield ~= nil then
 			after.shield = swap.shield
 		end
@@ -347,6 +358,77 @@ BT.OnItemCells(T.Cells)
 -- checked from the saved file with no character of that class. A spell the
 -- game has not loaded yet is asked for and counted as waiting: Record again
 -- a few seconds later has it.
+-- WHAT THE GAME SAYS OF YOUR TALENTS (Josh 2026-11-18: "What do you need me
+-- to check regarding talents?"). Crit talents and the way you fight are both
+-- found by asking the game whether you know a talent's spell (Read.lua). It
+-- had not been seen whether the game answers for a talent, nor whether the
+-- spell you know is the one in the tables or a later rank of it. This
+-- records, for the record on the Testing page: the two calls' answers for
+-- each talent the tables list for your class, and each talent you have
+-- points in as the talent window has it, with its spell and the same two
+-- answers.
+function T.Known(data)
+	local function ask(call, id)
+		if type(call) ~= "function" then
+			return "no call"
+		end
+		local ok, known = pcall(call, id)
+		return ok and known == true
+	end
+	local function both(id)
+		return { player = ask(IsPlayerSpell, id), known = ask(IsSpellKnown, id) }
+	end
+	local _, class = UnitClass("player")
+	local out = { class = class, listed = {}, marks = {}, points = {}, calls = {
+		traits = C_Traits ~= nil and C_ClassTalents ~= nil, old = GetNumTalentTabs ~= nil and GetTalentInfo ~= nil } }
+	for id in pairs(type(data.talents) == "table" and data.talents[class] or {}) do
+		out.listed[id] = both(id)
+	end
+	-- (the paladin's own, Read.lua, and their words; and whether the game's
+	-- cooldown for Judgement has Improved Judgement in it: 10 seconds if not)
+	for id in pairs(Rd.PALADIN or {}) do
+		local row = both(id)
+		local ok, text = pcall(C_Spell.GetSpellDescription, id)
+		row.words = ok and type(text) == "string" and not (issecretvalue and issecretvalue(text)) and text or nil
+		out.listed[id] = row
+	end
+	if GetSpellBaseCooldown then
+		local ok, ms = pcall(GetSpellBaseCooldown, 20271)
+		out.judgement = ok and type(ms) == "number" and not (issecretvalue and issecretvalue(ms)) and ms or nil
+	end
+	for way, spec in pairs(type(data.specs) == "table" and data.specs[class] or {}) do
+		for id in pairs(spec.marks or {}) do
+			out.marks[id] = both(id)
+			out.marks[id].way = way
+		end
+	end
+	local ok, problem = pcall(function()
+		local config = C_ClassTalents.GetActiveConfigID()
+		local info = config and C_Traits.GetConfigInfo(config)
+		for _, tree in ipairs(info and info.treeIDs or {}) do
+			for _, node in ipairs(C_Traits.GetTreeNodes(tree) or {}) do
+				local n = C_Traits.GetNodeInfo(config, node)
+				local entry = n and n.activeEntry and n.activeEntry.entryID
+				if entry and (n.currentRank or 0) > 0 then
+					local e = C_Traits.GetEntryInfo(config, entry)
+					local d = e and e.definitionID and C_Traits.GetDefinitionInfo(e.definitionID)
+					local id = d and (d.overriddenSpellID or d.spellID)
+					local row = id and both(id) or {}
+					row.spell, row.rank, row.most = id, n.currentRank, n.maxRanks
+					-- (its words at your rank, as the talent window has them)
+					row.words = id and Rd.TalentWords and Rd.TalentWords(id) or nil
+					row.name = id and C_Spell.GetSpellName and C_Spell.GetSpellName(id) or nil
+					out.points[#out.points + 1] = row
+				end
+			end
+		end
+	end)
+	if not ok then
+		out.problem = tostring(problem)
+	end
+	return out
+end
+
 function T.Dump()
 	local data = UP.SpellData
 	if not (UP.On() and type(data) == "table" and type(data.spells) == "table" and C_Spell and C_Spell.GetSpellDescription) then
@@ -384,6 +466,7 @@ function T.Dump()
 		end
 		out.talents[class] = words
 	end
+	out.known = T.Known(data)
 	BeebModDB = BeebModDB or {}
 	BeebModDB.upgradesDump = out
 	return out.spells

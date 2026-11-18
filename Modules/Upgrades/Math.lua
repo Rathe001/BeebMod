@@ -112,6 +112,17 @@ end
 --   point), healthPerStamina, manaPerIntellect
 -- `weapons`, when the piece is a weapon: { worn = { min, max, speed },
 --   new = { min, max, speed } }, each as its tooltip says
+-- What a weapon of a kind is lifted by (1.06 for 6%). `lifts`: Read.lua's,
+-- { twoHand = { pct, holy }, oneHand = { pct } }. `holyOnly`: the lift for
+-- Holy damage, which only a talent that says so gives.
+function M.Lift(lifts, twoHand, holyOnly)
+	local t = lifts and lifts[twoHand and "twoHand" or "oneHand"]
+	if not t or (holyOnly and not t.holy) then
+		return 1
+	end
+	return 1 + (t.pct or 0) / 100
+end
+
 function M.Swap(now, rates, worn, new, weapons)
 	local d = M.Difference(worn, new)
 	local after = copy(now)
@@ -140,7 +151,10 @@ function M.Swap(now, rates, worn, new, weapons)
 	-- block value: 1 for every 20 strength (the character sheet's
 	-- BLOCK_VALUE_PER_STRENGTH), and what a shield has of its own, which
 	-- Read.lua takes from its tooltip as UPGRADES_BLOCK
-	after.blockValue = (now.blockValue or 0) + gained.strength / 20 + get("UPGRADES_BLOCK") + get("ITEM_MOD_BLOCK_VALUE_SHORT")
+	-- (`rates.blockValue`: Shield Specialization, which the game's own number
+	-- has in it already)
+	after.blockValue = (now.blockValue or 0)
+		+ (gained.strength / 20 + get("UPGRADES_BLOCK") + get("ITEM_MOD_BLOCK_VALUE_SHORT")) * (rates.blockValue or 1)
 	after.block = (now.block or 0) + get("ITEM_MOD_BLOCK_RATING_SHORT") * (rates.blockPerRating or 0)
 	after.health = now.health + gained.stamina * (rates.healthPerStamina or 0) + get("ITEM_MOD_HEALTH_SHORT")
 	after.mana = now.mana + gained.intellect * (rates.manaPerIntellect or 0) + get("ITEM_MOD_MANA_SHORT")
@@ -168,7 +182,9 @@ function M.Swap(now, rates, worn, new, weapons)
 	after.expertise = (now.expertise or 0)
 		+ get("ITEM_MOD_EXPERTISE_RATING_SHORT") * (rates.expertisePerRating or 0.1) * M.PER_EXPERTISE
 	after.attackPower = now.attackPower + ap
-	after.armor = after.armor + get("RESISTANCE0_NAME")
+	-- (`rates.armorFromItems`: Toughness, "Increases your armor value from
+	-- items by 10%")
+	after.armor = after.armor + get("RESISTANCE0_NAME") * (rates.armorFromItems or 1)
 	local both = get("ITEM_MOD_SPELL_POWER_SHORT")
 	local damage = both + get("ITEM_MOD_SPELL_DAMAGE_DONE_SHORT")
 	for name, school in pairs(M.SCHOOLS) do
@@ -200,9 +216,19 @@ function M.Swap(now, rates, worn, new, weapons)
 	after.feralGain = (now.feralGain or 0) + get("ITEM_MOD_FERAL_ATTACK_POWER_SHORT")
 
 	-- 5. weapon damage follows attack power
-	local perHit = ap / M.AP_PER_DPS * now.weaponSpeed
+	-- A WEAPON SPECIALIZATION (Josh 2026-11-18: "Let's add those 2-3 you
+	-- recommend"). The game's weapon damage has it in already for the weapon
+	-- in hand (`now.weaponLift`, 1.06 for 6%). So attack power gained is
+	-- lifted by it too, and for a new weapon the worn one's lift is taken
+	-- out and the new one's put on (`weapons.lift`, which differs where one
+	-- is a two-hander and the other is not). What is not weapon damage
+	-- follows by `liftPhysical` and `liftHoly`: the new lift over the old,
+	-- which Roles.lua puts on the amounts a description gives.
+	local lift = now.weaponLift or 1
+	local perHit = ap / M.AP_PER_DPS * now.weaponSpeed * lift
 	after.damageMin = now.damageMin + perHit
 	after.damageMax = now.damageMax + perHit
+	after.weaponLift, after.lifts = lift, now.lifts
 
 	-- 5b. A RANGED WEAPON'S DAMAGE FOLLOWS RANGED ATTACK POWER (the hunter).
 	-- The game has no call for what a stat gives of it, so the original
@@ -243,14 +269,16 @@ function M.Swap(now, rates, worn, new, weapons)
 	local was, will = weapons and weapons.worn, weapons and weapons.new
 	if will then
 		local share = now.attackPower / M.AP_PER_DPS * now.weaponSpeed
-		local restMin = was and (now.damageMin - was.min - share) or 0
-		local restMax = was and (now.damageMax - was.max - share) or 0
+		local restMin = was and (now.damageMin / lift - was.min - share) or 0
+		local restMax = was and (now.damageMax / lift - was.max - share) or 0
 		local newShare = after.attackPower / M.AP_PER_DPS * will.speed
+		local new = weapons.lift or lift
 		after.weaponSpeed = will.speed
 		-- and its chance on hit, if it has one, in place of the worn one's
 		after.proc = will.proc
-		after.damageMin = will.min + newShare + restMin
-		after.damageMax = will.max + newShare + restMax
+		after.damageMin = (will.min + newShare + restMin) * new
+		after.damageMax = (will.max + newShare + restMax) * new
+		after.weaponLift = new
 	end
 
 	return after, d

@@ -216,6 +216,12 @@ function Rd.State()
 		s.twoHand = loc == "INVTYPE_2HWEAPON"
 		-- (a dagger: some of a rogue's abilities need one)
 		s.dagger = Rd.Dagger(main)
+		-- (a weapon specialization: what each kind of weapon is lifted by,
+		-- and what the one in hand is, which the game's damage has in it)
+		if Rd.Gear then
+			s.lifts = Rd.Gear()
+			s.weaponLift = UP.Math.Lift(s.lifts, s.twoHand)
+		end
 	end
 	-- a druid's forms, kept from when each was last seen (Rd.Forms)
 	s.forms = Rd.Forms(s, UP.DB())
@@ -283,6 +289,10 @@ end
 -- what one point is worth, asked of the functions the character sheet calls
 function Rd.Rates(s)
 	local r = { attackPowerPer = {}, multiplier = Rd.Multipliers() }
+	-- (Toughness and Shield Specialization: Rd.GEAR_TALENTS)
+	local g = Rd.Gear and Rd.Gear() or {}
+	r.armorFromItems = 1 + (g.armor or 0) / 100
+	r.blockValue = 1 + (g.block or 0) / 100
 	for i, name in ipairs(STATS) do
 		local per = num(GetAttackPowerForStat and GetAttackPowerForStat(i, 100))
 		if per and per ~= 0 then
@@ -669,6 +679,20 @@ function Rd.StatPercents(id, into, text)
 	percents(text or words(id), into)
 	return false
 end
+-- a talent's share: the stats the tables list for it, by the percent its
+-- words say at your rank (the tables' own where the words give none)
+function Rd.TalentPercents(listed, said, into)
+	if type(listed) ~= "table" then
+		return
+	end
+	for _, name in ipairs(STATS) do
+		local n = listed[name] or listed.all
+		if n then
+			local pct = said and said > 0 and said <= 50 and said or n
+			into[name] = (into[name] or 1) * (1 + pct / 100)
+		end
+	end
+end
 function Rd.Multipliers()
 	local t = GetTime()
 	if multipliers and multipliersAt and (t - multipliersAt < 2 or InCombatLockdown()) then
@@ -690,9 +714,17 @@ function Rd.Multipliers()
 			Rd.StatPercents(id, found)
 		end
 	end
+	-- and your talents, each at your rank. The tables have a talent's first
+	-- rank, and its words at your rank say what it is now (Rd.TalentWords).
+	local data = UP.SpellData
+	local listed = type(data) == "table" and type(data.stats) == "table" and data.stats or {}
+	local talents = Rd.Traits and Rd.Traits() or {}
+	for id in pairs(talents) do
+		Rd.TalentPercents(listed[id], Rd.Numbers(Rd.TalentWords(id))[1], found)
+	end
 	-- and your passives
 	eachSpell(function(id, item)
-		if item.isPassive then
+		if item.isPassive and not (talents[id] and listed[id]) then
 			Rd.StatPercents(id, found)
 		end
 	end)
@@ -742,6 +774,118 @@ function Rd.HealShare(entry, amount, healing, level)
 	local own = entry.base + (entry.per or 0) * grown
 	return math.max(0, math.min(share, (amount - own) / healing))
 end
+-- A TALENT'S WORDS AT YOUR RANK (Josh's record, 2026-11-18: Improved
+-- Judgement with 2 of 2 points read "Decreases the cooldown of your
+-- Judgement ability by 1 sec."). A talent is one spell whatever your points
+-- in it, and that spell's description is its first rank's. The talent
+-- window gets its words from the talent itself with the rank handed over
+-- (C_TooltipInfo.GetTraitEntry, as Blizzard_TalentDisplay.lua calls it), so
+-- the same is done here. `Rd.Traits()`: each talent you have points in, by
+-- its spell, with what the talent window calls it and your rank.
+local traits, traitsAt
+function Rd.Traits()
+	local t = GetTime and GetTime() or 0
+	if traits and traitsAt and t - traitsAt < 5 then
+		return traits
+	end
+	local found = {}
+	pcall(function()
+		local config = C_ClassTalents.GetActiveConfigID()
+		local info = config and C_Traits.GetConfigInfo(config)
+		for _, tree in ipairs(info and info.treeIDs or {}) do
+			for _, node in ipairs(C_Traits.GetTreeNodes(tree) or {}) do
+				local n = C_Traits.GetNodeInfo(config, node)
+				local entry = n and n.activeEntry and n.activeEntry.entryID
+				local rank = n and num(n.currentRank) or 0
+				if entry and rank > 0 then
+					local e = C_Traits.GetEntryInfo(config, entry)
+					local d = e and e.definitionID and C_Traits.GetDefinitionInfo(e.definitionID)
+					for _, id in ipairs({ d and d.spellID or false, d and d.overriddenSpellID or false }) do
+						if type(id) == "number" and not secret(id) then
+							found[id] = { entry = entry, rank = rank }
+						end
+					end
+				end
+			end
+		end
+	end)
+	traits, traitsAt = found, t
+	return found
+end
+function Rd.TalentWords(id)
+	local t = Rd.Traits()[id]
+	if t and C_TooltipInfo and C_TooltipInfo.GetTraitEntry then
+		local ok, data = pcall(C_TooltipInfo.GetTraitEntry, t.entry, t.rank)
+		if ok and type(data) == "table" and type(data.lines) == "table" then
+			-- (the last line is the description. The ones before it are
+			-- "Passive", or a cost and a cast time, whose numbers are not
+			-- the talent's: Seal of Command's began "60 Mana", "Instant".)
+			local last = nil
+			for _, line in ipairs(data.lines) do
+				local text = type(line) == "table" and line.leftText
+				if type(text) == "string" and not secret(text) and text ~= "" then
+					last = text
+				end
+			end
+			if last then
+				return last
+			end
+		end
+	end
+	return words(id)
+end
+
+-- TALENTS THAT CHANGE WHAT GEAR GIVES (Josh 2026-11-18: "Let's add those 2-3
+-- you recommend"). By id, from the game's tables; the number is which one
+-- of the talent's words is its percent.
+--   armor  "Increases your armor value from items by 10%": Toughness, the
+--          paladin's and the warrior's
+--   block  "Increases the amount of damage absorbed by your shield by 30%":
+--          Shield Specialization, the paladin's and the shaman's
+--   hands  more damage while a weapon of that kind is held: the weapon
+--          specializations. `holy`: the paladin's two-handed one, which
+--          says "Physical and Holy".
+Rd.GEAR_TALENTS = {
+	[20143] = { armor = 1 }, [12299] = { armor = 1 },
+	[20148] = { block = 1 }, [20149] = { block = 1 }, [20150] = { block = 1 },
+	[16253] = { block = 2 }, [16298] = { block = 2 }, [16299] = { block = 2 }, [16300] = { block = 2 }, [16301] = { block = 2 },
+	[12163] = { hands = "twoHand" }, [20111] = { hands = "twoHand", holy = true }, [20196] = { hands = "oneHand" },
+}
+-- Returns { armor = percent, block = percent, twoHand = { pct, holy },
+-- oneHand = { pct } }, each only where you have the talent.
+-- `known(id)`, `describe(id)`: the game's calls, handed in.
+function Rd.GearTalents(known, describe)
+	local out = {}
+	for id, t in pairs(Rd.GEAR_TALENTS) do
+		if known(id) then
+			local n = Rd.Numbers(describe(id) or "")
+			local pct = n[t.armor or t.block or 1] or 0
+			if pct > 0 and pct <= 100 then
+				if t.armor then
+					out.armor = math.max(out.armor or 0, pct)
+				elseif t.block then
+					out.block = math.max(out.block or 0, pct)
+				elseif not out[t.hands] or pct > out[t.hands].pct then
+					out[t.hands] = { pct = pct, holy = t.holy }
+				end
+			end
+		end
+	end
+	return out
+end
+local function knows(id)
+	local ok, known = pcall(IsPlayerSpell or IsSpellKnown, id)
+	return ok and known == true
+end
+local gear, gearAt
+function Rd.Gear()
+	local t = GetTime and GetTime() or 0
+	if not (gear and gearAt and t - gearAt < 5) then
+		gear, gearAt = Rd.GearTalents(knows, Rd.TalentWords), t
+	end
+	return gear
+end
+
 -- WHICH WAY YOU FIGHT, BY YOUR TALENTS (Josh 2026-11-18: "We need to
 -- determine which one by which talents they have selected"). Each way of a
 -- class lists the talents only it takes. The way with the most of them
@@ -801,6 +945,55 @@ function Rd.Talents(kit, list, known, describe)
 		end
 	end
 end
+-- THE PALADIN'S TALENTS (Josh 2026-11-18: "Let's finish the paladin stuff").
+-- The ones that change what a piece of gear is worth, each by its id. Its
+-- amounts are the numbers its description says now, in order, since your
+-- points in it change them. A talent that only makes everything a set
+-- percent bigger is not here: it is in both sides of a comparison.
+--   Vengeance             percent, seconds, stacks: damage after a crit
+--   Sanctified Judgement  chance, percent: the judged seal's mana back
+--   Improved Judgement    seconds off Judgement's cooldown
+--   Illumination          chance, percent: a heal's mana back after a crit
+--   Holy Power            percent more of what a heal crit adds
+--   Improved Flash of Light  percent more chance for it to crit
+-- `known(id)`, `describe(id)`: the game's calls, handed in.
+Rd.PALADIN = {
+	[20049] = "vengeance", [1311074] = "judgeBack", [25956] = "judgeSooner", [20210] = "illumination", [5923] = "holyPower",
+	[20249] = "flash", [20250] = "flash", [20251] = "flash",
+}
+function Rd.PaladinTalents(kit, known, describe)
+	local flash, power = 0, 0
+	for id, what in pairs(Rd.PALADIN) do
+		if known(id) then
+			local n = Rd.Numbers(describe(id) or "")
+			local a, b, c = n[1] or 0, n[2] or 0, n[3] or 0
+			if what == "vengeance" and a > 0 and a <= 50 and b > 0 then
+				kit.vengeance = { pct = a, secs = b, stacks = c >= 1 and c or 1 }
+			elseif what == "judgeBack" and a > 0 and a <= 100 and b > 0 and b <= 100 then
+				kit.judgeBack = a / 100 * b / 100
+			elseif what == "judgeSooner" and a > 0 and kit.judgement and not kit.judgement.sooner then
+				-- (the game's call gives the cooldown without talents)
+				kit.judgement.sooner = a
+				kit.judgement.cooldown = math.max(1.5, kit.judgement.cooldown - a)
+			elseif what == "illumination" and a > 0 and a <= 100 and b > 0 and b <= 100 then
+				kit.back = a / 100 * b / 100
+			elseif what == "holyPower" and a > 0 and a <= 300 then
+				power = math.max(power, a)
+			elseif what == "flash" and a > 0 and a <= 100 then
+				flash = math.max(flash, a)
+			end
+		end
+	end
+	for _, h in ipairs(kit.heals or {}) do
+		if power > 0 then
+			h.critMore = (h.critMore or 0) + power
+		end
+		if flash > 0 and h.key == "flashOfLight" then
+			h.critAdd = (h.critAdd or 0) + flash
+		end
+	end
+end
+
 -- `kit.unread`: the ids of spells the model prices whose descriptions did
 -- not have the numbers the list says (see LIMIT, above).
 function Rd.Kit(s)
@@ -843,7 +1036,7 @@ function Rd.Kit(s)
 			local cast = type(spell) == "table" and num(spell.castTime) or 0
 			if v.amount then
 				local name = type(item.name) == "string" and not secret(item.name) and item.name or heal
-				heals[#heals + 1] = { name = name, amount = v.amount, cast = cast / 1000, cost = cost(id), id = id,
+				heals[#heals + 1] = { name = name, amount = v.amount, cast = cast / 1000, cost = cost(id), id = id, key = heal,
 					share = Rd.HealShare(entry, v.amount, s.healing, s.level) }
 			end
 		elseif ROLES[entry.is] then
@@ -871,10 +1064,11 @@ function Rd.Kit(s)
 	kit.heals = heals
 	local data = UP.SpellData
 	local _, class = UnitClass("player")
-	Rd.Talents(kit, type(data) == "table" and type(data.talents) == "table" and data.talents[class] or nil, function(id)
-		local ok, known = pcall(IsPlayerSpell or IsSpellKnown, id)
-		return ok and known == true
-	end, words)
+	-- (their words at your rank: Rd.TalentWords)
+	Rd.Talents(kit, type(data) == "table" and type(data.talents) == "table" and data.talents[class] or nil, knows, Rd.TalentWords)
+	if class == "PALADIN" then
+		Rd.PaladinTalents(kit, knows, Rd.TalentWords)
+	end
 	return kit
 end
 
