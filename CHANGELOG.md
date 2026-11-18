@@ -41,6 +41,9 @@ BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
   you can learn it.
 - **Long names are never cut.** A long name is set smaller, then the
   tooltip is made wider.
+- **A player you grouped with.** How often you grouped is on one line.
+  Where and when is on the line under it, so a long place name no longer
+  widens the tooltip.
 - **Fixed: Questie's quest list over the dock.** After a /reload in a city
   Questie's list stayed on top of BeebMod's. It is now put away within a
   few seconds.

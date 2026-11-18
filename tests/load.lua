@@ -8480,6 +8480,21 @@ if ok then
 				said = said or tostring(l):find("512:32:128:160[^|]*|t  Grouped once") ~= nil
 			end
 			assert(said, "and the tooltip says it: " .. table.concat(lines, " / "))
+			-- where and when on a line of its own, under the first one's words
+			local TipLib = BT.UnitTip
+			local under = false
+			for n, l in ipairs(lines) do
+				if tostring(l):find("|t  Grouped once$") then
+					under = tostring(lines[n + 1]):sub(1, #TipLib.Icon("blank")) == TipLib.Icon("blank")
+						and tostring(lines[n + 1]):find("|t  last in ", 1, true) ~= nil
+				end
+			end
+			assert(under, "the place and time are under it: " .. table.concat(lines, " / "))
+			local broke = TipLib.Lines("Grouped 3 times · last in a place with a very long name that goes on and on, 2 days ago")
+			assert(broke[1] == "Grouped 3 times" and #broke >= 3, "a long part breaks between words: " .. table.concat(broke, " / "))
+			for _, l in ipairs(broke) do
+				assert(TipLib.Measure(l, TipLib.ROW) <= TipLib.WRAP_W, "no line wider than the limit: " .. l)
+			end
 
 			for _, k in ipairs(stubbed) do
 				_G[k] = keep[k]

@@ -160,15 +160,18 @@ function T.Fill(tip, unit)
 		if p.rating then
 			Tip.Row(tip, "rating", tint, ("Rated %d/5"):format(p.rating), Tip.INK)
 		end
-		-- how often you grouped with them, and the last time and place
+		-- how often you grouped with them, and the last time and place.
+		-- ON TWO LINES, THE SECOND UNDER THE FIRST ONE'S WORDS (Josh
+		-- 2026-11-18, of "Grouped once · last in Excavation Site: Wetlands,
+		-- just now" under a short name): Tip.Wrapped.
 		local grouped = BT.LedgerGroups and BT.LedgerGroups.Line(p)
 		if grouped then
-			Tip.Row(tip, "grouped", tint, grouped, INK2)
+			Tip.Wrapped(tip, "grouped", tint, grouped, INK2)
 		end
 		-- and your duels with them (Modules/Ledger/Duels.lua)
 		local duels = BT.LedgerDuels and BT.LedgerDuels.Line(p)
 		if duels then
-			Tip.Row(tip, "duels", tint, duels, INK2)
+			Tip.Wrapped(tip, "duels", tint, duels, INK2)
 		end
 	end
 

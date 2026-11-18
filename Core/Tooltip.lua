@@ -473,6 +473,7 @@ function T.Icon(name, colour)
 	if not slot then
 		return ""
 	end
+	-- (a "blank" row keeps the two spaces after it too: T.Row)
 	local c = colour or T.INK
 	local function byte(v)
 		return math.floor((v or 1) * 255 + 0.5)
@@ -532,6 +533,52 @@ function T.Row(tip, icon, tint, text, rgb, right, rightRgb, wrap, size, lead)
 	return i
 end
 T.BODY_INDENT = 2
+
+-- A ROW THAT MAY TAKE MORE THAN ONE LINE, EVERY LINE UNDER THE FIRST ONE'S
+-- WORDS (Josh 2026-11-18, of "Grouped once · last in Excavation Site:
+-- Wetlands, just now": "line break this so it doesnt push the tooltip too
+-- wide", then "indent that second line so it lines up with the first"). A
+-- line the tooltip wraps starts again under the picture, so the breaks are
+-- made here: first at each " · ", then between words wherever a part is
+-- wider than T.WRAP_W. Each line after the first is led by the room a
+-- picture takes with nothing in it. Returns the first line and the last.
+T.WRAP_W = 230
+function T.Lines(text, size, width)
+	local out = {}
+	width = width or T.WRAP_W
+	local function part(words)
+		local line
+		for word in words:gmatch("%S+") do
+			local longer = line and (line .. " " .. word) or word
+			if line and T.Measure(longer, size or T.ROW) > width then
+				out[#out + 1] = line
+				line = word
+			else
+				line = longer
+			end
+		end
+		out[#out + 1] = line
+	end
+	local from = 1
+	while true do
+		local a, b = (text or ""):find(" · ", from, true)
+		part((text or ""):sub(from, a and a - 1 or nil))
+		if not a then
+			break
+		end
+		from = b + 1
+	end
+	return out
+end
+
+function T.Wrapped(tip, icon, tint, text, rgb, size)
+	local first, last
+	for n, line in ipairs(T.Lines(text, size)) do
+		last = T.Row(tip, n == 1 and icon or "blank", tint, line, rgb, nil, nil, nil, size)
+		first = first or last
+	end
+	return first, last
+end
 
 -- the tags' words, how far a box reaches past them, how tall it is, the gap
 -- between two, and the size of the blank line a row of them sits on
