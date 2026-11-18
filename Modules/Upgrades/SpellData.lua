@@ -7,11 +7,11 @@ BT.Upgrades.SpellData = {
 	-- each number in its description is, in the order it says them
 	spells = {
 		PALADIN = {
-			[20116] = { is = "consecration", lvl = 30, read = "first - - second -" }, -- Consecration
-			[20922] = { is = "consecration", lvl = 40, read = "first - - second -" }, -- Consecration
-			[20923] = { is = "consecration", lvl = 50, read = "first - - second -" }, -- Consecration
-			[20924] = { is = "consecration", lvl = 60, read = "first - - second -" }, -- Consecration
-			[26573] = { is = "consecration", lvl = 20, read = "first - - second -" }, -- Consecration
+			[20116] = { is = "consecration", lvl = 30, read = "first - cap second -" }, -- Consecration
+			[20922] = { is = "consecration", lvl = 40, read = "first - cap second -" }, -- Consecration
+			[20923] = { is = "consecration", lvl = 50, read = "first - cap second -" }, -- Consecration
+			[20924] = { is = "consecration", lvl = 60, read = "first - cap second -" }, -- Consecration
+			[26573] = { is = "consecration", lvl = 20, read = "first - cap second -" }, -- Consecration
 			[19750] = { is = "heal:flashOfLight", lvl = 20, share = 0.429, base = 46, per = 1, from = 20, to = 25, read = "amount amount" }, -- Flash of Light
 			[19939] = { is = "heal:flashOfLight", lvl = 26, share = 0.429, base = 66, per = 1.3, from = 26, to = 31, read = "amount amount" }, -- Flash of Light
 			[19940] = { is = "heal:flashOfLight", lvl = 34, share = 0.429, base = 101, per = 1.6, from = 34, to = 39, read = "amount amount" }, -- Flash of Light

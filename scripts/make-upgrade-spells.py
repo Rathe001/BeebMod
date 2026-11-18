@@ -59,7 +59,8 @@ MODEL = {
     "PALADIN": {
         "Holy Strike": ("holyStrike", ["percent", "holy"]),
         "Judgement": ("judgement", []),
-        "Consecration": ("consecration", ["first", "-", "second"]),
+        # ("The first 4 enemies who enter the area will take an additional...")
+        "Consecration": ("consecration", ["first", "cap", "second"]),
         "Righteous Fury": ("righteousFury", ["all", "holy"]),
         "Seal of the Crusader": ("crusader", ["ap", "-", "holy"]),
         "Seal of Command": ("command", ["percent", "judge", "-"]),

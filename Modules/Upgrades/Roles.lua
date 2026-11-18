@@ -117,7 +117,20 @@ R.STRENGTH_PER_BLOCK = 20
 -- (2026-11-17) give 6.1 to 7.0 a minute, depending on the enemy's armor.
 R.COMMAND_PER_MINUTE = 7
 R.SEAL_SECONDS = 30
+-- HOW MANY ENEMIES "AOE" IS (Josh 2026-11-17: "AoE is fine at 4 enemies,
+-- unless the skill/spell specifies otherwise. We should go with either the
+-- max, or 4... whichever is higher"). Four, or as many as a spell of yours
+-- says it reaches where that is more. A spell that reaches fewer still hits
+-- only as many as it says.
 R.AOE_ENEMIES = 4
+function R.AoeEnemies(kit)
+	local most = R.AOE_ENEMIES
+	local c = kit and kit.consecration
+	if c and type(c.cap) == "number" and c.cap > most then
+		most = c.cap
+	end
+	return most
+end
 -- crits: a melee crit doubles, a spell crit adds half
 R.MELEE_CRIT = 1.0
 R.SPELL_CRIT = 0.5
@@ -361,7 +374,12 @@ local function damage(s, kit, how, crusader, seconds)
 	if kit.consecration then
 		local k = kit.consecration
 		-- (the debuff is on one enemy only)
-		local amount = ((k.total + R.SHARE.consecration * (more - debuff)) * enemies + R.SHARE.consecration * debuff) * spellHit
+		-- (its second part is for the first `cap` enemies only, as it says;
+		-- the rest take the first part's share of the whole)
+		local each = k.total + R.SHARE.consecration * (more - debuff)
+		local full = math.min(enemies, k.cap or enemies)
+		local part = (k.first and k.total > 0) and k.first / k.total or 1
+		local amount = (each * full + each * part * (enemies - full) + R.SHARE.consecration * debuff) * spellHit
 		spells[#spells + 1] = { dps = amount / k.cooldown, mana = k.cost / k.cooldown }
 	end
 

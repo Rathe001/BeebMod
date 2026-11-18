@@ -92,7 +92,7 @@ local function price(s, kit)
 	return {
 		tank = R.Survival(s, kit), healer = R.Healing(s, kit), dps = R.Damage(s, kit),
 		threat = R.Threat(s, kit), sustain = R.Sustain(s, kit), fight = R.FightHealing(s, kit),
-		aoe = R.Damage(s, kit, { enemies = R.AOE_ENEMIES }),
+		aoe = R.Damage(s, kit, { enemies = R.AoeEnemies(kit) }),
 	}
 end
 

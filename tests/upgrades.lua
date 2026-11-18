@@ -437,6 +437,18 @@ do
 	check(("and more than that in threat, from the front, where it is parried too: %+.2f%%"):format(threat), threat > more)
 end
 
+print("how many enemies AoE is")
+do
+	-- (Josh 2026-11-17: "either the max, or 4... whichever is higher")
+	near("four, with no spell that says more", R.AoeEnemies({}), 4)
+	near("four, where a spell says fewer", R.AoeEnemies({ consecration = { cap = 3 } }), 4)
+	near("as many as a spell says, where that is more", R.AoeEnemies({ consecration = { cap = 6 } }), 6)
+	local cons = read(20116, "Consecrates the land beneath the Paladin, doing 24 Holy damage over 8 sec to enemies who "
+		.. "enter the area. The first 4 enemies who enter the area will take an additional 74 damage over 8 sec.")
+	near("Consecration says how many take its second part", cons.cap or 0, 4)
+	near("and both parts", (cons.first or 0) + (cons.second or 0), 98)
+end
+
 print("an item's other effects")
 do
 	check("a trinket's Use, as stats for the time it is up", type(data.uses) == "table" and next(data.uses) ~= nil)
