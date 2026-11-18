@@ -3,6 +3,54 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Upgrades on gear tooltips.** A piece of gear now shows how much it
+  would change you as a tank, a healer and a damage dealer, in percent. It
+  is compared with what you wear in that slot. A ring or trinket has a row
+  for each slot. So does a one-hand weapon where you hold a weapon in each
+  hand. Hold Shift for the parts each number is made of. The
+  switch is "Upgrades on gear tooltips" on the General page.
+- **Upgrades: how the numbers are made.** The addon works out a fight with
+  your own spells, at the amounts their descriptions give you now. It does
+  the same with the new piece on and shows the difference. Below level 60
+  the fight is as long as an enemy of your level lasts. At 60 it is three
+  minutes. These are estimates. Only the paladin has been compared with
+  real fights.
+- **Upgrades: every class.** A shaman, druid or priest is priced by the
+  way your talents say you fight. With no talents that mark a way, the
+  better one for your gear is used. A druid's forms are counted after you
+  have been in Cat Form and Bear Form once.
+- **Upgrades: talents.** Talents that change what gear is worth are
+  counted at your rank. These are the ones that change what a crit does,
+  Toughness, Shield Specialization, the weapon specializations, and six
+  of the paladin's own.
+- **Upgrades: poisons and imbues.** A rogue's Instant or Deadly Poison and
+  a shaman's Windfury or Flametongue are counted from what is on your
+  weapons. One that has run out is taken to go on again.
+- **Upgrades: what is not counted.** Totems, wands, heals over time,
+  stances, and some abilities this game added. An item with an effect the
+  addon cannot price says so on its tooltip.
+- **Tooltips have a new look.** Items, spells, buffs, players, NPCs and
+  world objects have a coloured band behind the name. Their figures are
+  tiles. A player's band is in the class colour, with the level large and
+  the health bar along the foot.
+- **Recipes show what they make.** A recipe's tooltip shows the skill it
+  needs, whether you can learn it, the item it makes and the materials. A
+  recipe at a trainer shows the same card, without the skill and whether
+  you can learn it.
+- **Long names are never cut.** A long name is set smaller, then the
+  tooltip is made wider.
+- **Fixed: Questie's quest list over the dock.** After a /reload in a city
+  Questie's list stayed on top of BeebMod's. It is now put away within a
+  few seconds.
+- **Fixed: dungeon kills named by a number.** A kill counted from loot
+  inside a dungeon went in the Expedition journal as "#255069". It now has
+  its name. Pages kept with a number are named a few seconds after login.
+- **Fixed: dungeon enemies under "Unknown zone".** They are now filed under
+  their dungeon.
+- **Settings: a long description wraps.** It was cut short.
+
 ## 1.15.0
 
 - **Your frame and the party move apart.** Your own frame was the top of

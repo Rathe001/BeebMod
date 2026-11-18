@@ -701,30 +701,63 @@ BT.Upgrades.SpellData = {
 			[16909] = { more = 20, nth = 1, of = "vengeance", keys = { hurricane = true, insectswarm = true, moonfire = true, starfire = true, wrath = true } }, -- Vengeance
 		},
 	},
+	-- a weapon's temporary enchantment -> the damage it adds (see the script)
+	enchants = {
+		[3] = { kind = "flame", low = 8.3, high = 28.64 }, -- Flametongue 3
+		[4] = { kind = "flame", low = 5.22, high = 19.16 }, -- Flametongue 2
+		[5] = { kind = "flame", low = 3.23, high = 13.04 }, -- Flametongue 1
+		[7] = { kind = "dot", chance = 30, tick = 6, period = 3, secs = 12, stacks = 5 }, -- Deadly Poison
+		[8] = { kind = "dot", chance = 30, tick = 9, period = 3, secs = 12, stacks = 5 }, -- Deadly Poison II
+		[25] = { kind = "hit", chance = 15, hit = 52 }, -- Shadow Oil
+		[26] = { kind = "hit", chance = 10, hit = 33 }, -- Frost Oil
+		[36] = { kind = "hit", chance = 15, hit = 11 }, -- Enchant: Fiery Blaze
+		[42] = { kind = "hit", chance = 10, hit = 25 }, -- Poison (Instant 20)
+		[283] = { kind = "windfury", chance = 20, attacks = 2, ap = 46 }, -- Windfury 1
+		[284] = { kind = "windfury", chance = 20, attacks = 2, ap = 46 }, -- Windfury 2
+		[323] = { kind = "hit", chance = 20, hit = 15 }, -- Instant Poison
+		[324] = { kind = "hit", chance = 20, hit = 23 }, -- Instant Poison II
+		[325] = { kind = "hit", chance = 20, hit = 33 }, -- Instant Poison III
+		[523] = { kind = "flame", low = 13.86, high = 45.76 }, -- Flametongue 4
+		[525] = { kind = "windfury", chance = 20, attacks = 2, ap = 119 }, -- Windfury 3
+		[623] = { kind = "hit", chance = 20, hit = 51 }, -- Instant Poison IV
+		[624] = { kind = "hit", chance = 20, hit = 71 }, -- Instant Poison V
+		[625] = { kind = "hit", chance = 20, hit = 88 }, -- Instant Poison VI
+		[626] = { kind = "dot", chance = 30, tick = 14, period = 3, secs = 12, stacks = 5 }, -- Deadly Poison III
+		[627] = { kind = "dot", chance = 30, tick = 18, period = 3, secs = 12, stacks = 5 }, -- Deadly Poison IV
+		[1003] = { kind = "dot", chance = 20, tick = 15, period = 3, secs = 12, stacks = 3 }, -- Venomhide Poison
+		[1665] = { kind = "flame", low = 23.36, high = 75.04 }, -- Flametongue 5
+		[1666] = { kind = "flame", low = 31.44, high = 99.92 }, -- Flametongue 6
+		[1669] = { kind = "windfury", chance = 20, attacks = 2, ap = 249 }, -- Windfury 4
+		[2630] = { kind = "dot", chance = 30, tick = 23, period = 3, secs = 12, stacks = 5 }, -- Deadly Poison V
+		[7542] = { kind = "dot", chance = 30, tick = 27, period = 3, secs = 12, stacks = 5 }, -- Occult Poison I
+		[7567] = { kind = "flame", low = 31.44, high = 99.92 }, -- Flametongue 6
+		[7569] = { kind = "windfury", chance = 20, attacks = 2, ap = 249 }, -- Windfury 4
+		[7651] = { kind = "dot", chance = 30, tick = 34, period = 3, secs = 12, stacks = 5 }, -- Occult Poison II
+	},
 	-- aura id -> the stats it raises, by percent (MOD_TOTAL_STAT_PERCENTAGE)
 	stats = {
-		[11232] = { strength = 10 }, -- Arcane Mind
-		[16252] = { strength = 2 }, -- Toughness
-		[17003] = { strength = 10 }, -- Heart of the Wild
-		[17485] = { strength = 10 }, -- Ancestral Knowledge
-		[18551] = { strength = 15 }, -- Mental Strength
-		[18697] = { strength = 15 }, -- Demonic Embrace
-		[19168] = { strength = 15 }, -- Lightning Reflexes
+		[11232] = { intellect = 10 }, -- Arcane Mind
+		[16252] = { stamina = 2 }, -- Toughness
+		[17003] = { intellect = 10 }, -- Heart of the Wild
+		[17485] = { intellect = 10 }, -- Ancestral Knowledge
+		[18551] = { intellect = 15 }, -- Mental Strength
+		[18697] = { stamina = 15 }, -- Demonic Embrace
+		[19168] = { agility = 15 }, -- Lightning Reflexes
 		[20217] = { all = 10 }, -- Blessing of Kings
-		[20257] = { strength = 2 }, -- Divine Intellect
+		[20257] = { intellect = 2 }, -- Divine Intellect
 		[20262] = { strength = 2 }, -- Divine Strength
 		[20598] = { spirit = 10 }, -- The Human Spirit
 		[24425] = { all = 15 }, -- Spirit of Zandalar
 		[25898] = { all = 10 }, -- Greater Blessing of Kings
-		[29140] = { stamina = 10 }, -- Vitality
+		[29140] = { stamina = 10, strength = 10 }, -- Vitality
 		[355365] = { all = 15 }, -- Spirit of Zandalar
 		[370552] = { all = 5 }, -- Skeletal Artifact
 		[409580] = { all = 10 }, -- Heart of the Lion
 		[409583] = { all = 10 }, -- Heart of the Lion
 		[429836] = { spirit = 5 }, -- Anointed By Light
-		[430420] = { intellect = 5 }, -- Anointed By Elune
-		[430421] = { stamina = 5 }, -- Anointed By The Loa
-		[439734] = { strength = 25 }, -- Tree of Life (Passive)
+		[430420] = { spirit = 5 }, -- Anointed By Elune
+		[430421] = { spirit = 5 }, -- Anointed By The Loa
+		[439734] = { spirit = 25 }, -- Tree of Life (Passive)
 		[446695] = { all = 8 }, -- Fervor of the Temple Explorer
 		[446698] = { all = 8 }, -- Fervor of the Temple Explorer
 		[459610] = { all = 15 }, -- Wanderer's Resolve
@@ -733,11 +766,11 @@ BT.Upgrades.SpellData = {
 		[473476] = { all = 15 }, -- Dreams of Zandalar
 		[1213408] = { all = 10 }, -- Blessing of Kings
 		[1230098] = { all = 8 }, -- Boosted Stats
-		[1248751] = { strength = 5 }, -- Increased Spirit
+		[1248751] = { spirit = 5 }, -- Increased Spirit
 		[1286254] = { all = 10 }, -- (DNT) Blessing of Kings - TEST RAID SPELL
 		[1304753] = { stamina = 15 }, -- Mol'dar's Moxie
-		[1309631] = { strength = 15 }, -- Living Spirit
-		[1326168] = { strength = 15 }, -- Dark Inspiration
+		[1309631] = { spirit = 15 }, -- Living Spirit
+		[1326168] = { spirit = 15 }, -- Dark Inspiration
 	},
 	-- weapon's item id -> { what its "Chance on hit" does in damage, whether it is magic }
 	procs = {

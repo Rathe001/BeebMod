@@ -109,25 +109,41 @@ function M.NameTheNameless()
 	if J.demo or not (s and type(s.enemies) == "table") then
 		return 0
 	end
-	local found, asked = 0, 0
+	-- EVERY PAGE IS REACHED (review 2026-11-18). Each run asked the first
+	-- 200 it came to and stopped, and both runs after login came to the
+	-- same 200, so pages past them kept their numbers. A page is now asked
+	-- twice at most in a session (the client may need a moment to fetch a
+	-- name it has not shown), and another run is set for as long as one
+	-- was left over or asked for the first time.
+	local found, asked, again = 0, 0, false
 	for npc, m in pairs(s.enemies) do
-		if type(m) == "table" and (type(m.name) ~= "string" or m.name == "") and type(npc) == "number" then
-			asked = asked + 1
-			if asked > 200 then
+		if type(m) == "table" and (type(m.name) ~= "string" or m.name == "") and type(npc) == "number"
+			and (M.askedName[npc] or 0) < 2 then
+			if asked >= M.NAMES_A_RUN then
+				again = true
 				break
 			end
+			asked = asked + 1
+			M.askedName[npc] = (M.askedName[npc] or 0) + 1
 			local name = K.NameByGUID(nil, npc)
 			if name then
 				m.name = name
 				found = found + 1
+			elseif M.askedName[npc] < 2 then
+				again = true
 			end
 		end
+	end
+	if again and C_Timer and C_Timer.After then
+		C_Timer.After(M.NAMES_EVERY, M.NameTheNameless)
 	end
 	if found > 0 and BT.ExpeditionWindow and BT.ExpeditionWindow.Changed then
 		BT.ExpeditionWindow.Changed()
 	end
-	return found
+	return found, again
 end
+M.NAMES_A_RUN, M.NAMES_EVERY = 200, 20
+M.askedName = {}
 
 -- a kill, in your own journal (J.Saved): the notices for it, and the score
 local function record(info)
@@ -843,11 +859,11 @@ M.events:SetScript("OnEvent", function(_, event, a, b, c, d, e)
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		BT.Session.OnWorld(M, a, b)
 		M.QuestsChanged()
-		-- pages kept with a number for a name get their names (M.NameTheNameless);
-		-- twice, as the client may need a moment to fetch a name it has not shown
-		if C_Timer and C_Timer.After then
+		-- pages kept with a number for a name get their names
+		-- (M.NameTheNameless, which sets its own later runs)
+		if C_Timer and C_Timer.After and not M.namingBegun then
+			M.namingBegun = true
 			C_Timer.After(5, M.NameTheNameless)
-			C_Timer.After(25, M.NameTheNameless)
 		end
 	elseif event == "QUEST_ACCEPTED" or event == "QUEST_LOG_UPDATE" then
 		M.QuestsChanged()

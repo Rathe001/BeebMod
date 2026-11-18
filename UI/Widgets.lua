@@ -660,7 +660,10 @@ function W.Row(parent, title, blurb, opts)
 		if r.blurb.SetNonSpaceWrap then
 			r.blurb:SetNonSpaceWrap(false)
 		end
-		local okW, wide = pcall(r.blurb.GetStringWidth, r.blurb)
+		-- (THE WIDTH ON ONE LINE, review 2026-11-18: a string that is wrapped
+		-- already gives the width of its widest line, which is never more
+		-- than the room, so the row was not made taller)
+		local okW, wide = pcall(r.blurb.GetUnboundedStringWidth or r.blurb.GetStringWidth, r.blurb)
 		wide = okW and BT.Pill.Number(wide, 0) or 0
 		local room = BT.Pill.Number(holder.GetWidth and holder:GetWidth(), 0)
 		if room <= 0 then
@@ -671,6 +674,24 @@ function W.Row(parent, title, blurb, opts)
 		r.blurbLines = lines
 		if lines > 1 then
 			r:SetHeight(W.ROW_H + (lines - 1) * W.BLURB_LINE)
+		end
+		-- AND THE GAME'S OWN COUNT ONCE IT IS ON SCREEN (the same review).
+		-- Words break before the edge, so the lines can be one more than
+		-- the width says. The game knows how many it drew once the row has
+		-- its width: the row is made that tall then, and the page laid out
+		-- again.
+		if r.HookScript and r.blurb.GetNumLines then
+			pcall(r.HookScript, r, "OnShow", function(self)
+				local okN, drawn = pcall(self.blurb.GetNumLines, self.blurb)
+				drawn = okN and BT.Pill.Number(drawn, 0) or 0
+				if drawn > (self.blurbLines or 1) then
+					self.blurbLines = drawn
+					self:SetHeight(W.ROW_H + (drawn - 1) * W.BLURB_LINE)
+					if parent.Layout then
+						pcall(parent.Layout, parent)
+					end
+				end
+			end)
 		end
 	end
 	-- the hairline above every row but a section's first

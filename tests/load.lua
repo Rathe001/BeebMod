@@ -3820,7 +3820,28 @@ if ok then
 				end
 				assert(BT.settings.questMisses[3001]["Small Spider Leg"] == mod.MISSES, "one miss a corpse: "
 					.. tostring(BT.settings.questMisses[3001]["Small Spider Leg"]))
-				assert(not hover("Giant Wood Lurker", "Spider", 3001), "six corpses without it: the row goes")
+				assert(not hover("Giant Wood Lurker", "Spider", 3001), "that many corpses without it: the row goes")
+				-- (review 2026-11-18) a picked pocket is no miss: the enemy is
+				-- your target, and alive
+				do
+					local wasGuid, wasDead = _G.UnitGUID, _G.UnitIsDead
+					_G.GetLootSourceInfo = function() return "Creature-0-1-1-1-3003-0000000001", 1 end
+					_G.UnitGUID = function() return "Creature-0-1-1-1-3003-0000000001" end
+					_G.UnitIsDead = function() return false end
+					mod.LearnDrops()
+					assert(BT.settings.questMisses[3003] == nil, "a window on a live target is not counted")
+					_G.UnitIsDead = function() return true end
+					mod.LearnDrops()
+					assert(BT.settings.questMisses[3003]["Small Spider Leg"] == 1, "its corpse is")
+					_G.UnitGUID, _G.UnitIsDead = wasGuid, wasDead
+				end
+				-- and the counts for an item no quest wants are dropped
+				do
+					local m = { [1] = { ["Small Spider Leg"] = 3, ["Old Thing"] = 9 }, [2] = { ["Old Thing"] = 4 } }
+					mod.PruneMisses(m, { ["Small Spider Leg"] = true })
+					assert(m[1]["Small Spider Leg"] == 3 and m[1]["Old Thing"] == nil and m[2] == nil,
+						"only what a quest still wants is kept")
+				end
 				for corpse = 1, mod.MISSES do
 					_G.GetLootSourceInfo = function() return ("Creature-0-1-1-1-3002-00000000%02d"):format(corpse), 1 end
 					mod.LearnDrops()
@@ -3957,7 +3978,9 @@ if ok then
 			assert(select(2, BT.UnitTip.LineOf(tip, i):GetFont()) == size
 				and select(2, BT.UnitTip.LineOf(tip, i, "TextRight"):GetFont()) == size,
 				"the objective and its count a size up: " .. tostring(select(2, BT.UnitTip.LineOf(tip, i):GetFont())))
-			assert(mod.QUEST_SIZE > BT.UnitTip.ROW, "larger than the other rows")
+			-- (Josh 2026-11-18: "Can you reduce quest text size a bit?" They
+			-- were a size above the other rows. The band still sets them off.)
+			assert(mod.QUEST_SIZE == 11 and mod.QUEST_TITLE_SIZE == 12, "a little smaller than they were")
 			local band = tip.beebsQuestBands and tip.beebsQuestBands[1]
 			assert(band and band:IsShown(), "a band behind it")
 			assert(band._points.LEFT.rel == BT.UnitTip.LineOf(tip, i) and band._points.RIGHT.rel == tip,

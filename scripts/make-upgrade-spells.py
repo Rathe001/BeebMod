@@ -8,6 +8,7 @@
 #   done
 #   py -I scripts/make-upgrade-spells.py <the folder they are in> [mangos.sqlite]
 #
+# (SpellItemEnchantment and SpellAuraOptions too, for what is put on a weapon.)
 # (SpellPower too. The second argument is the VMaNGOS database's sqlite file,
 # for the threat a tank's abilities add: see scripts/make-dungeon-names.py for
 # where it comes from. Without it no ability has threat of its own.)
@@ -640,6 +641,82 @@ for cls, model in MODEL.items():
 out.append("\t},")
 print("%d crit talents" % talents)
 
+# ------------------------------------------------- what is put on a weapon
+# (Josh 2026-11-18, of what was left: "proceed". A rogue's poison and a
+# shaman's imbue change what a weapon is worth: a fast one lands a poison
+# more often, and Windfury swings a slow one again.) Both are a temporary
+# enchantment on the weapon, and the game says which one is on by its id.
+# For each that does damage:
+#   hit       a chance on each hit to do so much (Instant Poison)
+#   dot       a chance on each hit to put on damage over time that stacks
+#             (Deadly Poison): so much every `period` seconds for `secs`
+#   windfury  a chance on each hit for extra swings with more attack power.
+#             Its numbers are in the rank of Windfury Weapon that puts it on,
+#             found by its number: "Windfury 2" is the second rank.
+#   flame     damage on every hit, by the weapon's speed: `low` at a speed
+#             of 1.3 and `high` at 4.0, as Flametongue Weapon's words work
+#             them out (its number over 77, and over 25).
+aura_options = {int(r["SpellID"]): r for r in rows("SpellAuraOptions")}
+
+
+def ranks_of(name):
+    """The ranks of an imbue a shaman casts, lowest first."""
+    found = [i for i, n in names.items() if n == name and "Imbue the Shaman" in templates.get(i, "") and i in levels]
+    return sorted(found, key=lambda i: int(levels[i]["SpellLevel"]))
+
+
+def base_of(spell, index):
+    e = effects.get(spell, {}).get(index)
+    return float(e["EffectBasePointsF"]) if e else None
+
+
+out += ["\t-- a weapon's temporary enchantment -> the damage it adds (see the script)", "\tenchants = {"]
+enchants = 0
+windfury, flametongue = ranks_of("Windfury Weapon"), ranks_of("Flametongue Weapon")
+for r in sorted(rows("SpellItemEnchantment"), key=lambda r: int(r["ID"])):
+    name, line = r["Name_lang"], None
+    numbered = re.match(r"^(Windfury|Flametongue) (\d+)$", name)
+    if numbered and numbered.group(1) == "Windfury" and int(numbered.group(2)) <= len(windfury):
+        text = templates[windfury[int(numbered.group(2)) - 1]]
+        said = re.search(r"\$(\d+)s2 extra .*?\$(\d+)s1 extra", text)
+        chance = re.search(r"(\d+)% chance", text)
+        if said and chance:
+            attacks, ap = base_of(int(said.group(1)), 1), base_of(int(said.group(2)), 0)
+            if attacks and ap:
+                line = 'kind = "windfury", chance = %s, attacks = %g, ap = %g' % (chance.group(1), attacks, ap)
+        if not line:
+            problems += 1
+            print("NO NUMBERS for " + name)
+    elif numbered and int(numbered.group(2)) <= len(flametongue):
+        text = templates[flametongue[int(numbered.group(2)) - 1]]
+        said = re.search(r"\$\{\$(\d+)m1/77-1\+\(\$(\d+)m1\)\} to \$\{\$(\d+)m1/25\+\(\$(\d+)m1\)\}", text)
+        if said:
+            per, more = base_of(int(said.group(1)), 0), base_of(int(said.group(2)), 0)
+            if per is not None and more is not None:
+                line = 'kind = "flame", low = %g, high = %g' % (round(per / 77 - 1 + more, 2), round(per / 25 + more, 2))
+        if not line:
+            problems += 1
+            print("NO NUMBERS for " + name)
+    elif r["Effect_0"] == "1" and int(r["EffectArg_0"]) in effects and float(r["EffectPointsMin_0"]) > 0:
+        spell = int(r["EffectArg_0"])
+        m = misc.get(spell)
+        for e in effects[spell].values():
+            base = float(e["EffectBasePointsF"])
+            if e["Effect"] == "2" and base > 0:
+                line = 'kind = "hit", chance = %g, hit = %g' % (float(r["EffectPointsMin_0"]), base)
+            elif e["Effect"] == "6" and e["EffectAura"] == "3" and base > 0 and float(e["EffectAuraPeriod"]) > 0 and m:
+                o = aura_options.get(spell)
+                line = 'kind = "dot", chance = %g, tick = %g, period = %g, secs = %g, stacks = %d' % (
+                    float(r["EffectPointsMin_0"]), base, float(e["EffectAuraPeriod"]) / 1000,
+                    durations.get(int(m["DurationIndex"]), 0) / 1000, max(1, int(o["CumulativeAura"]) if o else 1))
+            if line:
+                break
+    if line:
+        enchants += 1
+        out.append("\t\t[%s] = { %s }, -- %s" % (r["ID"], line, name))
+out.append("\t},")
+print("%d weapon enchantments" % enchants)
+
 # ---------------------------------------------------------- stat percents
 STAT = {-1: "all", 0: "strength", 1: "agility", 2: "stamina", 3: "intellect", 4: "spirit"}
 out += ["\t-- aura id -> the stats it raises, by percent (MOD_TOTAL_STAT_PERCENTAGE)", "\tstats = {"]
@@ -648,9 +725,21 @@ for spell in sorted(effects):
     found = {}
     for e in effects[spell].values():
         if e["EffectAura"] == "137":
-            which, pct = STAT.get(int(e["EffectMiscValue_0"])), float(e["EffectBasePointsF"])
-            if which and 0 < pct <= 50:
-                found[which] = pct
+            # WHICH STATS: the second number is a bit for each (1 strength,
+            # 2 agility, 4 stamina, 8 intellect, 16 spirit), and it is the
+            # one to go by. The first is 0 for Divine Intellect and Divine
+            # Strength alike, which made every such talent strength.
+            pct, bits = float(e["EffectBasePointsF"]), int(e["EffectMiscValue_1"])
+            if not 0 < pct <= 50:
+                continue
+            if bits & 31 == 31:
+                found["all"] = pct
+            elif bits & 31:
+                for i in range(5):
+                    if bits & (1 << i):
+                        found[STAT[i]] = pct
+            elif STAT.get(int(e["EffectMiscValue_0"])):
+                found[STAT[int(e["EffectMiscValue_0"])]] = pct
     if found:
         stat_auras += 1
         out.append("\t\t[%d] = { %s }, -- %s" % (spell, ", ".join("%s = %g" % kv for kv in sorted(found.items())),

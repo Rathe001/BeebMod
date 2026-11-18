@@ -1140,7 +1140,9 @@ M.SqueezeBlankTail = squeezeBlankTail
 -- size up from its objectives, in gold; its objectives are set in by
 -- M.QUEST_INDENT, white. One quest has no name, so its objectives are not set
 -- in.
-M.QUEST_TITLE_SIZE = 13
+-- (12, from 13, and the objectives 11, from 12: Josh 2026-11-18, of three
+-- players' rows under one quest, "Can you reduce quest text size a bit?")
+M.QUEST_TITLE_SIZE = 12
 M.QUEST_INDENT = 8
 --
 -- LARGER, ON A BAND OF GOLD (Josh 2026-11-07: "Are we able to highlight or
@@ -1148,7 +1150,7 @@ M.QUEST_INDENT = 8
 -- much... that is the primary thing I am looking for on these"). The rows
 -- are a size and a half up from the others, and a faint gold band lies
 -- behind them from the tooltip's left to its right.
-M.QUEST_SIZE = 12
+M.QUEST_SIZE = 11
 M.BAND_INK = { 1.00, 0.82, 0.25, 0.10 }
 -- how far the band reaches left of the words and in from the right edge
 M.BAND_LEFT, M.BAND_RIGHT = 4, 2
@@ -1349,7 +1351,38 @@ end
 -- for good (M.Drops), and a match by the enemy's own name is kept whatever
 -- the count: "Webwood Venom Sac" stays on a Webwood Lurker.
 -- A corpse with nothing on it opens no loot window and is not counted.
-M.MISSES = 6
+-- (Review 2026-11-18. TEN, from six: an item that drops three times in ten
+-- is missing from six corpses in a row one time in eight, and from ten one
+-- time in thirty-five. A WINDOW ON AN ENEMY THAT IS ALIVE is a picked
+-- pocket, where a quest item cannot be, and is no miss. THE COUNTS FOR AN
+-- ITEM NO QUEST WANTS ANY MORE are dropped, where they were kept for good.)
+M.MISSES = 10
+-- takes out the counts for every item not in `wanted` (a set of names)
+function M.PruneMisses(misses, wanted)
+	for npc, items in pairs(misses) do
+		if type(items) == "table" then
+			for name in pairs(items) do
+				if not wanted[name] then
+					items[name] = nil
+				end
+			end
+		end
+		if type(items) ~= "table" or next(items) == nil then
+			misses[npc] = nil
+		end
+	end
+end
+-- whether `guid` is your target, and alive
+function M.AliveTarget(guid)
+	local ok, yes = pcall(function()
+		local target = UnitGUID("target")
+		if target == nil or (issecretvalue and issecretvalue(target)) or target ~= guid then
+			return false
+		end
+		return UnitIsDead("target") == false
+	end)
+	return ok and yes == true
+end
 function M.Misses()
 	local s = BT.settings
 	if not s then
@@ -1371,12 +1404,18 @@ function M.LearnDrops()
 		return 0
 	end
 	local ok, objectives = pcall(BT.Quests.ItemObjectives)
-	if not (ok and objectives and #objectives > 0) then
+	if not (ok and objectives) then
 		return 0
 	end
 	local wanted = {}
 	for _, o in ipairs(objectives) do
 		wanted[o.text] = true
+	end
+	if M.Misses() then
+		M.PruneMisses(M.Misses(), wanted)
+	end
+	if #objectives == 0 then
+		return 0
 	end
 	local drops = M.Drops()
 	if not drops then
@@ -1411,7 +1450,7 @@ function M.LearnDrops()
 	local misses = M.Misses()
 	if misses then
 		for guid, corpse in pairs(corpses) do
-			if not counted[guid] then
+			if not counted[guid] and not M.AliveTarget(guid) then
 				counted[guid] = true
 				countedN = countedN + 1
 				for name in pairs(wanted) do
@@ -4257,151 +4296,6 @@ end
 
 local UP_INK, DOWN_INK = { 0.44, 0.86, 0.55 }, { 1, 0.54, 0.40 }
 
--- the slot a piece goes in, where there is only one it could
-local ONE_SLOT = {
-	INVTYPE_HEAD = 1, INVTYPE_NECK = 2, INVTYPE_SHOULDER = 3, INVTYPE_CHEST = 5, INVTYPE_ROBE = 5, INVTYPE_WAIST = 6,
-	INVTYPE_LEGS = 7, INVTYPE_FEET = 8, INVTYPE_WRIST = 9, INVTYPE_HAND = 10, INVTYPE_CLOAK = 15, INVTYPE_WEAPON = 16,
-	INVTYPE_WEAPONMAINHAND = 16, INVTYPE_2HWEAPON = 16, INVTYPE_SHIELD = 17, INVTYPE_HOLDABLE = 17,
-	INVTYPE_WEAPONOFFHAND = 17, INVTYPE_RANGED = 18, INVTYPE_RANGEDRIGHT = 18, INVTYPE_THROWN = 18, INVTYPE_RELIC = 18,
-}
--- what you wear where `link` would go; nil for a ring or trinket (two
--- places), for the piece itself, and for what is not worn at all
-function M.WornFor(link)
-	if type(link) ~= "string" or not (C_Item and C_Item.GetItemInfoInstant and GetInventoryItemLink) then
-		return nil
-	end
-	local ok, _, _, _, loc = pcall(C_Item.GetItemInfoInstant, link)
-	local slot = ok and ONE_SLOT[loc]
-	local worn = slot and GetInventoryItemLink("player", slot)
-	if type(worn) ~= "string" or worn == link then
-		return nil
-	end
-	return worn
-end
-
-local STAT_ORDER = { "RESISTANCE0_NAME", "ITEM_MOD_STRENGTH_SHORT", "ITEM_MOD_AGILITY_SHORT", "ITEM_MOD_STAMINA_SHORT",
-	"ITEM_MOD_INTELLECT_SHORT", "ITEM_MOD_SPIRIT_SHORT" }
-local STAT_PRIMARY = {}
-for _, k in ipairs(STAT_ORDER) do
-	STAT_PRIMARY[k] = true
-end
-local STAT_SKIP = { ITEM_MOD_DAMAGE_PER_SECOND_SHORT = true }
-
-local function plainNumber(v)
-	return type(v) == "number" and not (issecretvalue and issecretvalue(v))
-end
-local function amount(v, plus)
-	local s = v == math.floor(v) and ("%d"):format(v) or ("%.1f"):format(v)
-	return (plus and v > 0) and ("+" .. s) or s
-end
-
--- THE FACTS, AS NUMBERS WITH A WORD: weapon DPS, damage, speed, block, what
--- a Use gives, then the stats the game lists for the item (C_Item.
--- GetItemStats). Where the game lists none, the client's own
--- stat lines are split into number and word. Also returns the Use line the
--- facts say all of, the Use line whose cooldown is a fact, and the Equip
--- lines that are stats and nothing else.
-function M.StatList(item)
-	local list = {}
-	local function add(num, label, key)
-		list[#list + 1] = { num = num, label = label or "", key = key }
-		return list[#list]
-	end
-	local used = {}
-	if item.dps then
-		add(tostring(item.dps), "DPS")
-	end
-	local facts, said, timed = M.ItemFacts(item)
-	local need = item.require and M.Bare(item.require.text) or nil
-	for _, f in ipairs(facts) do
-		if f.text ~= need then
-			local text = f.lower and f.text:lower() or f.text
-			local num, label = text:match("^(%S+)%s+(.+)$")
-			if num then
-				if label:lower() == "armor" then
-					used.RESISTANCE0_NAME = true
-				end
-				add(num, label:sub(1, 1):upper() .. label:sub(2))
-			else
-				add(text, "")
-			end
-		end
-	end
-	local ok, stats = false, nil
-	if type(item.link) == "string" and C_Item and C_Item.GetItemStats then
-		ok, stats = pcall(C_Item.GetItemStats, item.link)
-	end
-	local values, isStats = {}, {}
-	if ok and type(stats) == "table" and next(stats) ~= nil then
-		-- THE ITEM'S OWN STATS AND NOTHING BESIDE THEM (Josh 2026-11-16: "On
-		-- second thought, I think we should just show the item stats, not the
-		-- comparison numbers. We can just use the 3 tiles (tank, healer, dps)
-		-- for the quick comparison"). Each stat had its change against the
-		-- worn piece at its right, and a grey 0 for a stat only the worn piece
-		-- has. Both are gone: the tiles are the comparison.
-		local delta = nil
-		local keys, seen = {}, {}
-		for _, k in ipairs(STAT_ORDER) do
-			keys[#keys + 1], seen[k] = k, true
-		end
-		local others = {}
-		for k in pairs(stats) do
-			if type(k) == "string" and not seen[k] then
-				others[#others + 1] = k
-			end
-		end
-		for k in pairs(delta or {}) do
-			if type(k) == "string" and not seen[k] and stats[k] == nil then
-				others[#others + 1] = k
-			end
-		end
-		table.sort(others)
-		for _, k in ipairs(others) do
-			keys[#keys + 1] = k
-		end
-		for _, k in ipairs(keys) do
-			local v, dv = stats[k], delta and delta[k]
-			if not STAT_SKIP[k] and not used[k] then
-				local name = type(_G[k]) == "string" and _G[k] or k
-				if plainNumber(v) and v ~= 0 then
-					local e = add(amount(v, k ~= "RESISTANCE0_NAME"), name, k)
-					e.delta = plainNumber(dv) and dv ~= 0 and dv or nil
-					if not STAT_PRIMARY[k] then
-						values[amount(v)] = true
-					end
-				elseif plainNumber(dv) and dv ~= 0 then
-					local e = add("0", name, k)
-					e.dim, e.delta = true, dv
-				end
-			end
-		end
-		-- an Equip line every number of which is one of those stats
-		for _, e in ipairs(item.effects) do
-			if e.head == "Equip" and type(e.text) == "string" then
-				local words = e.text:gsub("per 5 sec", ""):gsub(",", "")
-				local any, all = false, true
-				for n in words:gmatch("%d[%d%.]*") do
-					n = n:gsub("%.$", "")
-					any = true
-					all = all and values[n] == true
-				end
-				if any and all then
-					isStats[e] = true
-				end
-			end
-		end
-	else
-		if item.armor and not item.dps then
-			add(tostring(item.armor), "Armor")
-		end
-		for _, s in ipairs(item.stats) do
-			local num, label = tostring(s.text):match("^([%+%-]?[%d%.,]+)%s+(.+)$")
-			add(num or tostring(s.text), label)
-		end
-	end
-	return list, said, timed, isStats
-end
-
 -- Writes `item` on `tip` in the new look. Returns true.
 M.VENDOR_POUCH = "|TInterface\\GossipFrame\\VendorGossipIcon:11:11:0:0|t "
 function M.WriteItemB(tip, item, icon, level)
@@ -4721,7 +4615,7 @@ function M.WriteItemB(tip, item, icon, level)
 	-- block, the stats in white, then each effect as its sentence in the
 	-- game's green. This takes back two things the mockup had: stats as a
 	-- number and a word two to a row, and Equip lines that only add stats
-	-- turned into stat rows (M.StatList, not called now).
+	-- turned into stat rows. (The code for both was taken out 2026-11-18.)
 	facts(item)
 	-- rows of its own, as they come (a spell's requirements and what it
 	-- does: M.WriteSpellB)
@@ -4936,22 +4830,6 @@ function M.WriteItemB(tip, item, icon, level)
 					local second = bSay(b, tostring(part[1]) .. " " .. hex(part[3] or ITEM_INK, tostring(part[2])),
 						ITEM_SUB, I.FOOT)
 					second:SetPoint("TOP", at, "TOPLEFT", x, 0)
-				end
-			end
-		elseif at and L.kind == "stats" then
-			local w = (inner - B.COL_GAP) / 2
-			for i, s in ipairs(L.stats) do
-				local x = ((i - 1) % 2) * (w + B.COL_GAP)
-				local y = math.floor((i - 1) / 2) * B.STAT_H
-				local num = bSay(b, s.num, s.dim and ITEM_SUB or ITEM_INK, B.ROW, false, "name")
-				num:SetPoint("TOPLEFT", at, "TOPLEFT", math.floor(x + 0.5), -y)
-				if s.label ~= "" then
-					local label = bSay(b, s.label, ITEM_SUB, B.ROW)
-					label:SetPoint("LEFT", num, "RIGHT", 5, 0)
-				end
-				if s.delta then
-					local delta = bSay(b, amount(s.delta, true), s.delta < 0 and DOWN_INK or UP_INK, I.FOOT)
-					delta:SetPoint("TOPRIGHT", at, "TOPLEFT", math.floor(x + w + 0.5), -y - 1)
 				end
 			end
 		elseif at and L.kind == "grid" then
@@ -5261,13 +5139,11 @@ function M.RebuildItem(tip, data)
 			item.recipe.madeLevel = text and text:match("(%d+)%s*$") or nil
 		end
 	end
-	-- the item itself and what you wear in its place, for its stats and
-	-- their change (M.StatList); not on the comparison tooltips, which show
+	-- the item itself, and whether this is a comparison tooltip, which shows
 	-- the worn piece
 	item.link = shownItem(tip)
 	local comparing = tip.isShopping or tip == rawget(_G, "ShoppingTooltip1") or tip == rawget(_G, "ShoppingTooltip2")
 		or tip == rawget(_G, "ItemRefShoppingTooltip1") or tip == rawget(_G, "ItemRefShoppingTooltip2")
-	item.wornLink = not comparing and M.WornFor and M.WornFor(item.link) or nil
 	item.comparing = comparing and true or false
 	-- THE "EQUIPPED" LABEL OVER A COMPARISON TOOLTIP: the client hides it
 	-- whenever the tooltip is cleared (ShoppingTooltipTemplate), and the
@@ -5467,30 +5343,68 @@ end
 -- while a comparison tooltip shows, its lines are looked through each frame
 -- and the list is emptied wherever it is found (M.FoldDelta, which finds
 -- nothing once it has).
-function M.HideDeltaShown()
+-- NOT EVERY LINE EVERY FRAME (review 2026-11-18). Each frame a tooltip was
+-- up this made a table, asked the class twice, and went through every line
+-- of each comparison tooltip. A comparison tooltip is now looked through
+-- for M.DELTA_SECONDS after the game clears or shows it, which is when the
+-- list can be written, and until the list has been found once. `due`: the
+-- time each is looked through until. Called with `all`, every shown one is
+-- looked through whatever its time.
+M.DELTA_SECONDS = 0.5
+local COMPARISONS = { "ShoppingTooltip1", "ShoppingTooltip2" }
+local due = {}
+function M.HideDeltaShown(all)
+	if all == nil then
+		all = true
+	end
+	if not all and next(due) == nil then
+		return 0
+	end
 	if not M.HidesDelta() then
 		return 0
 	end
 	local n = 0
-	for _, name in ipairs({ "ShoppingTooltip1", "ShoppingTooltip2" }) do
+	local t = GetTime and GetTime() or 0
+	for _, name in ipairs(COMPARISONS) do
 		local tip = rawget(_G, name)
-		if tip and tip.IsShown and tip:IsShown() then
-			local ok, head = pcall(M.FoldDelta, tip)
-			if not ok then
-				BT.Err("tooltips.delta: " .. tostring(head))
-			elseif head then
-				n = n + 1
+		if tip and (all or due[tip]) then
+			if tip.IsShown and tip:IsShown() then
+				local ok, head = pcall(M.FoldDelta, tip)
+				if not ok then
+					BT.Err("tooltips.delta: " .. tostring(head))
+				elseif head then
+					n = n + 1
+					due[tip] = nil
+				end
+			end
+			if due[tip] and t > due[tip] then
+				due[tip] = nil
 			end
 		end
 	end
 	return n
+end
+function M.DeltaDue(tip)
+	due[tip] = (GetTime and GetTime() or 0) + M.DELTA_SECONDS
+end
+for _, name in ipairs(COMPARISONS) do
+	local tip = rawget(_G, name)
+	if tip and tip.HookScript then
+		for _, script in ipairs({ "OnTooltipCleared", "OnShow" }) do
+			pcall(tip.HookScript, tip, script, function(self)
+				M.DeltaDue(self)
+			end)
+		end
+	end
 end
 if GameTooltip and GameTooltip.HookScript then
 	pcall(GameTooltip.HookScript, GameTooltip, "OnUpdate", function()
 		if next(spare) then
 			M.SettleSpared()
 		end
-		M.HideDeltaShown()
+		if next(due) then
+			M.HideDeltaShown(false)
+		end
 	end)
 end
 

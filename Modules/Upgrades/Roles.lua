@@ -458,6 +458,53 @@ local function crits(a, adds, chance)
 	return 1 + each * chance
 end
 
+-- ON YOUR WEAPONS: A POISON, OR A SHAMAN'S IMBUE (Josh 2026-11-18, of what
+-- was left: "proceed"). `s.imbue`: what is on the main hand and the off
+-- hand, from the tables' list by way of Read.lua. Each adds to your swings'
+-- damage, and each follows the weapon: a fast one lands a poison more
+-- often, a slow one swings harder under Windfury. Returns damage a second.
+--   hit       a chance on each hit to do so much. Magic: armor takes none.
+--   dot       a chance on each hit for damage over time that stacks. How
+--             many stacks are up is an estimate, as Vengeance's is: your
+--             hits that put it on, times how long it lasts, levelling off
+--             at the most there can be.
+--   windfury  a chance on each hit for extra swings with more attack power,
+--             and not more than once in 3 seconds (R.WINDFURY_EVERY, the
+--             original game's; no game file has it). Main hand only.
+--   flame     damage on every hit, by the weapon's speed
+-- `rates`: the swings that land a second, main and off. Not counted: an
+-- ability's hit landing a poison, and spell power on any of these.
+R.WINDFURY_EVERY = 3
+R.FLAME_SPEED = { low = 1.3, high = 4.0 }
+function R.Imbued(s, rates, average, crit, through, hit)
+	local im = s.imbue
+	if type(im) ~= "table" then
+		return 0
+	end
+	local sum = 0
+	for _, name in ipairs({ "main", "off" }) do
+		local e, rate = im[name], rates[name] or 0
+		if type(e) == "table" and rate > 0 then
+			local chance = (e.chance or 100) / 100
+			if e.kind == "hit" then
+				sum = sum + rate * chance * (e.hit or 0)
+			elseif e.kind == "dot" and (e.period or 0) > 0 then
+				local most = math.max(1, e.stacks or 1)
+				sum = sum + most * (1 - math.exp(-rate * chance * (e.secs or 0) / most)) * (e.tick or 0) / e.period
+			elseif e.kind == "windfury" and name == "main" then
+				local procs = math.min(rate * chance, 1 / R.WINDFURY_EVERY)
+				sum = sum + procs * (e.attacks or 1) * (average + (e.ap or 0) / 14 * s.weaponSpeed)
+					* (1 + R.MELEE_CRIT * crit) * through * hit
+			elseif e.kind == "flame" then
+				local speed = name == "main" and s.weaponSpeed or s.offSpeed or 0
+				local t = clamp((speed - R.FLAME_SPEED.low) / (R.FLAME_SPEED.high - R.FLAME_SPEED.low), 0, 1)
+				sum = sum + rate * ((e.low or 0) + ((e.high or 0) - (e.low or 0)) * t)
+			end
+		end
+	end
+	return sum
+end
+
 -- A CLASS THAT FIGHTS MORE THAN ONE WAY (Josh 2026-11-18: "the player could
 -- either have a melee spec or caster. We need to determine which one by
 -- which talents they have selected. The rotation formula will be completely
@@ -509,6 +556,7 @@ function R.FormState(s, form)
 	t.damageMin = f.pawMin + t.attackPower / 14 * f.speed
 	t.damageMax = f.pawMax + t.attackPower / 14 * f.speed
 	t.dual, t.offSpeed, t.twoHand, t.dagger, t.shield, t.proc = false, nil, false, false, false, nil
+	t.imbue = nil
 	t.formed = form
 	return t
 end
@@ -575,14 +623,18 @@ local function abilities(s, kit, how, seconds)
 	local white = landed * swings
 	-- and the off hand's swings: its damage as the game showed it, moved by
 	-- half of any attack power gained since
+	local offSwings = 0
 	if s.dual and (s.offSpeed or 0) > 0 then
 		local off = ((s.offMin or 0) + (s.offMax or 0)) / 2
 			+ (s.attackPower - (s.offAp or s.attackPower)) / 14 * s.offSpeed * R.OFF_HAND
-		white = white + math.max(0, off) * (1 + R.MELEE_CRIT * crit) * through * swingHit / (s.offSpeed / (1 + s.haste / 100))
+		offSwings = swingHit / (s.offSpeed / (1 + s.haste / 100))
+		white = white + math.max(0, off) * (1 + R.MELEE_CRIT * crit) * through * offSwings
 	end
 	if s.proc then
 		white = white + s.proc.damage * s.proc.perMinute / 60 * (s.proc.magic and 1 or through)
 	end
+	-- what is on your weapons (see ON YOUR WEAPONS)
+	white = white + R.Imbued(s, { main = swings, off = offSwings }, average, crit, through, hit)
 	-- a ranged class: its shots in place of all of that, and its pet
 	if mode.ranged then
 		local speed = s.rangedSpeed or 0

@@ -95,10 +95,13 @@ function T.Fill(tip, unit)
 		if p.rating then
 			tiles[#tiles + 1] = { value = ("%d / 5"):format(p.rating), label = "Rating" }
 		end
+		-- NO TILE FOR THE TIMES YOU GROUPED (Josh 2026-11-18, of a tooltip
+		-- whose only tile was a "1" over "GROUPED": "Not sure I like the
+		-- 'Grouped'. Takes too much room"). The count is said in the line with
+		-- where and when, as it was before the tiles: "Grouped once · last in
+		-- Wetlands, just now". With no rating and no duels there are no tiles
+		-- at all, and that line is the plain row below.
 		local grouped = tonumber(p.grouped) or 0
-		if grouped >= 1 and BT.LedgerGroups then
-			tiles[#tiles + 1] = { value = tostring(grouped), label = "Grouped" }
-		end
 		local won, lost = tonumber(p.duelsWon) or 0, tonumber(p.duelsLost) or 0
 		if won + lost >= 1 and BT.LedgerDuels then
 			tiles[#tiles + 1] = { value = ("%d – %d"):format(won, lost), label = "Duels" }
@@ -108,12 +111,7 @@ function T.Fill(tip, unit)
 			tiled = true
 			local last = {}
 			if grouped >= 1 and BT.LedgerGroups then
-				local when = U.Since(p.groupedAt)
-				if type(p.groupedWhere) == "string" and p.groupedWhere ~= "" then
-					last[#last + 1] = ("Last grouped in %s, %s"):format(p.groupedWhere, when)
-				else
-					last[#last + 1] = ("Last grouped %s"):format(when)
-				end
+				last[#last + 1] = BT.LedgerGroups.Line(p)
 			end
 			if won + lost >= 1 and BT.LedgerDuels then
 				last[#last + 1] = (#last > 0 and "last duel %s" or "Last duel %s"):format(U.Since(p.duelAt))

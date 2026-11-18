@@ -1205,6 +1205,90 @@ do
 	near("words that give none: the tables' own", into.strength, 1.02)
 end
 
+print("on your weapons: a poison, a shaman's imbue")
+do
+	-- (Josh 2026-11-18, of what was left: "proceed")
+	local e = data.enchants
+	check("Instant Poison: 20% of hits, for its damage", e[323].kind == "hit" and e[323].chance == 20 and e[323].hit == 15)
+	check("Deadly Poison: 30% of hits, stacking to 5 over 12 seconds", e[7].kind == "dot" and e[7].chance == 30 and e[7].stacks == 5
+		and e[7].secs == 12 and e[7].period == 3 and e[7].tick == 6)
+	check("Windfury: 20% of hits, with the rank's own numbers", e[283].kind == "windfury" and e[283].chance == 20
+		and e[283].attacks >= 1 and e[283].ap > 0 and e[1669].ap > e[283].ap)
+	check("Flametongue: by the weapon's speed", e[5].kind == "flame" and e[5].high > e[5].low and e[1666].high > e[5].high)
+	check("Crippling Poison does no damage, and is not listed", e[22] == nil)
+
+	-- which one is on, and kept
+	local db = {}
+	local on = Rd.Imbue(e, db, 323, 7)
+	check("what is on each hand", on.main == e[323] and on.off == e[7])
+	on = Rd.Imbue(e, db, nil, nil)
+	check("run out: the same one is taken to go on again", on.main == e[323] and on.off == e[7])
+	on = Rd.Imbue(e, db, 22, nil)
+	check("Crippling Poison on the main hand is your choice: nothing there", on.main == nil and on.off == e[7])
+	check("and that is kept too", Rd.Imbue(e, db, nil, nil).main == nil)
+
+	-- the sums
+	local rogue = { level = 60, attackPower = 600, armor = 2000, crit = 20, health = 3000, mana = 0, manaPer5 = 0, damageMin = 100,
+		damageMax = 150, weaponSpeed = 2, haste = 0, dodge = 10, parry = 5, block = 0, blockValue = 0, hit = 0, spellHit = 0,
+		spellCrit = 0, healing = 0, spellDamage = { [2] = 0, [3] = 0, [4] = 0, [5] = 0, [6] = 0, [7] = 0 } }
+	local none = { abilities = {}, heals = {}, seals = {}, at = {}, energy = true }
+	local function with(change)
+		local t = {}
+		for k, v in pairs(rogue) do t[k] = v end
+		change(t)
+		return t
+	end
+	local bare = R.Damage(rogue, none, { long = true })
+	-- (a swing lands 90% of the time here: 5% missed, 5% dodged)
+	near("Instant Poison: hits a second x 20% x its damage",
+		R.Damage(with(function(t) t.imbue = { main = e[323] } end), none, { long = true }) - bare, 0.9 / 2 * 0.2 * 15)
+	local slow = with(function(t) t.weaponSpeed, t.damageMin, t.damageMax = 3, 150, 225 end)
+	local slowBare = R.Damage(slow, none, { long = true })
+	check("a slower weapon with the same damage a second lands it less",
+		R.Damage(with(function(t) t.weaponSpeed, t.damageMin, t.damageMax, t.imbue = 3, 150, 225, { main = e[323] } end), none,
+			{ long = true }) - slowBare < 0.9 / 2 * 0.2 * 15)
+	local deadly = R.Damage(with(function(t) t.imbue = { main = e[7] } end), none, { long = true }) - bare
+	check(("Deadly Poison: some of its 5 stacks, at 6 every 3 seconds: %.2f"):format(deadly), deadly > 0 and deadly < 5 * 6 / 3)
+	local wf = { kind = "windfury", chance = 20, attacks = 1, ap = 140 }
+	local fury = R.Damage(with(function(t) t.imbue = { main = wf } end), none, { long = true }) - bare
+	check(("Windfury adds swings: %.1f on %.1f"):format(fury, bare), fury > 0 and fury < bare)
+	-- (at a speed of 0.5 a fifth of the hits is more than one in 3 seconds)
+	local fast = with(function(t) t.weaponSpeed, t.damageMin, t.damageMax = 0.5, 25, 37.5 end)
+	local fastGain = R.Damage(with(function(t) t.weaponSpeed, t.damageMin, t.damageMax, t.imbue = 0.5, 25, 37.5, { main = wf } end), none,
+		{ long = true }) - R.Damage(fast, none, { long = true })
+	check("and no more than once in 3 seconds, which a very fast weapon meets", fastGain < fury)
+	check("the tables have Divine Intellect as intellect and Divine Strength as strength",
+		data.stats[20257].intellect == 2 and data.stats[20257].strength == nil and data.stats[20262].strength == 2)
+	check("and Blessing of Kings as every stat", data.stats[20217].all == 10)
+	near("it is not on the off hand", R.Imbued(rogue, { main = 0, off = 1 }, 125, 0.2, 0.7, 0.9), 0)
+	local flame = { kind = "flame", low = 5, high = 20 }
+	near("Flametongue at a speed of 1.3: its low amount each hit",
+		R.Imbued(with(function(t) t.weaponSpeed, t.imbue = 1.3, { main = flame } end), { main = 1, off = 0 }, 125, 0.2, 0.7, 0.9), 5)
+	near("and at 4.0, its high one",
+		R.Imbued(with(function(t) t.weaponSpeed, t.imbue = 4, { main = flame } end), { main = 1, off = 0 }, 125, 0.2, 0.7, 0.9), 20)
+	near("nothing on: nothing added", R.Imbued(rogue, { main = 1, off = 1 }, 125, 0.2, 0.7, 0.9), 0)
+end
+
+print("the kind of weapon, and the slots a piece could go in")
+do
+	-- (review 2026-11-18)
+	local had = rawget(_G, "C_Item")
+	local kinds = { axe = "INVTYPE_2HWEAPON", sword = "INVTYPE_WEAPON" }
+	_G.C_Item = { GetItemInfoInstant = function(link) return 1, "Weapon", "Axe", kinds[link], 1, 2, 1 end }
+	check("a two-hander is one", Rd.TwoHanded("axe") == true)
+	check("a one-hand weapon is not", Rd.TwoHanded("sword") == false)
+	check("nothing in hand is not", Rd.TwoHanded(nil) == false)
+	_G.C_Item = had
+	local one = Rd.Slots("INVTYPE_WEAPON", "INVTYPE_SHIELD")
+	check("a one-hand weapon with a shield worn: the main hand", #one == 1 and one[1] == 16)
+	local two = Rd.Slots("INVTYPE_WEAPON", "INVTYPE_WEAPON")
+	check("with a weapon in the off hand: either hand", #two == 2 and two[1] == 16 and two[2] == 17)
+	check("an off-hand weapon there counts too", #Rd.Slots("INVTYPE_WEAPON", "INVTYPE_WEAPONOFFHAND") == 2)
+	check("a two-hander goes in the main hand whatever is worn", #Rd.Slots("INVTYPE_2HWEAPON", "INVTYPE_WEAPON") == 1)
+	check("a ring still has two", #Rd.Slots("INVTYPE_FINGER", nil) == 2)
+	check("what is not gear has none", Rd.Slots("INVTYPE_BAG", nil) == nil and Rd.Slots(nil, nil) == nil)
+end
+
 print("an item's other effects")
 do
 	check("a trinket's Use, as stats for the time it is up", type(data.uses) == "table" and next(data.uses) ~= nil)

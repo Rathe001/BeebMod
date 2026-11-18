@@ -68,7 +68,7 @@ function T.MoreItemCells(tip, data, shopping)
 			-- words }, `quiet` for the dimmer ink (Upgrades' Shift breakdown)
 			-- and, for the item card's new look (Modules/Tooltips,
 			-- M.WriteItemB): rows of tiles and grids of numbers.
-			--   tiles = { { head = words or nil, { value, rgb, label,
+			--   tiles = { { head = words or nil, { value = , rgb = , label = ,
 			--     second = { word, value, rgb } or nil }, ... }, ... }
 			--   grids = { { head = words or nil, rows = { { label,
 			--     { value, rgb }, { value, rgb }, { value, rgb } }, ... } } }

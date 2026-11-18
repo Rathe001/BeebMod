@@ -56,19 +56,22 @@ local ROLES = { { "tank", "tank" }, { "healer", "healer" }, { "dps", "DPS" } }
 -- A CLASS THE MODEL HAS SPELLS FOR (2026-11-17, when the warrior came after
 -- the paladin: it was "a paladin" everywhere). SpellData.lua has a list for
 -- each such class.
-local function paladin()
-	local data = UP.SpellData
-	local _, class = UnitClass("player")
-	return type(data) == "table" and type(data.spells) == "table" and data.spells[class] ~= nil
+-- (The class does not change in a session, so it is asked for once.)
+local covers = nil
+local function covered()
+	if covers == nil then
+		local data = UP.SpellData
+		local _, class = UnitClass("player")
+		if not class then
+			return false
+		end
+		covers = type(data) == "table" and type(data.spells) == "table" and data.spells[class] ~= nil
+	end
+	return covers
 end
 -- true where the role numbers are worked out for your class: the Tooltips
 -- module then hides the game's own list of stat changes (M.HidesDelta)
-function UP.Covers()
-	-- (a class the model has spells for: SpellData.lua)
-	local data = UP.SpellData
-	local _, class = UnitClass("player")
-	return paladin() and type(data) == "table" and type(data.spells) == "table" and data.spells[class] ~= nil
-end
+UP.Covers = covered
 
 -- your totals, rates and kit, read at most twice a second
 local seen, seenAt
@@ -181,7 +184,7 @@ T.NOTE_SPELLS = "Some of your spells could not be read"
 T.NOTE_FORMS = "Go into Cat Form and Bear Form once to count them"
 
 -- what a two-slot piece's rows are called: "ring 1", "ring 2"
-local PAIRS = { [11] = "ring 1", [12] = "ring 2", [13] = "trinket 1", [14] = "trinket 2" }
+local PAIRS = { [11] = "ring 1", [12] = "ring 2", [13] = "trinket 1", [14] = "trinket 2", [16] = "main hand", [17] = "off hand" }
 
 local function named(wornLink)
 	return type(wornLink) == "string" and wornLink:match("%[(.-)%]") or "empty"
@@ -274,6 +277,9 @@ end
 -- the answers kept (T.Cells), by the item's link
 local kept = {}
 T.KEEP = 5
+-- (true from when your gear, buffs, stats, spells or level changed until
+-- the swap check's "before" has been read again: see the ticker below)
+local changed = true
 local stale = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "UNIT_AURA", "UNIT_STATS",
 	"UNIT_ATTACK_POWER", "UNIT_MAXHEALTH", "UNIT_MAXPOWER", "COMBAT_RATING_UPDATE", "PLAYER_DAMAGE_DONE_MODS",
@@ -283,6 +289,7 @@ end
 stale:SetScript("OnEvent", function(_, _, unit)
 	if unit == nil or unit == "player" or type(unit) ~= "string" then
 		kept = {}
+		changed = true
 	end
 end)
 
@@ -291,7 +298,7 @@ end)
 -- items need to show the new upgrade stats"): nothing on the comparison
 -- tooltips, and nothing for an item that is on you (Rd.Swaps).
 function T.Cells(tip, data, shopping)
-	if shopping or wornCard(tip) or not UP.On() or not paladin() then
+	if shopping or wornCard(tip) or not UP.On() or not covered() then
 		return nil
 	end
 	local l = link(tip, data)
@@ -488,7 +495,7 @@ shift:SetScript("OnEvent", function(_, _, key)
 	-- cannot be written by the game's own code, and it stops with an error.
 	-- So nothing is redrawn unless this is on, you are a paladin, and the
 	-- tooltip shows an item that could be worn: the only ones Shift changes.
-	if not UP.On() or not paladin() then
+	if not UP.On() or not covered() then
 		return
 	end
 	for _, tip in ipairs({ GameTooltip, ItemRefTooltip }) do
@@ -533,8 +540,8 @@ local function links()
 end
 
 local function remember()
-	-- (only where the tiles show: on, and a paladin)
-	if not UP.On() or not paladin() then
+	-- (only where the tiles show: on, and a class the model covers)
+	if not UP.On() or not covered() then
 		last = nil
 		return
 	end
@@ -610,14 +617,20 @@ f:SetScript("OnEvent", function(_, event)
 		-- THE "BEFORE" IS KEPT FRESH (Josh's chat lines, 2026-11-16: every
 		-- stat 5 under what was expected, and armor 152 under). The totals
 		-- had been remembered at login, a buff ended before the swap, and
-		-- the check blamed the swap for it. So they are read again each
-		-- second while the gear is as it was remembered.
+		-- the check blamed the swap for it. So they are read again while
+		-- the gear is as it was remembered.
+		-- ONLY WHEN SOMETHING CHANGED (review 2026-11-18). The whole
+		-- character was read every second of the session, in combat too:
+		-- some 40 stat calls, two weapon tooltips and 19 items' stats. The
+		-- events that empty the kept answers (`stale`) are the same ones
+		-- that can move a total, so the read waits for one of them.
 		C_Timer.NewTicker(1, function()
-			if waiting or not UP.On() then
+			if waiting or not changed or not UP.On() then
 				return
 			end
 			if not last then
 				remember()
+				changed = last == nil
 				return
 			end
 			for slot = 1, 19 do
@@ -626,6 +639,7 @@ f:SetScript("OnEvent", function(_, event)
 				end
 			end
 			remember()
+			changed = false
 		end)
 	elseif not waiting then
 		waiting = true

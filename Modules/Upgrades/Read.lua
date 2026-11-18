@@ -211,9 +211,11 @@ function Rd.State()
 	-- (a two-hander: some abilities need one, and a weapon's damage is
 	-- evened out for an ability by which it is)
 	do
+		-- (THE KIND OF WEAPON WAS NEVER READ, review 2026-11-18. It was asked
+		-- for at the end of a chain of `and`, which hands on one value only,
+		-- and the kind is the fourth. So a two-hander was never one here.)
 		local main = GetInventoryItemLink("player", 16)
-		local _, _, _, loc = main and C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(main)
-		s.twoHand = loc == "INVTYPE_2HWEAPON"
+		s.twoHand = Rd.TwoHanded(main)
 		-- (a dagger: some of a rogue's abilities need one)
 		s.dagger = Rd.Dagger(main)
 		-- (a weapon specialization: what each kind of weapon is lifted by,
@@ -255,6 +257,14 @@ function Rd.State()
 			s.petDps = db.pet.dps
 		end
 	end
+	-- WHAT IS ON YOUR WEAPONS: a poison, or a shaman's imbue (Rd.Imbue)
+	if GetWeaponEnchantInfo then
+		local ok, hasMain, _, _, mainId, hasOff, _, _, offId = pcall(GetWeaponEnchantInfo)
+		local data = UP.SpellData
+		if ok and type(data) == "table" and type(data.enchants) == "table" then
+			s.imbue = Rd.Imbue(data.enchants, UP.DB(), hasMain and num(mainId) or nil, hasOff and num(offId) or nil)
+		end
+	end
 	-- A WEAPON IN THE OFF HAND: its swings as the game shows them, which is
 	-- with the off hand's cut taken. Kept with the attack power they were
 	-- read at, so a change in it can move them (Roles.lua).
@@ -284,6 +294,28 @@ function Rd.State()
 		end
 	end
 	return s
+end
+
+-- WHAT IS ON YOUR WEAPONS (Josh 2026-11-18, of what was left: "proceed").
+-- The game gives the id of the temporary enchantment on each hand, and the
+-- tables' list (`list`, SpellData.enchants) says what it adds. What was on
+-- a hand last is kept in `db`, so a poison that has run out, or a weapon
+-- held for a moment with none, does not change every number: you are taken
+-- to put the same one on again. One that is on now and is not in the list
+-- (Crippling Poison) is your choice, and counts for nothing.
+-- Returns { main = entry, off = entry }.
+function Rd.Imbue(list, db, mainId, offId)
+	db.imbue = type(db.imbue) == "table" and db.imbue or {}
+	local out = {}
+	local function hand(name, id)
+		if id and id > 0 then
+			db.imbue[name] = list[id] and id or false
+		end
+		out[name] = db.imbue[name] and list[db.imbue[name]] or nil
+	end
+	hand("main", mainId)
+	hand("off", offId)
+	return out
 end
 
 -- what one point is worth, asked of the functions the character sheet calls
@@ -1078,12 +1110,19 @@ end
 -- sentence is asked of the client and each %s or %d in it stands for a
 -- number, so the line is known in whatever language the client speaks.
 -- `fallback`: the English, for a client without the sentence.
+-- (each sentence's pattern is built once and kept by the sentence: a
+-- weapon's tooltip asked for three of them on every line)
+local shapes = {}
 local function shape(key, fallback)
-	local text = type(_G[key]) == "string" and not secret(_G[key]) and _G[key] or fallback
-	text = text:gsub("%%%d%$", "%%")
+	local said = type(_G[key]) == "string" and not secret(_G[key]) and _G[key] or fallback
+	if shapes[said] then
+		return shapes[said]
+	end
+	local text = said:gsub("%%%d%$", "%%")
 	text = text:gsub("[%^%$%(%)%.%[%]%*%+%-%?]", "%%%0")
 	text = text:gsub("%%[sd]", "([%%d%%.,]+)")
-	return "^" .. text
+	shapes[said] = "^" .. text
+	return shapes[said]
 end
 Rd.Shape = shape
 
@@ -1314,6 +1353,21 @@ local function where(link)
 	return loc
 end
 Rd.Where = where
+function Rd.TwoHanded(link)
+	return where(link) == "INVTYPE_2HWEAPON"
+end
+
+-- THE SLOTS A PIECE COULD GO IN. A one-hand weapon goes in the main hand.
+-- It goes in either hand where you hold a weapon in the off hand now
+-- (review 2026-11-18: a rogue with two daggers got one row for a sword,
+-- against the main hand only; a ring gets a row for each finger).
+-- `offKind`: what the off hand holds, as the game names its kind.
+function Rd.Slots(loc, offKind)
+	if loc == "INVTYPE_WEAPON" and (offKind == "INVTYPE_WEAPON" or offKind == "INVTYPE_WEAPONOFFHAND") then
+		return { 16, 17 }
+	end
+	return loc and SLOTS[loc] or nil
+end
 
 -- THE OTHER HAND, FROM YOUR BAGS (Josh 2026-11-17, a shield in his bags with
 -- a two-hander worn, and no numbers on it: "Is there any way we can show
@@ -1364,7 +1418,7 @@ end
 -- are wearing, or for an off hand while a two-hander is worn.
 function Rd.Swaps(link)
 	local loc = where(link)
-	local slots = loc and SLOTS[loc]
+	local slots = Rd.Slots(loc, where(GetInventoryItemLink("player", 17)))
 	if not slots then
 		return {}
 	end

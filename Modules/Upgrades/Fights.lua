@@ -135,6 +135,8 @@ frame:SetScript("OnEvent", function(_, event, _, _, spellID)
 			return
 		end
 		local okKit, kit = pcall(Rd.Kit, s)
+		-- (a fight still waiting to be closed is closed now: see below)
+		finish()
 		fight = {
 			at = date("%Y-%m-%d %H:%M:%S"), began = GetTime(), state = copy(s), kit = okKit and copy(kit) or nil,
 			seal = seal, casts = {},
@@ -149,7 +151,17 @@ frame:SetScript("OnEvent", function(_, event, _, _, spellID)
 		end
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		-- the meter closes the fight a moment after combat drops
-		C_Timer.After(1.5, finish)
+		-- THE FIGHT IT WAS SET FOR, AND NO OTHER (review 2026-11-18). Pull
+		-- again inside the wait and the timer closed the new fight after a
+		-- second, with the old one's totals, and the new one's casts were
+		-- dropped. The old fight is now closed as the next begins, and the
+		-- timer does nothing where the fight is no longer its own.
+		local mine = fight
+		C_Timer.After(1.5, function()
+			if fight == mine then
+				finish()
+			end
+		end)
 	elseif spellID and not secret(spellID) then
 		local name = C_Spell and C_Spell.GetSpellName and plain(C_Spell.GetSpellName(spellID))
 		-- (a seal by its id in the generated list, not by its English name)
