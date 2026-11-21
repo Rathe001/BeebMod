@@ -390,6 +390,20 @@ function M.Steady(f)
 	pcall(f.SetScale, f, scale > 0 and scale or 1)
 	return true
 end
+
+-- the interface's scale changed: every name up now takes the new one (review,
+-- 2026-11-21: they kept the old one until their plate came round again)
+M.scaleWatch = CreateFrame("Frame")
+for _, event in ipairs({ "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
+	pcall(M.scaleWatch.RegisterEvent, M.scaleWatch, event)
+end
+M.scaleWatch:SetScript("OnEvent", function()
+	for _, f in pairs(M.friends or {}) do
+		if f.IsShown and f:IsShown() then
+			pcall(M.Steady, f)
+		end
+	end
+end)
 -- the line under an NPC's name, grey (Josh 2026-10-04: "Can you make the NPC
 -- titles gray?"): light enough to read on the ground at its small size
 M.FRIEND_SUB = BT.TEXT.quiet

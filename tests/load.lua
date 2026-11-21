@@ -5348,6 +5348,11 @@ if ok then
 			U.Me = function() return "Brand New" end
 			assert(BT.Home("") == R and _G.BeebModDB.homes["Brand New"] == R, "a new character: the only named book")
 			_G.BeebModDB.realms["Other|All"] = { players = {} }
+			-- (review, 2026-11-21: the record's realm was never read, and only
+			-- the one named book made this pass)
+			_G.BeebModDB.homes = nil
+			U.Me = function() return "Aeki Xx" end
+			assert(BT.Home("") == R, "with two named books, the realm on this character's own record")
 			U.Me = function() return "Newer Still" end
 			assert(BT.Home("") == "", "two named books and no record: no realm can be told")
 			_G.C_GameRules = { IsHardcoreActive = function() return true end }
@@ -5359,10 +5364,14 @@ if ok then
 			BT.db, BT.scope = _G.BeebModDB.realms[R .. "|All"], { key = R .. "|All", realm = R }
 			local records, characters = BT.FoldNameless(R)
 			local s = _G.BeebModDB.settings
-			assert(records == 5 and s.purses["Aeki Xx@"] == nil and s.purses["Other One@"] == nil,
-				"every record under no realm moved: " .. tostring(records))
-			assert(s.purses["Aeki Xx@" .. R].copper == 30 and s.purses["Other One@" .. R].copper == 5,
-				"the purse written last is the purse")
+			-- (review, 2026-11-21: a character the file does not know on this
+			-- realm may be another ruleset's, and waits for its own login)
+			assert(records == 4 and s.purses["Aeki Xx@"] == nil and s.purses["Other One@"] ~= nil,
+				"this character's records moved, a stranger's left: " .. tostring(records))
+			assert(s.purses["Aeki Xx@" .. R].copper == 30, "the purse written last is the purse")
+			_G.BeebModDB.homes = { ["Other One"] = R }
+			assert(BT.FoldNameless(R) == 1 and s.purses["Other One@" .. R].copper == 5 and s.purses["Other One@"] == nil,
+				"one last bound to this realm comes across")
 			assert(#s.xpPace["Aeki Xx@" .. R] == 2, "the pace samples one after the other")
 			local p = s.pickpocket["Aeki Xx@" .. R]
 			assert(p.coin == 8 and p.picks == 3 and p.items[7] == 3 and p.items[8] == 1 and p.session.last == 9,
@@ -5377,6 +5386,21 @@ if ok then
 			assert(led["|All"] == nil and led[R .. "|All"].people.New and led[R .. "|All"].earned.a == 100
 				and led[R .. "|All"].earned.b == 950, "the Ledger's people and dates with it")
 			assert(characters == 0, "an empty book brought nobody")
+			-- (review, 2026-11-21) the Ledger's dates where the realm has no
+			-- Ledger book yet, and a 0 never over a real date
+			_G.BeebModDB = file()
+			_G.BeebModDB.ledger.realms[R .. "|All"] = nil
+			_G.BeebModDB.ledger.realms["|All"].rank = 2
+			BT.db, BT.scope = _G.BeebModDB.realms[R .. "|All"], { key = R .. "|All", realm = R }
+			BT.FoldNameless(R)
+			local made = _G.BeebModDB.ledger.realms[R .. "|All"]
+			assert(made and made.earned and made.earned.a == 900 and made.earned.b == 950 and made.rank == 2,
+				"the dates and the rank come across to a Ledger book made for them")
+			_G.BeebModDB = file()
+			_G.BeebModDB.ledger.realms["|All"].earned.a = 0
+			BT.db, BT.scope = _G.BeebModDB.realms[R .. "|All"], { key = R .. "|All", realm = R }
+			BT.FoldNameless(R)
+			assert(_G.BeebModDB.ledger.realms[R .. "|All"].earned.a == 100, "a 0 does not take a real date's place")
 			-- two named books: only this character's records move, and the book stays
 			_G.BeebModDB = file()
 			_G.BeebModDB.realms["Other|All"] = { players = {} }

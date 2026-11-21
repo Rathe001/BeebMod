@@ -129,6 +129,13 @@ end
 
 -- the field's words changed: ours taken out, the rest given to the game
 function S.Typed(text)
+	-- (switched off, the field is all the game's again: the hook stays on
+	-- it, and took a tag out of the game's own search. Review, 2026-11-21)
+	if not BT.Enabled("bagwindow") then
+		S.tests = nil
+		S.Clear()
+		return nil
+	end
 	local tests, rest = S.Parse(text)
 	S.tests = #tests > 0 and tests or nil
 	if S.tests then

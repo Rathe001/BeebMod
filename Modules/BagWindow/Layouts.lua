@@ -80,6 +80,9 @@ local function plain(v)
 	return v
 end
 
+-- [item's number] = { class, price, bind }, once the game has told all three
+M.itemFacts = {}
+
 -- What is in a slot: { id, quality, count, class, quest, new, price }, or nil
 -- for an empty one.
 function M.ItemIn(bag, index)
@@ -98,8 +101,16 @@ function M.ItemIn(bag, index)
 	local item = { id = id, quality = tonumber(plain(info.quality)) or 1, count = tonumber(plain(info.stackCount)) or 1 }
 	-- bound to you already (the search's "soulbound", Search.lua)
 	item.bound = plain(info.isBound) == true
+	-- WHAT AN ITEM ALWAYS IS, ASKED ONCE: its class, its worth and how it
+	-- binds are the same for every one of that item, so they are kept by the
+	-- item's number once the game has them all. Each opening of the bags
+	-- asked them again of every slot.
+	local known = M.itemFacts[id]
+	if known then
+		item.class, item.price, item.bind = known.class, known.price, known.bind
+	end
 	local instant = (C_Item and C_Item.GetItemInfoInstant) or rawget(_G, "GetItemInfoInstant")
-	if instant then
+	if instant and not known then
 		local okI, _, _, _, _, _, class = pcall(instant, id)
 		item.class = okI and tonumber(plain(class)) or nil
 	end
@@ -124,11 +135,18 @@ function M.ItemIn(bag, index)
 		item.new = okN and plain(isNew) == true
 	end
 	local full = (C_Item and C_Item.GetItemInfo) or rawget(_G, "GetItemInfo")
-	if full then
+	if full and not known then
 		local got = { pcall(full, id) }
+		-- the game has not loaded this item yet: asked again when it has
+		if not (got[1] and got[2] ~= nil) then
+			item.waiting = true
+		end
 		item.price = got[1] and tonumber(plain(got[12])) or nil
 		-- how it binds: 1 when picked up, 2 when equipped, 3 when used
 		item.bind = got[1] and tonumber(plain(got[15])) or nil
+		if not item.waiting and item.class then
+			M.itemFacts[id] = { class = item.class, price = item.price, bind = item.bind }
+		end
 	end
 	return item
 end
@@ -174,6 +192,14 @@ function M.Categorize(slots)
 		end
 		return a.index < b.index
 	end)
+	-- whether any item's worth and binding are still to come (L.events)
+	M.itemsWaiting = false
+	for _, item in ipairs(items) do
+		if item.waiting then
+			M.itemsWaiting = true
+			break
+		end
+	end
 	return items, empties
 end
 
@@ -571,13 +597,19 @@ local function label(c, i)
 	l.hit.beebs = true
 	l.hit:SetScript("OnClick", function(self)
 		if self.key then
+			-- (not at a vendor, where every shelf is open whatever is kept:
+			-- the click changed nothing in sight and turned the kept answer
+			-- over. Review, 2026-11-21)
+			if not next(L.Folded()) and M.ShelfFolded(self.key) then
+				return
+			end
 			M.FoldShelf(self.key)
 		end
 	end)
 	l.hit:SetScript("OnEnter", function(self)
 		if GameTooltip and self.key then
 			GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
-			GameTooltip:SetText(M.ShelfFolded(self.key) and "Click to unfold" or "Click to fold")
+			GameTooltip:SetText(M.ShelfFolded(self.key) and "Click: unfold" or "Click: fold")
 			GameTooltip:Show()
 		end
 	end)
@@ -853,6 +885,7 @@ function L.Arrange()
 	end
 	L.FitSearch(w, width)
 	L.drawn = layout.key
+	L.stale = nil
 	L.Buttons()
 	return true
 end
@@ -930,8 +963,16 @@ function L.Hold(force)
 end
 
 -- once a frame, however many of the game's calls asked
+-- NOT TWICE FOR ONE OPENING (Josh 2026-11-21: "Anything we can do about the
+-- stutter when the bags are opened"). Opening the bags asked for the layout
+-- four times: the game sized the window, laid its slots out, set its search
+-- and showed the window, and each asked. The layout was drawn at once from
+-- the second and again a frame later for the rest. A request now only says
+-- the layout is stale, and drawing it says it is not, so the frame after an
+-- opening finds nothing to do.
 local queued = false
 function L.Soon()
+	L.stale = true
 	if queued then
 		return
 	end
@@ -939,7 +980,9 @@ function L.Soon()
 		queued = true
 		C_Timer.After(0, function()
 			queued = false
-			pcall(L.Arrange)
+			if L.stale then
+				pcall(L.Arrange)
+			end
 		end)
 	else
 		pcall(L.Arrange)
@@ -1087,21 +1130,27 @@ function L.Hook()
 			if L.Active() then
 				L.Soon()
 			end
+			-- (the game lays its slots out next, and that hook draws at
+			-- once and clears this request)
 		end)
 	end
 	-- the game has put its search field back where it keeps it
 	if type(w.UpdateSearchBox) == "function" then
 		pcall(hooksecurefunc, w, "UpdateSearchBox", function()
 			L.searchHome = nil
+			-- (the field alone put right, not the whole layout drawn again:
+			-- this comes with every opening. The stutter watch, 2026-11-21)
 			if L.Active() and L.drawn then
-				L.Soon()
+				L.FitSearch(w, BT.Pill.Number(w:GetWidth(), 0))
 			end
 		end)
 	end
 	if w.HookScript then
 		pcall(w.HookScript, w, "OnShow", function()
 			L.Buttons()
-			if L.Active() then
+			-- (the game's own OnShow has laid the slots out by now, and that
+			-- hook drew ours: asked only where it did not)
+			if L.Active() and not L.drawn then
 				L.Soon()
 			end
 		end)
@@ -1117,6 +1166,11 @@ L.events:SetScript("OnEvent", function(_, event)
 	-- an item picked up or put down: the square to drop on, and no more
 	if event == "CURSOR_CHANGED" or event == "ITEM_LOCK_CHANGED" then
 		pcall(L.Hold)
+		return
+	end
+	-- (the game says this of every item it loads, anywhere: only when one of
+	-- the bags' own was waited for. Review, 2026-11-21)
+	if event == "GET_ITEM_INFO_RECEIVED" and not M.itemsWaiting then
 		return
 	end
 	if event == "PLAYER_REGEN_ENABLED" and not L.owed then

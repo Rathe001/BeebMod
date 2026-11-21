@@ -8,8 +8,8 @@ BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 - **Bags by category.** The combined backpack now sorts your items onto
   shelves: New, Quest, Gear, Consumables, Crafting, Junk and Other, with
   Ammo and Shards for the classes that carry them. Each shelf has its name
-  and count at the left. Click a shelf's name to fold it away or open it
-  again, and the arrow beside the name shows which. Junk starts folded and
+  and count at the left. Click a shelf's name to fold or unfold it. The
+  arrow next to the name shows which. Junk starts folded and
   shows what it sells for. At a vendor every shelf is open. Gear is grouped
   by equipment set, with each set's name over its items. Empty slots are
   not drawn. A line at the foot says how many are free and how many slots
@@ -21,6 +21,9 @@ BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
   Expedition and the census looked reset, and the money tooltip listed each
   character twice. Nothing was lost. At your next login BeebMod puts the two
   sets back together. Kills, sightings and notes from both are kept.
+- **Bags open faster.** Opening the bags could hitch for a moment. The row
+  of bag icons at the foot of the window was redrawn once for every item
+  you carry. It is redrawn once now.
 - **The bag search knows item tags.** Type `boe`, `bop`, `bou` or
   `soulbound` in the bag search to dim everything else. `set` finds items
   in an equipment set. A category name such as `junk` or `quest` works too.

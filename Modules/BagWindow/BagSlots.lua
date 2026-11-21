@@ -664,5 +664,27 @@ S.events:SetScript("OnEvent", function(_, event, unit)
 	if not (f and f.IsVisible and f:IsVisible() and BT.Enabled("bagwindow")) then
 		return
 	end
+	-- ONCE A FRAME FOR THE ITEM EVENTS (Josh 2026-11-21: "Anything we can do
+	-- about the stutter when the bags are opened"). The stutter watch timed
+	-- it: opening the bags, the game says ITEM_DATA_LOAD_RESULT once for
+	-- every item in them, about sixty in one frame, and the row was drawn
+	-- again for each at 1.3 ms. That was 80 ms of a 120 ms frame. The row
+	-- has five pictures, and one look after the burst is enough.
+	if event == "ITEM_DATA_LOAD_RESULT" or event == "GET_ITEM_INFO_RECEIVED" then
+		if S.itemQueued then
+			return
+		end
+		if C_Timer and C_Timer.After then
+			S.itemQueued = true
+			C_Timer.After(0, function()
+				S.itemQueued = nil
+				local row = S.frame
+				if row and row.IsVisible and row:IsVisible() and BT.Enabled("bagwindow") then
+					S.Refresh(event)
+				end
+			end)
+			return
+		end
+	end
 	S.Soon(event)
 end)

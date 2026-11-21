@@ -113,7 +113,13 @@ function BT.Home(raw)
 		local found = {}
 		for _, row in ipairs(BT.BY_CHARACTER) do
 			for who in pairs(tableAt(BeebModDB.settings, row) or {}) do
-				local name, realm = type(who) == "string" and who:match("^(.-)@(.+)$")
+				-- (on a line of its own: `and` in front of the call kept only
+				-- its first answer, so the realm was never read. Review,
+				-- 2026-11-21)
+				local name, realm = nil, nil
+				if type(who) == "string" then
+					name, realm = who:match("^(.-)@(.+)$")
+				end
 				if name == me and fits(realm) then
 					found[realm] = true
 				end
@@ -254,13 +260,36 @@ function BT.FoldNameless(realm)
 	local named = BT.NamedRealms()
 	local all = #named == 1 and named[1] == realm
 	local me = U.Me and U.Me() or nil
+	-- WHOSE RECORDS MAY MOVE (review, 2026-11-21). One named book does not
+	-- prove a record under no realm belongs to it: a Hardcore character first
+	-- played after 2026-11-20 has only "Name@" records, and a PvE character's
+	-- login took them for PvE. So a character's records move when it is the
+	-- one logged in, or when the file already knows it on this realm, by a
+	-- record under "Name@Realm" or the realm it was last bound to. Any other
+	-- waits for its own login.
+	local known = {}
+	for _, row in ipairs(BT.BY_CHARACTER) do
+		for who in pairs(tableAt(BeebModDB.settings, row) or {}) do
+			if type(who) == "string" then
+				local name, r = who:match("^(.-)@(.+)$")
+				if name and r == realm then
+					known[name] = true
+				end
+			end
+		end
+	end
+	for name, r in pairs(type(BeebModDB.homes) == "table" and BeebModDB.homes or {}) do
+		if type(r) == "string" then
+			known[name] = squeezed(r) == realm or nil
+		end
+	end
 	local records = 0
 	for _, row in ipairs(BT.BY_CHARACTER) do
 		local t = tableAt(BeebModDB.settings, row)
 		local moves = {}
 		for who in pairs(t or {}) do
 			local name = type(who) == "string" and who:match("^(.+)@$") or nil
-			if name and (all or name == me) then
+			if name and (name == me or (all and known[name])) then
 				moves[#moves + 1] = { who, name .. "@" .. realm }
 			end
 		end
@@ -284,14 +313,28 @@ function BT.FoldNameless(realm)
 					-- the Ledger's people, and when each commendation was earned:
 					-- the earlier day of the two (Modules/Ledger/Ranks.lua)
 					local ledger = type(BeebModDB.ledger) == "table" and BeebModDB.ledger.realms or nil
-					local from, to = type(ledger) == "table" and ledger[key], type(ledger) == "table" and ledger[bound]
-					if type(from) == "table" and type(from.earned) == "table" and type(to) == "table" then
-						to.earned = type(to.earned) == "table" and to.earned or {}
-						for id, at in pairs(from.earned) do
-							local had = to.earned[id]
-							if type(had) ~= "number" or (type(at) == "number" and at < had) then
-								to.earned[id] = at
+					local from = type(ledger) == "table" and ledger[key] or nil
+					-- (the realm's own Ledger book made first if it has none:
+					-- the dates were dropped where it had not been. And a 0,
+					-- "before the Ledger kept dates", never takes a real
+					-- date's place. Review, 2026-11-21)
+					local to = nil
+					if type(from) == "table" and BT.Notes and BT.Notes.Book then
+						local okB, book = pcall(BT.Notes.Book, bound)
+						to = okB and type(book) == "table" and book or nil
+					end
+					if type(from) == "table" and type(to) == "table" then
+						if type(from.earned) == "table" then
+							to.earned = type(to.earned) == "table" and to.earned or {}
+							for id, at in pairs(from.earned) do
+								local had = to.earned[id]
+								if type(had) ~= "number" or (type(at) == "number" and at > 0 and (had == 0 or at < had)) then
+									to.earned[id] = at
+								end
 							end
+						end
+						if type(from.rank) == "number" then
+							to.rank = math.max(tonumber(to.rank) or 0, from.rank)
 						end
 					end
 					if BT.Notes and BT.Notes.Join then
