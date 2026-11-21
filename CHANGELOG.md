@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.18.0
 
 - **A line for a hunter's pet on the dock.** Under your level, while your
   pet is out: its name and level, how far it is through the level, and its
