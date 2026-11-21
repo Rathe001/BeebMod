@@ -213,6 +213,7 @@ W.LABELS = {
 	minimap = { "Minimap", "Square minimap with coordinates" },
 	buttons = { "Addon buttons", "Other addons' minimap buttons in one row" },
 	xp = { "Experience", "XP bar with time to level" },
+	pet = { "Pet", "A hunter's pet: its level, experience and mood" },
 	pvp = { "PvP", "Your PvP rank and progress to the next" },
 	rep = { "Reputation", "Your standing with the faction you watch" },
 	metrics = { "Metrics", "Small stats in rows of three" },
@@ -854,6 +855,11 @@ local function testingPage(body)
 			say = function(v) return v == 0 and "None" or ("Rank " .. v) end },
 		{ key = "side", title = "PvP side", blurb = "The side's colour on the shield before the first rank",
 			values = { "Alliance", "Horde" }, say = function(v) return v end },
+		-- (Josh 2026-11-21: "I dont have a hunter. Can you add something to the
+		-- testing page so I can see what it would look like in game?")
+		{ key = "pet", title = "Hunter's pet", blurb = "A made-up pet on the dock, in each mood",
+			values = { 3, 2, 1, 4 },
+			say = function(v) return ({ "Unhappy", "Content", "Happy", "At your level" })[v] end },
 		{ key = "expedition", title = "Expedition", blurb = "Each Expedition rank's badge",
 			values = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, say = function(v) return "Rank " .. v end },
 		{ key = "ledger", title = "Ledger", blurb = "Each Ledger rank's badge",

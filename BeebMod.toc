@@ -119,6 +119,7 @@ Modules\XP\Dungeons.lua
 Modules\XP\Zones.lua
 Modules\XP\XP.lua
 Modules\Rep\Rep.lua
+Modules\Pet\Pet.lua
 Modules\PvP\PvP.lua
 # every kind of mob you have killed: the book, what counts as a kill, the
 # toast and the journal window before the module that drives them

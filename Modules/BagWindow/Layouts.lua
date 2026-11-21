@@ -165,6 +165,30 @@ function M.CategoryOf(item)
 	return CLASS[item.class or -1] or "other"
 end
 
+-- ONLY THE SLOTS THAT HOLD ITEMS (Josh 2026-11-21, a bag's own button on the
+-- square for dropping: "im no longer able to drop stacks on the icon"). The
+-- combined backpack has seven more buttons that look like slots, one for each
+-- bag: the game's bag buttons, which it keeps on the window for a controller.
+-- M.Slots finds them with the rest, by their look, so the bag window can
+-- dress them. They hold no item, so the layout took them for empty slots: it
+-- counted 69 slots where the dock counted 62, and stacked them on the square
+-- with the true empty ones. One on top took the drop for its bag. The game
+-- keeps its item slots in the window's own list, and that is what is laid out.
+function M.ItemSlots(w)
+	if type(w) == "table" and type(w.Items) == "table" then
+		local out = {}
+		for _, slot in pairs(w.Items) do
+			if type(slot) == "table" and slot.GetBagID and slot.SetPoint then
+				out[#out + 1] = slot
+			end
+		end
+		if #out > 0 then
+			return out
+		end
+	end
+	return M.Slots(w)
+end
+
 -- The slots of a window as items by shelf, and its empty slots. An item is
 -- { slot, cat, id, quality, count, price, bag, index }.
 function M.Categorize(slots)
@@ -538,7 +562,7 @@ function L.Remember(w, again)
 	if again then
 		L.home = {}
 	end
-	for _, slot in ipairs(M.Slots(w)) do
+	for _, slot in ipairs(M.ItemSlots(w)) do
 		if not L.home[slot] then
 			L.home[slot] = points(slot)
 		end
@@ -732,7 +756,7 @@ function L.Arrange()
 	end
 	L.Remember(w)
 	local slots = {}
-	for _, slot in ipairs(M.Slots(w)) do
+	for _, slot in ipairs(M.ItemSlots(w)) do
 		if slot.IsShown and slot:IsShown() then
 			slots[#slots + 1] = slot
 		end
@@ -954,10 +978,24 @@ function L.Hold(force)
 	c.free:ClearAllPoints()
 	if shown > 0 then
 		c.free:SetPoint("LEFT", c, "TOPLEFT", at.x + size + 8, -(at.y + L.FREE_H / 2))
-		c.free:SetText("Drop here  ·  " .. words)
+		c.free:SetText("Drop here to split or move  ·  " .. words)
 	else
 		c.free:SetPoint("LEFT", c, "TOPLEFT", at.x, -(at.y + L.FREE_H / 2))
-		c.free:SetText(words)
+		-- HELD, AND NOWHERE TO PUT IT (Josh 2026-11-21, half a stack in hand
+		-- and 62 of 62 slots used: "the icon no longer shows up at all").
+		-- There is no square because there is no free slot. The line says
+		-- so, in the warning's colour, while the item is held.
+		if held then
+			c.free:SetText("No free slot to drop in  ·  " .. words)
+			local warn = (BT.Tip and BT.Tip.STATE and BT.Tip.STATE.warn) or BT.TEXT.quiet
+			c.free:SetTextColor(warn[1], warn[2], warn[3])
+		else
+			c.free:SetText(words)
+			c.free:SetTextColor(BT.TEXT.quiet[1], BT.TEXT.quiet[2], BT.TEXT.quiet[3])
+		end
+	end
+	if shown > 0 then
+		c.free:SetTextColor(BT.TEXT.quiet[1], BT.TEXT.quiet[2], BT.TEXT.quiet[3])
 	end
 	return held
 end

@@ -3,6 +3,22 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **A line for a hunter's pet on the dock.** Under your level, while your
+  pet is out: its name and level, how far it is through the level, and its
+  mood with the game's own face. The bar is its experience. Point at the
+  line for the damage it deals and whether it is gaining loyalty. Switch it
+  off under Dock in the settings.
+- **No doubled quests on unit tooltips with Questie.** With Questie loaded,
+  each quest showed twice on an enemy's tooltip, once from BeebMod and once
+  from Questie. BeebMod now leaves the quest lines to Questie. If you turn
+  Questie's tooltips off in its options, BeebMod's lines come back.
+- **The square for dropping an item works again.** In the category view the
+  square that appears while you hold an item could refuse the drop. One of
+  the game's bag buttons was sitting on it. With full bags the square no
+  longer shows, since there is nowhere to put the item.
+
 ## 1.17.0
 
 - **Bags by category.** The combined backpack now sorts your items onto

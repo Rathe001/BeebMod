@@ -107,7 +107,7 @@ function S.Apply()
 	end
 	local kept = 0
 	for _, w in ipairs(M.Windows()) do
-		for _, slot in ipairs(M.Slots(w)) do
+		for _, slot in ipairs(M.ItemSlots and M.ItemSlots(w) or M.Slots(w)) do
 			local item = M.ItemIn(slot.GetBagID and slot:GetBagID() or nil, slot.GetID and slot:GetID() or nil)
 			if item then
 				item.cat = M.CategoryOf(item)

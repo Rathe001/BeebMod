@@ -281,7 +281,7 @@ B.SHIELD_SWORDS = "Interface\\AddOns\\BeebMod\\Art\\Dock\\swords"
 -- Exalted), a PvP rank (0 for none) and side, an Expedition rank. Only the
 -- shields follow them; nothing is saved, and a reload puts them back.
 B.preview = {}
-local PREVIEWED = { "xp", "rep", "pvp", "expedition", "ledgerline" }
+local PREVIEWED = { "xp", "pet", "rep", "pvp", "expedition", "ledgerline" }
 function B.SetPreview(key, value)
 	B.preview[key] = value
 	for _, k in ipairs(PREVIEWED) do

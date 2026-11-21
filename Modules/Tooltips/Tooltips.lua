@@ -1208,6 +1208,25 @@ function M.QuestBand(tip, lines)
 	return shown
 end
 
+-- QUESTIE'S ROWS, NOT BOTH (Josh 2026-11-21, a Bloodscalp Scout with each
+-- quest twice: "Any way we can hide the beebmod quest stuff in tooltips if
+-- questie is running? I dont want duplicates"). Questie writes a unit's
+-- quests on its tooltip after BeebMod has, so each was there twice. While
+-- Questie is loaded and its own tooltips are on, BeebMod leaves the quests to
+-- it. With Questie's tooltips switched off in its options, BeebMod's rows
+-- are back.
+function M.QuestieWrites()
+	local q = rawget(_G, "Questie")
+	if type(q) ~= "table" then
+		return false
+	end
+	local profile = type(q.db) == "table" and q.db.profile or nil
+	if type(profile) == "table" and profile.enableTooltips == false then
+		return false
+	end
+	return true
+end
+
 function M.QuestRows(tip, quests)
 	local T = BT.UnitTip
 	local lines = {}
@@ -2350,7 +2369,7 @@ function M.Compose(tip, unit)
 
 	-- the rows: the quests it counts for, then your kills of it
 	local beforeQuests = BT.Pill.Number(tip:NumLines(), 0)
-	M.QuestRows(tip, quests)
+	M.QuestRows(tip, M.QuestieWrites() and {} or quests)
 	local beforeKills = BT.Pill.Number(tip:NumLines(), 0)
 	local killsAt = M.KillsRow(tip, unit, beforeKills > beforeQuests)
 	-- where it is, should another addon write under it (M.KillsLast)

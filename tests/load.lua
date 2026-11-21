@@ -5293,6 +5293,70 @@ if ok then
 			assert(Se.Matches({ cat = "gear", bind = 2, bound = false }, (Se.Parse("boe gear")))
 				and not Se.Matches({ cat = "junk", bind = 2, bound = false }, (Se.Parse("boe gear"))), "two tags are both asked")
 			assert(not Se.Matches(nil, tests), "an empty slot is nothing")
+			-- A HUNTER'S PET ON THE DOCK (Josh 2026-11-21: "a new row under the
+			-- player level for hunter pets ... happiness, level, and an
+			-- experience bar")
+			do
+				local pet = BT.GetModule("pet")
+				assert(pet and pet.dock and pet.order > BT.GetModule("xp").order and pet.order < BT.GetModule("pvp").order,
+					"a line of the dock, between Level and PvP")
+				local was = { _G.HasPetUI, _G.UnitExists, _G.UnitName, _G.UnitLevel, _G.GetPetExperience, _G.C_PetInfo }
+				_G.HasPetUI = function() return true, false end
+				assert(pet.Read() == nil, "a pet that is not a hunter's has no line")
+				_G.HasPetUI = function() return true, true end
+				_G.UnitExists = function(u) return u == "pet" end
+				_G.UnitName = function(u) return u == "pet" and "Humar" or "Beeb" end
+				_G.UnitLevel = function(u) return u == "pet" and 23 or 30 end
+				_G.GetPetExperience = function() return 620, 1000 end
+				_G.C_PetInfo = { GetPetHappiness = function() return 3, 125, 1 end, GetPetLoyalty = function() return "Loyalty Level 4" end }
+				local p = pet.Read()
+				assert(p and p.name == "Humar" and p.level == 23 and p.progress == 0.62 and p.mood == 3 and p.damage == 125
+					and p.loyalty == "Loyalty Level 4", "what the game says of it")
+				local left, right = pet.Lines(p)
+				assert(left:find("Humar", 1, true) and left:find("Level 23", 1, true), "its name and level: " .. left)
+				assert(right:find("62%", 1, true) and right:find("Happy", 1, true), "how far, and its mood: " .. right)
+				_G.GetPetExperience = function() return 0, 0 end
+				_G.C_PetInfo.GetPetHappiness = function() return 1, 75, -1 end
+				p = pet.Read()
+				local _, capped = pet.Lines(p)
+				assert(not capped:find("%%") and capped:find("Unhappy", 1, true), "at your level no share, and an unhappy pet says so: " .. capped)
+				BT.SetEnabled("pet", true)
+				pet.Show(true)
+				assert(pet.frame:IsShown() and pet.text:GetText() == left, "the line is up with a pet out")
+				_G.UnitExists = function() return false end
+				pet.Update()
+				assert(not pet.frame:IsShown(), "and gone with the pet")
+				_G.HasPetUI, _G.UnitExists, _G.UnitName, _G.UnitLevel, _G.GetPetExperience, _G.C_PetInfo =
+					was[1], was[2], was[3], was[4], was[5], was[6]
+				pet.Update()
+				-- a made-up pet from the Testing page, for a player with no hunter
+				BT.Dock.SetPreview("pet", 1)
+				assert(pet.frame:IsShown() and pet.eta:GetText():find("Unhappy", 1, true) and pet.eta:GetText():find("62%", 1, true),
+					"a made-up pet, unhappy: " .. tostring(pet.eta:GetText()))
+				BT.Dock.SetPreview("pet", 4)
+				assert(not pet.eta:GetText():find("%%") and pet.eta:GetText():find("Happy", 1, true), "and one at your level")
+				BT.Dock.SetPreview("pet", nil)
+				assert(not pet.frame:IsShown(), "put away with the preview")
+			end
+			-- Questie's quest rows, not both (Josh 2026-11-21)
+			do
+				local tips = BT.GetModule("tooltips")
+				local wasQ = _G.Questie
+				_G.Questie = nil
+				assert(not tips.QuestieWrites(), "no Questie: the quests are BeebMod's to write")
+				_G.Questie = { db = { profile = { enableTooltips = true } } }
+				assert(tips.QuestieWrites(), "Questie with its tooltips on writes them")
+				_G.Questie.db.profile.enableTooltips = false
+				assert(not tips.QuestieWrites(), "its tooltips off: BeebMod's again")
+				_G.Questie = {}
+				assert(tips.QuestieWrites(), "a Questie whose options can't be read is taken to write them")
+				_G.Questie = wasQ
+			end
+			-- only the window's own item slots are laid out: the game's bag
+			-- buttons look like slots and hold no item (Josh 2026-11-21)
+			local itemSlot = { GetBagID = function() return 0 end, SetPoint = function() end }
+			local listed = mod.ItemSlots({ Items = { itemSlot, "not a slot", { SetPoint = function() end } } })
+			assert(#listed == 1 and listed[1] == itemSlot, "the slots in the window's own list, and nothing else")
 			-- the switch: kept, and the default is not written down
 			local was = BT.settings.bagwindow and BT.settings.bagwindow.layout
 			assert(mod.Layout() == "shelves", "categories until you say otherwise")
@@ -15553,7 +15617,7 @@ if ok then
 			BT.SortModules()
 			BT.Window.Reorder(dockPage)
 			BT.Dock.Relayout()
-			assert(pageKeys() == "minimap,buttons,xp,pvp,rep,expedition,ledgerline,metrics,tracker,micro",
+			assert(pageKeys() == "minimap,buttons,xp,pet,pvp,rep,expedition,ledgerline,metrics,tracker,micro",
 				"no order is the default order: " .. pageKeys())
 			-- ANOTHER FEATURE'S ROW (Josh 2026-09-27): the Expedition's tab in the
 			-- Dock's block moves its line, and is gone while the Expedition is
@@ -15582,7 +15646,7 @@ if ok then
 			-- puts PvP straight after Level, not at the foot of the dock
 			local saved = {}
 			for _, m in ipairs(BT.Modules()) do
-				if m.key ~= "pvp" and m.key ~= "xp" and m.key ~= "rep" then saved[#saved + 1] = m.key end
+				if m.key ~= "pvp" and m.key ~= "pet" and m.key ~= "xp" and m.key ~= "rep" then saved[#saved + 1] = m.key end
 			end
 			table.insert(saved, 2, "xp")
 			table.insert(saved, 3, "rep")
@@ -15590,7 +15654,7 @@ if ok then
 			BT.SortModules()
 			keys = {}
 			for _, m in ipairs(BT.Modules()) do keys[#keys + 1] = m.key end
-			assert(table.concat(keys, ","):find("^[%w]+,xp,pvp,rep,"),
+			assert(table.concat(keys, ","):find("^[%w]+,xp,pet,pvp,rep,"),
 				"a module the saved order has not heard of goes after its neighbour: " .. table.concat(keys, ","))
 			BT.settings.order = nil
 			BT.SortModules()
