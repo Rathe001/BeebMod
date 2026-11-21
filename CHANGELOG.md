@@ -3,6 +3,26 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Your records are back in one place.** Since the game's update on
+  November 20 the game no longer tells addons the name of your realm.
+  BeebMod started a second, empty set of records that day. The Ledger, the
+  Expedition and the census looked reset, and the money tooltip listed each
+  character twice. Nothing was lost. At your next login BeebMod puts the two
+  sets back together. Kills, sightings and notes from both are kept.
+- **Money totals by faction.** Gold can't move between Alliance and Horde.
+  If you have characters on both, the money tooltip now lists each side
+  with its own total, your side first. The all-characters figure on the
+  dock adds up your side only. Characters on another ruleset are no longer
+  counted. A character's side is known once you have logged in on it or
+  seen it in the census.
+- **Friendly names keep one size.** A friendly player's or NPC's name above
+  their head no longer jumps between sizes as they walk toward you or away.
+- **Item tooltips always show the level an item requires.** It was shown
+  only when your level was too low. It is red when you are too low and grey
+  when you are not.
+
 ## 1.16.2
 
 - **What loaded says more about a blocked action.** Some players have had

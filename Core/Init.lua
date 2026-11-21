@@ -42,7 +42,7 @@ BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-11-20-kit-taint-99"
+BT.BUILD = "2026-11-21-no-realm-100"
 
 -- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
 -- to disable it in production builds so normal users don't see it?"). The
@@ -1090,6 +1090,14 @@ function BT.Bind(realm, faction)
 	-- and its two sides one book
 	local joined = BT.JoinSides(rname)
 	BT.joinedOnLoad = joined > 0 and joined or nil
+	-- and what was filed under no realm, from 2026-11-20 on, back with the
+	-- rest (Core/Home.lua)
+	if BT.FoldNameless then
+		local ok, records, characters = pcall(BT.FoldNameless, rname)
+		if ok and (records > 0 or characters > 0) then
+			BT.namelessOnLoad = { records = records, characters = characters }
+		end
+	end
 	if folded > 0 then
 		BT.foldedOnLoad = folded
 	end
@@ -1256,7 +1264,7 @@ function BT.EnsureBound()
 	if BT.db and BT.settings then
 		return true
 	end
-	BT.Bind(GetRealmName and GetRealmName(), UnitFactionGroup and UnitFactionGroup("player"))
+	BT.Bind(BT.RealmNow and BT.RealmNow() or (GetRealmName and GetRealmName()), UnitFactionGroup and UnitFactionGroup("player"))
 	return BT.db ~= nil
 end
 

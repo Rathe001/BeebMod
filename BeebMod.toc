@@ -32,6 +32,7 @@ Core\Cpu.lua
 Core\Stutter.lua
 Core\Util.lua
 Core\Session.lua
+Core\Home.lua
 Core\Fonts.lua
 Core\Blocked.lua
 Core\Reach.lua

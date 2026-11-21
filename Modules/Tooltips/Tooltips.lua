@@ -4575,9 +4575,9 @@ function M.WriteItemB(tip, item, icon, level)
 		end
 		spacer()
 		tilesOf(made.more or {}, true)
-		local shortOf = made.require and warning(made.require.rgb) or nil
-		if shortOf then
-			row(M.Bare(made.require.text), shortOf, nil, nil, true)
+		-- (the level it asks, always: the game's red where you fall short)
+		if made.require then
+			row(M.Bare(made.require.text), warning(made.require.rgb) or ITEM_SUB, nil, nil, true)
 		end
 		facts(made)
 		for _, r in ipairs(made.rest) do
@@ -4614,11 +4614,13 @@ function M.WriteItemB(tip, item, icon, level)
 		end
 	end
 	-- what it asks of you, in the warning's colour where you fall short
-	-- ONLY WHERE YOU FALL SHORT (his Death Speaker Scepter read "Requires
-	-- Level 28" to a level 28): a requirement you meet is not said
-	local short = item.require and warning(item.require.rgb) or nil
-	if short then
-		row(M.Bare(item.require.text), short, nil, nil, true)
+	-- THE LEVEL, ALWAYS (Josh 2026-11-21, on a player's "would it be possible
+	-- not hide the level requirements of gear": "Maybe we should always show
+	-- it?"). It was said only where you fell short, since his Death Speaker
+	-- Scepter read "Requires Level 28" to a level 28. A player buying for an
+	-- alt or selling at auction needs it too. Quiet where you meet it.
+	if item.require then
+		row(M.Bare(item.require.text), warning(item.require.rgb) or ITEM_SUB, nil, nil, true)
 		spacer()
 	end
 

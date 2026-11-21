@@ -48,6 +48,10 @@ local function bootLines(say)
 	if BT.foldedOnLoad then
 		say(("%s folded in from the realm's old name"):format(C(BT.foldedOnLoad)))
 	end
+	if BT.namelessOnLoad then
+		say(("filed under no realm, moved back: %s records · %s characters"):format(C(BT.namelessOnLoad.records),
+			C(BT.namelessOnLoad.characters)))
+	end
 	if BT.renamedOnLoad then
 		say(("%s settings moved to their new names"):format(C(BT.renamedOnLoad)))
 	end
@@ -80,6 +84,37 @@ function BT.WhatLoaded()
 		BT.settings and "yes" or "|cffff6b6bnone|r",
 		(BT.DB and BT.db) and C(BT.DB.Stats(BT.db).total) or "-"))
 	bootLines(U.Print)
+	-- WHAT THE GAME SAYS OF THE REALM (Josh 2026-11-21: every character twice
+	-- in the money tooltip). From 2026-11-20 GetRealmName came back empty, so
+	-- a second book was bound and each character was filed again as "Name@".
+	-- This asks every call that might still tell one ruleset from another.
+	local function ask(label, fn, ...)
+		if type(fn) ~= "function" then
+			return label .. " no such call"
+		end
+		local got = { pcall(fn, ...) }
+		if not got[1] then
+			return label .. " error"
+		end
+		local said = {}
+		for i = 2, math.max(2, math.min(#got, 4)) do
+			local v = got[i]
+			said[#said + 1] = type(v) == "string" and ("%q"):format(v) or tostring(v)
+		end
+		return label .. " " .. table.concat(said, ", ")
+	end
+	local rules, seasons, cvars = rawget(_G, "C_GameRules"), rawget(_G, "C_Seasons"), rawget(_G, "C_CVar")
+	U.Print("realm: " .. table.concat({
+		("at login %q"):format(tostring(U.realm)),
+		ask("GetRealmName", rawget(_G, "GetRealmName")),
+		ask("GetNormalizedRealmName", rawget(_G, "GetNormalizedRealmName")),
+		ask("GetRealmID", rawget(_G, "GetRealmID")),
+		ask("UnitFullName", rawget(_G, "UnitFullName"), "player"),
+		ask("hardcore", rules and rules.IsHardcoreActive),
+		ask("season", seasons and seasons.GetActiveSeason),
+		ask("realmName setting",cvars and cvars.GetCVar, "realmName"),
+		ask("GetCurrentRegion", rawget(_G, "GetCurrentRegion")),
+	}, " · "))
 	local on = {}
 	for _, m in ipairs(BT.Modules()) do
 		on[#on + 1] = ("%s %s"):format(m.key, BT.Enabled(m.key) and "on" or "off")

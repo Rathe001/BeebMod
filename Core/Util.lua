@@ -103,8 +103,13 @@ U.RULESETS = { pve = "PvE", pvp = "PvP", rp = "RP", rppvp = "RP-PvP", roleplay =
 	hardcore = "Hardcore", hc = "Hardcore" }
 
 function U.RealmLabel(realm)
-	if type(realm) ~= "string" or realm == "" then
+	if type(realm) ~= "string" then
 		return nil
+	end
+	-- NO NAME AT ALL (2026-11-21, Core/Home.lua): the game names no realm
+	-- any more, and a book bound to none is the game's own
+	if realm == "" then
+		return "Forever"
 	end
 	local rules = not realm:find("%s") and realm:match("Realm%d*(%a+)$")
 	if not rules then

@@ -26,9 +26,10 @@ Boot.handlers = {}
 local handlers = Boot.handlers
 
 handlers.PLAYER_ENTERING_WORLD = function(_, _, initial, reloading)
-	local realm = GetRealmName and GetRealmName() or nil
+	-- the realm the game names, or the one the saved file knows this
+	-- character by now that the game names none (Core/Home.lua)
+	local realm = BT.RealmNow()
 	local faction = UnitFactionGroup and UnitFactionGroup("player") or nil
-	U.realm = realm
 	U.LearnRealm(realm)
 	-- the realm and faction are only knowable now. A plain zone-in (the
 	-- client says neither login nor reload) with everything already bound
@@ -74,7 +75,7 @@ end
 -- last resort: if the login event itself was refused, bind when the addon loads
 function Boot.Fallback()
 	if Boot.refused and Boot.refused.PLAYER_ENTERING_WORLD then
-		BT.Bind(GetRealmName and GetRealmName(), UnitFactionGroup and UnitFactionGroup("player"))
+		BT.Bind(BT.RealmNow(), UnitFactionGroup and UnitFactionGroup("player"))
 		if BT.Dock then
 			BT.Dock.Create()
 		end

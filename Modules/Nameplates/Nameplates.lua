@@ -372,6 +372,24 @@ M.FRIEND_NPC = { 0.56, 0.74, 0.60 }
 -- (a player's name 13 and its level 12, Josh 2026-10-04: "can you increase
 -- player nameplate name text size?")
 M.FRIEND_SIZE = { player = 13, npc = 10, level = 12, sub = 9 }
+
+-- ONE SIZE AT EVERY DISTANCE (Josh 2026-11-21: "Anything we can do about the
+-- abrupt text scaling of nameplates?"). The game scales a plate with its
+-- distance, and a name on the plate was scaled with it. The game draws text
+-- at whole sizes, so the name jumped from one size to the next as a player
+-- walked. A friend's name leaves the plate's scale alone and keeps the scale
+-- of the rest of the interface. The plate still places it and fades it.
+function M.Steady(f)
+	if type(f.SetIgnoreParentScale) ~= "function" then
+		return false
+	end
+	if not pcall(f.SetIgnoreParentScale, f, true) then
+		return false
+	end
+	local scale = BT.Pill.Number(UIParent.GetEffectiveScale and UIParent:GetEffectiveScale(), 1)
+	pcall(f.SetScale, f, scale > 0 and scale or 1)
+	return true
+end
 -- the line under an NPC's name, grey (Josh 2026-10-04: "Can you make the NPC
 -- titles gray?"): light enough to read on the ground at its small size
 M.FRIEND_SUB = BT.TEXT.quiet
@@ -1440,6 +1458,7 @@ function M.Added(token)
 		if not pcall(f.SetParent, f, plate) then
 			pcall(f.SetParent, f, UIParent)
 		end
+		M.Steady(f)
 		M.Place(f, plate)
 		f:Show()
 		M.PaintFriend(f, src)
@@ -1805,9 +1824,12 @@ function M.DumpPlates(lines)
 			local up = (M.friends[token] and M.friends[token]:IsShown() and M.friends[token])
 				or (M.skins[token] and M.skins[token]:IsShown() and M.skins[token]) or nil
 			local oursAlpha = BT.Pill.Number(up and up.GetEffectiveAlpha and up:GetEffectiveAlpha(), -1)
-			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f oursAlpha=%.2f reaction=%s attack=%s pvp=%s"):format(
+			-- how large the game draws the plate, and ours on it (M.Steady)
+			local scale = BT.Pill.Number(plate.GetEffectiveScale and plate:GetEffectiveScale(), -1)
+			local oursScale = BT.Pill.Number(up and up.GetEffectiveScale and up:GetEffectiveScale(), -1)
+			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f oursAlpha=%.2f scale=%.2f oursScale=%.2f reaction=%s attack=%s pvp=%s"):format(
 				token, describe(F.Plain(UnitName, token)), describe(player), describe(M.IsFriend(token)),
-				ours, alpha, oursAlpha, describe(F.Plain(_G.UnitReaction, token, "player")),
+				ours, alpha, oursAlpha, scale, oursScale, describe(F.Plain(_G.UnitReaction, token, "player")),
 				describe(F.Plain(_G.UnitCanAttack, "player", token)), describe(F.Plain(_G.UnitIsPVP, token)))
 		end
 	end

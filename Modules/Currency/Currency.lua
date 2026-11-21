@@ -124,6 +124,31 @@ local function purses()
 	return BT.settings.purses
 end
 
+M.SIDES = { "Alliance", "Horde" }
+
+-- the side you are on, or nil when the game names neither
+function M.MySide()
+	if type(UnitFactionGroup) ~= "function" then
+		return nil
+	end
+	local ok, side = pcall(UnitFactionGroup, "player")
+	return ok and (side == "Alliance" or side == "Horde") and side or nil
+end
+
+-- A purse's side: the one written on it, or the one the census has for a
+-- character who has not logged in since sides were written down.
+local function sideOf(name, e)
+	if e.faction == "Alliance" or e.faction == "Horde" then
+		return e.faction
+	end
+	if not (BT.DB and BT.DB.Get and BT.db) then
+		return nil
+	end
+	local ok, row = pcall(BT.DB.Get, BT.db, name)
+	local side = ok and type(row) == "table" and row.faction or nil
+	return (side == "Alliance" or side == "Horde") and side or nil
+end
+
 -- this character's purse, written down; nil when there is no name to file
 -- it under or no purse to read
 function M.Remember()
@@ -142,20 +167,39 @@ function M.Remember()
 	if okC and type(class) == "string" then
 		entry.class = class
 	end
+	-- WHICH SIDE (Josh 2026-11-21: "I think we should track faction for
+	-- sure"): gold can't cross between Alliance and Horde
+	local side = M.MySide()
+	if side then
+		entry.faction = side
+	end
 	entry.copper, entry.at = copper, U.Now()
 	all[who] = entry
 	return entry
 end
 
--- every purse written down, richest first, and what they come to
+-- Every purse written down on this realm, richest first, and what they come
+-- to.
+-- ONLY WHAT CAN BE POOLED (Josh 2026-11-21: "They should only be separated
+-- by ruleset and faction ... If a player has both horde and alliance, we
+-- should break the total into 2 faction totals (since you cannot move money
+-- between factions)"). A realm is a ruleset, and gold does not cross to
+-- another, so a purse on another realm is not listed or counted here. With
+-- characters on both sides, `sides` holds each side's total and `split` is
+-- true. A purse whose side is not known yet is counted under "unknown".
 function M.Purses()
-	local list, total, realms = {}, 0, {}
+	local list, total, sides = {}, 0, {}
+	local home = U.HomeRealm and U.HomeRealm() or nil
 	for who, e in pairs(purses() or {}) do
 		if type(who) == "string" and type(e) == "table" and type(e.copper) == "number" then
-			local name, realm = who:match("^(.-)@(.+)$")
-			list[#list + 1] = { who = who, name = name or who, realm = realm, copper = e.copper, class = e.class }
-			total = total + e.copper
-			realms[realm or ""] = true
+			local name, realm = who:match("^(.-)@(.*)$")
+			if not name or home == nil or realm == home then
+				name = name or who
+				local side = sideOf(name, e) or "unknown"
+				list[#list + 1] = { who = who, name = name, copper = e.copper, class = e.class, side = side }
+				total = total + e.copper
+				sides[side] = (sides[side] or 0) + e.copper
+			end
 		end
 	end
 	table.sort(list, function(a, b)
@@ -164,11 +208,18 @@ function M.Purses()
 		end
 		return a.who < b.who
 	end)
-	local n = 0
-	for _ in pairs(realms) do
-		n = n + 1
+	return list, total, sides.Alliance ~= nil and sides.Horde ~= nil, sides
+end
+
+-- what the cell shows for "all characters": every purse's sum, or your own
+-- side's when you have characters on both
+function M.Pooled()
+	local _, total, split, sides = M.Purses()
+	local mine = split and M.MySide() or nil
+	if mine then
+		return sides[mine] or 0, mine
 	end
-	return list, total, n > 1
+	return total, nil
 end
 
 -- A new session on a login, the same one on a reload (Core/Session.lua).
@@ -256,7 +307,7 @@ function M.Update()
 	if not M.chip then
 		return
 	end
-	local total = M.ShowsTotal() and select(2, M.Purses()) or nil
+	local total = M.ShowsTotal() and (M.Pooled()) or nil
 	M.chip:Set(M.Cell(money(), total))
 	if M.session then
 		M.session.last = U.Now()
@@ -300,26 +351,23 @@ function M.Tip()
 		M.TipPurses(t)
 		local foot = {}
 		if M.HasOthers() then
-			foot[1] = { "Click", M.ShowsTotal() and "show this character" or "show all characters" }
+			local _, mine = M.Pooled()
+			foot[1] = { "Click", M.ShowsTotal() and "show this character"
+				or (mine and ("show all %s characters"):format(mine) or "show all characters") }
 		end
 		t:Foot(foot)
 	end })
 end
 
 -- every character's gold, once there is more than this one: the richest
--- first, the rest as one row, and the total
-function M.TipPurses(t)
-	local list, total, realms = M.Purses()
-	if #list < 2 then
-		return false
-	end
-	t:Section("All characters")
+-- first, the rest as one row, and the total. With characters on both sides,
+-- a list and a total for each side, yours first.
+local function listPurses(t, list, label, sum)
 	local others, rest = 0, 0
 	for i, p in ipairs(list) do
 		if i <= M.LIST_MAX then
-			local name = realms and p.realm and (p.name .. " · " .. p.realm) or p.name
 			local colour = p.class and { U.ClassColor(p.class) } or nil
-			t:Row(name, M.Coins(p.copper, true), nil, nil, colour)
+			t:Row(p.name, M.Coins(p.copper, true), nil, nil, colour)
 		else
 			others, rest = others + 1, rest + p.copper
 		end
@@ -327,7 +375,33 @@ function M.TipPurses(t)
 	if others > 0 then
 		t:Row(("%d more"):format(others), M.Coins(rest, true))
 	end
-	t:Total("Total", M.Coins(total, true))
+	t:Total(label, M.Coins(sum, true))
+end
+
+function M.TipPurses(t)
+	local list, total, split, sides = M.Purses()
+	if #list < 2 then
+		return false
+	end
+	if not split then
+		t:Section("All characters")
+		listPurses(t, list, "Total", total)
+		return true
+	end
+	local mine = M.MySide()
+	local order = { mine == "Horde" and "Horde" or "Alliance", mine == "Horde" and "Alliance" or "Horde", "unknown" }
+	for _, side in ipairs(order) do
+		local these = {}
+		for _, p in ipairs(list) do
+			if p.side == side then
+				these[#these + 1] = p
+			end
+		end
+		if #these > 0 then
+			t:Section(side == "unknown" and "Faction not known yet" or side)
+			listPurses(t, these, side == "unknown" and "Total" or (side .. " total"), sides[side] or 0)
+		end
+	end
 	return true
 end
 

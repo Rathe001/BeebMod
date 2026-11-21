@@ -5156,6 +5156,88 @@ if ok then
 			BT.boot.boundCount = count
 			_G.GetRealmName, _G.UnitFactionGroup = wasRealm, wasFaction
 		end },
+		{ "a game that names no realm binds the realm the saved file knows", function()
+			-- (Josh 2026-11-21: every character twice in the money tooltip. From
+			-- 2026-11-20 GetRealmName gives "", Core/Home.lua)
+			local U = BT.Util
+			local wasDB, wasMe, wasDb, wasScope, wasRules = _G.BeebModDB, U.Me, BT.db, BT.scope, _G.C_GameRules
+			local R = "CAMWOWUS2Realm1PvE"
+			local function file()
+				return {
+					realms = {
+						[R .. "|All"] = { players = { Old = "x" }, stats = { sightings = 0 } },
+						["|All"] = { players = {}, stats = { sightings = 0 } },
+					},
+					ledger = { realms = {
+						[R .. "|All"] = { people = {}, earned = { a = 100 } },
+						["|All"] = { people = { New = { grouped = 1 } }, earned = { a = 900, b = 950 } },
+					} },
+					settings = {
+						purses = {
+							["Aeki Xx@" .. R] = { copper = 10, at = 100 }, ["Aeki Xx@"] = { copper = 30, at = 900 },
+							["Other One@"] = { copper = 5, at = 950 },
+						},
+						xpPace = { ["Aeki Xx@" .. R] = { { xp = 1, t = 1 } }, ["Aeki Xx@"] = { { xp = 2, t = 2 } } },
+						pickpocket = { ["Aeki Xx@" .. R] = { coin = 5, picks = 2, items = { [7] = 1 } },
+							["Aeki Xx@"] = { coin = 3, picks = 1, items = { [7] = 2, [8] = 1 }, session = { last = 9 } } },
+						expedition = { chars = {
+							["Aeki Xx@" .. R] = { kills = { [1] = 5 }, first = { [1] = 10 }, earned = { t = 20 },
+								earnedBy = { t = 1 }, bestRank = 3, last = { at = 50, npc = 1 } },
+							["Aeki Xx@"] = { kills = { [1] = 2, [2] = 1 }, first = { [1] = 900, [2] = 901 },
+								earned = { t = 905, u = 906 }, earnedBy = { t = 2, u = 2 }, bestRank = 2,
+								last = { at = 910, npc = 2 }, recent = { "g" } },
+						} },
+					},
+				}
+			end
+			_G.BeebModDB = file()
+			U.Me = function() return "Aeki Xx" end
+			assert(BT.Home("Whitemane") == "Whitemane" and _G.BeebModDB.homes["Aeki Xx"] == "Whitemane",
+				"a realm the game names is the realm, and is remembered")
+			assert(BT.Home("") == "Whitemane", "and with no name, the one remembered")
+			_G.BeebModDB.homes = nil
+			assert(BT.Home("") == R, "with nothing remembered, the realm on a record of this character")
+			U.Me = function() return "Brand New" end
+			assert(BT.Home("") == R and _G.BeebModDB.homes["Brand New"] == R, "a new character: the only named book")
+			_G.BeebModDB.realms["Other|All"] = { players = {} }
+			U.Me = function() return "Newer Still" end
+			assert(BT.Home("") == "", "two named books and no record: no realm can be told")
+			_G.C_GameRules = { IsHardcoreActive = function() return true end }
+			assert(BT.Home("") == "Hardcore", "a Hardcore character takes no other kind's book")
+			_G.C_GameRules = wasRules
+			-- the two halves made one
+			_G.BeebModDB = file()
+			U.Me = function() return "Aeki Xx" end
+			BT.db, BT.scope = _G.BeebModDB.realms[R .. "|All"], { key = R .. "|All", realm = R }
+			local records, characters = BT.FoldNameless(R)
+			local s = _G.BeebModDB.settings
+			assert(records == 5 and s.purses["Aeki Xx@"] == nil and s.purses["Other One@"] == nil,
+				"every record under no realm moved: " .. tostring(records))
+			assert(s.purses["Aeki Xx@" .. R].copper == 30 and s.purses["Other One@" .. R].copper == 5,
+				"the purse written last is the purse")
+			assert(#s.xpPace["Aeki Xx@" .. R] == 2, "the pace samples one after the other")
+			local p = s.pickpocket["Aeki Xx@" .. R]
+			assert(p.coin == 8 and p.picks == 3 and p.items[7] == 3 and p.items[8] == 1 and p.session.last == 9,
+				"the takings added up")
+			local c = s.expedition.chars["Aeki Xx@" .. R]
+			assert(c.kills[1] == 7 and c.kills[2] == 1 and c.first[1] == 10 and c.first[2] == 901,
+				"kills added, a first kill on its first day")
+			assert(c.earned.t == 20 and c.earnedBy.t == 1 and c.earned.u == 906 and c.earnedBy.u == 2
+				and c.bestRank == 3 and c.last.npc == 2 and c.recent[1] == "g", "a feat keeps its first day")
+			assert(_G.BeebModDB.realms["|All"] == nil, "the book with no realm is gone into the realm's")
+			local led = _G.BeebModDB.ledger.realms
+			assert(led["|All"] == nil and led[R .. "|All"].people.New and led[R .. "|All"].earned.a == 100
+				and led[R .. "|All"].earned.b == 950, "the Ledger's people and dates with it")
+			assert(characters == 0, "an empty book brought nobody")
+			-- two named books: only this character's records move, and the book stays
+			_G.BeebModDB = file()
+			_G.BeebModDB.realms["Other|All"] = { players = {} }
+			records = BT.FoldNameless(R)
+			assert(records == 4 and _G.BeebModDB.settings.purses["Other One@"] and _G.BeebModDB.realms["|All"],
+				"with two named books the rest is left where it is")
+			assert(U.RealmLabel("") == "Forever", "a realm with no name is the game's")
+			_G.BeebModDB, U.Me, BT.db, BT.scope = wasDB, wasMe, wasDb, wasScope
+		end },
 		{ "a double right-click casts Fishing with a pole in hand", function()
 			-- DOUBLE-CLICK TO FISH (Josh 2026-11-05, as Fishing Buddy does it)
 			local mod = BT.GetModule("fishing")
@@ -12899,8 +12981,8 @@ if ok then
 			assert(all:find("MAKES", 1, true) and all:find("Filigreed Pristine Circlet | Head · Cloth · Binds when picked up", 1, true),
 				"what it makes, and what that is: " .. all)
 			assert(all:find("38 Armor | +12 Stamina | Equip: Increases healing", 1, true), "the made item's facts: " .. all)
-			assert(not all:find("Teaches you", 1, true) and not all:find("Requires Level 25", 1, true),
-				"not the teaching line, nor a level you have: " .. all)
+			assert(not all:find("Teaches you", 1, true) and all:find("Requires Level 25", 1, true),
+				"not the teaching line; the level it asks, met or not: " .. all)
 			assert(all:find("MATERIALS", 1, true) and rightOf(t, "Bolt of Silk Cloth") == "8" and rightOf(t, "Pristine Leather") == "1",
 				"the amounts alone for a profession that is not yours: " .. all)
 			do
@@ -13365,7 +13447,7 @@ if ok then
 				assert(allB:find("(53.8 damage per second)", 1, true), "damage per second under it: " .. allB)
 				assert(allB:find("+13 Stamina", 1, true), "a stat as its own line: " .. allB)
 				assert(not drawn:find("Stamina", 1, true), "and not drawn in a column as well: " .. drawn)
-				assert(not allB:find("Requires Level 58", 1, true), "a requirement you meet is not said: " .. allB)
+				assert(allB:find("Requires Level 58", 1, true), "the level it asks is said, met or not: " .. allB)
 				assert(allB:find("Equip: +62 Attack Power.", 1, true), "an effect the game lists no stat for stays a sentence")
 				-- (Josh 2026-11-16: "we arent showing item tags, like soulbound,
 				-- binds when equipped")
@@ -17707,10 +17789,33 @@ if ok then
 				assert(not BT.Tip.Says("show all characters"), "and no click to offer")
 				BT.Tip.Hide()
 				BT.settings.currencyTotal = nil
-				-- two realms: each name says its realm
-				BT.settings.purses = { [me] = { copper = 1 }, ["Aeki@Elsewhere"] = { copper = 2 } }
+				-- ONLY WHAT CAN BE POOLED (Josh 2026-11-21): another realm is
+				-- another ruleset, and its gold is not listed or counted here
+				BT.settings.purses = { [me] = { copper = 1 }, ["Aeki@Elsewhere"] = { copper = 2 },
+					["Bankalt@" .. realm] = { copper = 4 } }
+				local here, sum, split = mod.Purses()
+				assert(#here == 2 and sum == 5 and not split, "a purse on another realm is left out: " .. tostring(sum))
 				mod.Tip()
-				assert(BT.Tip.Says("Aeki · Elsewhere"), "on two realms, the realm by each name")
+				assert(not BT.Tip.Says("Aeki"), "and not listed")
+				BT.Tip.Hide()
+				-- BOTH SIDES (Josh 2026-11-21: "If a player has both horde and
+				-- alliance, we should break the total into 2 faction totals")
+				mod.Money()
+				assert(BT.settings.purses[me].faction == "Horde", "your side is written on your purse")
+				BT.settings.purses["Bankalt@" .. realm] = { copper = 400, faction = "Alliance" }
+				BT.settings.purses["Hordealt@" .. realm] = { copper = 30, faction = "Horde" }
+				BT.settings.purses["Oldalt@" .. realm] = { copper = 7 }
+				local _, _, both, sides = mod.Purses()
+				assert(both and sides.Horde == purse + 30 and sides.Alliance == 400 and sides.unknown == 7,
+					"a total for each side, and one for a side not known yet")
+				local pooled, mine = mod.Pooled()
+				assert(pooled == purse + 30 and mine == "Horde", "the cell's total is your own side's")
+				mod.Tip()
+				local texts = table.concat(BT.Tip.Texts(), " | ")
+				assert(BT.Tip.Says("Horde total") and BT.Tip.Says("Alliance total") and BT.Tip.Says("FACTION NOT KNOWN YET")
+					and not BT.Tip.Says("ALL CHARACTERS"), "the hover has a list and a total for each side: " .. texts)
+				assert(texts:find("HORDE", 1, true) < texts:find("ALLIANCE", 1, true), "your side first: " .. texts)
+				assert(BT.Tip.Says("show all Horde characters"), "and the click says whose it adds up")
 				BT.Tip.Hide()
 				BT.settings.purses = nil
 			end
