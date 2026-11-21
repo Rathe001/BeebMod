@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.17.0
 
 - **Bags by category.** The combined backpack now sorts your items onto
   shelves: New, Quest, Gear, Consumables, Crafting, Junk and Other, with
