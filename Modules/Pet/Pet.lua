@@ -199,7 +199,9 @@ function M.Tip()
 				t:Row("Loyalty", p.rate > 0 and "Gaining" or "Losing", p.rate > 0 and "good" or "bad")
 			end
 			if p.loyalty then
-				t:Row("Loyalty level", p.loyalty)
+				-- (a line of its own: as a row its label was cut to "Loyalty le...",
+				-- Josh's screenshot, 2026-11-21)
+				t:Note(p.loyalty)
 			end
 			if p.mood < 3 then
 				t:Note("Feed your pet to make it happy.", "warn")

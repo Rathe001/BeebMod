@@ -559,15 +559,19 @@ end
 -- where the game has its slots and its window now: taken before anything of
 -- ours moves them, and again each time the game lays them out
 function L.Remember(w, again)
+	-- (this window's own, not every window's: the reagent bag's slots are
+	-- kept here too, and its game layout comes at another time)
 	if again then
-		L.home = {}
+		for _, slot in ipairs(M.ItemSlots(w)) do
+			L.home[slot] = nil
+		end
 	end
 	for _, slot in ipairs(M.ItemSlots(w)) do
 		if not L.home[slot] then
 			L.home[slot] = points(slot)
 		end
 	end
-	if not L.gameSize and not L.sized then
+	if w == window() and not L.gameSize and not L.sized then
 		local width, height = w:GetSize()
 		width, height = BT.Pill.Number(width, 0), BT.Pill.Number(height, 0)
 		if width > 0 and height > 0 then
@@ -713,6 +717,151 @@ function M.FreeWords(items, empties)
 	return words
 end
 
+-- THE REAGENT BAG ON THE SHELVES TOO (Josh 2026-11-21, the Linen Reagent Bag
+-- in a window of its own next to the shelves: "Can we combine the reagent bags
+-- into the main bag?"). The game keeps the reagent bag in its own window
+-- however the backpack is set. In the category layout its items go on the
+-- shelves with the rest, each still the game's own slot.
+--
+-- ITS WINDOW IS PUT OUT OF SIGHT, NOT HIDDEN. A slot is drawn only while its
+-- window is shown, so the window stays shown and is moved off the screen. It
+-- is lifted a layer above the backpack, so its slots draw over the shelves
+-- and not under them. Where the game had it, and its layer, are kept and put
+-- back with the grid. The bag window's own placing leaves it alone meanwhile
+-- (M.ApplyPosition).
+local function reagentBagIndex()
+	return Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag or nil
+end
+
+-- the reagent bag's window, while it is shown
+function L.Reagents()
+	local index = reagentBagIndex()
+	if not index then
+		return nil
+	end
+	local combined = window()
+	for _, w in ipairs(M.Windows()) do
+		if w ~= combined and w.IsShown and w:IsShown() and type(w.GetBagID) == "function" then
+			local ok, bag = pcall(w.GetBagID, w)
+			if ok and plain(bag) == index then
+				return w
+			end
+		end
+	end
+	return nil
+end
+
+-- FOR WHAT LOADED (Josh 2026-11-21, a screenshot of the shelves with the
+-- reagent bag's six items on none of them and its window nowhere in sight).
+-- Every bag window the game has that could be the reagent bag's: its name,
+-- the bag it says it is, whether it is shown, how many slots it lists and
+-- how many are shown, and its layer. Then what the layout did with it.
+function L.Said()
+	local index = reagentBagIndex()
+	local parts = { ("reagent bag index %s"):format(tostring(index)) }
+	local combined = window()
+	for _, w in ipairs(M.Windows()) do
+		if w ~= combined then
+			local name = BT.Furniture.Call(w, "GetName") or "?"
+			local okB, bag = pcall(function() return w.GetBagID and w:GetBagID() end)
+			local okI, id = pcall(function() return w.GetID and w:GetID() end)
+			local shown = w.IsShown and w:IsShown() and true or false
+			-- only the ones that are up, or say they are the reagent bag
+			if shown or (okB and plain(bag) == index) or (okI and plain(id) == index) then
+				local listed, up = 0, 0
+				for _, slot in ipairs(M.ItemSlots(w)) do
+					listed = listed + 1
+					if slot.IsShown and slot:IsShown() then
+						up = up + 1
+					end
+				end
+				parts[#parts + 1] = ("%s bag=%s id=%s shown=%s slots=%d up=%d strata=%s items=%s"):format(name,
+					tostring(okB and plain(bag)), tostring(okI and plain(id)), tostring(shown), listed, up,
+					tostring(w.GetFrameStrata and w:GetFrameStrata()), type(w.Items))
+			end
+		end
+	end
+	parts[#parts + 1] = ("merged=%s layout=%s drawn=%s"):format(
+		L.merged and (BT.Furniture.Call(L.merged, "GetName") or "yes") or "no", tostring(M.Layout()), tostring(L.drawn))
+	return "reagents: " .. table.concat(parts, " · ")
+end
+
+-- OPENED WITH THE BACKPACK (What loaded, 2026-11-21: "merged=no", and no
+-- reagent window listed). The B key opens the backpack and leaves the reagent
+-- bag shut on this client: it was open in Josh's screenshot only because he
+-- had clicked its icon. With no window shown its slots are not drawn, so
+-- there was nothing to put on the shelves. In the category layout the
+-- reagent bag is opened a frame after the backpack, the way a click on its
+-- icon in the row at the foot opens it (BagSlots.lua), and shut again with
+-- the backpack. In a fight too: the game's OpenBag has no check for one.
+function L.OpenReagents()
+	local index = reagentBagIndex()
+	if not index or L.Reagents() then
+		return false
+	end
+	local c = rawget(_G, "C_Container")
+	local count = (c and c.GetContainerNumSlots) or rawget(_G, "GetContainerNumSlots")
+	local okN, n = pcall(function() return count and count(index) end)
+	if not (okN and (tonumber(plain(n)) or 0) > 0) then
+		return false -- no reagent bag worn
+	end
+	local open = rawget(_G, "OpenBag")
+	if type(open) ~= "function" then
+		return false
+	end
+	if M.NoteOpen then
+		pcall(M.NoteOpen, "slot")
+	end
+	pcall(open, index)
+	L.openedReagents = L.Reagents() ~= nil
+	return L.openedReagents
+end
+
+function L.CloseReagents()
+	if not L.openedReagents then
+		return false
+	end
+	L.openedReagents = nil
+	L.Unmerge()
+	local index, close = reagentBagIndex(), rawget(_G, "CloseBag")
+	if index and type(close) == "function" then
+		pcall(close, index)
+	end
+	return true
+end
+
+function L.Merge(r)
+	if L.merged ~= r then
+		L.Unmerge()
+		L.merged = r
+		L.mergedHome = { points = points(r), strata = r.GetFrameStrata and r:GetFrameStrata() or nil,
+			clamped = r.IsClampedToScreen and r:IsClampedToScreen() or nil }
+	end
+	if r.SetClampedToScreen then
+		pcall(r.SetClampedToScreen, r, false)
+	end
+	if r.SetFrameStrata then
+		pcall(r.SetFrameStrata, r, "HIGH")
+	end
+	return put(r, { { "TOPLEFT", UIParent, "TOPLEFT", -L.AWAY, L.AWAY } })
+end
+
+function L.Unmerge()
+	local r, home = L.merged, L.mergedHome
+	L.merged, L.mergedHome = nil, nil
+	if not (r and home) then
+		return false
+	end
+	if home.strata and r.SetFrameStrata then
+		pcall(r.SetFrameStrata, r, home.strata)
+	end
+	put(r, home.points)
+	if home.clamped ~= nil and r.SetClampedToScreen then
+		pcall(r.SetClampedToScreen, r, home.clamped and true or false)
+	end
+	return true
+end
+
 -- every slot where the game had it, the window its own size, ours put away
 function L.Restore()
 	local w = window()
@@ -734,6 +883,7 @@ function L.Restore()
 	end
 	L.sized = nil
 	L.FreeSearch(w)
+	L.Unmerge()
 	if L.canvas then
 		L.canvas:Hide()
 	end
@@ -761,6 +911,20 @@ function L.Arrange()
 			slots[#slots + 1] = slot
 		end
 	end
+	-- the reagent bag's, from its own window (L.Reagents)
+	local reagents = L.Reagents()
+	if reagents then
+		L.HookReagents(reagents)
+		L.Remember(reagents)
+		for _, slot in ipairs(M.ItemSlots(reagents)) do
+			if slot.IsShown and slot:IsShown() then
+				slots[#slots + 1] = slot
+			end
+		end
+		L.Merge(reagents)
+	elseif L.merged then
+		L.Unmerge()
+	end
 	local scale = L.SCALE
 	local size = (slots[1] and BT.Pill.Number(slots[1]:GetWidth(), 37) or 37) * scale
 	local items, empties = M.Categorize(slots)
@@ -786,7 +950,18 @@ function L.Arrange()
 		if L.homeScale[slot] == nil then
 			L.homeScale[slot] = BT.Pill.Number(slot.GetScale and slot:GetScale(), 1)
 		end
-		pcall(slot.SetScale, slot, scale)
+		-- a slot of another window (the reagent bag's) takes that window's
+		-- scale, which need not be the backpack's: made up for here
+		local own = scale
+		local parent = slot.GetParent and slot:GetParent() or nil
+		if parent and parent ~= w and parent.GetEffectiveScale then
+			local theirs = BT.Pill.Number(parent:GetEffectiveScale(), 0)
+			local ours = BT.Pill.Number(w:GetEffectiveScale(), 0)
+			if theirs > 0 and ours > 0 then
+				own = scale * ours / theirs
+			end
+		end
+		pcall(slot.SetScale, slot, own)
 		put(slot, { { "TOPLEFT", c, "TOPLEFT", x / scale, -y / scale } })
 	end
 	for _, p in ipairs(plan.places) do
@@ -1138,6 +1313,44 @@ end
 -- When
 -- ---------------------------------------------------------------------------
 
+-- the reagent bag's window: its slots laid out again by the game, and the
+-- window shown or hidden, each ask for the shelves again
+L.reagentHooked = setmetatable({}, { __mode = "k" })
+function L.HookReagents(r)
+	if L.reagentHooked[r] or type(hooksecurefunc) ~= "function" then
+		return
+	end
+	L.reagentHooked[r] = true
+	if type(r.UpdateItemLayout) == "function" then
+		pcall(hooksecurefunc, r, "UpdateItemLayout", function()
+			L.Remember(r, true)
+			if L.Active() then
+				L.Soon()
+			end
+		end)
+	end
+	if r.HookScript then
+		for _, script in ipairs({ "OnShow", "OnHide" }) do
+			pcall(r.HookScript, r, script, function()
+				if L.Active() then
+					L.Soon()
+				end
+			end)
+		end
+	end
+end
+
+-- the game places its bag windows again as each opens: the reagent bag's is
+-- put out of sight again after it
+if type(hooksecurefunc) == "function" and type(rawget(_G, "UpdateContainerFrameAnchors")) == "function" then
+	pcall(hooksecurefunc, "UpdateContainerFrameAnchors", function()
+		if L.merged and L.Active() then
+			L.mergedHome.points = points(L.merged)
+			L.Merge(L.merged)
+		end
+	end)
+end
+
 function L.Hook()
 	local w = window()
 	if not w or L.hooked or type(hooksecurefunc) ~= "function" then
@@ -1186,11 +1399,27 @@ function L.Hook()
 	if w.HookScript then
 		pcall(w.HookScript, w, "OnShow", function()
 			L.Buttons()
+			-- the reagent bag's window, opened with this one (L.OpenReagents)
+			if L.Active() and C_Timer and C_Timer.After then
+				C_Timer.After(0, function()
+					if not (L.Active() and w:IsShown()) then
+						return
+					end
+					L.OpenReagents()
+					if L.Reagents() and not L.merged then
+						L.Soon()
+					end
+				end)
+			end
 			-- (the game's own OnShow has laid the slots out by now, and that
 			-- hook drew ours: asked only where it did not)
 			if L.Active() and not L.drawn then
 				L.Soon()
 			end
+		end)
+		-- and shut with it, where this opened it
+		pcall(w.HookScript, w, "OnHide", function()
+			L.CloseReagents()
 		end)
 	end
 end

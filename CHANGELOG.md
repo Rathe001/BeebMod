@@ -3,6 +3,14 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **The reagent bag is part of the category view.** Its items now sit on
+  the shelves with the rest of your bags. Its own window no longer opens
+  next to the backpack. The grid view still shows it apart.
+- **A pet's loyalty fits in its tooltip.** The loyalty text was cut short on
+  the dock's pet line. It has a line of its own now.
+
 ## 1.18.0
 
 - **A line for a hunter's pet on the dock.** Under your level, while your

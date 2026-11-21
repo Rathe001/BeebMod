@@ -651,6 +651,11 @@ function M.ApplyPosition(frame)
 	if not (frame and pos and BT.Enabled("bagwindow") and frame:IsShown() and movable(frame)) then
 		return false
 	end
+	-- the reagent bag's window while its items are on the shelves: out of
+	-- sight, and left there (Layouts.lua, L.Merge)
+	if M.Shelves and M.Shelves.merged == frame then
+		return false
+	end
 	frame:ClearAllPoints()
 	frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", pos.x or 0, pos.y or 0)
 	return true
@@ -881,6 +886,13 @@ function M.Status()
 	local ok, taint = pcall(M.Taint)
 	if ok and taint then
 		parts[#parts + 1] = taint
+	end
+	-- where the reagent bag's window and slots are (Layouts.lua)
+	if M.Shelves and M.Shelves.Said then
+		local okR, said = pcall(M.Shelves.Said)
+		if okR and said then
+			parts[#parts + 1] = said
+		end
 	end
 	return #parts > 0 and table.concat(parts, " · ") or nil
 end
