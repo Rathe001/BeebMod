@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.16.2
 
 - **What loaded says more about a blocked action.** Some players have had
   an item refused when they used it from the bags, with a message that
