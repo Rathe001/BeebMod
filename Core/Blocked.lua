@@ -8,6 +8,93 @@
 local ADDON, BT = ...
 local CreateFrame, C_Timer = BT.Cpu.For("Core/Blocked.lua")
 
+-- WHOSE A FRAME'S FIELDS ARE (Josh 2026-11-20: a player's leather armor kit,
+-- used from the bags, was refused). The game refuses a protected call when
+-- the code on the way to it read anything an addon wrote. issecurevariable
+-- says, field by field, which of a table's fields are the game's own and
+-- which addon wrote the others. Scan counts the ones that are not the game's
+-- into `found`, by field and addon, and leaves BeebMod's own fields out
+-- (beebs..., bmShadow): the game never reads those.
+BT.Taint = {}
+local Taint = BT.Taint
+
+function Taint.Can()
+	return type(rawget(_G, "issecurevariable")) == "function"
+end
+
+function Taint.Scan(t, found)
+	local check = rawget(_G, "issecurevariable")
+	if type(check) ~= "function" or type(t) ~= "table" then
+		return false
+	end
+	local hit = false
+	for key in pairs(t) do
+		if type(key) == "string" and not key:find("^beebs") and not key:find("^bm%u") then
+			local ok, secure, by = pcall(check, t, key)
+			if ok and not secure then
+				local name = key .. " by " .. ((by ~= nil and by ~= "") and tostring(by) or "?")
+				found[name] = (found[name] or 0) + 1
+				hit = true
+			end
+		end
+	end
+	return hit
+end
+
+function Taint.Said(found, most)
+	local names = {}
+	for name, n in pairs(found) do
+		names[#names + 1] = n > 1 and ("%s x%d"):format(name, n) or name
+	end
+	table.sort(names)
+	local more = #names - most
+	while #names > most do
+		table.remove(names)
+	end
+	if #names == 0 then
+		return "none"
+	end
+	return table.concat(names, ", ") .. (more > 0 and (" and %d more"):format(more) or "")
+end
+
+-- THE OTHER FRAMES A KIT GOES THROUGH. Using a kit or an enchant opens the
+-- character window (GameEvent.HandleEnchantSpellSelected, then
+-- ToggleCharacter), a click on an equipped item runs
+-- PaperDollItemSlotButton_OnClick, and replacing an enchant asks in a popup.
+local SLOTS = { "Head", "Neck", "Shoulder", "Back", "Chest", "Shirt", "Tabard", "Wrist", "Hands", "Waist", "Legs",
+	"Feet", "Finger0", "Finger1", "Trinket0", "Trinket1", "MainHand", "SecondaryHand", "Ranged", "Ammo" }
+local GROUPS = {
+	{ "character window", { "CharacterFrame", "PaperDollFrame", "PaperDollItemsFrame" } },
+	{ "equipped slots", SLOTS, "Character%sSlot" },
+	{ "popups", { "StaticPopup1", "StaticPopup2", "StaticPopup3", "StaticPopup4" } },
+	{ "vendor window", { "MerchantFrame" } },
+}
+local GLOBALS = { "FRAME_THAT_OPENED_BAGS", "UIPanelWindows", "StaticPopupDialogs", "ToggleCharacter", "ShowUIPanel",
+	"PaperDollItemSlotButton_OnClick", "ContainerFrameItemButton_OnClick" }
+
+function Taint.Others()
+	if not Taint.Can() then
+		return nil
+	end
+	local parts = {}
+	for _, group in ipairs(GROUPS) do
+		local found = {}
+		for _, name in ipairs(group[2]) do
+			Taint.Scan(rawget(_G, group[3] and group[3]:format(name) or name), found)
+		end
+		parts[#parts + 1] = group[1] .. " " .. Taint.Said(found, 8)
+	end
+	local check, globals = rawget(_G, "issecurevariable"), {}
+	for _, name in ipairs(GLOBALS) do
+		local ok, secure, by = pcall(check, name)
+		if ok and not secure then
+			globals[#globals + 1] = name .. " by " .. tostring(by)
+		end
+	end
+	parts[#parts + 1] = "globals " .. (#globals > 0 and table.concat(globals, ", ") or "none")
+	return table.concat(parts, " · ")
+end
+
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_ACTION_BLOCKED")
 f:RegisterEvent("ADDON_ACTION_FORBIDDEN")
@@ -35,6 +122,21 @@ f:SetScript("OnEvent", function(_, event, addon, func)
 	BT.blockedLog[#BT.blockedLog + 1] = ("%s calling %s%s"):format(event, tostring(func), while_)
 	if debugstack then
 		BT.blockedStack = debugstack(2, 10, 0)
+	end
+	-- WHOSE THE BAG SLOTS WERE WHEN IT HAPPENED (Josh 2026-11-20: reports of
+	-- items refused when used from the bags). The bag window names every field
+	-- on the game's bag windows and slots that an addon wrote
+	-- (Modules/BagWindow/BagWindow.lua, M.Taint).
+	local window = BT.GetModule and BT.GetModule("bagwindow")
+	if window and window.Taint then
+		local ok, taint = pcall(window.Taint)
+		if ok and taint then
+			BT.blockedLog[#BT.blockedLog + 1] = "then: " .. taint
+		end
+	end
+	local okOthers, others = pcall(Taint.Others)
+	if okOthers and others then
+		BT.blockedLog[#BT.blockedLog + 1] = "then: " .. others
 	end
 	-- KEPT IN THE SAVED FILE TOO (2026-10-04: "Interface action failed
 	-- because of an AddOn", and the list had gone with the reload)

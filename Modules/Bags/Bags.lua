@@ -284,6 +284,11 @@ end
 -- ContainerFrame.xml in Blizzard_UIPanels_Game/Mainline on the forever
 -- branch, read 2026-10-18). The game's own B key runs the same function.
 local function openBags()
+	-- counted for What loaded (Modules/BagWindow/BagWindow.lua, M.Taint)
+	local window = BT.GetModule("bagwindow")
+	if window and window.NoteOpen then
+		pcall(window.NoteOpen, "dock")
+	end
 	if type(ToggleAllBags) == "function" then
 		pcall(ToggleAllBags)
 	elseif type(OpenAllBags) == "function" then

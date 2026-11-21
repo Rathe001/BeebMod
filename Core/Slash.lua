@@ -109,8 +109,28 @@ function BT.WhatLoaded()
 		end
 	end
 	U.Print("refused events: " .. (#refused > 0 and table.concat(refused, ", ") or "none"))
+	-- whose the character window, the equipped slots and the popups are now
+	-- (Core/Blocked.lua, Taint.Others)
+	if BT.Taint and BT.Taint.Others then
+		local ok, others = pcall(BT.Taint.Others)
+		if ok and others then
+			U.Print("taint: " .. others)
+		end
+	end
 	for _, line in ipairs(BT.blockedLog or {}) do
 		U.Print("|cffff6b6bblocked|r " .. line)
+	end
+	-- THE CODE THAT RAN INTO THE LAST ONE (Josh 2026-11-20). It was kept and
+	-- never printed, so a player's report had the call and not the way to it.
+	if type(BT.blockedStack) == "string" then
+		local n = 0
+		for line in BT.blockedStack:gmatch("[^\r\n]+") do
+			n = n + 1
+			if n > 8 then
+				break
+			end
+			U.Print("|cffff6b6bblocked at|r " .. line)
+		end
 	end
 	for _, err in ipairs(BT.moduleErrors or {}) do
 		U.Print("|cffff6b6bmodule error|r " .. err)

@@ -794,6 +794,62 @@ function M.WatchPosition()
 end
 
 -- ---------------------------------------------------------------------------
+-- Whose the game's bag slots are
+-- ---------------------------------------------------------------------------
+--
+-- WHAT AN ADDON WROTE ON THE GAME'S BAG WINDOWS (Josh 2026-11-20: "I'm still
+-- getting reports of secure actions being blocked when used directly from
+-- the inventory"). The game refuses to use an item when the click ran through
+-- anything an addon wrote. issecurevariable says, field by field, which of a
+-- frame's fields are the game's own and which addon wrote the others. This
+-- reads every field of each bag window and each slot, and names the ones that
+-- are not the game's, with the addon. BeebMod's own fields (beebs...) are left
+-- out: the game never reads them.
+--
+-- NOT KNOWN YET which of these the game minds. It makes a window's slots the
+-- first time the window opens (ContainerFrameMixin:AcquireNewItemButton), and
+-- the dock's bags cell and the bag slots open the bags from BeebMod's code
+-- (Modules/Bags/Bags.lua, Modules/BagWindow/BagSlots.lua). If the game counts
+-- slots made that way as BeebMod's, it counts their clicks as BeebMod's too.
+-- So those opens are counted, with how many slots were made before the first.
+M.TAINT_NAMES = 12
+M.opens = { dock = 0, slot = 0 }
+
+function M.NoteOpen(from)
+	local o = M.opens
+	if o.first == nil then
+		local n = 0
+		for _, w in ipairs(M.Windows()) do
+			n = n + #M.Slots(w)
+		end
+		o.first, o.madeBefore = from, n
+	end
+	o[from] = (o[from] or 0) + 1
+end
+
+function M.Taint()
+	if not BT.Taint.Can() then
+		return "bag taint: can't be read"
+	end
+	local scan, said = BT.Taint.Scan, function(found) return BT.Taint.Said(found, M.TAINT_NAMES) end
+	local windows, slots, made, hit = {}, {}, 0, 0
+	for _, w in ipairs(M.Windows()) do
+		scan(w, windows)
+		for _, b in ipairs(M.Slots(w)) do
+			made = made + 1
+			if scan(b, slots) then
+				hit = hit + 1
+			end
+		end
+	end
+	local o = M.opens
+	local first = o.first and (", the first from the %s with %d slots made"):format(
+		o.first == "dock" and "dock" or "bag slots", o.madeBefore or 0) or ""
+	return ("bag taint: windows %s · %d of %d slots: %s · BeebMod opened bags from the dock %d, from the bag slots %d%s"):format(
+		said(windows), hit, made, said(slots), o.dock or 0, o.slot or 0, first)
+end
+
+-- ---------------------------------------------------------------------------
 -- The record
 -- ---------------------------------------------------------------------------
 
@@ -801,14 +857,25 @@ end
 -- page's Record button)
 -- THE BAG SLOTS IN WHAT LOADED (Josh 2026-11-05: "Bag icons are still not
 -- showing", and What loaded is what he pastes). Each slot's numbers, and the
--- row's last few passes, in chat (M.BagSlots.Brief).
+-- row's last few passes, in chat (M.BagSlots.Brief). Then whose the game's
+-- bag slots are (M.Taint).
 function M.Status()
 	local S = M.BagSlots
-	return S and S.Brief and S.Brief() or nil
+	local parts = {}
+	parts[#parts + 1] = S and S.Brief and S.Brief() or nil
+	local ok, taint = pcall(M.Taint)
+	if ok and taint then
+		parts[#parts + 1] = taint
+	end
+	return #parts > 0 and table.concat(parts, " · ") or nil
 end
 
 function M.Dump()
 	local lines = BT.Furniture.Dump(M.Windows())
+	local okTaint, taint = pcall(M.Taint)
+	if okTaint and taint then
+		lines[#lines + 1] = taint
+	end
 	if M.BagSlots and M.BagSlots.Dump then
 		for _, line in ipairs(M.BagSlots.Dump()) do
 			lines[#lines + 1] = line

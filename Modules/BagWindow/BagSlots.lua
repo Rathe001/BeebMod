@@ -138,6 +138,8 @@ function S.Click(b)
 	if S.Drop(b) then
 		return
 	end
+	-- counted for What loaded (M.Taint)
+	call(M.NoteOpen, "slot")
 	call(_G.ToggleBag, b.bag)
 end
 
@@ -261,6 +263,7 @@ function S.KeyClick()
 		call(_G.PutKeyInKeyRing)
 		return
 	end
+	call(M.NoteOpen, "slot")
 	if type(_G.ToggleKeyRing) == "function" then
 		call(_G.ToggleKeyRing)
 	else

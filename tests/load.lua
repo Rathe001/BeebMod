@@ -10165,6 +10165,51 @@ if ok then
 			assert(type(brief) == "string" and brief:find("bag slots up", 1, true)
 				and brief:find("1:31 tex=nil id=22976 icon=133644 chose=133644", 1, true),
 				"What loaded names each slot's numbers: " .. tostring(brief))
+			-- WHOSE THE GAME'S BAG SLOTS ARE (Josh 2026-11-20: items refused
+			-- when used from the bags). With no issecurevariable it says so.
+			-- With one, it names each field an addon wrote on a window or a
+			-- slot, leaves BeebMod's own fields out, and counts BeebMod's opens.
+			assert(brief:find("bag taint: can't be read", 1, true), "no issecurevariable, and it says so: " .. brief)
+			do
+				local hadCheck, hadOpens = rawget(_G, "issecurevariable"), mod.opens
+				mod.opens = { dock = 0, slot = 0 }
+				local wrote = { [win] = { size = "BeebMod" }, [slot] = { OnClick = "BeebMod", hasItem = "Baganator" } }
+				local asked = {}
+				_G.issecurevariable = function(t, key)
+					asked[key] = true
+					local by = wrote[t] and wrote[t][key]
+					return by == nil, by
+				end
+				local hadSize = win.size
+				win.size, slot.OnClick, slot.hasItem = 16, function() end, 1
+				mod.NoteOpen("dock")
+				mod.NoteOpen("dock")
+				mod.NoteOpen("slot")
+				local taint = mod.Taint()
+				assert(taint:find("windows size by BeebMod ·", 1, true), "a window's field and who wrote it: " .. taint)
+				assert(taint:find("slots: OnClick by BeebMod, hasItem by Baganator ·", 1, true)
+					and taint:find("1 of ", 1, true), "a slot's fields, and how many slots have one: " .. taint)
+				assert(taint:find("from the dock 2, from the bag slots 1, the first from the dock with", 1, true),
+					"and BeebMod's own opens: " .. taint)
+				for key in pairs(asked) do
+					assert(not key:find("^beebs"), "BeebMod's own fields are not asked about: " .. key)
+				end
+				assert(mod.Status():find(taint, 1, true), "What loaded has the line")
+				-- and the frames a kit goes through: the character window, the
+				-- equipped slots, the popups (Core/Blocked.lua, Taint.Others)
+				local hadHead = rawget(_G, "CharacterHeadSlot")
+				local head = { autoEquipSlotIDs = {}, beebsRing = {}, bmShadow = {} }
+				_G.CharacterHeadSlot = head
+				wrote[head] = { autoEquipSlotIDs = "BeebMod", beebsRing = "BeebMod", bmShadow = "BeebMod" }
+				local others = BT.Taint.Others()
+				assert(others:find("equipped slots autoEquipSlotIDs by BeebMod ·", 1, true),
+					"an equipped slot's field, and none of BeebMod's own: " .. others)
+				assert(others:find("popups none", 1, true) and others:find("globals none", 1, true),
+					"and nothing where nothing was written: " .. others)
+				_G.CharacterHeadSlot = hadHead
+				win.size, slot.OnClick, slot.hasItem = hadSize, nil, nil
+				_G.issecurevariable, mod.opens = hadCheck, hadOpens
+			end
 			-- AND AGAIN A MOMENT LATER (Josh 2026-11-04: after a /reload "the bag
 			-- icon appears"): a bag just put on has no picture when the event
 			-- comes, and has one half a second on
