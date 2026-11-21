@@ -3980,7 +3980,7 @@ if ok then
 				"the objective and its count a size up: " .. tostring(select(2, BT.UnitTip.LineOf(tip, i):GetFont())))
 			-- (Josh 2026-11-18: "Can you reduce quest text size a bit?" They
 			-- were a size above the other rows. The band still sets them off.)
-			assert(mod.QUEST_SIZE == 11 and mod.QUEST_TITLE_SIZE == 12, "a little smaller than they were")
+			assert(mod.QUEST_SIZE == 10 and mod.QUEST_TITLE_SIZE == 11, "smaller again (Josh 2026-11-21)")
 			local band = tip.beebsQuestBands and tip.beebsQuestBands[1]
 			assert(band and band:IsShown(), "a band behind it")
 			assert(band._points.LEFT.rel == BT.UnitTip.LineOf(tip, i) and band._points.RIGHT.rel == tip,
@@ -5155,6 +5155,154 @@ if ok then
 				"a plain zone-in leaves the bound book as it is")
 			BT.boot.boundCount = count
 			_G.GetRealmName, _G.UnitFactionGroup = wasRealm, wasFaction
+		end },
+		{ "the bags by category: which shelf an item goes on, and where the shelves put it", function()
+			-- (Josh 2026-11-21, board A of the bag categories canvas,
+			-- Modules/BagWindow/Layouts.lua)
+			local mod = BT.GetModule("bagwindow")
+			local Sh = mod.Shelves
+			assert(mod.Layouts.shelves.arrange and not mod.Layouts.grid.arrange, "the grid is the game's own layout")
+			assert(mod.LAYOUT_ORDER[1] == "shelves" and mod.DEFAULT_LAYOUT == "shelves", "the new layout is the one seen first")
+			local C = mod.CategoryOf
+			assert(C({ id = 1, quality = 1, class = 0 }) == "consumable" and C({ id = 1, quality = 2, class = 4 }) == "gear"
+				and C({ id = 1, quality = 1, class = 7 }) == "crafting" and C({ id = 1, quality = 1, class = 9 }) == "crafting"
+				and C({ id = 1, quality = 1, class = 6 }) == "ammo" and C({ id = 1, quality = 1, class = 15 }) == "other",
+				"by the game's class of item")
+			assert(C({ id = 1, quality = 0, class = 2 }) == "junk", "a grey item is junk whatever it is")
+			assert(C({ id = 1, quality = 0, class = 12 }) == "quest" and C({ id = 1, quality = 1, class = 0, quest = true }) == "quest",
+				"a quest item is a quest item first")
+			assert(C({ id = 6265, quality = 1, class = 15 }) == "shards", "a warlock's shards have a shelf")
+			assert(C({ id = 1, quality = 0, class = 12, new = true }) == "new", "and a new item is new before anything")
+			-- what is in the bags, from the game's calls
+			local wasC, wasItem, wasNew = _G.C_Container, _G.C_Item, _G.C_NewItems
+			local bag = {
+				[1] = { itemID = 100, quality = 2, stackCount = 1 }, [2] = { itemID = 200, quality = 0, stackCount = 3 },
+				[4] = { itemID = 300, quality = 1, stackCount = 5 }, [5] = { itemID = 400, quality = 1, stackCount = 1 },
+			}
+			local classOf = { [100] = 4, [200] = 15, [300] = 0, [400] = 7 }
+			_G.C_Container = {
+				GetContainerItemInfo = function(_, i) return bag[i] end,
+				GetContainerItemQuestInfo = function() return { isQuestItem = false } end,
+			}
+			_G.C_Item = {
+				GetItemInfoInstant = function(id) return id, "", "", "", 1, classOf[id], 0 end,
+				GetItemInfo = function(id) return "n", "l", 1, 1, 1, "", "", 1, "", 1, id == 200 and 40 or 0 end,
+			}
+			_G.C_NewItems = { IsNewItem = function(_, i) return i == 5 end }
+			local slots = {}
+			for i = 1, 6 do
+				slots[i] = { GetBagID = function() return 0 end, GetID = function() return i end }
+			end
+			local items, empties = mod.Categorize(slots)
+			_G.C_Container, _G.C_Item, _G.C_NewItems = wasC, wasItem, wasNew
+			assert(#items == 4 and #empties == 2, "four items and two empty slots")
+			local cat = {}
+			for _, it in ipairs(items) do
+				cat[it.id] = it.cat
+			end
+			assert(cat[100] == "gear" and cat[200] == "junk" and cat[300] == "consumable" and cat[400] == "new",
+				"each on its shelf")
+			assert(items[1].id == 100, "the best first")
+			-- the shelves: each a row of its own, the full width
+			local plan = mod.Layouts.shelves.arrange(items, empties, { size = 37 })
+			assert(#plan.labels == 4 and plan.labels[1].name == "New" and plan.labels[2].name == "Gear"
+				and plan.labels[3].name == "Consumables" and plan.labels[4].name == "Junk", "the shelves in their order")
+			assert(plan.labels[2].y > plan.labels[1].y and plan.labels[3].y > plan.labels[2].y
+				and plan.labels[2].x == plan.labels[1].x and plan.labels[1].w == plan.width,
+				"a shelf a row, however short (Josh 2026-11-21)")
+			assert(plan.labels[4].sub:find("1 item", 1, true) and plan.labels[4].sub:find("\n", 1, true),
+				"junk says what it sells for: " .. plan.labels[4].sub)
+			assert(#plan.places == 4 and plan.places[1].x == Sh.LABEL + Sh.LABEL_GAP, "an item starts right of its shelf's name")
+			assert(plan.free.n == 2 and plan.free.y > plan.labels[4].y and plan.height == plan.free.y + Sh.FREE_H,
+				"the line of free slots under the last shelf")
+			local many = {}
+			for i = 1, 20 do
+				many[i] = { slot = {}, cat = "crafting", id = i, quality = 1, count = 1 }
+			end
+			many[21] = { slot = {}, cat = "other", id = 99, quality = 1, count = 1 }
+			local wide = mod.Layouts.shelves.arrange(many, {}, { size = 37 })
+			assert(wide.labels[1].w == wide.width and wide.labels[2].y > wide.labels[1].y, "a long shelf takes the row")
+			assert(wide.places[Sh.COLS + 1].y > wide.places[1].y and wide.places[Sh.COLS + 1].x == wide.places[1].x,
+				"and wraps after " .. Sh.COLS)
+			-- a folded shelf is one square, every item of it stacked there
+			local shut = mod.Layouts.shelves.arrange(many, {}, { size = 37, folded = { crafting = true } })
+			assert(shut.labels[1].folded and shut.labels[2].y == Sh.FOLD_PAD * 2 + Sh.NAME_H, "folded, it is one line tall")
+			assert(#shut.hidden == 20 and #shut.places == 1, "none of its items is drawn (Josh: \"it doesn't hide the first item\")")
+			assert(shut.height < wide.height, "and the window is shorter for it")
+			-- (Josh 2026-11-21: "Collapsing the categories doesnt seem to save any space")
+			local bothShut = mod.Layouts.shelves.arrange(many, {}, { size = 37, folded = { crafting = true, other = true } })
+			assert(bothShut.free.y == (Sh.FOLD_PAD * 2 + Sh.NAME_H) * 2 + Sh.FREE_GAP, "two folded shelves are two lines")
+			assert(not bothShut.labels[1].sub:find("\n", 1, true) and bothShut.labels[1].pad == Sh.FOLD_PAD,
+				"its count on the name's line")
+			-- GEAR BY EQUIPMENT SET (Josh 2026-11-21): a heading a set, the rest
+			-- under "No set"; no headings where nothing is in a set
+			local gear = {}
+			for i = 1, 5 do
+				gear[i] = { slot = {}, cat = "gear", id = i, quality = 2, count = 1, set = i <= 2 and "Tank" or (i == 3 and "Healing" or nil) }
+			end
+			local sets = mod.Layouts.shelves.arrange(gear, {}, { size = 31 })
+			assert(#sets.heads == 3 and sets.heads[1].text == "Healing" and sets.heads[2].text == "Tank"
+				and sets.heads[3].text == "No set", "the sets by name, then the rest")
+			assert(sets.heads[2].x > sets.heads[1].x and sets.heads[2].y == sets.heads[1].y, "groups run along the row")
+			assert(sets.places[1].y == sets.heads[1].y + Sh.HEAD_H and sets.places[1].x == sets.heads[1].x,
+				"a group's items under its heading")
+			for i = 1, 5 do
+				gear[i].set = nil
+			end
+			assert(#mod.Layouts.shelves.arrange(gear, {}, { size = 31 }).heads == 0, "no sets, no headings")
+			-- more across for bags too full for the screen
+			local wider = mod.Layouts.shelves.arrange(many, {}, { size = 37, cols = 20 })
+			assert(wider.width > wide.width and wider.places[20].y == wider.places[1].y and wider.height < wide.height,
+				"twenty across is wider and shorter")
+			-- junk is folded until you say otherwise; nothing is folded at a vendor
+			local wasFolded = BT.settings.bagwindow and BT.settings.bagwindow.folded
+			BT.settings.bagwindow = BT.settings.bagwindow or {}
+			BT.settings.bagwindow.folded = nil
+			assert(mod.ShelfFolded("junk") and not mod.ShelfFolded("gear"), "junk folded, the rest open")
+			assert(mod.FoldShelf("junk") == false and not mod.ShelfFolded("junk"), "a click unfolds it, and that is kept")
+			assert(mod.FoldShelf("gear") == true and Sh.Folded().gear, "and folds another")
+			local wasMerchant = _G.MerchantFrame
+			_G.MerchantFrame = { IsShown = function() return true end }
+			assert(next(Sh.Folded()) == nil, "at a vendor every shelf is open")
+			_G.MerchantFrame = wasMerchant
+			BT.settings.bagwindow.folded = wasFolded
+			-- the dock's count of slots, the special bags apart (Josh 2026-11-21:
+			-- "The dock says I have 62 slots, but the bags says I have 69")
+			local bagsMod = BT.GetModule("bags")
+			local wasBags = bagsMod.Bags
+			bagsMod.Bags = function() return { bags = { used = 55, total = 62 }, reagents = { used = 0, total = 7 } } end
+			assert(mod.FreeWords(55, 14) == "7 free  ·  55/62  ·  Reagents 0/7", "as the dock counts them: " .. mod.FreeWords(55, 14))
+			bagsMod.Bags = function() return { bags = { used = 62, total = 62 }, reagents = { used = 0, total = 0 } } end
+			assert(mod.FreeWords(62, 0) == "Bags full  ·  62/62", "full, and no special bag")
+			bagsMod.Bags = function() return { bags = { used = 0, total = 0 } } end
+			assert(mod.FreeWords(3, 2) == "2 free  ·  3/5", "the window's own count where the dock has none")
+			bagsMod.Bags = wasBags
+			-- THE SEARCH'S OWN WORDS (Josh 2026-11-21: "you can search for 'boe' or
+			-- 'soulbound' and it will only highlight those items")
+			local Se = mod.Search
+			local tests, rest = Se.Parse("BoE sword")
+			assert(#tests == 1 and rest == "sword", "a tag is taken out, the rest is the game's: " .. rest)
+			assert(#(Se.Parse("sword of kings")) == 0, "words that are no tag are all the game's")
+			assert(Se.Matches({ bind = 2, bound = false }, tests) and not Se.Matches({ bind = 2, bound = true }, tests)
+				and not Se.Matches({ bind = 1 }, tests), "boe: binds when equipped, and not bound yet")
+			assert(Se.Matches({ bound = true }, (Se.Parse("soulbound"))) and Se.Matches({ bound = true }, (Se.Parse("bound")))
+				and not Se.Matches({ bound = false }, (Se.Parse("soulbound"))), "soulbound: bound to you")
+			assert(Se.Matches({ bind = 1 }, (Se.Parse("bop"))) and Se.Matches({ set = "Tank" }, (Se.Parse("set")))
+				and Se.Matches({ cat = "junk" }, (Se.Parse("Junk"))) and not Se.Matches({ cat = "gear" }, (Se.Parse("junk"))),
+				"bop, an equipment set, and a shelf by its name")
+			assert(Se.Matches({ cat = "gear", bind = 2, bound = false }, (Se.Parse("boe gear")))
+				and not Se.Matches({ cat = "junk", bind = 2, bound = false }, (Se.Parse("boe gear"))), "two tags are both asked")
+			assert(not Se.Matches(nil, tests), "an empty slot is nothing")
+			-- the switch: kept, and the default is not written down
+			local was = BT.settings.bagwindow and BT.settings.bagwindow.layout
+			assert(mod.Layout() == "shelves", "categories until you say otherwise")
+			mod.SetLayout("grid")
+			assert(mod.Layout() == "grid" and BT.settings.bagwindow.layout == "grid", "the grid, kept")
+			mod.SetLayout("nonsense")
+			assert(mod.Layout() == "grid", "a layout that is not one changes nothing")
+			mod.SetLayout("shelves")
+			assert(mod.Layout() == "shelves" and BT.settings.bagwindow.layout == nil, "and back")
+			BT.settings.bagwindow.layout = was
 		end },
 		{ "a game that names no realm binds the realm the saved file knows", function()
 			-- (Josh 2026-11-21: every character twice in the money tooltip. From

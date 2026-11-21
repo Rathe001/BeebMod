@@ -5,12 +5,28 @@ BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 
 ## Unreleased
 
+- **Bags by category.** The combined backpack now sorts your items onto
+  shelves: New, Quest, Gear, Consumables, Crafting, Junk and Other, with
+  Ammo and Shards for the classes that carry them. Each shelf has its name
+  and count at the left. Click a shelf's name to fold it away or open it
+  again, and the arrow beside the name shows which. Junk starts folded and
+  shows what it sells for. At a vendor every shelf is open. Gear is grouped
+  by equipment set, with each set's name over its items. Empty slots are
+  not drawn. A line at the foot says how many are free and how many slots
+  you have. Two buttons in the window's title switch between this and the
+  grid you had before.
 - **Your records are back in one place.** Since the game's update on
   November 20 the game no longer tells addons the name of your realm.
   BeebMod started a second, empty set of records that day. The Ledger, the
   Expedition and the census looked reset, and the money tooltip listed each
   character twice. Nothing was lost. At your next login BeebMod puts the two
   sets back together. Kills, sightings and notes from both are kept.
+- **The bag search knows item tags.** Type `boe`, `bop`, `bou` or
+  `soulbound` in the bag search to dim everything else. `set` finds items
+  in an equipment set. A category name such as `junk` or `quest` works too.
+  Add a name to narrow it: `boe sword`.
+- **Smaller quest lines on unit tooltips.** A quest's name and objectives
+  are a size smaller, so a long objective no longer makes the tooltip wide.
 - **Money totals by faction.** Gold can't move between Alliance and Horde.
   If you have characters on both, the money tooltip now lists each side
   with its own total, your side first. The all-characters figure on the

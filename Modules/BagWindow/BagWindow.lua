@@ -424,6 +424,13 @@ function M.StyleAll(plain, force)
 		if M.BagSlots then
 			M.BagSlots.Attach()
 		end
+		-- the game's own layout back, and the switch away (Layouts.lua)
+		if M.Shelves then
+			M.Shelves.Apply()
+		end
+		if M.Search then
+			M.Search.Clear()
+		end
 		return 0
 	end
 	-- ONLY THE WINDOWS YOU CAN SEE (Josh 2026-09-30, review). Every item the
@@ -467,6 +474,14 @@ function M.StyleAll(plain, force)
 	M.Hook()
 	-- the window may not have existed when the module came on
 	M.WatchPosition()
+	-- the layout you chose, and its switch in the title (Layouts.lua)
+	if M.Shelves then
+		pcall(M.Shelves.Ensure)
+	end
+	-- the search's own words (Search.lua)
+	if M.Search then
+		pcall(M.Search.Hook)
+	end
 	return n
 end
 

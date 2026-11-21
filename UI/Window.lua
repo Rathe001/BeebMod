@@ -1011,6 +1011,20 @@ local function testingPage(body)
 				U.Print("Taint log: the game didn't take the change.")
 			end
 		end)
+	-- CAN THE BAG'S SLOTS BE MOVED (Josh 2026-11-21, before the bags are laid
+	-- out by category): Modules/BagWindow/Probe.lua
+	body.bagProbeRow = Wd.SwitchRow(rec, "Bag slots moved", "Draws each bag item in its neighbour's place, to see what the game allows. Open your bags first.",
+		function()
+			local m = BT.GetModule("bagwindow")
+			return m and m.Probe and m.Probe.on or false
+		end,
+		function(on)
+			local m = BT.GetModule("bagwindow")
+			if m and m.Probe then
+				m.Probe.Set(on)
+				Wd.SyncRows()
+			end
+		end)
 	-- what is showing now, whenever the page is opened
 	body:HookScript("OnShow", function()
 		local m = BT.GetModule("unitframes")

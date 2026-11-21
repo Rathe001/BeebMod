@@ -1142,7 +1142,9 @@ M.SqueezeBlankTail = squeezeBlankTail
 -- in.
 -- (12, from 13, and the objectives 11, from 12: Josh 2026-11-18, of three
 -- players' rows under one quest, "Can you reduce quest text size a bit?")
-M.QUEST_TITLE_SIZE = 12
+-- (11 and 10: Josh 2026-11-21, "can we further reduce the quest text size in
+-- tooltips? It is still pushing the tooltips too wide")
+M.QUEST_TITLE_SIZE = 11
 M.QUEST_INDENT = 8
 --
 -- LARGER, ON A BAND OF GOLD (Josh 2026-11-07: "Are we able to highlight or
@@ -1150,7 +1152,7 @@ M.QUEST_INDENT = 8
 -- much... that is the primary thing I am looking for on these"). The rows
 -- are a size and a half up from the others, and a faint gold band lies
 -- behind them from the tooltip's left to its right.
-M.QUEST_SIZE = 11
+M.QUEST_SIZE = 10
 M.BAND_INK = { 1.00, 0.82, 0.25, 0.10 }
 -- how far the band reaches left of the words and in from the right edge
 M.BAND_LEFT, M.BAND_RIGHT = 4, 2
@@ -1952,11 +1954,81 @@ function M.QuestMarks(tip)
 	return n
 end
 
+-- YOUR KILLS ARE THE LAST LINE (Josh 2026-11-21, a Bloodscalp Axe Thrower
+-- with Questie's "[35] Bloodscalp Ears" under "No kills yet": "Make sure the
+-- 'No kills yet' and the number of kills is always at the bottom of the
+-- tooltip"). Another addon writes its lines after every module here has had
+-- its turn, so they land under the kills. A tooltip's lines can't be put in
+-- another order. So when the tooltip grows and words now follow the kills,
+-- the old kills line is emptied and shrunk to nothing, and the kills are
+-- written again at the end.
+M.killsBits = setmetatable({}, { __mode = "k" })
+BT.UnitTip.OnGone(function(tip)
+	M.killsBits[tip] = nil
+end)
+
+function M.KillsLast(tip)
+	local k = tip and M.killsBits[tip]
+	if not k or k.moving or not tip.NumLines then
+		return false
+	end
+	local n = BT.Pill.Number(tip:NumLines(), 0)
+	if n <= k.at then
+		return false
+	end
+	-- only for words: the client's blank line for its health bar is nothing
+	local words = false
+	for i = k.at + 1, n do
+		local fs = BT.UnitTip.LineOf(tip, i)
+		local ok, text = pcall(function() return fs and fs.GetText and fs:GetText() end)
+		if ok and text ~= nil and ((issecretvalue and issecretvalue(text)) or (type(text) == "string" and not text:match("^%s*$"))) then
+			words = true
+			break
+		end
+	end
+	if not words then
+		return false
+	end
+	-- still the same enemy to count: the row is asked of the unit again
+	if type(UnitExists) == "function" then
+		local ok, there = pcall(UnitExists, k.unit)
+		if not ok or (issecretvalue and issecretvalue(there)) or not there then
+			return false
+		end
+	end
+	k.moving = true
+	for i = k.from, k.at do
+		for _, side in ipairs({ false, "TextRight" }) do
+			local fs = BT.UnitTip.LineOf(tip, i, side or nil)
+			if fs and fs.SetText then
+				pcall(fs.SetText, fs, side and "" or " ")
+			end
+			BT.UnitTip.SizeLine(tip, i, 1, side or nil)
+		end
+	end
+	local before = n
+	local at = M.KillsRow(tip, k.unit, true)
+	if at then
+		k.from, k.at = before + 1, at
+		if tip.Show then
+			pcall(tip.Show, tip)
+		end
+	else
+		M.killsBits[tip] = nil
+	end
+	k.moving = nil
+	return at ~= nil
+end
+
 if GameTooltip and GameTooltip.HookScript then
 	pcall(GameTooltip.HookScript, GameTooltip, "OnSizeChanged", function(tip)
 		local ok, err = pcall(M.UnitLookAgain, tip)
 		if not ok then
 			BT.Err("tooltips.band: " .. tostring(err))
+		end
+		ok, err = pcall(M.KillsLast, tip)
+		if not ok then
+			BT.Err("tooltips.kills: " .. tostring(err))
 		end
 		ok, err = pcall(M.QuestMarks, tip)
 		if not ok then
@@ -2279,7 +2351,10 @@ function M.Compose(tip, unit)
 	-- the rows: the quests it counts for, then your kills of it
 	local beforeQuests = BT.Pill.Number(tip:NumLines(), 0)
 	M.QuestRows(tip, quests)
-	local killsAt = M.KillsRow(tip, unit, BT.Pill.Number(tip:NumLines(), 0) > beforeQuests)
+	local beforeKills = BT.Pill.Number(tip:NumLines(), 0)
+	local killsAt = M.KillsRow(tip, unit, beforeKills > beforeQuests)
+	-- where it is, should another addon write under it (M.KillsLast)
+	M.killsBits[tip] = killsAt and { unit = unit, from = beforeKills + 1, at = killsAt } or nil
 
 	-- Elite, Rare or Boss, as a tag just before the level
 	if rank then
