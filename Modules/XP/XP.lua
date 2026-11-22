@@ -346,6 +346,101 @@ function M.Update()
 	M.rested:SetWidth(math.max(1, w * ahead))
 end
 
+-- THE MOST REST A CHARACTER HOLDS is one and a half levels' worth: 150% of
+-- the experience its current level needs. That is the rule of the classic
+-- game; it is not read from this client, which has no call for it.
+M.REST_LEVELS = 1.5
+
+-- WELL RESTED, ON THE LEGACY TREE (Josh 2026-11-22, a screenshot of the
+-- Adventure tree: "Well Rested, Rank 0/5. Your rested experience accumulates
+-- 4% faster and your rested experience cap is increased by 4%"). The Legacy
+-- Tree is one of the game's trait trees (Blizzard_LegacySystem), read as it
+-- reads itself: the tree's nodes, each node's rank and its spell. The node
+-- is found by its spell's name, so on a client in another language it is
+-- not found and the plain cap is used. 4% a rank is taken from the first
+-- rank's words; the later ranks have not been seen.
+M.REST_TALENT = "Well Rested"
+M.REST_PER_RANK = 0.04
+
+-- every node of the Adventure tree: { name, spell, rank, most }
+function M.LegacyNodes()
+	local out = {}
+	local traits = rawget(_G, "C_Traits")
+	local consts = Constants and Constants.LegacyConsts
+	local tree = consts and consts.LEGACY_TREE_ADVENTURE_ID
+	if not (traits and tree and traits.GetConfigIDByTreeID and traits.GetTreeNodes and traits.GetNodeInfo) then
+		return out
+	end
+	local okC, config = pcall(traits.GetConfigIDByTreeID, tree)
+	local okN, nodes = pcall(traits.GetTreeNodes, tree)
+	if not (okC and config and okN and type(nodes) == "table") then
+		return out
+	end
+	local nameOf = (C_Spell and C_Spell.GetSpellName) or rawget(_G, "GetSpellInfo")
+	for _, node in ipairs(nodes) do
+		local okI, info = pcall(traits.GetNodeInfo, config, node)
+		if okI and type(info) == "table" then
+			local entry = type(info.activeEntry) == "table" and info.activeEntry.entryID
+				or (type(info.entryIDs) == "table" and info.entryIDs[1]) or nil
+			local spell, name
+			if entry and traits.GetEntryInfo and traits.GetDefinitionInfo then
+				local okE, e = pcall(traits.GetEntryInfo, config, entry)
+				local def = okE and type(e) == "table" and e.definitionID or nil
+				local okD, d = pcall(function() return def and traits.GetDefinitionInfo(def) end)
+				if okD and type(d) == "table" then
+					spell = d.overriddenSpellID or d.spellID
+					name = d.overrideName
+				end
+			end
+			if not name and spell and nameOf then
+				local okS, got = pcall(nameOf, spell)
+				name = okS and type(got) == "string" and got or nil
+			end
+			out[#out + 1] = { name = name, spell = spell, rank = tonumber(info.activeRank) or 0,
+				most = tonumber(info.maxRanks) or 0 }
+		end
+	end
+	return out
+end
+
+-- how many ranks of Well Rested, or nil where the node is not found
+function M.RestRank()
+	local ok, nodes = pcall(M.LegacyNodes)
+	if not ok then
+		return nil
+	end
+	for _, node in ipairs(nodes) do
+		if node.name == M.REST_TALENT then
+			return node.rank
+		end
+	end
+	return nil
+end
+
+-- the most rest held, in levels' worth
+function M.RestCap(rank)
+	return M.REST_LEVELS * (1 + M.REST_PER_RANK * (rank or 0))
+end
+
+function M.RestedShare(rested, max, rank)
+	if not (max and max > 0) then
+		return nil
+	end
+	return math.max(0, math.min(1, (rested or 0) / (max * M.RestCap(rank))))
+end
+
+-- FOR WHAT LOADED: the Adventure tree as this reads it, so the node's spell
+-- number can be seen and a missing reading told from rank 0
+function M.Status()
+	local parts = {}
+	for _, node in ipairs(M.LegacyNodes()) do
+		parts[#parts + 1] = ("%s (%s) %d/%d"):format(tostring(node.name), tostring(node.spell), node.rank, node.most)
+	end
+	local rank = M.RestRank()
+	return ("Well Rested: %s · rest cap %.2f levels · Adventure tree: %s"):format(
+		rank and ("rank " .. rank) or "not found", M.RestCap(rank), #parts > 0 and table.concat(parts, ", ") or "not read")
+end
+
 function M.Tip()
 	if not BT.Tip then
 		return
@@ -365,6 +460,15 @@ function M.Tip()
 		t:Headline(pct .. "%", ("of level %d"):format(level))
 		local done = max > 0 and cur / max or 0
 		t:Bar(done, nil, nil, (rested or 0) > 0 and { (rested or 0) / max, "rested" } or nil)
+		-- HOW FULL THE REST IS (Josh 2026-11-22: "is it possible to show the
+		-- % of max rested xp the character has? Right now you can't really
+		-- tell beyond your current level"). The bar draws rested only as far
+		-- as the end of this level, and rest holds more than that.
+		local share = M.RestedShare(rested, max, M.RestRank())
+		if share then
+			t:Row("Rested", ("%d%% of full  ·  %s XP"):format(math.floor(share * 100 + 0.5), U.Commas(rested or 0)),
+				share > 0 and "rested" or nil)
+		end
 		-- ZONES AND DUNGEONS FOR YOUR LEVEL (Josh 2026-10-04): three of each
 		-- whose range takes you in, for your side, nearest the middle of
 		-- their range first (Modules/XP/Zones.lua, Dungeons.lua); none, no section

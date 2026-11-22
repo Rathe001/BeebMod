@@ -3,6 +3,26 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Buying a bank bag slot works again.** With the category view on, the game
+  refused the purchase and said BeebMod was blocked. BeebMod was opening the
+  reagent bag itself, and the game treats what follows as an addon's doing.
+  It no longer opens it.
+- **The backpack key opens every bag in the category view.** The reagent
+  bag's items are on the shelves only while the game has that bag open. So
+  with a reagent bag worn, your backpack key now does what the game's Open
+  All Bags key does. Your saved key bindings are not changed. The grid view
+  leaves the key as it was.
+
+- **How full your rest is, on the level tooltip.** A new Rested line says
+  what share of the most rest you can hold you have, and how much experience
+  that is. The bar only shows rest up to the end of your level. Ranks of
+  Well Rested on the Legacy Tree raise the most you can hold, and the line
+  counts them.
+- **The bags open without a jump.** The category view was drawn at the
+  wrong size for a moment each time the bags opened.
+
 ## 1.18.2
 
 - **Reagent items stay bright in the category view.** After you sold, mailed

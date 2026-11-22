@@ -42,7 +42,7 @@ BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-11-21-reagent-raise-110"
+BT.BUILD = "2026-11-22-well-rested-115"
 
 -- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
 -- to disable it in production builds so normal users don't see it?"). The

@@ -781,6 +781,8 @@ function L.Said()
 			end
 		end
 	end
+	parts[#parts + 1] = ("backpack keys opening all bags: %s"):format(
+		(L.keysSet and L.keysSet ~= "") and L.keysSet or "none")
 	parts[#parts + 1] = ("merged=%s layout=%s drawn=%s backpack strata=%s"):format(
 		L.merged and (BT.Furniture.Call(L.merged, "GetName") or "yes") or "no", tostring(M.Layout()), tostring(L.drawn),
 		tostring(combined and combined.GetFrameStrata and combined:GetFrameStrata()))
@@ -857,50 +859,18 @@ function L.Said()
 	return "reagents: " .. table.concat(parts, " · ")
 end
 
--- OPENED WITH THE BACKPACK (What loaded, 2026-11-21: "merged=no", and no
--- reagent window listed). The B key opens the backpack and leaves the reagent
--- bag shut on this client: it was open in Josh's screenshot only because he
--- had clicked its icon. With no window shown its slots are not drawn, so
--- there was nothing to put on the shelves. In the category layout the
--- reagent bag is opened a frame after the backpack, the way a click on its
--- icon in the row at the foot opens it (BagSlots.lua), and shut again with
--- the backpack. In a fight too: the game's OpenBag has no check for one.
-function L.OpenReagents()
-	local index = reagentBagIndex()
-	if not index or L.Reagents() then
-		return false
-	end
-	local c = rawget(_G, "C_Container")
-	local count = (c and c.GetContainerNumSlots) or rawget(_G, "GetContainerNumSlots")
-	local okN, n = pcall(function() return count and count(index) end)
-	if not (okN and (tonumber(plain(n)) or 0) > 0) then
-		return false -- no reagent bag worn
-	end
-	local open = rawget(_G, "OpenBag")
-	if type(open) ~= "function" then
-		return false
-	end
-	if M.NoteOpen then
-		pcall(M.NoteOpen, "slot")
-	end
-	pcall(open, index)
-	L.openedReagents = L.Reagents() ~= nil
-	return L.openedReagents
-end
-
-function L.CloseReagents()
-	if not L.openedReagents then
-		return false
-	end
-	L.openedReagents = nil
-	L.Unmerge()
-	local index, close = reagentBagIndex(), rawget(_G, "CloseBag")
-	if index and type(close) == "function" then
-		pcall(close, index)
-	end
-	return true
-end
-
+-- NEVER OPENED BY BEEBMOD (Josh 2026-11-22: buying a bank bag slot was
+-- refused, "BeebMod has been blocked from an action only available to the
+-- Blizzard UI", PurchaseBankTab). From 1.18.1 the category layout opened the
+-- reagent bag itself a frame after the backpack, since the B key leaves it
+-- shut. What loaded then showed the reagent bag's slots made under BeebMod's
+-- name, every bag slot's itemContextMatchResult marked "by BeebMod", and the
+-- game's confirm popup marked too. With the reagent bag opened by the game
+-- (the mailbox, 2026-11-21) the same line read "0 of 75 slots: none". So the
+-- reagent bag's items go on the shelves only while the game has its window
+-- open: at a vendor, the mailbox and the bank, and from the game's own Open
+-- All Bags key.
+--
 -- A LAYER ABOVE THE BACKPACK'S, WHATEVER THAT IS (Josh 2026-11-21, two
 -- screenshots: after selling at a vendor, and after using a hearthstone, the
 -- reagent bag's items were dim squares on the Crafting shelf. In each the
@@ -976,6 +946,19 @@ function L.Unmerge()
 		pcall(r.SetFrameStrata, r, home.strata)
 	end
 	put(r, home.points)
+	-- ITS SLOTS WITH IT (Josh 2026-11-22, a screenshot with the backpack
+	-- shut: six reagent items left in the air where the shelves had been,
+	-- and the reagent bag's window empty at the foot of the screen). The
+	-- window went back and its slots stayed where the shelves had put them.
+	for _, slot in ipairs(M.ItemSlots(r)) do
+		if L.homeScale[slot] ~= nil then
+			pcall(slot.SetScale, slot, L.homeScale[slot])
+			L.homeScale[slot] = nil
+		end
+		if L.home[slot] then
+			put(slot, L.home[slot])
+		end
+	end
 	if home.clamped ~= nil and r.SetClampedToScreen then
 		pcall(r.SetClampedToScreen, r, home.clamped and true or false)
 	end
@@ -1322,23 +1305,32 @@ local function draw()
 	end
 	return ok
 end
+--
+-- BEFORE THIS FRAME IS DRAWN, NOT IN THE NEXT ONE (Josh 2026-11-22: "When my
+-- bag opens, it is distorted for a fraction of a second before the layout
+-- adjusts properly"). A request used to wait for a timer, which runs in the
+-- next frame. So one frame was drawn with the game's own size on the window,
+-- or with the reagent bag's items not yet on the shelves. A frame's OnUpdate
+-- runs after the frame's events and before it is drawn: the request shows
+-- this ticker, and its OnUpdate draws the shelves once and hides it. Still
+-- one drawing for however many requests a frame brings.
+L.ticker = CreateFrame("Frame")
+L.ticker:Hide()
+L.ticker:SetScript("OnUpdate", function(self)
+	self:Hide()
+	queued = false
+	if L.stale then
+		draw()
+	end
+end)
 function L.Soon()
 	L.stale = true
 	L.tally.asked = L.tally.asked + 1
 	if queued then
 		return
 	end
-	if C_Timer and C_Timer.After then
-		queued = true
-		C_Timer.After(0, function()
-			queued = false
-			if L.stale then
-				draw()
-			end
-		end)
-	else
-		draw()
-	end
+	queued = true
+	L.ticker:Show()
 end
 
 -- asked by the bag window's own pass (M.StyleAll): hooked, the switch
@@ -1355,7 +1347,68 @@ function L.Ensure()
 end
 
 -- the chosen layout put on, or the game's own put back
+-- THE BACKPACK KEY OPENS ALL BAGS, IN THE CATEGORY LAYOUT (Josh 2026-11-22:
+-- "I think we need to spend some time to figure out how to fix the reagent
+-- bag properly"). The reagent bag's items can be on the shelves only while
+-- the game has its window open, and BeebMod must not open it (see NEVER
+-- OPENED BY BEEBMOD). The B key opens the backpack alone. The game has a
+-- key of its own that opens every bag, the reagent bag with them, and a key
+-- press is the game's doing, not an addon's. So while the category layout
+-- is on and a reagent bag is worn, each key bound to the backpack is
+-- pointed at Open All Bags. It is an override: the player's own bindings
+-- are not changed or saved, and it is gone with the grid, the module
+-- switched off, or a reload without BeebMod. Not set or cleared in a fight,
+-- where the game refuses both; done when the fight ends.
+L.keys = CreateFrame("Frame")
+function L.WantsKeys()
+	if not L.Active() then
+		return false
+	end
+	local index = Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag or nil
+	local c = rawget(_G, "C_Container")
+	if not (index and c and c.GetContainerNumSlots) then
+		return false
+	end
+	local ok, n = pcall(c.GetContainerNumSlots, index)
+	return ok and (tonumber(n) or 0) > 0
+end
+
+function L.Keys()
+	local set, clear, keysOf = rawget(_G, "SetOverrideBinding"), rawget(_G, "ClearOverrideBindings"), rawget(_G, "GetBindingKey")
+	if not (type(set) == "function" and type(clear) == "function" and type(keysOf) == "function") then
+		return nil
+	end
+	if InCombatLockdown and InCombatLockdown() then
+		L.keysOwed = true
+		return nil
+	end
+	L.keysOwed = nil
+	local want = L.WantsKeys()
+	local keys = want and { keysOf("TOGGLEBACKPACK") } or {}
+	local said = table.concat(keys, " ")
+	if said == (L.keysSet or "") then
+		return said
+	end
+	pcall(clear, L.keys)
+	for _, key in ipairs(keys) do
+		pcall(set, L.keys, false, key, "OPENALLBAGS")
+	end
+	L.keysSet = said
+	return said
+end
+
+for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UPDATE_BINDINGS", "PLAYER_REGEN_ENABLED", "BAG_CONTAINER_UPDATE" }) do
+	pcall(L.keys.RegisterEvent, L.keys, event)
+end
+L.keys:SetScript("OnEvent", function(_, event)
+	if event == "PLAYER_REGEN_ENABLED" and not L.keysOwed then
+		return
+	end
+	pcall(L.Keys)
+end)
+
 function L.Apply()
+	pcall(L.Keys)
 	if L.Active() then
 		L.Hook()
 		L.Arrange()
@@ -1538,13 +1591,12 @@ function L.Hook()
 	if w.HookScript then
 		pcall(w.HookScript, w, "OnShow", function()
 			L.Buttons()
-			-- the reagent bag's window, opened with this one (L.OpenReagents)
+			-- the reagent bag's window may open a moment after this one
 			if L.Active() and C_Timer and C_Timer.After then
 				C_Timer.After(0, function()
 					if not (L.Active() and w:IsShown()) then
 						return
 					end
-					L.OpenReagents()
 					if L.Reagents() and not L.merged then
 						L.Soon()
 					end
@@ -1556,9 +1608,10 @@ function L.Hook()
 				L.Soon()
 			end
 		end)
-		-- and shut with it, where this opened it
+		-- the backpack shut with the reagent bag still open: its window back
+		-- where the game had it, not left out of sight
 		pcall(w.HookScript, w, "OnHide", function()
-			L.CloseReagents()
+			L.Unmerge()
 		end)
 	end
 end
