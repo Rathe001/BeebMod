@@ -92,7 +92,53 @@ function Taint.Others()
 		end
 	end
 	parts[#parts + 1] = "globals " .. (#globals > 0 and table.concat(globals, ", ") or "none")
+	local okE, edit = pcall(Taint.EditMode)
+	if okE and edit then
+		parts[#parts + 1] = edit
+	end
 	return table.concat(parts, " · ")
+end
+
+-- THE EDIT MODE'S FRAMES (Josh 2026-11-21, an error on gaining a level in a
+-- fight: "GetAuraDataByIndex(): Auras cannot be accessed when secret while
+-- tainted by 'BeebMod'", from the Edit Mode's pass over its frames). The
+-- game's quest tracker, the one frame in that pass that reads auras, carried
+-- no mark after a reload. So the mark is read earlier in the pass, or put on
+-- later in play. This names every marked field on the Edit Mode's manager,
+-- on each frame it keeps, and on the tracker's lists.
+function Taint.EditMode()
+	local mgr = rawget(_G, "EditModeManagerFrame")
+	if not (Taint.Can() and type(mgr) == "table") then
+		return nil
+	end
+	local found, frames = {}, 0
+	local function scan(t, name)
+		local own = {}
+		if Taint.Scan(t, own) then
+			for field, n in pairs(own) do
+				found[name .. "." .. field] = n
+			end
+		end
+	end
+	scan(mgr, "manager")
+	if type(mgr.registeredSystemFrames) == "table" then
+		for i, f in ipairs(mgr.registeredSystemFrames) do
+			frames = frames + 1
+			local ok, name = pcall(function() return f.GetName and f:GetName() end)
+			name = ok and type(name) == "string" and name or ("frame" .. i)
+			scan(f, name)
+			if type(f.modules) == "table" then
+				for j, module in ipairs(f.modules) do
+					scan(module, name .. ".list" .. j)
+				end
+			end
+		end
+	end
+	for _, name in ipairs({ "ObjectiveTrackerManager", "ScenarioObjectiveTracker", "QuestObjectiveTracker",
+		"UIParentRightManagedFrameContainer", "UIParentBottomManagedFrameContainer" }) do
+		scan(rawget(_G, name), name)
+	end
+	return ("edit mode, %d frames: %s"):format(frames, Taint.Said(found, 20))
 end
 
 local f = CreateFrame("Frame")

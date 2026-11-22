@@ -781,8 +781,79 @@ function L.Said()
 			end
 		end
 	end
-	parts[#parts + 1] = ("merged=%s layout=%s drawn=%s"):format(
-		L.merged and (BT.Furniture.Call(L.merged, "GetName") or "yes") or "no", tostring(M.Layout()), tostring(L.drawn))
+	parts[#parts + 1] = ("merged=%s layout=%s drawn=%s backpack strata=%s"):format(
+		L.merged and (BT.Furniture.Call(L.merged, "GetName") or "yes") or "no", tostring(M.Layout()), tostring(L.drawn),
+		tostring(combined and combined.GetFrameStrata and combined:GetFrameStrata()))
+	-- A REAGENT SLOT NEXT TO A BACKPACK SLOT (Josh 2026-11-21, a third
+	-- screenshot, at the mailbox: the reagent bag's items dim again, with
+	-- the reagent window a layer above the backpack as it should be). Every
+	-- way a slot can be made dim, read from the first slot of each that
+	-- holds an item.
+	local function slotSaid(win, label)
+		for _, slot in ipairs(M.ItemSlots(win)) do
+			local okH, has = pcall(function()
+				return M.ItemIn(slot.GetBagID and slot:GetBagID() or nil, slot.GetID and slot:GetID() or nil) ~= nil
+			end)
+			if okH and has and slot.IsShown and slot:IsShown() then
+				local function get(o, method, ...)
+					if type(o) ~= "table" or type(o[method]) ~= "function" then
+						return "-"
+					end
+					local ok, v = pcall(o[method], o, ...)
+					if not ok then
+						return "!"
+					end
+					return type(v) == "number" and ("%.2f"):format(v) or tostring(v)
+				end
+				local icon = slot.icon or slot.Icon
+				local r, g, b = "-", "-", "-"
+				if type(icon) == "table" and icon.GetVertexColor then
+					local okV, vr, vg, vb = pcall(icon.GetVertexColor, icon)
+					if okV then
+						r, g, b = ("%.1f"):format(vr or 0), ("%.1f"):format(vg or 0), ("%.1f"):format(vb or 0)
+					end
+				end
+				return ("%s slot: alpha %s eff %s visible %s strata %s level %s scale %s · icon alpha %s shown %s grey %s colour %s/%s/%s layer %s · context overlay %s search overlay %s matches %s context %s · window alpha %s level %s"):format(
+					label, get(slot, "GetAlpha"), get(slot, "GetEffectiveAlpha"), get(slot, "IsVisible"),
+					get(slot, "GetFrameStrata"), get(slot, "GetFrameLevel"), get(slot, "GetEffectiveScale"),
+					get(icon, "GetAlpha"), get(icon, "IsShown"), get(icon, "IsDesaturated"), r, g, b, get(icon, "GetDrawLayer"),
+					get(slot.ItemContextOverlay, "IsShown"), get(slot.searchOverlay, "IsShown"),
+					tostring(slot.matchesSearch), tostring(slot.itemContextMatchResult),
+					get(win, "GetAlpha"), get(win, "GetFrameLevel"))
+			end
+		end
+		return label .. " slot: none with an item"
+	end
+	if combined then
+		parts[#parts + 1] = slotSaid(combined, "backpack")
+	end
+	if L.merged then
+		parts[#parts + 1] = slotSaid(L.merged, "reagent")
+	end
+	if L.canvas then
+		parts[#parts + 1] = ("canvas strata %s level %s"):format(tostring(L.canvas:GetFrameStrata()), tostring(L.canvas:GetFrameLevel()))
+	end
+	-- the shelves' own count next to the bags' count now (L.Soon)
+	local t = L.tally
+	if t then
+		local now = "?"
+		if combined and combined.IsShown and combined:IsShown() then
+			local slots = {}
+			for _, slot in ipairs(M.ItemSlots(combined)) do
+				slots[#slots + 1] = slot
+			end
+			if L.merged then
+				for _, slot in ipairs(M.ItemSlots(L.merged)) do
+					slots[#slots + 1] = slot
+				end
+			end
+			local okC, items = pcall(M.Categorize, slots)
+			now = okC and tostring(#items) or "failed"
+		end
+		parts[#parts + 1] = ("shelves: asked %d, drawn %d, failed %d, stale=%s, last event %s, drew %s items, bags hold %s now%s"):format(
+			t.asked, t.ran, t.failed, tostring(L.stale), tostring(t.event), tostring(L.counts and L.counts[1]), now,
+			t.error and (", last failure: " .. t.error) or "")
+	end
 	return "reagents: " .. table.concat(parts, " · ")
 end
 
@@ -830,6 +901,51 @@ function L.CloseReagents()
 	return true
 end
 
+-- A LAYER ABOVE THE BACKPACK'S, WHATEVER THAT IS (Josh 2026-11-21, two
+-- screenshots: after selling at a vendor, and after using a hearthstone, the
+-- reagent bag's items were dim squares on the Crafting shelf. In each the
+-- dim squares were as many as the reagent bag held). The reagent window was
+-- put on the HIGH layer. Where the backpack is on that layer too, the two are
+-- ordered by which was raised last, and a click in the backpack raises it:
+-- the reagent slots were then drawn under the backpack and seen through it.
+-- The layer is now the one above the backpack's own.
+L.STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG" }
+function L.Above(strata)
+	for i, name in ipairs(L.STRATA) do
+		if name == strata then
+			return L.STRATA[math.min(i + 1, #L.STRATA)]
+		end
+	end
+	return "DIALOG"
+end
+
+-- RAISED AGAIN AFTER A CLICK (Josh 2026-11-21: with the reagent items dim,
+-- "/run ContainerFrame6:Raise()" made them bright; a higher layer did not).
+-- The game reported the dim slots at full alpha, on the layer above the
+-- backpack, with nothing over them, and still drew them under it. A click in
+-- the backpack raises the backpack, and after one the reagent window is
+-- drawn in the wrong order until it is raised itself.
+function L.Lift()
+	local r = L.merged
+	if not (r and r.Raise and r.IsShown and r:IsShown()) then
+		return false
+	end
+	return (pcall(r.Raise, r))
+end
+
+-- EVERY FRAME, NOT A FRAME AFTER THE CLICK (Josh 2026-11-21: "It works, but
+-- those items flash dim now quickly before going back normal"). Raised a
+-- frame after a click, the items were drawn dim for that one frame. The
+-- reagent window is now raised before each frame is drawn, while its items
+-- are on the shelves and at no other time.
+L.lifts = CreateFrame("Frame")
+L.lifts:Hide()
+L.lifts:SetScript("OnUpdate", function(self)
+	if not L.Lift() then
+		self:Hide()
+	end
+end)
+
 function L.Merge(r)
 	if L.merged ~= r then
 		L.Unmerge()
@@ -841,8 +957,12 @@ function L.Merge(r)
 		pcall(r.SetClampedToScreen, r, false)
 	end
 	if r.SetFrameStrata then
-		pcall(r.SetFrameStrata, r, "HIGH")
+		local w = window()
+		local okS, under = pcall(function() return w and w.GetFrameStrata and w:GetFrameStrata() end)
+		pcall(r.SetFrameStrata, r, L.Above(okS and under or "HIGH"))
 	end
+	L.Lift()
+	L.lifts:Show()
 	return put(r, { { "TOPLEFT", UIParent, "TOPLEFT", -L.AWAY, L.AWAY } })
 end
 
@@ -1183,9 +1303,28 @@ end
 -- the second and again a frame later for the rest. A request now only says
 -- the layout is stale, and drawing it says it is not, so the frame after an
 -- opening finds nothing to do.
+--
+-- WHAT WENT WRONG IS KEPT (Josh 2026-11-21, a screenshot after selling at a
+-- vendor: Crafting said 14 items and drew 10, with four empty squares among
+-- them, while the line at the foot had the right count). The shelves had not
+-- been drawn again since the sale, and a drawing that fails said nothing.
+-- How often one was asked for, how often it ran, and the last failure are
+-- kept for What loaded (L.Said).
 local queued = false
+L.tally = { asked = 0, ran = 0, failed = 0 }
+local function draw()
+	local t = L.tally
+	t.ran = t.ran + 1
+	local ok, err = pcall(L.Arrange)
+	if not ok then
+		t.failed = t.failed + 1
+		t.error = tostring(err)
+	end
+	return ok
+end
 function L.Soon()
 	L.stale = true
+	L.tally.asked = L.tally.asked + 1
 	if queued then
 		return
 	end
@@ -1194,11 +1333,11 @@ function L.Soon()
 		C_Timer.After(0, function()
 			queued = false
 			if L.stale then
-				pcall(L.Arrange)
+				draw()
 			end
 		end)
 	else
-		pcall(L.Arrange)
+		draw()
 	end
 end
 
@@ -1444,6 +1583,7 @@ L.events:SetScript("OnEvent", function(_, event)
 		return
 	end
 	local w = window()
+	L.tally.event = event
 	if L.Active() and w and w.IsShown and w:IsShown() then
 		L.Soon()
 	end

@@ -3,6 +3,12 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Reagent items stay bright in the category view.** After you sold, mailed
+  or used an item, the reagent bag's items on the shelves went dim until the
+  bags were opened again. They keep their full colour now.
+
 ## 1.18.1
 
 - **The reagent bag is part of the category view.** Its items now sit on

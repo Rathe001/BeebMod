@@ -1576,6 +1576,32 @@ function M.Rows() return rows or {} end
 
 -- WHAT IT IS DOING, for the Testing page's What loaded (it was a line at the
 -- foot of the Quest tracker's page until the settings canvas, 2026-10-04)
+--
+-- WHOSE THE GAME'S TRACKER IS (Josh 2026-11-21, an error on gaining a level:
+-- "GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted
+-- by 'BeebMod'", from the Edit Mode's pass over its frames). The one frame in
+-- that pass that reads auras is the game's quest tracker, which BeebMod
+-- hides. This says which of its fields, and its lists', carry BeebMod's mark.
+function M.Taint()
+	local f = M.ClientFrame()
+	if not (f and BT.Taint and BT.Taint.Can()) then
+		return nil
+	end
+	local frame, lists = {}, {}
+	BT.Taint.Scan(f, frame)
+	if type(f.modules) == "table" then
+		for _, module in ipairs(f.modules) do
+			BT.Taint.Scan(module, lists)
+		end
+	end
+	return ("game's tracker marked: %s · its lists: %s"):format(BT.Taint.Said(frame, 12), BT.Taint.Said(lists, 12))
+end
+
 function M.Status()
-	return ("%d tracked · game's tracker %s"):format(M.lastCount or 0, M.ClientFrame() and "hidden" or "not found")
+	local said = ("%d tracked · game's tracker %s"):format(M.lastCount or 0, M.ClientFrame() and "hidden" or "not found")
+	local ok, taint = pcall(M.Taint)
+	if ok and taint then
+		said = said .. " · " .. taint
+	end
+	return said
 end
