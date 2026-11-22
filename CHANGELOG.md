@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.18.3
 
 - **Buying a bank bag slot works again.** With the category view on, the game
   refused the purchase and said BeebMod was blocked. BeebMod was opening the
