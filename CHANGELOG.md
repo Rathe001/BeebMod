@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.19.0
 
 - **The reagent bag's items stay under other windows.** They were drawn on
   top of any window opened over the bags.
