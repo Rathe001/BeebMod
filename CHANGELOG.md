@@ -3,6 +3,30 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **The reagent bag's items stay under other windows.** They were drawn on
+  top of any window opened over the bags.
+- **Addon buttons stay in sight in their line.** Some showed only while the
+  mouse was over the minimap.
+- **A player's PvP rank on their tooltip.** A player's tooltip has a tag
+  with their rank. BeebMod learns a player's rank from a battleground's
+  scoreboard or when you inspect them, and remembers it.
+- **A player's title over their name.** A friendly player's nameplate has
+  their title in small grey words above the name. A PvP rank is not
+  written there.
+- **Battlegrounds won and lost, on the PvP tooltip.** Each battleground has
+  a row with its wins, losses and the share won, and a last row has them
+  all together. Matches are counted from this version on, for each
+  character.
+- **Your own frame stays up in a raid.** It went away with the party column
+  when you joined a raid or a battleground.
+- **Players in a battleground get BeebMod's tooltip.** They had the game's
+  plain one, on the raid frames too.
+- **The other side in a battleground gets a class in the census.** Players
+  read from the scoreboard were filed with no class. They are filled in the
+  next time you see them on one.
+
 ## 1.18.3
 
 - **Buying a bank bag slot works again.** With the category view on, the game

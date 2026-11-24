@@ -357,6 +357,14 @@ function M.Friend(token)
 	f.marker:SetPoint("BOTTOM", f.name, "TOP", 0, 3)
 	f.marker:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
 	f.marker:Hide()
+	-- a player's title, over the name, the size of the line under it; a
+	-- raid mark goes over the title while there is one (M.PaintTitle)
+	f.title = f:CreateFontString(nil, "OVERLAY")
+	BT.Fonts.Set(f.title, "text", M.FRIEND_SIZE.sub, "")
+	f.title:SetShadowColor(0, 0, 0, 1)
+	f.title:SetShadowOffset(1, -1)
+	f.title:SetWordWrap(false)
+	f.title:SetPoint("BOTTOM", f.name, "TOP", 0, 1)
 	f:Hide()
 	f.bmUnit = token
 	M.friends[token] = f
@@ -1175,6 +1183,65 @@ function M.PaintGroup(f, src)
 	return kind
 end
 
+-- A PLAYER'S TITLE, OVER THE NAME (Josh 2026-11-23: "Can we put the player's
+-- title above their nameplate name?"). The game has no call for a title by
+-- itself: UnitPVPName gives the name with the title on it ("Private Aeki",
+-- "Aeki the Patient"), as the character window writes it. The title is what
+-- is left with the name taken out. Their whole name is looked for first,
+-- then the given name alone, since which of the two the game puts the title
+-- on has not been seen. A name the game keeps secret gives no title.
+function M.TitleFrom(titled, full, given)
+	if type(titled) ~= "string" or titled == "" then
+		return nil
+	end
+	for _, name in ipairs({ full or false, given or false }) do
+		if type(name) == "string" and name ~= "" then
+			local from, to = titled:find(name, 1, true)
+			if from then
+				local rest = titled:sub(1, from - 1) .. titled:sub(to + 1)
+				rest = rest:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+				return rest ~= "" and rest or nil
+			end
+		end
+	end
+	return nil
+end
+
+function M.PlayerTitle(unit, full)
+	if type(unit) ~= "string" then
+		return nil
+	end
+	-- (not from UnitHonorLevel either: for somebody else it said 1 of a rank
+	-- 3 player, Josh's dump 2026-11-23)
+	return M.TitleFrom(F.Plain(_G.UnitPVPName, unit), (not F.Secret(full)) and full or nil, F.Plain(UnitName, unit))
+end
+
+function M.PaintTitle(f, src, full)
+	if not f.title then
+		return nil
+	end
+	local title = src:IsPlayer() and M.PlayerTitle(f.bmUnit, full) or nil
+	-- NO PVP RANK ON A PLATE (Josh 2026-11-24, after a day of the rank's
+	-- insignia on plates: "I think we should remove the pvp rank from the
+	-- nameplate. It should just be on the tooltip of the player instead. I
+	-- dont want the nameplates getting too cluttered"). The insignia is
+	-- gone. A title that is a rank's name ("Corporal", as a battleground
+	-- gives it) is left off too. The rank is a tag on their tooltip
+	-- (Modules/Tooltips/Tooltips.lua, M.RankTag).
+	local pvp = BT.GetModule and BT.GetModule("pvp")
+	if title and pvp and pvp.RankOfTitle and pvp.RankOfTitle(title) then
+		title = nil
+	end
+	f.title:SetText(title or "")
+	f.title:SetTextColor(M.FRIEND_SUB[1], M.FRIEND_SUB[2], M.FRIEND_SUB[3])
+	-- the raid mark over whichever is on top
+	if f.marker then
+		f.marker:ClearAllPoints()
+		f.marker:SetPoint("BOTTOM", title and f.title or f.name, "TOP", 0, 3)
+	end
+	return title
+end
+
 function M.PaintFriend(f, src)
 	M.PaintFriendMark(f, src)
 	M.PaintGroup(f, src)
@@ -1193,6 +1260,7 @@ function M.PaintFriend(f, src)
 	end
 	f.name:SetText(name)
 	f.name:SetTextColor(M.FriendColour(src))
+	M.PaintTitle(f, src, name)
 	-- coloured by how far from yours, as on the unit frames (F.LevelTag)
 	f.level:SetText(player and F.LevelTag(src) or "")
 	F.AlphaFrom(f.under, src:IsTarget(), 1, 0)

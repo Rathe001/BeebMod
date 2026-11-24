@@ -5250,6 +5250,53 @@ if ok then
 				gear[i].set = nil
 			end
 			assert(#mod.Layouts.shelves.arrange(gear, {}, { size = 31 }).heads == 0, "no sets, no headings")
+			-- the reagent bag's window follows the backpack, and no other window
+			do
+				local Sh = mod.Shelves
+				local hadW, hadM, hadSeen = rawget(_G, "ContainerFrameCombinedBags"), Sh.merged, Sh.liftSeen
+				local raises = 0
+				local pack = { level = 20, GetFrameLevel = function(s) return s.level end }
+				local bag = { level = 5, IsShown = function() return true end, GetFrameLevel = function(s) return s.level end }
+				bag.Raise = function(s) raises = raises + 1 s.level = pack.level + 50 end
+				rawset(_G, "ContainerFrameCombinedBags", pack)
+				Sh.merged, Sh.liftSeen = bag, nil
+				assert(Sh.Lift() and raises == 1, "under the backpack: raised")
+				Sh.Lift() Sh.Lift()
+				assert(raises == 1, "the backpack where it was: left alone, so another window can go over both")
+				pack.level = 200
+				Sh.Lift()
+				assert(raises == 2 and bag.level > pack.level, "a click in the backpack raised it: the reagent window follows")
+				Sh.Lift()
+				assert(raises == 2, "and is left alone again")
+				Sh.Lift(true)
+				assert(raises == 3, "asked outright, it is raised")
+				-- a click in the bags: raised every frame for a moment after
+				do
+					local hadFoci, hadTime, hadUntil = rawget(_G, "GetMouseFoci"), rawget(_G, "GetTime"), Sh.liftUntil
+					local now = 100
+					rawset(_G, "GetTime", function() return now end)
+					local slot = { GetParent = function() return pack end }
+					local other = { GetParent = function() return nil end }
+					rawset(_G, "GetMouseFoci", function() return { other } end)
+					assert(not Sh.Clicked(), "a click on a window over the bags is not one in the bags")
+					Sh.Lift()
+					assert(raises == 3, "and raises nothing")
+					rawset(_G, "GetMouseFoci", function() return { slot } end)
+					assert(Sh.Clicked(), "a click on a slot of the backpack is")
+					Sh.Lift() Sh.Lift()
+					assert(raises == 5, "raised each frame after it")
+					now = now + Sh.LIFT_FOR + 0.1
+					Sh.Lift()
+					assert(raises == 5, "and left alone once the moment is over")
+					rawset(_G, "GetMouseFoci", hadFoci) rawset(_G, "GetTime", hadTime)
+					Sh.liftUntil = hadUntil
+				end
+				bag.GetFrameLevel = nil
+				Sh.Lift() Sh.Lift()
+				assert(raises == 7, "no level to read: raised each time, as before")
+				rawset(_G, "ContainerFrameCombinedBags", hadW)
+				Sh.merged, Sh.liftSeen = hadM, hadSeen
+			end
 			-- more across for bags too full for the screen
 			local wider = mod.Layouts.shelves.arrange(many, {}, { size = 37, cols = 20 })
 			assert(wider.width > wide.width and wider.places[20].y == wider.places[1].y and wider.height < wide.height,
@@ -7257,6 +7304,10 @@ if ok then
 				if h.bmRole == "tanks" then tankHeader = h end
 			end
 			assert(tankHeader and tankHeader:GetAttribute("roleFilter") == "MAINTANK", "a column of the main tanks")
+			-- YOUR OWN CELL IN A RAID TOO: the party column goes down, yours stays
+			assert(mod.me and mod.Visibility(mod.me) == "show", "your own cell is up always")
+			assert(mod.Visibility(mod.headers[1]) == "[group:raid] hide; show", "the party column is down in a raid")
+			assert(mod.Visibility(tankHeader) == "[group:raid] show; hide", "and the raid's are up only in one")
 			-- THE GROUPS, PACKED: 1 and 2 full, one member in 7 - three columns
 			local wasInRaid, wasNum, wasRoster = _G.IsInRaid, _G.GetNumGroupMembers, _G.GetRaidRosterInfo
 			_G.IsInRaid = function() return true end
@@ -8939,6 +8990,44 @@ if ok then
 				BT.UnitTip.Fill(tip, Strict.Secret("mouseover"))
 				assert(BT.UnitTip.fills == fills and #lines == 0, "a secret unit: no fill, no error")
 				_G.UnitExists = exists
+				-- A PLAYER UNDER THE MOUSE (2026-11-23): on the pointing tooltip
+				-- the secret unit is drawn as "mouseover"; on any other, or with
+				-- no player under the mouse, it is left to the game
+				local S = BT.UnitTip.Stand
+				assert(S(_G.GameTooltip, Strict.Secret("mouseover")) == "mouseover", "a player under the mouse stands in")
+				assert(S(tip, Strict.Secret("mouseover")) == nil, "not on another tooltip")
+				-- one of our own cells, the tooltip's owner, says who it is
+				local hadOwner, hadEx, hadIs = _G.GameTooltip.GetOwner, _G.UnitExists, _G.UnitIsPlayer
+				_G.GameTooltip.GetOwner = function() return { bmUnit = "raid7" } end
+				_G.UnitExists = function() return true end
+				_G.UnitIsPlayer = _G.UnitExists
+				local stood = S(_G.GameTooltip, Strict.Secret("raid7"))
+				_G.GameTooltip.GetOwner, _G.UnitExists, _G.UnitIsPlayer = hadOwner, hadEx, hadIs
+				assert(stood == "raid7", "a raid cell's own unit: " .. tostring(stood))
+				assert(S(_G.GameTooltip, "target") == "target", "a plain unit is itself")
+				-- A UNIT'S TOOLTIP WITH NO UNIT: stood in for where the tooltip
+				-- is a unit's, by its GUID where that reads (a pet too)
+				do
+					local G = _G.GameTooltip
+					local hadType, hadData, hadGuid, hadIs = G.IsTooltipType, G.GetPrimaryTooltipData, _G.UnitGUID, _G.UnitIsPlayer
+					assert(S(G, nil) == nil or hadType ~= nil, "no unit and no word that it is a unit's: left alone")
+					local isUnit, guid = true, "Pet-0-1-2-3"
+					G.IsTooltipType = function() return isUnit end
+					G.GetPrimaryTooltipData = function() return { guid = guid } end
+					_G.UnitIsPlayer = function() return false end
+					_G.UnitGUID = function(u) return u == "mouseover" and "Pet-0-1-2-3" or nil end
+					assert(S(G, nil) == "mouseover", "a pet under the mouse with the tooltip's GUID")
+					_G.UnitGUID = function() return "Pet-0-9-9-9" end
+					assert(S(G, nil) == nil, "another GUID is somebody else")
+					isUnit = false
+					_G.UnitGUID = function() return "Pet-0-1-2-3" end
+					assert(S(G, nil) == nil, "a tooltip that is no unit's is left alone")
+					G.IsTooltipType, G.GetPrimaryTooltipData, _G.UnitGUID, _G.UnitIsPlayer = hadType, hadData, hadGuid, hadIs
+				end
+				local wasPlayer = _G.UnitIsPlayer
+				_G.UnitIsPlayer = function() return false end
+				assert(S(_G.GameTooltip, Strict.Secret("mouseover")) == nil, "and not for a boss")
+				_G.UnitIsPlayer = wasPlayer
 			end
 			BT.UnitTip.Fill(tip, "mouseover")
 			BT.settings.tooltipGuild = hadGuild
@@ -16823,6 +16912,80 @@ if ok then
 				_G.UnitIsUnit = function(a, b2) return a == "nameplate2" and b2 == "target" end
 				mod.TargetChanged()
 				assert(f.under._alpha == 1, "and a white line under your target's")
+				-- A PLAYER'S TITLE, OVER THE NAME (2026-11-23)
+				do
+					assert(mod.TitleFrom("Private Omajin Ghosttusk", "Omajin Ghosttusk", "Omajin") == "Private", "a title before")
+					assert(mod.TitleFrom("Omajin the Patient", "Omajin Ghosttusk", "Omajin") == "the Patient", "one after the given name")
+					assert(mod.TitleFrom("Omajin Ghosttusk, Hand of A'dal", "Omajin Ghosttusk", "Omajin") == "Hand of A'dal", "one after a comma")
+					assert(mod.TitleFrom("Omajin Ghosttusk", "Omajin Ghosttusk", "Omajin") == nil
+						and mod.TitleFrom(nil, "Omajin", "Omajin") == nil and mod.TitleFrom("Somebody Else", "Omajin", nil) == nil,
+						"and none where there is none")
+					local hadPvp = _G.UnitPVPName
+					_G.UnitPVPName = function(unit) return unit == "nameplate2" and ("Elder " .. f.name._text) or nil end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.title._text == "Elder" and f.title._points.BOTTOM.rel == f.name, "the title over the name: " .. tostring(f.title._text))
+					assert(f.marker._points.BOTTOM.rel == f.title, "and a raid mark over the title")
+					_G.UnitPVPName = hadPvp
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.title._text == "" and f.marker._points.BOTTOM.rel == f.name, "no title, and the mark over the name")
+				end
+				-- A PLAYER'S PVP RANK (2026-11-23): heard from a scoreboard or an
+				-- inspect, kept by GUID. On their tooltip, and off the plate
+				-- (2026-11-24)
+				do
+					local pvp = BT.GetModule("pvp")
+					local hadBook, hadGuid, hadPvP, hadN = BT.settings.pvpRanks, _G.UnitGUID, _G.C_PvP, _G.GetNumBattlefieldScores
+					local hadFrame, hadHonor, hadFile = _G.InspectFrame, _G.GetInspectHonorData, _G.GetFileIDFromPath
+					BT.settings.pvpRanks = nil
+					_G.GetFileIDFromPath = function() return 1 end
+					_G.UnitGUID = function(unit)
+						return (unit == "nameplate2" and "Player-1-0000AAAA") or (unit == "target" and "Player-1-0000BBBB") or nil
+					end
+					local tips = BT.GetModule("tooltips")
+					assert(f.rank == nil and f.rankBack == nil and mod.PaintRank == nil, "a plate has no insignia")
+					assert(pvp.UnitRank("nameplate2") == nil and tips.RankTag("nameplate2") == nil, "no rank heard, no tag")
+					_G.GetNumBattlefieldScores = function() return 2 end
+					_G.C_PvP = { GetScoreInfo = function(i)
+						return i == 1 and { guid = "Player-1-0000AAAA", honorLevel = 3 } or { guid = "Player-1-0000CCCC", honorLevel = 0 }
+					end }
+					assert(pvp.ReadScoreboard() == 1 and pvp.RankFor("Player-1-0000AAAA") == 3
+						and pvp.RankFor("Player-1-0000CCCC") == nil, "a scoreboard's ranks are kept, a Civilian is not")
+					assert(pvp.ReadScoreboard() == 0, "and the same again is no news")
+					do
+						local hadSide = _G.UnitFactionGroup
+						_G.UnitFactionGroup = function() return "Horde" end
+						local n, word = pvp.UnitRank("nameplate2")
+						assert(n == 3 and word == "Sergeant" and tips.RankTag("nameplate2") == "Sergeant",
+							"the rank kept, by its name on their side: " .. tostring(word))
+						_G.UnitFactionGroup = function() return "Alliance" end
+						assert(tips.RankTag("nameplate2") == "Sergeant" and select(2, pvp.UnitRank("nameplate2")) == pvp.RANKS.Alliance[3],
+							"and on the other side")
+						_G.UnitFactionGroup = hadSide
+					end
+					-- an inspect: the window's unit and its seventh value
+					_G.InspectFrame = { unit = "target" }
+					_G.GetInspectHonorData = function() return 5, 0, 0, 0, 40, 0, 7, 100, 200 end
+					assert(pvp.ReadInspect() and pvp.RankFor("Player-1-0000BBBB") == 7, "an inspected player's rank is kept")
+					assert(pvp.NoteRank("Player-1-0000AAAA", 0) and pvp.RankFor("Player-1-0000AAAA") == nil, "a rank gone is forgotten")
+					assert(not pvp.NoteRank("Creature-0-1", 4) and not pvp.NoteRank(nil, 4), "and only a player has one")
+					assert(tips.RankTag("nameplate2") == nil, "the tag goes with the rank")
+					-- no rank kept: the words before their name give it, and a
+					-- rank's name is no title on the plate
+					local hadWords, hadName = _G.UnitPVPName, _G.UnitName
+					_G.UnitName = function(unit) if unit == "nameplate2" then return f.name._text end return hadName(unit) end
+					_G.UnitPVPName = function(unit) return unit == "nameplate2" and ("Corporal " .. f.name._text) or nil end
+					assert(pvp.RankOfTitle("Corporal") == 2 and pvp.RankOfTitle("Elder") == nil, "Corporal is rank 2")
+					assert(pvp.UnitRank("nameplate2") == 2, "read from the words before the name")
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.title._text == "", "a rank is not written over the name")
+					_G.UnitPVPName = function(unit) return unit == "nameplate2" and (f.name._text .. " the Patient") or nil end
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					assert(f.title._text == "the Patient" and pvp.UnitRank("nameplate2") == nil, "a title that is no rank stays in words")
+					_G.UnitPVPName, _G.UnitName = hadWords, hadName
+					mod.PaintFriend(f, F.Source("nameplate2"))
+					BT.settings.pvpRanks, _G.UnitGUID, _G.C_PvP, _G.GetNumBattlefieldScores = hadBook, hadGuid, hadPvP, hadN
+					_G.InspectFrame, _G.GetInspectHonorData, _G.GetFileIDFromPath = hadFrame, hadHonor, hadFile
+				end
 				-- A PLAYER'S GUILD (Josh 2026-10-17: "Can we add guild names to
 				-- player nameplates? Same size as the pet text, but green")
 				do
@@ -17756,6 +17919,37 @@ if ok then
 				and right:find("1,125 / 1,500", 1, true),
 				"Grunt is rank 2, with 1,125 of 1,500, named without the label's number: " .. left .. " | " .. right)
 			-- a label with no number: the longest rank name inside it
+			-- WON AND LOST, BY BATTLEGROUND (2026-11-23)
+			do
+				assert(mod.Result(1, 1) == "won" and mod.Result(0, 1) == "lost" and mod.Result(255, 0) == "draw"
+					and mod.Result(1, nil) == nil, "the winner against your side")
+				local hadInfo, hadTeam, hadMatches = _G.GetInstanceInfo, _G.GetBattlefieldArenaFaction, BT.settings.pvpMatches
+				BT.settings.pvpMatches = nil
+				local place, kind = "Warsong Gulch", "pvp"
+				_G.GetInstanceInfo = function() return place, kind end
+				_G.GetBattlefieldArenaFaction = function() return 1 end
+				local heard = mod.events:GetScript("OnEvent")
+				heard(mod.events, "PVP_MATCH_COMPLETE", 1, 600)
+				heard(mod.events, "PVP_MATCH_COMPLETE", 1, 600)
+				local rows, total = mod.MatchRows()
+				assert(#rows == 1 and rows[1].won == 1 and total.won == 1, "a match is counted once")
+				heard(mod.events, "PLAYER_ENTERING_WORLD")
+				heard(mod.events, "PVP_MATCH_COMPLETE", 0, 600)
+				place = "Arathi Basin"
+				heard(mod.events, "PLAYER_ENTERING_WORLD")
+				heard(mod.events, "PVP_MATCH_COMPLETE", 1, 600)
+				heard(mod.events, "PLAYER_ENTERING_WORLD")
+				kind = "arena"
+				heard(mod.events, "PVP_MATCH_COMPLETE", 1, 600)
+				rows, total = mod.MatchRows()
+				assert(#rows == 2 and rows[1].name == "Arathi Basin" and rows[2].won == 1 and rows[2].lost == 1,
+					"each battleground its own row, by name, and no arena")
+				assert(total.won == 2 and total.lost == 1 and mod.MatchWords(total) == "2 won · 1 lost · 67%",
+					"and all of them together: " .. mod.MatchWords(total))
+				assert(mod.MatchWords({ won = 1, lost = 0, draw = 1 }) == "1 won · 0 lost · 1 drawn · 50%", "a draw is said")
+				_G.GetInstanceInfo, _G.GetBattlefieldArenaFaction, BT.settings.pvpMatches = hadInfo, hadTeam, hadMatches
+				mod.counted, mod.lastMatch = nil, nil
+			end
 			assert(mod.NumberOf("First Sergeant") == 5 and mod.NumberOf("Master Sergeant") == 4
 				and mod.NumberOf("Knight-Champion") == 9 and mod.NumberOf("High Warlord") == 14
 				and mod.NumberOf("Sergeant") == 3 and mod.NumberOf("Rank 12: Warlord") == 12
@@ -22764,6 +22958,8 @@ if ok then
 				{ "Hordie Scorecard", 1, 2, 0, 50, 0, 3, "Orc", "Shaman", "SHAMAN" },
 				{ "Allie Scorecard", 0, 1, 2, 20, 1, 1, "Human", "Paladin", "PALADIN" },
 				{ "Odd Sider", 0, 0, 0, 0, 7, 0, "Gnome", "Warrior", "Warrior" },
+				-- this client's order: the token ninth, damage done tenth
+				{ "Ninth Place", 1, 2, 0, 50, 0, "Troll", "Hunter", "HUNTER", 1200 },
 			}
 			_G.GetNumBattlefieldScores = function() return #scores end
 			_G.GetBattlefieldScore = function(i) return (table.unpack or unpack)(scores[i]) end
@@ -22774,6 +22970,15 @@ if ok then
 				h.WHO_LIST_UPDATE(nil, "WHO_LIST_UPDATE")
 				h.FRIENDLIST_UPDATE(nil, "FRIENDLIST_UPDATE")
 				h.UPDATE_BATTLEFIELD_SCORE(nil, "UPDATE_BATTLEFIELD_SCORE")
+				-- and by name, where the client has C_PvP.GetScoreInfo
+				local hadPvP = _G.C_PvP
+				_G.GetNumBattlefieldScores = function() return 1 end
+				_G.C_PvP = { GetScoreInfo = function()
+					return { name = "Named Fields", faction = 0, classToken = "WARLOCK", guid = "Player-4372-0000BEEF",
+						damageDone = 900 }
+				end }
+				h.UPDATE_BATTLEFIELD_SCORE(nil, "UPDATE_BATTLEFIELD_SCORE")
+				_G.C_PvP = hadPvP
 				h.MAIL_INBOX_UPDATE(nil, "MAIL_INBOX_UPDATE")
 				h.CHAT_MSG_CHANNEL_LIST(nil, "CHAT_MSG_CHANNEL_LIST", "@Chan Owner, +Chan Mod, Chan Member, General",
 					"", "", "1. General")
@@ -22802,6 +23007,10 @@ if ok then
 			assert(hs and hs.faction == "Horde" and hs.class == "SHAMAN", "side 0 is the Horde")
 			assert(as and as.faction == "Alliance" and as.class == "PALADIN", "side 1 is the Alliance")
 			assert(odd and odd.faction == nil and odd.class == "WARRIOR", "a side it does not know is no side, and a class in words its token")
+			local ninth, named = row("Ninth Place"), row("Named Fields")
+			assert(ninth and ninth.class == "HUNTER" and ninth.faction == "Horde", "the token read from the ninth place too")
+			assert(named and named.class == "WARLOCK" and named.faction == "Horde" and named.guid == "Player-4372-0000BEEF",
+				"and a row read by name, with its GUID")
 			-- the mail: a sender listed, an auction house not a character
 			local mw = row("Letter Writer")
 			assert(mw and mw.seen == 0 and mw.vouch, "a letter's sender is listed, not seen")

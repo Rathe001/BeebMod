@@ -137,19 +137,61 @@ end
 
 -- A battleground scoreboard is forty characters with their class and faction,
 -- handed over in one table, most of whom you will never stand next to.
+--
+-- THE OTHER SIDE HAD NO CLASS (Josh 2026-11-23, the census after a
+-- battleground: 29 of an hour's players "Unknown", "I suspect they are
+-- horde"). The class was read from the tenth value of GetBattlefieldScore,
+-- where the oldest clients keep the token. This client keeps it ninth
+-- (Blizzard_Deprecated, Deprecated_12_0_1.lua) and has damage done tenth, so
+-- nobody on a scoreboard got a class. Your own side got theirs from the raid;
+-- the other side stayed without. The row is read from C_PvP.GetScoreInfo
+-- where the client has it, by name and with the GUID. The old call is kept
+-- for a client without it, its class taken from whichever place holds one.
+local function hidden(v)
+	return issecretvalue ~= nil and issecretvalue(v) and true or false
+end
+
+-- one row of the scoreboard: name, side, class token, GUID
+function R.Score(i)
+	local pvp = rawget(_G, "C_PvP")
+	if type(pvp) == "table" and type(pvp.GetScoreInfo) == "function" then
+		local ok, s = pcall(pvp.GetScoreInfo, i)
+		if ok and type(s) == "table" then
+			local name, side, class, guid = s.name, s.faction, s.classToken, s.guid
+			if hidden(name) or type(name) ~= "string" then
+				return nil
+			end
+			if hidden(guid) or type(guid) ~= "string" or not guid:match("^Player%-") then
+				guid = nil
+			end
+			return name, (not hidden(side)) and side or nil, (not hidden(class)) and R.ClassToken(class) or nil, guid
+		end
+		return nil
+	end
+	if not GetBattlefieldScore then
+		return nil
+	end
+	local name, _, _, _, _, side, _, _, ninth, tenth = GetBattlefieldScore(i)
+	if hidden(name) or type(name) ~= "string" then
+		return nil
+	end
+	local class = (not hidden(tenth)) and R.ClassToken(tenth) or nil
+	class = class or ((not hidden(ninth)) and R.ClassToken(ninth) or nil)
+	return name, (not hidden(side)) and side or nil, class, nil
+end
+
 function R.Battleground()
-	if not (GetNumBattlefieldScores and GetBattlefieldScore) then
+	if not GetNumBattlefieldScores then
 		return 0
 	end
 	local wrote = 0
 	for i = 1, (GetNumBattlefieldScores() or 0) do
-		local name, _, _, _, _, side, _, _, _, classToken = GetBattlefieldScore(i)
+		local name, side, class, guid = R.Score(i)
 		if name then
-			-- the class only when it is a real token (the scoreboard's layout
-			-- differs between clients), and no race: it is given in words.
-			-- The side is 0 for the Horde, 1 for the Alliance.
+			-- no race: it is given in words. The side is 0 for the Horde, 1
+			-- for the Alliance.
 			local faction = (side == 0 and "Horde") or (side == 1 and "Alliance") or false
-			if note(name, { src = "bg", class = R.ClassToken(classToken), faction = faction }) then
+			if note(name, { src = "bg", class = class, faction = faction, guid = guid }) then
 				wrote = wrote + 1
 			end
 		end

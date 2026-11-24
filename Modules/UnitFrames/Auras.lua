@@ -607,11 +607,27 @@ function A.Attach(b, kind)
 		local ok, slot = pcall(set.debuffs.AddAuraSlot, set.debuffs, "dispel", "HARMFUL|RAID", {
 			initializeFrame = dispelButton(w, h),
 		})
-		if ok and type(slot) == "table" and slot.SetPoint then
-			slot:ClearAllPoints()
-			slot:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
-			slot:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
-			set.dispel = slot
+		-- A SLOT THE GAME KEEPS FROM ADDONS (Josh 2026-11-23, in a battleground:
+		-- "calling 'ClearAllPoints' on bad self (Attempt to access forbidden
+		-- object from code tainted by an AddOn)", from the line below, for a
+		-- party cell made there). The error ended the sweep, so the cell got
+		-- no aura rows and the cells after it were not dressed. A forbidden
+		-- slot is left alone: that cell has no dispel mark. Counted for What
+		-- loaded (A.forbidden).
+		local barred = ok and type(slot) == "table" and type(slot.IsForbidden) == "function" and slot:IsForbidden()
+		if barred then
+			A.forbidden = (A.forbidden or 0) + 1
+		elseif ok and type(slot) == "table" and slot.SetPoint then
+			local placed = pcall(function()
+				slot:ClearAllPoints()
+				slot:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+				slot:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+			end)
+			if placed then
+				set.dispel = slot
+			else
+				A.forbidden = (A.forbidden or 0) + 1
+			end
 		end
 	end
 	-- your heals and damage over time, a bar a spell along the top (Timers.lua)

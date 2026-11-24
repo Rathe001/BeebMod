@@ -2102,6 +2102,22 @@ local RANK_GAP, TAG_INSET = 5, 18
 -- how much lower than the name's own line the tags hang
 M.TAG_DROP = 2
 
+-- a player's PvP rank by name, "Sergeant", where BeebMod knows it
+-- (Modules/PvP/PvP.lua, M.UnitRank); counted for What loaded
+M.rankTags = 0
+function M.RankTag(unit)
+	local pvp = BT.GetModule and BT.GetModule("pvp")
+	if not (pvp and pvp.UnitRank) then
+		return nil
+	end
+	local ok, _, word = pcall(pvp.UnitRank, unit)
+	if ok and type(word) == "string" then
+		M.rankTags = M.rankTags + 1
+		return word
+	end
+	return nil
+end
+
 function M.Compose(tip, unit)
 	if not (tip.ClearLines and tip.AddDoubleLine) then
 		return
@@ -2185,6 +2201,11 @@ function M.Compose(tip, unit)
 		else
 			small[#small + 1] = line
 		end
+	end
+	-- A PLAYER'S PVP RANK (Josh 2026-11-24: it "should just be on the tooltip
+	-- of the player", off the nameplate). A tag after their race.
+	if isPlayer then
+		addTag(tags, M.RankTag(unit))
 	end
 	-- and what state it is in, after what it is
 	if dead then
@@ -2544,7 +2565,8 @@ M.crestSaid = "none yet"
 
 -- for What loaded on the Testing page
 function M.Status()
-	local line = ("last crest: %s; card parts left over: %d"):format(M.crestSaid, M.leftovers)
+	local line = ("last crest: %s; card parts left over: %d; rank tags written: %d"):format(M.crestSaid, M.leftovers,
+		M.rankTags or 0)
 	-- comparison cards left as the game filled them, and those written a
 	-- frame late (M.Spared, M.SettleSpared)
 	line = line .. ("; comparison fills left unwritten: %d, written late: %d"):format(M.spared, M.settled)
@@ -7724,8 +7746,10 @@ if GameTooltip and GameTooltip.HookScript then
 		end
 		-- a secret unit (inside an instance) cannot be asked about: it is
 		-- drawn as the game gives it, plainly dressed (T.Fill)
-		if unit ~= nil and issecretvalue and issecretvalue(unit) then
-			unit = nil
+		-- (a player under the mouse is drawn as "mouseover": T.Stand)
+		-- (and a unit's tooltip that names no unit)
+		if unit == nil or (issecretvalue and issecretvalue(unit)) then
+			unit = BT.UnitTip and BT.UnitTip.Stand and BT.UnitTip.Stand(tip, unit) or nil
 		end
 		-- (not while one of ours is showing it: Compose and ComposeItem
 		-- have just dressed it, and a plain pass took an item's spine off)

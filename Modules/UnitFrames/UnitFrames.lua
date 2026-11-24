@@ -821,8 +821,13 @@ function M.Sweep()
 			if type(child) == "table" and child.GetAttribute and not child.bmDressed then
 				F.Dress(child, h.bmKind)
 				F.Clicks(child)
+				-- (an error in a cell's aura rows does not end the sweep: the
+				-- cell is dressed already and would never be swept again)
 				if F.Auras then
-					F.Auras.Attach(child, h.bmKind)
+					local okA, errA = pcall(F.Auras.Attach, child, h.bmKind)
+					if not okA then
+						BT.Err("unitframes.auras: " .. tostring(errA))
+					end
 				end
 				if h.bmRole == "party" then
 					M.Minis(child)
@@ -953,7 +958,8 @@ local function buildGroups()
 	-- has one unit, always you. A plain frame with the one secure button on
 	-- it, listed with the headers so it is swept, painted, scaled and switched
 	-- with the party as their cells are. Its role is the party's - the same
-	-- switch, the same cell, shown when the party is - and its block is yours.
+	-- switch, the same cell - and its block is yours. It is up in a raid too
+	-- (M.Visibility).
 	local me = CreateFrame("Frame", "BeebModMe", UIParent)
 	me:SetSize(F.KINDS.party.w, F.KINDS.party.h)
 	me:SetPoint("TOPLEFT", holder("player"), "TOPLEFT", 0, 0)
@@ -979,14 +985,28 @@ end
 
 -- which headers show when, handed to the client: [group:raid] and friends are
 -- conditions the client resolves itself, in or out of a fight
+--
+-- YOUR OWN CELL, IN A RAID TOO (Josh 2026-11-23, a battleground: "Player frame
+-- not showing in raids"). It took the party's rule and went down with the
+-- party column in a raid, and the game's player frame is put away, so the
+-- only you left was a small cell in the raid's grid. It is up always.
+function M.Visibility(h)
+	if h == M.me then
+		return "show"
+	end
+	if h.bmRole == "raid" or h.bmRole == "tanks" then
+		return "[group:raid] show; hide"
+	end
+	return "[group:raid] hide; show"
+end
+
 local function drive(h, on)
 	if not RegisterStateDriver then
 		h:SetShown(on)
 		return
 	end
 	if on then
-		RegisterStateDriver(h, "visibility", (h.bmRole == "raid" or h.bmRole == "tanks") and "[group:raid] show; hide"
-			or "[group:raid] hide; show")
+		RegisterStateDriver(h, "visibility", M.Visibility(h))
 	else
 		if UnregisterStateDriver then
 			UnregisterStateDriver(h, "visibility")
@@ -1166,6 +1186,21 @@ end
 -- ---------------------------------------------------------------------------
 -- Keeping them current
 -- ---------------------------------------------------------------------------
+
+-- for What loaded: cells dressed, and dispel marks the game kept from us
+-- (Auras.lua, A.forbidden)
+function M.Status()
+	local cells, rows = 0, 0
+	for _, child in ipairs(M.GroupCells()) do
+		cells = cells + 1
+		rows = rows + (child.bmAuras and 1 or 0)
+	end
+	local said = ("group cells %d, with aura rows %d · dispel marks the game kept back: %d"):format(cells, rows,
+		F.Auras and F.Auras.forbidden or 0)
+	-- after where Edit Mode has the blocks (M.EditModeSaid)
+	local ok, edit = pcall(M.EditModeSaid)
+	return (ok and type(edit) == "string") and (edit .. " · " .. said) or said
+end
 
 function M.PaintSingles()
 	for unit, f in pairs(M.singles) do

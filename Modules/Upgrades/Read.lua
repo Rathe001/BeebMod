@@ -108,6 +108,46 @@ function Rd.Forms(s, db)
 	return kept.seen
 end
 
+-- WHICH TOTAL THE GAME KEEPS BACK, FOR WHAT LOADED (Josh 2026-11-23, a shield
+-- in his bags in a battleground with no numbers on it: "Any idea why the
+-- Upgrades isnt showing here?"). Rd.State gives nothing where any one of
+-- these cannot be read, and did not say which. The same reads, each named:
+-- the first that is missing or secret, or nil where all of them read.
+function Rd.Held()
+	if not UnitStat then
+		return "no UnitStat"
+	end
+	local function state(v)
+		return secret(v) and "secret" or (type(v) ~= "number" and type(v)) or nil
+	end
+	for i, name in ipairs(STATS) do
+		local ok, _, effective = pcall(UnitStat, "player", i)
+		local bad = not ok and "error" or state(effective)
+		if bad then
+			return name .. " " .. bad
+		end
+	end
+	local reads = {
+		{ "attack power", function() local a, b, c = UnitAttackPower("player") return state(a) or state(b) or state(c) end },
+		{ "armor", function() local _, a = UnitArmor("player") return state(a) end },
+		{ "damage", function() local a, b = UnitDamage("player") return state(a) or state(b) end },
+		{ "attack speed", function() return state((UnitAttackSpeed("player"))) end },
+		{ "mana regen", function() local _, c = GetManaRegen() return state(c) end },
+		{ "haste", function() return state(GetMeleeHaste and GetMeleeHaste() or 0) end },
+		{ "health", function() return state(UnitHealthMax("player")) end },
+	}
+	for _, r in ipairs(reads) do
+		local ok, bad = pcall(r[2])
+		if not ok then
+			return r[1] .. " error"
+		end
+		if bad then
+			return r[1] .. " " .. bad
+		end
+	end
+	return nil
+end
+
 -- your totals as you stand; nil if the game keeps any of them back
 function Rd.State()
 	-- (a client without the call has nothing to read)

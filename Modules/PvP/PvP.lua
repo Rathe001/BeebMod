@@ -404,6 +404,314 @@ function M.Read()
 	return p
 end
 
+-- ---------------------------------------------------------------------------
+-- Battlegrounds won and lost
+-- ---------------------------------------------------------------------------
+
+-- WON AND LOST, BY BATTLEGROUND (Josh 2026-11-23: "Possible to show the
+-- win/lose rate of each bg, and then the total?"). The game keeps no such
+-- count that an addon can ask for, so each match is written down as it ends:
+-- PVP_MATCH_COMPLETE names the winning side (0 the Horde, 1 the Alliance,
+-- anything else nobody), and GetBattlefieldArenaFaction the side you fought
+-- on. Kept for the character, under the battleground's name as the game has
+-- it. Matches from before this was built are not in it.
+local function plainOf(v)
+	if issecretvalue and issecretvalue(v) then
+		return nil
+	end
+	return v
+end
+
+-- this character's counts: { [battleground] = { won, lost, draw } }
+function M.Matches()
+	if not BT.settings then
+		return nil
+	end
+	BT.settings.pvpMatches = BT.settings.pvpMatches or {}
+	local all = BT.settings.pvpMatches
+	local mine, who = BT.Session.Mine(all)
+	if not mine then
+		mine = {}
+		all[who] = mine
+	end
+	return mine
+end
+
+-- the side you are fighting on: 0 the Horde, 1 the Alliance, or nil
+function M.Team()
+	local team = plainOf((ask("GetBattlefieldArenaFaction")))
+	if team == 0 or team == 1 then
+		return team
+	end
+	local side = plainOf((ask("UnitFactionGroup", "player")))
+	return (side == "Horde" and 0) or (side == "Alliance" and 1) or nil
+end
+
+-- "won", "lost" or "draw"; nil where your side is not known
+function M.Result(winner, team)
+	if team ~= 0 and team ~= 1 then
+		return nil
+	end
+	if winner ~= 0 and winner ~= 1 then
+		return "draw"
+	end
+	return winner == team and "won" or "lost"
+end
+
+-- one match written down; what it was counted as
+function M.Tally(name, winner, team)
+	local mine = M.Matches()
+	local result = M.Result(winner, team)
+	if not (mine and result and type(name) == "string" and name ~= "") then
+		return nil
+	end
+	local row = mine[name]
+	if type(row) ~= "table" then
+		row = { won = 0, lost = 0, draw = 0 }
+		mine[name] = row
+	end
+	row[result] = (tonumber(row[result]) or 0) + 1
+	return result
+end
+
+-- the match you are in has ended: counted once, in a battleground only
+function M.MatchOver(winner)
+	if M.counted then
+		return nil
+	end
+	local name, kind = ask("GetInstanceInfo")
+	name, kind, winner = plainOf(name), plainOf(kind), plainOf(winner)
+	if kind ~= "pvp" then
+		return nil
+	end
+	local result = M.Tally(name, winner, M.Team())
+	M.counted = result ~= nil
+	M.lastMatch = ("%s: winner %s, team %s, %s"):format(tostring(name), tostring(winner), tostring(M.Team()),
+		tostring(result))
+	return result
+end
+
+-- every battleground with a match in it, by name, and all of them together
+function M.MatchRows()
+	local rows, total = {}, { won = 0, lost = 0, draw = 0 }
+	for name, row in pairs(M.Matches() or {}) do
+		if type(row) == "table" then
+			local one = { name = name, won = tonumber(row.won) or 0, lost = tonumber(row.lost) or 0,
+				draw = tonumber(row.draw) or 0 }
+			if one.won + one.lost + one.draw > 0 then
+				rows[#rows + 1] = one
+				total.won, total.lost, total.draw = total.won + one.won, total.lost + one.lost, total.draw + one.draw
+			end
+		end
+	end
+	table.sort(rows, function(a, b) return a.name < b.name end)
+	return rows, total
+end
+
+-- "3 won · 1 lost · 75%": the share is of every match, a draw among them
+function M.MatchWords(row)
+	local n = row.won + row.lost + row.draw
+	local words = ("%s won · %s lost"):format(big(row.won), big(row.lost))
+	if row.draw > 0 then
+		words = words .. (" · %s drawn"):format(big(row.draw))
+	end
+	return words .. (" · %d%%"):format(n > 0 and math.floor(row.won / n * 100 + 0.5) or 0)
+end
+
+-- ---------------------------------------------------------------------------
+-- Other players' ranks
+-- ---------------------------------------------------------------------------
+
+-- SOMEBODY ELSE'S RANK, REMEMBERED (Josh 2026-11-23, of a rank 3 Sergeant's
+-- nameplate: "im wondering if we should just show the rank icon instead,
+-- maybe before level?"). The game tells an addon another player's rank in
+-- two places only. His two commands on that Sergeant said so:
+-- UnitHonorLevel("target") printed 1 and UnitPVPName("target") the bare
+-- name. The two places are a battleground's scoreboard, where each row's
+-- honorLevel is the rank (Blizzard_PVPMatch/Camelot/PVPMatchTableOverrides.lua),
+-- and the inspect window (GetInspectHonorData's seventh value, as
+-- Blizzard_InspectUI/Camelot/InspectPVPFrame.lua reads it). Each is read as
+-- the game shows it and kept by the player's GUID. Nobody is inspected by
+-- BeebMod: that would ask the server about everyone near you.
+-- Kept across sessions, for every character of yours. Past RANKS_KEPT the
+-- list is started again, since nothing says which are old.
+M.RANKS_KEPT = 5000
+M.ranksNoted = 0
+
+local function rankBook()
+	if not BT.settings then
+		return nil
+	end
+	local book = BT.settings.pvpRanks
+	if type(book) ~= "table" then
+		book = { n = 0, by = {} }
+		BT.settings.pvpRanks = book
+	end
+	book.by = type(book.by) == "table" and book.by or {}
+	book.n = tonumber(book.n) or 0
+	return book
+end
+
+-- a rank heard for a GUID: 1 to 14 kept, anything else forgets them
+function M.NoteRank(guid, rank)
+	local book = rankBook()
+	guid, rank = plainOf(guid), plainOf(rank)
+	if not (book and type(guid) == "string" and guid:match("^Player%-") and type(rank) == "number") then
+		return false
+	end
+	rank = math.floor(rank)
+	local had = book.by[guid]
+	if rank < 1 or rank > 14 then
+		if had then
+			book.by[guid] = nil
+			book.n = math.max(0, book.n - 1)
+		end
+		return had ~= nil
+	end
+	if had == rank then
+		return false
+	end
+	if not had then
+		if book.n >= M.RANKS_KEPT then
+			book.by, book.n = {}, 0
+		end
+		book.n = book.n + 1
+	end
+	book.by[guid] = rank
+	M.ranksNoted = M.ranksNoted + 1
+	return true
+end
+
+-- the rank kept for a GUID, 1 to 14, or nil
+function M.RankFor(guid)
+	local book = rankBook()
+	guid = plainOf(guid)
+	if not (book and type(guid) == "string") then
+		return nil
+	end
+	return book.by[guid]
+end
+
+-- the rank a title names, 1 to 14: "Corporal" is 2. Only the whole title.
+function M.RankOfTitle(title)
+	title = plainOf(title)
+	if type(title) ~= "string" or title == "" then
+		return nil
+	end
+	local low = title:lower()
+	for _, side in ipairs({ "Alliance", "Horde" }) do
+		for n, name in ipairs(M.RANKS[side]) do
+			if name:lower() == low then
+				return n
+			end
+		end
+	end
+	return nil
+end
+
+-- A UNIT'S RANK AND ITS NAME ON THEIR SIDE, for their tooltip (Josh
+-- 2026-11-24: the rank "should just be on the tooltip of the player"). The
+-- rank kept for their GUID first. Where there is none, or the game keeps the
+-- GUID secret, the words the game puts before their name: in a battleground
+-- UnitPVPName gives "Corporal Aeki" (seen 2026-11-23), in a city the bare
+-- name.
+function M.UnitRank(unit)
+	if type(unit) ~= "string" then
+		return nil
+	end
+	local rank = M.RankFor((ask("UnitGUID", unit)))
+	if not rank then
+		local titled, name = plainOf((ask("UnitPVPName", unit))), plainOf((ask("UnitName", unit)))
+		if type(titled) == "string" and type(name) == "string" and name ~= "" then
+			local from = titled:find(name, 1, true)
+			if from and from > 1 then
+				local before = titled:sub(1, from - 1):gsub("%s+$", "")
+				rank = M.RankOfTitle(before)
+			end
+		end
+	end
+	if not rank then
+		return nil
+	end
+	local side = plainOf((ask("UnitFactionGroup", unit)))
+	local list = M.RANKS[side or ""] or M.RANKS[M.SideName() or ""] or M.RANKS.Alliance
+	return rank, list[rank]
+end
+
+-- the scoreboard as it stands: every row's rank; how many were news
+function M.ReadScoreboard()
+	local pvp = _G.C_PvP
+	if not (type(pvp) == "table" and type(pvp.GetScoreInfo) == "function") then
+		return 0
+	end
+	local n = plainOf((ask("GetNumBattlefieldScores")))
+	local news = 0
+	-- for What loaded: rows read, rows whose GUID or rank the game kept
+	-- secret, and rows with a rank
+	local said = { rows = 0, secret = 0, ranked = 0 }
+	for i = 1, (type(n) == "number" and n or 0) do
+		local ok, row = pcall(pvp.GetScoreInfo, i)
+		if ok and type(row) == "table" then
+			said.rows = said.rows + 1
+			local level = plainOf(row.honorLevel)
+			if plainOf(row.guid) == nil or level == nil then
+				said.secret = said.secret + 1
+			elseif type(level) == "number" and level >= 1 then
+				said.ranked = said.ranked + 1
+			end
+			if M.NoteRank(row.guid, row.honorLevel) then
+				news = news + 1
+			end
+		end
+	end
+	M.scoreSaid = said
+	return news
+end
+
+-- whoever the inspect window is showing: their rank
+function M.ReadInspect()
+	local window = _G.InspectFrame
+	local unit = type(window) == "table" and plainOf(window.unit) or nil
+	if type(unit) ~= "string" then
+		return false
+	end
+	local guid = plainOf((ask("UnitGUID", unit)))
+	local _, _, _, _, _, _, level = ask("GetInspectHonorData")
+	return M.NoteRank(guid, plainOf(level) or 0)
+end
+
+-- the game's picture for a rank: its atlas where the client has one (the
+-- scoreboard's), or the insignia file; "atlas" or "file", and which
+function M.RankArt(n)
+	n = tonumber(n)
+	if not (n and n >= 1 and n <= 14) then
+		return nil
+	end
+	local atlas = ("UI-Character-Info-Honor-Icon-%d"):format(n)
+	local get = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+	if type(get) == "function" then
+		local ok, info = pcall(get, atlas)
+		if ok and type(info) == "table" then
+			return "atlas", atlas
+		end
+	end
+	local file = M.Insignia(n)
+	if file then
+		return "file", file
+	end
+	return nil
+end
+
+function M.Status()
+	local rows, total = M.MatchRows()
+	local book = rankBook()
+	local s = M.scoreSaid
+	return ("battlegrounds counted: %d kinds, %d matches · last: %s · other players' ranks kept: %d, heard this session: %d · last scoreboard: %s")
+		:format(#rows, total.won + total.lost + total.draw, tostring(M.lastMatch or "none this session"),
+			book and book.n or 0, M.ranksNoted,
+			s and ("%d rows, %d kept secret, %d with a rank"):format(s.rows, s.secret, s.ranked) or "none read")
+end
+
 -- the game's insignia for a rank, if the client has the file
 function M.Insignia(n)
 	if not (n and n >= 1) then
@@ -547,6 +855,15 @@ function M.Tip()
 		if p.life.highest then
 			t:ListRow("Highest rank", p.life.highest)
 		end
+		-- won and lost, each battleground and then all of them (M.MatchRows)
+		local rows, total = M.MatchRows()
+		if #rows > 0 then
+			t:Section("Battlegrounds")
+			for _, row in ipairs(rows) do
+				t:ListRow(row.name, M.MatchWords(row))
+			end
+			t:ListRow("All", M.MatchWords(total))
+		end
 		if p.fromTab then
 			t:Note("From your PvP tab.")
 		end
@@ -593,8 +910,38 @@ for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_PVP_KILLS_CHANGED", "P
 	"UNIT_FACTION", "UPDATE_FACTION", "MAJOR_FACTION_RENOWN_LEVEL_CHANGED" }) do
 	pcall(M.events.RegisterEvent, M.events, event)
 end
+pcall(M.events.RegisterEvent, M.events, "PVP_MATCH_COMPLETE")
+-- other players' ranks, as the game shows them (M.NoteRank)
+pcall(M.events.RegisterEvent, M.events, "UPDATE_BATTLEFIELD_SCORE")
+pcall(M.events.RegisterEvent, M.events, "INSPECT_HONOR_UPDATE")
+M.SCORE_EVERY = 5
 M.events:SetScript("OnEvent", function(_, event, unit)
 	if not BT.Enabled("pvp") then
+		return
+	end
+	-- a match ended (its winner is the event's first word); a new place, and
+	-- the next match is a new one
+	if event == "PVP_MATCH_COMPLETE" then
+		local ok, err = pcall(M.MatchOver, unit)
+		if not ok then
+			BT.Err("pvp.match: " .. tostring(err))
+		end
+		return
+	end
+	if event == "PLAYER_ENTERING_WORLD" then
+		M.counted = nil
+	end
+	-- the scoreboard is sent over and over in a match: read every few seconds
+	if event == "UPDATE_BATTLEFIELD_SCORE" then
+		local now = GetTime and GetTime() or 0
+		if now - (M.scoreAt or -math.huge) >= M.SCORE_EVERY then
+			M.scoreAt = now
+			pcall(M.ReadScoreboard)
+		end
+		return
+	end
+	if event == "INSPECT_HONOR_UPDATE" then
+		pcall(M.ReadInspect)
 		return
 	end
 	if event == "UNIT_FACTION" and unit ~= "player" then

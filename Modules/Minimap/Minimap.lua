@@ -1406,8 +1406,16 @@ end
 -- control that appears under the cursor should be.
 function M.Reveal(on)
 	local a = on and 1 or 0
+	local line = BT.MapButtons
 	for f in pairs(M.hovering or {}) do
-		if f.SetAlpha then
+		-- (one the Addon buttons line has since taken is not the map's to
+		-- fade: Buttons.lua, M.KeepInSight)
+		if line and line.Claims and line.Claims(f) then
+			M.hovering[f] = nil
+			if f.SetAlpha then
+				pcall(f.SetAlpha, f, 1)
+			end
+		elseif f.SetAlpha then
 			pcall(f.SetAlpha, f, a)
 		end
 	end

@@ -849,9 +849,93 @@ T.path, T.fills, T.itemFills = "none", 0, 0
 -- untainted execution"). Inside an instance the game can hand the tooltip's
 -- unit over as a secret, and asking anything about it from addon code is an
 -- error. That tooltip is left as the game draws it.
+--
+-- A PLAYER UNDER THE MOUSE IS ASKED FOR BY THAT NAME (Josh 2026-11-23, a
+-- battleground, the game's plain tooltip on a player: "Sometimes the wrong
+-- tooltips show"). In a battleground every tooltip's unit comes secret, so
+-- every player there got the game's tooltip. The unit under the mouse can be
+-- asked for as "mouseover", a word of our own and no secret. A secret unit
+-- on the pointing tooltip, with a player under the mouse, is drawn as that
+-- player. Anything else secret (a boss, as on 2026-11-06) is left to the
+-- game as before. Counted for What loaded: T.secrets seen, T.stood drawn.
+--
+-- AND A UNIT'S TOOLTIP WITH NO UNIT (Josh, later the same day, two more
+-- screenshots from Warsong Gulch, a player and a hunter's pet with the
+-- game's tooltip: "Still seeing a lot of missing custom tooltips"). The
+-- game finds a tooltip's unit from its GUID (TooltipUtil.GetDisplayedUnit),
+-- and that can come back with nothing where it was thought to come back
+-- secret. A tooltip that is a unit's and names no unit is stood in for the
+-- same way. Where the tooltip's GUID can be read, the stand-in must have
+-- that GUID, and then it may be anything: a pet too. Where it cannot, only
+-- a player stands in. Counted: T.blanks.
+T.secrets, T.stood, T.blanks, T.unitErrors = 0, 0, 0, 0
+local function hid(v)
+	return issecretvalue ~= nil and issecretvalue(v) and true or false
+end
+
+function T.Stand(tip, unit)
+	if unit ~= nil and not hid(unit) then
+		return unit
+	end
+	if tip ~= GameTooltip or not (UnitExists and UnitIsPlayer) then
+		return nil
+	end
+	-- the tooltip's own GUID, where it is a unit's and the GUID can be read
+	local guid = nil
+	local kind = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Unit
+	if type(tip.IsTooltipType) == "function" and kind ~= nil then
+		local okT, is = pcall(tip.IsTooltipType, tip, kind)
+		if unit == nil and not (okT and not hid(is) and is) then
+			return nil
+		end
+		local okD, data = pcall(tip.GetPrimaryTooltipData, tip)
+		if okD and type(data) == "table" and type(data.guid) == "string" and not hid(data.guid) then
+			guid = data.guid
+		end
+	elseif unit == nil then
+		return nil
+	end
+	-- ONE OF OUR OWN CELLS FIRST (Josh, the same day: "It looks like hovering
+	-- raid frames shows the wrong tooltip"). A unit frame's cell puts the
+	-- tooltip up for its own unit (Unit.lua, OnEnter) and is the tooltip's
+	-- owner, so the cell says who it is: "raid7", a word of our own.
+	local names = { "mouseover" }
+	local okO, owner = pcall(tip.GetOwner, tip)
+	if okO and type(owner) == "table" and type(owner.bmUnit) == "string" and not issecretvalue(owner.bmUnit) then
+		table.insert(names, 1, owner.bmUnit)
+	end
+	for _, name in ipairs(names) do
+		local okE, there = pcall(UnitExists, name)
+		if okE and not hid(there) and there then
+			local okG, theirs = pcall(UnitGUID or error, name)
+			if guid and okG and type(theirs) == "string" and not hid(theirs) then
+				-- both GUIDs read: the same one, or it is somebody else
+				if theirs == guid then
+					return name
+				end
+			else
+				local okP, player = pcall(UnitIsPlayer, name)
+				if okP and not hid(player) and player then
+					return name
+				end
+			end
+		end
+	end
+	return nil
+end
+
 function T.Fill(tip, unit)
-	if unit ~= nil and issecretvalue and issecretvalue(unit) then
-		return
+	if unit == nil or hid(unit) then
+		if unit == nil then
+			T.blanks = T.blanks + 1
+		else
+			T.secrets = T.secrets + 1
+		end
+		unit = T.Stand(tip, unit)
+		if not unit then
+			return
+		end
+		T.stood = T.stood + 1
 	end
 	if not (tip and unit and UnitExists and UnitExists(unit)) then
 		return
@@ -1070,7 +1154,13 @@ if processor and Enum.TooltipDataType.Unit then
 			return
 		end
 		T.Drawn(data)
-		local _, unit = TooltipUtil.GetDisplayedUnit(tip)
+		-- (asked for with care: the game's lookup works on the GUID, which may
+		-- be a secret here)
+		local okU, _, unit = pcall(TooltipUtil.GetDisplayedUnit, tip)
+		if not okU then
+			T.unitErrors = T.unitErrors + 1
+			unit = nil
+		end
 		-- the lines the client drew it from, for the fill that follows only:
 		-- which are quest names, whose objectives (Tooltips.lua, TypedQuests)
 		T.data = data

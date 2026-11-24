@@ -783,9 +783,9 @@ function L.Said()
 	end
 	parts[#parts + 1] = ("backpack keys opening all bags: %s"):format(
 		(L.keysSet and L.keysSet ~= "") and L.keysSet or "none")
-	parts[#parts + 1] = ("merged=%s layout=%s drawn=%s backpack strata=%s"):format(
+	parts[#parts + 1] = ("merged=%s layout=%s drawn=%s backpack strata=%s raised %s times, clicks in the bags heard %s"):format(
 		L.merged and (BT.Furniture.Call(L.merged, "GetName") or "yes") or "no", tostring(M.Layout()), tostring(L.drawn),
-		tostring(combined and combined.GetFrameStrata and combined:GetFrameStrata()))
+		tostring(combined and combined.GetFrameStrata and combined:GetFrameStrata()), tostring(L.lifted), tostring(L.clicks))
 	-- A REAGENT SLOT NEXT TO A BACKPACK SLOT (Josh 2026-11-21, a third
 	-- screenshot, at the mailbox: the reagent bag's items dim again, with
 	-- the reagent window a layer above the backpack as it should be). Every
@@ -878,16 +878,15 @@ end
 -- put on the HIGH layer. Where the backpack is on that layer too, the two are
 -- ordered by which was raised last, and a click in the backpack raises it:
 -- the reagent slots were then drawn under the backpack and seen through it.
--- The layer is now the one above the backpack's own.
-L.STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG" }
-function L.Above(strata)
-	for i, name in ipairs(L.STRATA) do
-		if name == strata then
-			return L.STRATA[math.min(i + 1, #L.STRATA)]
-		end
-	end
-	return "DIALOG"
-end
+-- The layer was then the one above the backpack's own.
+--
+-- THE BACKPACK'S OWN LAYER (Josh 2026-11-24, a screenshot with the mailbox
+-- and the Guild window open over the bags: the reagent bag's items drawn on
+-- top of the Guild window's chat, "Looks like a z-index type issue with the
+-- reagent bag slots and other windows"). A layer above the backpack is a
+-- layer above every window on the backpack's layer. The higher layer never
+-- cured the dim items either (below). The reagent window is now on the
+-- backpack's layer, in the order L.Lift gives it.
 
 -- RAISED AGAIN AFTER A CLICK (Josh 2026-11-21: with the reagent items dim,
 -- "/run ContainerFrame6:Raise()" made them bright; a higher layer did not).
@@ -895,12 +894,103 @@ end
 -- backpack, with nothing over them, and still drew them under it. A click in
 -- the backpack raises the backpack, and after one the reagent window is
 -- drawn in the wrong order until it is raised itself.
-function L.Lift()
+--
+-- ONLY WHEN THE BACKPACK HAS MOVED (2026-11-24, the same screenshot). Raised
+-- every frame, the reagent window was over every other window every frame.
+-- A raise gives a window a level above the rest of its layer. So the reagent
+-- window is raised when the backpack's level has changed since the last
+-- look, or is not under the reagent window's. Another window raised later
+-- goes over both and stays there. Where a level cannot be read it is raised
+-- as before. Counted for What loaded.
+--
+-- AND AFTER A CLICK IN THE BAGS (Josh 2026-11-24, the same day, a screenshot
+-- of the Crafting shelf with the reagent items dim: "Picking up an item in my
+-- bag causes the reagent items to go dim again"). The backpack's level did
+-- not say it had been raised. So a mouse button going down or up over the
+-- bags is heard (GLOBAL_MOUSE_DOWN, GLOBAL_MOUSE_UP), and the reagent window
+-- is raised every frame for L.LIFT_FOR seconds after it. A click on a window
+-- lying over the bags is not one in the bags: what is under the mouse has to
+-- be part of the backpack or of the reagent window.
+L.lifted, L.clicks = 0, 0
+L.LIFT_FOR = 0.5
+
+-- is `f` the window `w`, or inside it
+local function within(f, w)
+	for _ = 1, 30 do
+		if type(f) ~= "table" then
+			return false
+		end
+		if f == w then
+			return true
+		end
+		local ok, up = pcall(function() return f.GetParent and f:GetParent() end)
+		f = ok and up or nil
+	end
+	return false
+end
+
+-- a mouse button went down or up: was it in the bags
+function L.Clicked()
+	local r, w = L.merged, window()
+	if not (r and w) then
+		return false
+	end
+	local under = nil
+	if type(_G.GetMouseFoci) == "function" then
+		local ok, list = pcall(_G.GetMouseFoci)
+		under = ok and type(list) == "table" and list or nil
+	elseif type(_G.GetMouseFocus) == "function" then
+		local ok, f = pcall(_G.GetMouseFocus)
+		under = ok and { f } or nil
+	end
+	local inBags = false
+	if under then
+		for _, f in ipairs(under) do
+			if within(f, w) or within(f, r) then
+				inBags = true
+			end
+		end
+	else
+		-- nothing says what is under the mouse: the backpack's own box
+		local ok, over = pcall(function() return w.IsMouseOver and w:IsMouseOver() end)
+		inBags = ok and over and true or false
+	end
+	if inBags then
+		L.liftUntil = (GetTime and GetTime() or 0) + L.LIFT_FOR
+		L.clicks = L.clicks + 1
+	end
+	return inBags
+end
+
+L.clickEars = CreateFrame("Frame")
+pcall(L.clickEars.RegisterEvent, L.clickEars, "GLOBAL_MOUSE_DOWN")
+pcall(L.clickEars.RegisterEvent, L.clickEars, "GLOBAL_MOUSE_UP")
+L.clickEars:SetScript("OnEvent", function()
+	if L.merged then
+		pcall(L.Clicked)
+		pcall(L.Lift)
+	end
+end)
+
+function L.Lift(always)
 	local r = L.merged
 	if not (r and r.Raise and r.IsShown and r:IsShown()) then
 		return false
 	end
-	return (pcall(r.Raise, r))
+	local function level(o)
+		local ok, n = pcall(function() return o and o.GetFrameLevel and o:GetFrameLevel() end)
+		n = ok and plain(n) or nil
+		return type(n) == "number" and n or nil
+	end
+	local under, own = level(window()), level(r)
+	local clicked = L.liftUntil and (GetTime and GetTime() or 0) <= L.liftUntil
+	if not always and not clicked and under and own and under == L.liftSeen and own > under then
+		return true
+	end
+	pcall(r.Raise, r)
+	L.liftSeen = under
+	L.lifted = L.lifted + 1
+	return true
 end
 
 -- EVERY FRAME, NOT A FRAME AFTER THE CLICK (Josh 2026-11-21: "It works, but
@@ -929,9 +1019,9 @@ function L.Merge(r)
 	if r.SetFrameStrata then
 		local w = window()
 		local okS, under = pcall(function() return w and w.GetFrameStrata and w:GetFrameStrata() end)
-		pcall(r.SetFrameStrata, r, L.Above(okS and under or "HIGH"))
+		pcall(r.SetFrameStrata, r, okS and under or "HIGH")
 	end
-	L.Lift()
+	L.Lift(true)
 	L.lifts:Show()
 	return put(r, { { "TOPLEFT", UIParent, "TOPLEFT", -L.AWAY, L.AWAY } })
 end

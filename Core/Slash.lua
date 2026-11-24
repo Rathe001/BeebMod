@@ -136,6 +136,10 @@ function BT.WhatLoaded()
 		U.Print(("tooltip hooks: unit %s (%d filled) · item %s (%d filled) · spell %s (%d filled)"):format(
 			tostring(T.path), T.fills or 0, tostring(T.itemPath), T.itemFills or 0, tostring(T.spellPath),
 			T.spellFills or 0))
+		-- units the game handed over secret, and those drawn as the player
+		-- under the mouse (T.Stand)
+		U.Print(("unit tooltips with a secret unit: %d · with no unit: %d · drawn by a stand-in: %d · lookups that failed: %d")
+			:format(T.secrets or 0, T.blanks or 0, T.stood or 0, T.unitErrors or 0))
 	end
 	local refused = {}
 	for _, from in ipairs({ BT.Boot and BT.Boot.refused, BT.Collect and BT.Collect.refused }) do

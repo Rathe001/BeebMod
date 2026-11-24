@@ -251,6 +251,42 @@ local function take(b)
 	return o
 end
 
+-- IN THE LINE, A BUTTON IS ALWAYS IN SIGHT (Josh 2026-11-23, the line with
+-- its icons gone: "Addon row only shows addon icons if I hover over the
+-- map"). Two things fade a minimap button until the map is pointed at, and
+-- neither belongs in a line that is not on the map:
+--   the Minimap module's own hover (Minimap.lua, M.hovering), which takes a
+--   button it met before this line had taken it, and went on fading it;
+--   LibDBIcon's "show on mouseover", an addon's own setting, which fades its
+--   button out when the mouse leaves the minimap (button.showOnMouseover,
+--   button.fadeOut).
+-- Both are stopped while the button is in the line. LibDBIcon's is put back
+-- when the button goes back (giveBack). Counted for What loaded.
+M.unfaded = 0
+function M.KeepInSight(b)
+	local o = owned[b]
+	local map = BT.GetModule and BT.GetModule("minimap")
+	if map and type(map.hovering) == "table" and map.hovering[b] then
+		map.hovering[b] = nil
+	end
+	if b.showOnMouseover then
+		if o and o.mouseover == nil then
+			o.mouseover = b.showOnMouseover
+		end
+		b.showOnMouseover = nil
+		if type(b.fadeOut) == "table" and b.fadeOut.Stop then
+			pcall(b.fadeOut.Stop, b.fadeOut)
+		end
+	end
+	local ok, alpha = pcall(function() return b.GetAlpha and b:GetAlpha() end)
+	if ok and type(alpha) == "number" and alpha < 1 and b.SetAlpha then
+		pcall(b.SetAlpha, b, 1)
+		M.unfaded = M.unfaded + 1
+		return true
+	end
+	return false
+end
+
 -- ONE LAYOUT A FRAME (Josh 2026-09-23, audit): each SetPoint an addon made
 -- asked for a layout of its own, next frame, and each one read every button
 -- and laid the dock out again
@@ -287,6 +323,10 @@ local function giveBack(b)
 	end
 	if o.drag then
 		pcall(b.SetScript, b, "OnDragStart", o.drag)
+	end
+	-- its addon's "show on mouseover", as it was (M.KeepInSight)
+	if o.mouseover ~= nil then
+		b.showOnMouseover = o.mouseover
 	end
 end
 
@@ -343,6 +383,7 @@ function M.Layout()
 		if b.SetFrameLevel and frame.GetFrameLevel then
 			pcall(b.SetFrameLevel, b, (frame:GetFrameLevel() or 1) + 2)
 		end
+		M.KeepInSight(b)
 		-- not shown by force: a button its own addon has hidden ("hide
 		-- minimap icon") stays hidden, in the line or out of it
 	end
@@ -442,5 +483,12 @@ function M.Status()
 		names[#names + 1] = M.IsCompartment(b) and "the addon compartment"
 			or ((nameOf(b) or "?"):gsub("^LibDBIcon10_", ""))
 	end
-	return #names > 0 and ("in the line: " .. table.concat(names, ", ")) or "no addon has a minimap button"
+	-- (and how faint each is drawn: 1 is in full)
+	local faint = {}
+	for _, b in ipairs(M.list or {}) do
+		local ok, alpha = pcall(function() return b.GetAlpha and b:GetAlpha() end)
+		faint[#faint + 1] = (ok and type(alpha) == "number") and ("%.1f"):format(alpha) or "?"
+	end
+	return #names > 0 and ("in the line: " .. table.concat(names, ", ") .. " · drawn at " .. table.concat(faint, ", ")
+		.. " · brought back into sight: " .. tostring(M.unfaded)) or "no addon has a minimap button"
 end

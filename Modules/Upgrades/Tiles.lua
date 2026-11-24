@@ -297,12 +297,38 @@ end)
 -- NOT ON WHAT YOU ARE WEARING (Josh 2026-11-16: "I don't think the equipped
 -- items need to show the new upgrade stats"): nothing on the comparison
 -- tooltips, and nothing for an item that is on you (Rd.Swaps).
+--
+-- THE LAST PIECE OF GEAR THAT GOT NO NUMBERS, AND WHERE IT STOPPED (Josh
+-- 2026-11-23, T.Missed): kept for What loaded.
+local function missed(l, why)
+	local ok, held = pcall(Rd.Held)
+	T.missed = { link = l, why = why, held = ok and held or "?", at = date and date("%H:%M:%S") or "?",
+		fight = InCombatLockdown and InCombatLockdown() and true or false }
+	return nil
+end
+
+function Mod.Status()
+	local m = T.missed
+	local ok, held = pcall(Rd.Held)
+	local nowHeld = "totals now: " .. tostring(ok and (held or "all read") or "?")
+	if not m then
+		return "no gear without numbers yet · " .. nowHeld
+	end
+	local okI, instance, kind = pcall(IsInInstance or error)
+	return ("no numbers on %s at %s: %s · totals then: %s · in a fight: %s · %s · instance now: %s"):format(
+		tostring(m.link and m.link:match("%[(.-)%]") or m.link), m.at, m.why, tostring(m.held or "all read"),
+		tostring(m.fight), nowHeld, okI and (tostring(instance) .. " " .. tostring(kind)) or "?")
+end
+
 function T.Cells(tip, data, shopping)
 	if shopping or wornCard(tip) or not UP.On() or not covered() then
 		return nil
 	end
 	local l = link(tip, data)
 	if not l or not Rd.Where(l) then
+		return nil
+	end
+	if issecretvalue and issecretvalue(l) then
 		return nil
 	end
 	-- WORKED OUT ONCE, NOT FIVE TIMES A SECOND (Josh 2026-11-16: "Tooltip
@@ -318,9 +344,24 @@ function T.Cells(tip, data, shopping)
 	local key = l .. "|" .. tostring(Rd.Partner(l) or "")
 	local found = kept[key]
 	if not (found and t - found.at < T.KEEP) then
-		found = T.Compare(l)
-		if not found or #found == 0 then
-			return nil
+		local ok, err
+		ok, found, err = pcall(T.Compare, l)
+		if not ok then
+			return missed(l, "error: " .. tostring(found))
+		end
+		if not found then
+			return missed(l, "your totals could not be read")
+		end
+		if #found == 0 then
+			-- (what you are wearing has no swap and is no miss)
+			local okS, slots = pcall(Rd.Slots, Rd.Where(l), Rd.Where(GetInventoryItemLink("player", 17)))
+			for _, slot in ipairs(okS and slots or {}) do
+				if GetInventoryItemLink("player", slot) == l then
+					return nil
+				end
+			end
+			return missed(l, "no swap (kind " .. tostring(Rd.Where(l)) .. ", slots "
+				.. (okS and slots and table.concat(slots, ",") or "none") .. ")")
 		end
 		found.at = t
 		kept[key] = found
