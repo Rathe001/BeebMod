@@ -440,3 +440,36 @@ function P.WithFaction(s, faction)
 	end
 	return sub(s, 1, 23) .. CHAR[bits % 4 + code * 4 + floor(bits / 16) * 16] .. sub(s, 25)
 end
+
+-- A GUID AS A PACKED ROW HAS IT (2026-11-25, the census's PvP chart). A row
+-- keeps its GUID as seven letters, 25 to 31: the server's place in the words
+-- and the rest as a number. A list kept by GUID elsewhere (the PvP ranks) is
+-- matched to rows by those letters, so a count of the whole book never makes
+-- a GUID's string for a row. Returns a function: a GUID in, its seven
+-- letters out, or nil for a GUID no row could have (a server not in the
+-- words). Nothing is added to the words.
+function P.GuidCoder(db)
+	local servers = {}
+	for i, word in ipairs(P.Words(db).server or {}) do
+		servers[word] = i
+	end
+	return function(guid)
+		if type(guid) ~= "string" then
+			return nil
+		end
+		local server, hex = guid:match("^Player%-(%d+)%-(%x+)$")
+		local at = server and servers[server]
+		if not (at and #hex == 8) then
+			return nil
+		end
+		local out = {}
+		enc(at, 1, out)
+		enc(tonumber(hex, 16), 6, out)
+		return concat(out)
+	end
+end
+
+-- those seven letters of a packed row
+function P.GuidPart(s)
+	return sub(s, 25, 31)
+end

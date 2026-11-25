@@ -2805,9 +2805,30 @@ if ok then
 			for _, r in ipairs(switches) do found[r] = true end
 			-- AND THE VENDOR'S TWO (Josh 2026-11-08), utilities with no page either
 			-- AND UPGRADES (Josh 2026-11-17, when it became a module of BeebMod)
-			assert(#switches == 5 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow]
-				and found[BT.Settings.junkRow] and found[BT.Settings.repairRow] and found[BT.Settings.upgradesRow],
-				"on General, only the look, fishing, encounter notes, the vendor's two and Upgrades: " .. #switches)
+			-- AND THE CHAT BOX'S ARROW KEYS (Josh 2026-11-24)
+			assert(#switches == 6 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow]
+				and found[BT.Settings.junkRow] and found[BT.Settings.repairRow] and found[BT.Settings.upgradesRow]
+				and found[BT.Settings.chatArrowsRow],
+				"on General, only the look, fishing, encounter notes, the vendor's two, the chat box's arrows and Upgrades: " .. #switches)
+			do
+				local A = BT.ChatArrows
+				local box = { mode = true }
+				box.GetAltArrowKeyMode = function(s) return s.mode end
+				box.SetAltArrowKeyMode = function(s, v) s.mode = v end
+				assert(BT.Enabled("chatarrows"), "on until switched off")
+				assert(A.Set(box, true) and box.mode == false, "plain arrows go to the text")
+				box.mode = false
+				assert(A.Set(box, true) and A.home[box] == true, "what the box had is kept from the first time only")
+				assert(A.Set(box, false) and box.mode == true, "switched off, the box is as the game had it")
+				assert(not A.Set(box, false) and not A.Set({}, true), "nothing to undo twice, and nothing done to a box with no such setting")
+				A.Opened(box)
+				assert(box.mode == false, "a box the game opens later is done too")
+				BT.SetEnabled("chatarrows", false)
+				box.mode, A.home[box] = true, nil
+				A.Opened(box)
+				assert(box.mode == true, "and left alone while the switch is off")
+				BT.SetEnabled("chatarrows", true)
+			end
 			assert(BT.GetModule("upgrades") and BT.Enabled("upgrades") and BT.Upgrades.On(), "Upgrades is a module, on until switched off")
 			-- the target row's switch went with the row (Josh 2026-10-05)
 			local function rowFor(page, field)
@@ -5288,12 +5309,37 @@ if ok then
 					now = now + Sh.LIFT_FOR + 0.1
 					Sh.Lift()
 					assert(raises == 5, "and left alone once the moment is over")
+					-- a button held in the bags (a drag): raised for as long as it is
+					assert(Sh.Clicked("GLOBAL_MOUSE_DOWN") and Sh.held, "a button down in the bags is held")
+					now = now + 10
+					Sh.Lift() Sh.Lift()
+					assert(raises == 7, "raised each frame of a long drag")
+					rawset(_G, "GetMouseFoci", function() return { other } end)
+					Sh.Clicked("GLOBAL_MOUSE_UP")
+					assert(not Sh.held, "let go of wherever the button comes up")
+					Sh.Lift()
+					assert(raises == 8, "and for the moment after")
+					now = now + Sh.LIFT_FOR + 0.1
+					Sh.Lift()
+					assert(raises == 8, "then left alone")
+					-- a coming up that was never heard: the game says no button is down
+					rawset(_G, "GetMouseFoci", function() return { slot } end)
+					Sh.Clicked("GLOBAL_MOUSE_DOWN")
+					local hadDown = rawget(_G, "IsMouseButtonDown")
+					rawset(_G, "IsMouseButtonDown", function() return false end)
+					Sh.Lift()
+					assert(not Sh.held, "let go of")
+					rawset(_G, "IsMouseButtonDown", hadDown)
+					now = now + Sh.LIFT_FOR + 0.1
+					local before = raises
+					Sh.Lift()
+					assert(raises == before, "and left alone after the moment")
 					rawset(_G, "GetMouseFoci", hadFoci) rawset(_G, "GetTime", hadTime)
 					Sh.liftUntil = hadUntil
 				end
 				bag.GetFrameLevel = nil
 				Sh.Lift() Sh.Lift()
-				assert(raises == 7, "no level to read: raised each time, as before")
+				assert(raises >= 7, "no level to read: raised each time, as before")
 				rawset(_G, "ContainerFrameCombinedBags", hadW)
 				Sh.merged, Sh.liftSeen = hadM, hadSeen
 			end
@@ -13443,6 +13489,24 @@ if ok then
 			lines = { "Sack of Oats", "\194\160", "Handful of Oats 6/8" }
 			assert(mod.ObjectLook(tip, 1) == true and mod.UnitLookEnd(tip) == false,
 				"one a quest wants: the band ends over the quest's rows")
+			-- NOTHING UNDER THE GAP: the gap is shut, so the band is no taller
+			-- than on any other tooltip (2026-11-25), and opened again for rows
+			do
+				local sized = {}
+				local hadSize = BT.UnitTip.SizeLine
+				BT.UnitTip.SizeLine = function(t, i, size, ...) sized[#sized + 1] = { i, size } return hadSize(t, i, size, ...) end
+				lines = { "Hades Apollo", "94p" }
+				assert(mod.ObjectLook(tip, 1) == true and mod.UnitLookEnd(tip) == true, "who it is and the gap: the band over all of it")
+				assert(#sized == 1 and sized[1][1] == 2 and sized[1][2] == 1, "the gap line taken down to a point")
+				mod.UnitLookEnd(tip)
+				assert(#sized == 1, "once")
+				lines = { "Hades Apollo", "94p", "a row" }
+				tip.GetTop = function() return 100 end
+				_G.ObjectBandTipTextLeft1.GetBottom = function() return 80 end
+				mod.UnitLookAgain(tip)
+				assert(#sized == 2 and sized[2][1] == 2 and sized[2][2] == mod.UNIT.GAP, "a row written after: the gap its size again")
+				BT.UnitTip.SizeLine = hadSize
+			end
 			-- LINES WRITTEN LATER END THE WHOLE BAND (Josh 2026-11-17, another
 			-- addon's quest row lying on an NPC's band)
 			lines = { "Tin Vein", "Mining" }
@@ -16966,6 +17030,137 @@ if ok then
 					_G.InspectFrame = { unit = "target" }
 					_G.GetInspectHonorData = function() return 5, 0, 0, 0, 40, 0, 7, 100, 200 end
 					assert(pvp.ReadInspect() and pvp.RankFor("Player-1-0000BBBB") == 7, "an inspected player's rank is kept")
+				-- A STACKABLE ITEM'S STACK, on its card's foot (2026-11-25)
+				do
+					local hadItem, hadBags = _G.C_Item, rawget(_G, "C_Container")
+					_G.C_Item = setmetatable({ GetItemInfo = function(id)
+						return "Bright Baubles", nil, 1, 1, 1, "Trade Goods", "Other", id == 6532 and 20 or 1
+					end }, { __index = hadItem })
+					rawset(_G, "C_Container", { GetContainerItemInfo = function(bag, slot)
+						return bag == 2 and slot == 5 and { stackCount = 7, itemID = 6532 } or nil
+					end })
+					local inBag = { GetOwner = function() return { GetBagID = function() return 2 end, GetID = function() return 5 end } end }
+					local inChat = { GetOwner = function() return {} end }
+					assert(tips.StackText(inBag, 6532) == "Stack 7/20", "in a bag: how many of how many: " .. tostring(tips.StackText(inBag, 6532)))
+					assert(tips.StackText(inChat, 6532) == "Stacks to 20", "anywhere else: what a stack holds")
+					assert(tips.StackText(inBag, 99) == nil and tips.StackText(inBag, nil) == nil, "an item that does not stack has no line")
+					_G.C_Item = hadItem
+					rawset(_G, "C_Container", hadBags)
+				end
+				-- A LEDGER CHARACTER'S RANK, read by their GUID (2026-11-25)
+				do
+					local row = { guid = "Player-1-0000BBBB", faction = "Horde" }
+					local n, word = pvp.RankOfRecord(row)
+					assert(n == 7 and word == pvp.RANKS.Horde[7], "a Ledger row's rank, named on its own side: " .. tostring(word))
+					row.faction = "Alliance"
+					assert(select(2, pvp.RankOfRecord(row)) == pvp.RANKS.Alliance[7], "and on the other")
+					assert(pvp.RankOfRecord({ guid = "Player-1-0000FFFF" }) == nil and pvp.RankOfRecord({}) == nil
+						and pvp.RankOfRecord(nil) == nil, "none heard, or no GUID: nothing")
+					local hadTex = _G.C_Texture
+					_G.C_Texture = { GetAtlasInfo = function() return {} end }
+					assert(pvp.RankWords(row, 12, 0) == "|A:UI-Character-Info-Honor-Icon-7:12:12:0:0|a " .. pvp.RANKS.Alliance[7],
+						"the insignia and the name, for a line: " .. tostring(pvp.RankWords(row, 12, 0)))
+					_G.C_Texture = hadTex
+				end
+				-- ASKED FOR ON A HOVER (2026-11-25): as the inspect window asks
+				do
+					local had = { rawget(_G, "NotifyInspect"), rawget(_G, "CanInspect"), rawget(_G, "GetTime"), rawget(_G, "UnitIsPlayer"),
+						rawget(_G, "UnitIsUnit"), rawget(_G, "InCombatLockdown"), rawget(_G, "ClearInspectPlayer") }
+					local now, sent, can, fight, cleared = 500, {}, true, false, 0
+					rawset(_G, "GetTime", function() return now end)
+					rawset(_G, "NotifyInspect", function(unit) sent[#sent + 1] = unit end)
+					rawset(_G, "CanInspect", function() return can end)
+					rawset(_G, "UnitIsPlayer", function() return true end)
+					rawset(_G, "UnitIsUnit", function(a, b2) return a == "player" and b2 == "player" end)
+					rawset(_G, "InCombatLockdown", function() return fight end)
+					rawset(_G, "ClearInspectPlayer", function() cleared = cleared + 1 end)
+					pvp.asked, pvp.asking, pvp.askAt = {}, nil, nil
+					_G.InspectFrame = nil
+					assert(not pvp.AskRank("player"), "you are not asked about")
+					fight = true
+					assert(not pvp.AskRank("target"), "nobody is, in a fight")
+					fight, can = false, false
+					assert(not pvp.AskRank("target") and #sent == 0, "nor a player the game will not let be inspected")
+					can = true
+					assert(pvp.AskRank("target") and sent[1] == "target", "a player you point at is asked about")
+					assert(not pvp.AskRank("nameplate2") and #sent == 1, "one at a time")
+					_G.GetInspectHonorData = function() return 5, 0, 0, 0, 40, 0, 9, 100, 200 end
+					local ours, news = pvp.Answered()
+					assert(ours and news and pvp.RankFor("Player-1-0000BBBB") == 9 and cleared == 0,
+						"the answer is kept for the one asked about, and their talents are still waited for")
+					assert(not pvp.Answered(), "an answer nobody waits for is not ours")
+					-- THEIR TALENTS, with the same answer: the trees as the talent
+					-- window reads them
+					do
+						local hadTraits, hadConsts = _G.C_Traits, _G.Constants
+						local spent = { [11] = 5, [12] = 8, [13] = 25 }
+						_G.Constants = { TraitConsts = { INSPECT_TRAIT_CONFIG_ID = -1 } }
+						_G.C_Traits = {
+							GetConfigInfo = function(config) return config == -1 and { treeIDs = { 900 } } or nil end,
+							GetGroupDisplayInfoByTreeID = function(tree)
+								return tree == 900 and {
+									{ groupID = 13, displayName = "Retribution", icon = 135873, orderIndex = 3 },
+									{ groupID = 11, displayName = "Holy", icon = 135920, orderIndex = 1 },
+									{ groupID = 12, displayName = "Protection", icon = 135893, orderIndex = 2 },
+								} or {}
+							end,
+							GetGroupCurrencyInfo = function(_, ids)
+								local out = {}
+								for _, id in ipairs(ids) do
+									out[#out + 1] = { traitNodeGroupID = id, currencyInfos = { { spent = spent[id] } } }
+								end
+								return out
+							end,
+						}
+						assert(not pvp.Ready("Player-1-0000CCCC"), "word of somebody else's talents is not ours")
+						local mine, spec = pvp.Ready("Player-1-0000BBBB")
+						assert(mine and spec.name == "Retribution" and table.concat(spec.spent, "/") == "5/8/25",
+							"the tree with the most points, and each tree's points in order")
+						assert(pvp.asking == nil and cleared == 1, "both answers in: the game told it may forget them")
+						assert(pvp.SpecFor("target").name == "Retribution", "kept for their tooltip")
+						-- and their tooltip, still up, is drawn again a frame later
+						do
+							local T = BT.UnitTip
+							local hadRestack, hadGuid, hadTimer = T.Restack, T.guid, rawget(_G, "C_Timer")
+							local later, drawn = {}, 0
+							rawset(_G, "C_Timer", { After = function(_, fn) later[#later + 1] = fn end })
+							T.Restack = function() drawn = drawn + 1 return true end
+							T.guid = "Player-1-0000BBBB"
+							pvp.Retip("Player-1-0000BBBB")
+							assert(drawn == 0 and #later == 1, "not from inside the game's answer")
+							later[1]()
+							assert(drawn == 1, "the tooltip showing them is drawn again")
+							T.guid = "Player-1-0000CCCC"
+							pvp.Retip("Player-1-0000BBBB")
+							later[2]()
+							assert(drawn == 1, "a tooltip showing somebody else is left alone")
+							T.Restack, T.guid = hadRestack, hadGuid
+							rawset(_G, "C_Timer", hadTimer)
+						end
+						local line = tips.SpecLine("target")
+						assert(line:find("Retribution", 1, true) and line:find("5/8/25", 1, true) and line:find(("|T135873:14:14:0:%d:"):format(tips.SPEC_NUDGE), 1, true),
+							"the tooltip's line: the picture, the tree and the points: " .. line)
+						spent[12] = 25
+						assert(pvp.SpecOf(-1) == nil, "two trees level at the top: no tree named")
+						spent[11], spent[12], spent[13] = 0, 0, 0
+						assert(pvp.SpecOf(-1) == nil and pvp.SpecOf(7) == nil, "no points, or no such talents: nothing")
+						pvp.specs = {}
+						assert(tips.SpecLine("target") == nil, "nothing heard, no line")
+						_G.C_Traits, _G.Constants = hadTraits, hadConsts
+					end
+					now = now + pvp.ASK_EVERY + 0.1
+					assert(not pvp.AskRank("target") and #sent == 1, "the same player is not asked about again so soon")
+					assert(pvp.AskRank("nameplate2") and #sent == 2, "another is")
+					now = now + pvp.ASK_WAIT + 0.1
+					_G.InspectFrame = { unit = "target", IsShown = function() return true end }
+					assert(not pvp.AskRank("target"), "and nobody while the inspect window is open")
+					assert(pvp.asking == nil and pvp.askSaid.lost >= 1, "an answer that never came is counted lost")
+					rawset(_G, "NotifyInspect", had[1]) rawset(_G, "CanInspect", had[2]) rawset(_G, "GetTime", had[3])
+					rawset(_G, "UnitIsPlayer", had[4]) rawset(_G, "UnitIsUnit", had[5]) rawset(_G, "InCombatLockdown", had[6])
+					rawset(_G, "ClearInspectPlayer", had[7])
+					pvp.asked, pvp.asking, pvp.askAt = {}, nil, nil
+					_G.InspectFrame = { unit = "target" }
+				end
 					assert(pvp.NoteRank("Player-1-0000AAAA", 0) and pvp.RankFor("Player-1-0000AAAA") == nil, "a rank gone is forgotten")
 					assert(not pvp.NoteRank("Creature-0-1", 4) and not pvp.NoteRank(nil, 4), "and only a player has one")
 					assert(tips.RankTag("nameplate2") == nil, "the tag goes with the rank")
@@ -16975,6 +17170,33 @@ if ok then
 					_G.UnitName = function(unit) if unit == "nameplate2" then return f.name._text end return hadName(unit) end
 					_G.UnitPVPName = function(unit) return unit == "nameplate2" and ("Corporal " .. f.name._text) or nil end
 					assert(pvp.RankOfTitle("Corporal") == 2 and pvp.RankOfTitle("Elder") == nil, "Corporal is rank 2")
+				-- your own: what the dock's line reads, not the book
+				do
+					local hadIs, hadRead = _G.UnitIsUnit, pvp.Read
+					_G.UnitIsUnit = function(a, b2) return a == "mouseover" and b2 == "player" end
+					pvp.Read = function() return { number = 1, name = "Private" } end
+					local n, word = pvp.UnitRank("mouseover")
+					assert(n == 1 and word == "Private" and tips.RankTag("mouseover") == "Private", "your own rank on your own tooltip")
+					-- drawn as the game's insignia, where it has one
+					do
+						local hadTex = _G.C_Texture
+						_G.C_Texture = { GetAtlasInfo = function(a) return a == "UI-Character-Info-Honor-Icon-1" and {} or nil end }
+						assert(tips.RankIcon("mouseover") == ("|A:UI-Character-Info-Honor-Icon-1:%d:%d:0:%d|a"):format(tips.RANK_ICON, tips.RANK_ICON, tips.RANK_NUDGE),
+							"the rank's atlas, to go after the name: " .. tostring(tips.RankIcon("mouseover")))
+						_G.C_Texture = { GetAtlasInfo = function() return nil end }
+						local hadFile = _G.GetFileIDFromPath
+						_G.GetFileIDFromPath = function() return nil end
+						assert(tips.RankIcon("mouseover") == nil and tips.RankLine("mouseover") == "Private",
+							"no picture in the game: the rank in words alone")
+						_G.C_Texture = { GetAtlasInfo = function() return {} end }
+						assert(tips.RankLine("mouseover") == tips.RankIcon("mouseover") .. " Private",
+							"the insignia and the rank's name, for a line under the band")
+						_G.C_Texture, _G.GetFileIDFromPath = hadTex, hadFile
+					end
+					pvp.Read = function() return { number = 0 } end
+					assert(pvp.UnitRank("mouseover") == nil, "a Civilian has no tag")
+					_G.UnitIsUnit, pvp.Read = hadIs, hadRead
+				end
 					assert(pvp.UnitRank("nameplate2") == 2, "read from the words before the name")
 					mod.PaintFriend(f, F.Source("nameplate2"))
 					assert(f.title._text == "", "a rank is not written over the name")

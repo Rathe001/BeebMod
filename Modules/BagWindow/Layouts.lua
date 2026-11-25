@@ -911,6 +911,14 @@ end
 -- is raised every frame for L.LIFT_FOR seconds after it. A click on a window
 -- lying over the bags is not one in the bags: what is under the mouse has to
 -- be part of the backpack or of the reagent window.
+--
+-- AND FOR AS LONG AS THE BUTTON IS HELD (Josh 2026-11-25: "they still dim
+-- when I drag the bag window. Otherwise works fine"). A drag lasts longer
+-- than L.LIFT_FOR. A button that went down in the bags is `L.held` until a
+-- button comes up anywhere, and the reagent window is raised every frame
+-- meanwhile. The moment after starts when the button comes up. A button the
+-- game says is no longer down (IsMouseButtonDown) is let go of, in case its
+-- coming up was never heard.
 L.lifted, L.clicks = 0, 0
 L.LIFT_FOR = 0.5
 
@@ -929,8 +937,13 @@ local function within(f, w)
 	return false
 end
 
--- a mouse button went down or up: was it in the bags
-function L.Clicked()
+-- a mouse button went down or up (`event`): was it in the bags
+function L.Clicked(event)
+	if event == "GLOBAL_MOUSE_UP" and L.held then
+		-- the end of a hold begun in the bags, wherever the mouse is now
+		L.held = nil
+		L.liftUntil = (GetTime and GetTime() or 0) + L.LIFT_FOR
+	end
 	local r, w = L.merged, window()
 	if not (r and w) then
 		return false
@@ -958,6 +971,9 @@ function L.Clicked()
 	if inBags then
 		L.liftUntil = (GetTime and GetTime() or 0) + L.LIFT_FOR
 		L.clicks = L.clicks + 1
+		if event == "GLOBAL_MOUSE_DOWN" then
+			L.held = true
+		end
 	end
 	return inBags
 end
@@ -965,9 +981,9 @@ end
 L.clickEars = CreateFrame("Frame")
 pcall(L.clickEars.RegisterEvent, L.clickEars, "GLOBAL_MOUSE_DOWN")
 pcall(L.clickEars.RegisterEvent, L.clickEars, "GLOBAL_MOUSE_UP")
-L.clickEars:SetScript("OnEvent", function()
+L.clickEars:SetScript("OnEvent", function(_, event)
 	if L.merged then
-		pcall(L.Clicked)
+		pcall(L.Clicked, event)
 		pcall(L.Lift)
 	end
 end)
@@ -983,7 +999,14 @@ function L.Lift(always)
 		return type(n) == "number" and n or nil
 	end
 	local under, own = level(window()), level(r)
-	local clicked = L.liftUntil and (GetTime and GetTime() or 0) <= L.liftUntil
+	if L.held and type(_G.IsMouseButtonDown) == "function" then
+		local ok, down = pcall(_G.IsMouseButtonDown)
+		if ok and not down then
+			L.held = nil
+			L.liftUntil = (GetTime and GetTime() or 0) + L.LIFT_FOR
+		end
+	end
+	local clicked = L.held or (L.liftUntil and (GetTime and GetTime() or 0) <= L.liftUntil)
 	if not always and not clicked and under and own and under == L.liftSeen and own > under then
 		return true
 	end

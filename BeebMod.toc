@@ -139,6 +139,7 @@ Modules\Expedition\Demo.lua
 Modules\Chat\Chat.lua
 Modules\Chat\Links.lua
 Modules\Chat\Reader.lua
+Modules\Chat\Arrows.lua
 Modules\DamageMeter\DamageMeter.lua
 Modules\ResourceDisplay\ResourceDisplay.lua
 Modules\GameMenu\GameMenu.lua

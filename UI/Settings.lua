@@ -124,6 +124,15 @@ function S.Build(parent)
 		function() return BT.Switched("repair") end,
 		function(on) BT.SetEnabled("repair", on) end)
 
+	-- ARROW KEYS IN THE CHAT BOX (Josh 2026-11-24: "Yes please add that").
+	-- A utility with no page of its own (Modules/Chat/Arrows.lua). It works
+	-- with the Chat look on or off.
+	local typing = stack:Section("Chat")
+	S.chatArrowsRow = W.SwitchRow(typing, "Arrow keys in the chat box",
+		"While you type, the arrow keys move the cursor and go through what you typed before. Without this the game wants Alt held.",
+		function() return BT.Switched("chatarrows") end,
+		function(on) BT.SetEnabled("chatarrows", on) end)
+
 	-- UPGRADES (Josh 2026-11-16: "make sure we have a switch for this in the
 	-- options"; a module of BeebMod since 2026-11-17, Modules/Upgrades). A
 	-- utility with no page of its own, like the two above.

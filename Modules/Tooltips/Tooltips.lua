@@ -1870,6 +1870,7 @@ function M.UnitLook(tip, colour, last, level, fighting)
 	end
 	-- for M.UnitLookEnd, once every module has written its rows
 	u.identityEnd, u.fighting = last, fighting and true or false
+	u.gapShut = nil
 	-- (the last unit's tiles go: whoever wants a row asks again, M.UnitTiles)
 	for _, f in ipairs(u.tb and u.tb.tileBacks or {}) do
 		f:Hide()
@@ -1905,6 +1906,23 @@ function M.UnitLookEnd(tip)
 	if lines > u.identityEnd + 1 then
 		return false
 	end
+	-- THE GAP IS NOT PART OF THE BAND (Josh 2026-11-25, a player with no
+	-- guild and no rank next to his own tooltip: "Players with no guild or
+	-- rank have an unusually large header"). The gap line is room for rows.
+	-- With none, the band ran over it and was that much taller than on any
+	-- other tooltip. The line is taken down to a point and the tooltip laid
+	-- out again. It gets its size back if rows are written later
+	-- (M.UnitLookAgain).
+	if lines == u.identityEnd + 1 and not u.gapShut then
+		u.gapShut = lines
+		BT.UnitTip.SizeLine(tip, lines, 1, nil, "text")
+		if tip.Show then
+			local was = M.composing
+			M.composing = true
+			pcall(tip.Show, tip)
+			M.composing = was
+		end
+	end
 	u.band:ClearAllPoints()
 	u.band:SetPoint("TOPLEFT", tip, "TOPLEFT", 1, -1)
 	u.band:SetPoint("BOTTOMRIGHT", tip, "BOTTOMRIGHT", -1, u.fighting and (M.UNIT.STRIP_H + 1) or 1)
@@ -1929,6 +1947,11 @@ function M.UnitLookAgain(tip)
 	local lines = BT.Pill.Number(tip.NumLines and tip:NumLines(), 0)
 	if lines <= u.identityEnd + 1 then
 		return false
+	end
+	-- the gap its size again, for the rows now under it (M.UnitLookEnd)
+	if u.gapShut then
+		BT.UnitTip.SizeLine(tip, u.gapShut, M.UNIT.GAP, nil, "text")
+		u.gapShut = nil
 	end
 	if layUnitBand(tip, u, u.identityEnd) then
 		u.whole = nil
@@ -2118,6 +2141,87 @@ function M.RankTag(unit)
 	return nil
 end
 
+-- THE INSIGNIA AFTER THE NAME, IN PLACE OF THE TAG (Josh 2026-11-25, his own
+-- tooltip with a grey "Private" tag next to "Dwarf": "Are we able to use the
+-- pvp rank icon maybe isntead if "private" tag? It's a bit hard to notice
+-- currently"). The game's own picture for the rank, written into the name's
+-- line after the name, as the class's picture is written before it. Where
+-- the game has no picture, or keeps the name secret, the tag stays.
+--
+-- A LINE OF ITS OWN UNDER THE BAND (Josh, the same day, the insignia after
+-- his name: "I'm thinking move it out of the header into the content area").
+-- The insignia and the rank's name, under the guild. Nothing about the rank
+-- is on the band now, as a tag or after the name (M.RankLine).
+M.RANK_ICON = 16
+-- UP A LITTLE (Josh 2026-11-25, the chevron sitting lower than "Private":
+-- "Yeah nudge it"). The fifth number of the picture's escape, in pixels.
+M.RANK_NUDGE = 2
+M.RANK_INK = { 0.89, 0.75, 0.38 }
+function M.RankLine(unit)
+	-- asked of the game for the next time, or for this one once it answers
+	-- (Modules/PvP/PvP.lua, M.AskRank)
+	local pvp = BT.GetModule and BT.GetModule("pvp")
+	if pvp and pvp.AskRank then
+		pcall(pvp.AskRank, unit)
+	end
+	local word = M.RankTag(unit)
+	if not word then
+		return nil
+	end
+	local icon = M.RankIcon(unit)
+	return icon and (icon .. " " .. word) or word
+end
+-- THEIR TALENTS, UNDER THE RANK (Josh 2026-11-25: "it would be nice to show
+-- spec on the tooltips"). The tree with the most points, by its name and
+-- the game's picture for it, then the points in each tree as players write
+-- them: "Retribution 5/8/25". Known for another player once the game has
+-- answered about them this session (Modules/PvP/PvP.lua, M.SpecFor).
+M.SPEC_ICON = 14
+-- up a little, to sit level with the words (Josh 2026-11-25: "Icon and text
+-- arent quite vertically aligned")
+M.SPEC_NUDGE = 2
+M.SPEC_INK = { 0.86, 0.89, 0.87 }
+M.SPEC_SPLIT = "|cff7d8a85%s|r"
+function M.SpecLine(unit)
+	local pvp = BT.GetModule and BT.GetModule("pvp")
+	if not (pvp and pvp.SpecFor) then
+		return nil
+	end
+	local ok, spec = pcall(pvp.SpecFor, unit)
+	if not (ok and type(spec) == "table" and type(spec.name) == "string") then
+		return nil
+	end
+	local line = spec.name
+	if type(spec.icon) == "number" or type(spec.icon) == "string" then
+		line = ("|T%s:%d:%d:0:%d:64:64:5:59:5:59|t %s"):format(tostring(spec.icon), M.SPEC_ICON, M.SPEC_ICON, M.SPEC_NUDGE, line)
+	end
+	if type(spec.spent) == "table" and #spec.spent > 1 then
+		line = line .. " " .. M.SPEC_SPLIT:format(table.concat(spec.spent, "/"))
+	end
+	return line
+end
+
+function M.RankIcon(unit)
+	local pvp = BT.GetModule and BT.GetModule("pvp")
+	if not (pvp and pvp.UnitRank and pvp.RankArt) then
+		return nil
+	end
+	local ok, n = pcall(pvp.UnitRank, unit)
+	if not (ok and type(n) == "number") then
+		return nil
+	end
+	local okA, how, art = pcall(pvp.RankArt, n)
+	if not okA then
+		return nil
+	end
+	if how == "atlas" then
+		return ("|A:%s:%d:%d:0:%d|a"):format(art, M.RANK_ICON, M.RANK_ICON, M.RANK_NUDGE)
+	elseif how == "file" and type(art) == "string" then
+		return ("|T%s:%d:%d:0:%d|t"):format(art, M.RANK_ICON, M.RANK_ICON, M.RANK_NUDGE)
+	end
+	return nil
+end
+
 function M.Compose(tip, unit)
 	if not (tip.ClearLines and tip.AddDoubleLine) then
 		return
@@ -2204,9 +2308,8 @@ function M.Compose(tip, unit)
 	end
 	-- A PLAYER'S PVP RANK (Josh 2026-11-24: it "should just be on the tooltip
 	-- of the player", off the nameplate). A tag after their race.
-	if isPlayer then
-		addTag(tags, M.RankTag(unit))
-	end
+	local rankLine = isPlayer and M.RankLine(unit) or nil
+	local specLine = isPlayer and M.SpecLine(unit) or nil
 	-- and what state it is in, after what it is
 	if dead then
 		addTag(tags, "Dead", "quiet")
@@ -2317,6 +2420,22 @@ function M.Compose(tip, unit)
 		tip:AddLine(M.GUILD:format("<" .. with .. ">"))
 		sizeLine(tip, BT.Pill.Number(tip:NumLines(), 2), BT.UnitTip.ROW)
 	end
+	-- a player's PvP rank, under their guild (M.RankLine)
+	local function rankRow(below)
+		for _, row in ipairs({ { rankLine, M.RANK_INK }, { specLine, M.SPEC_INK } }) do
+			if row[1] then
+				tip:AddLine(row[1], row[2][1], row[2][2], row[2][3])
+				local at = BT.Pill.Number(tip:NumLines(), 2)
+				sizeLine(tip, at, BT.UnitTip.ROW)
+				if below then
+					BT.UnitTip.Indent(tip, at, BODY_INDENT)
+				end
+			end
+		end
+	end
+	if not M.TILES_LOOK then
+		rankRow(false)
+	end
 	-- whatever else the client had to say, as small print under them
 	-- UNDER THE BAND AS WELL, IN THE LOOK (Josh 2026-11-17, an NPC with
 	-- "Ironforge" on its band: "I think "Ironforge" and the quests should go
@@ -2365,6 +2484,7 @@ function M.Compose(tip, unit)
 		BT.UnitTip.Indent(tip, at, BODY_INDENT)
 	end
 	if M.TILES_LOOK then
+		rankRow(true)
 		smallPrint(true)
 	end
 	-- TWO PIXELS MORE ABOVE THE TAGS (Josh 2026-10-17: "Can I get like 2px
@@ -2565,7 +2685,7 @@ M.crestSaid = "none yet"
 
 -- for What loaded on the Testing page
 function M.Status()
-	local line = ("last crest: %s; card parts left over: %d; rank tags written: %d"):format(M.crestSaid, M.leftovers,
+	local line = ("last crest: %s; card parts left over: %d; ranks written: %d"):format(M.crestSaid, M.leftovers,
 		M.rankTags or 0)
 	-- comparison cards left as the game filled them, and those written a
 	-- frame late (M.Spared, M.SettleSpared)
@@ -3490,6 +3610,45 @@ function M.RecipeState(r)
 		return { ("Needs %s %s"):format(r.profession, tostring(r.skill or "")):gsub("%s+$", ""), "warn" }, have
 	end
 	return nil, have
+end
+
+-- HOW MANY IN THE STACK, AND HOW MANY A STACK HOLDS (Josh 2026-11-25, Bright
+-- Baubles' card: "Are we able to show current and max stack size on item
+-- tooltips for stackable items?"). On the foot's left, where a piece of gear
+-- has its durability: a stackable item has none. The most a stack holds is
+-- the game's (GetItemInfo's eighth value). How many are in this stack is
+-- known for an item in a bag, from the slot the tooltip hangs off
+-- (C_Container.GetContainerItemInfo's stackCount): "Stack 7/20". Anywhere
+-- else, such as a link in chat or a vendor's shelf, there is no stack of
+-- yours to count and the line is "Stacks to 20". An item that does not
+-- stack has no line.
+function M.StackText(tip, id)
+	local get = (C_Item and C_Item.GetItemInfo) or rawget(_G, "GetItemInfo")
+	if type(get) ~= "function" or id == nil then
+		return nil
+	end
+	local ok, _, _, _, _, _, _, _, most = pcall(get, id)
+	most = ok and plainLine(most) or nil
+	if type(most) ~= "number" or most <= 1 then
+		return nil
+	end
+	local held = nil
+	local okO, owner = pcall(function() return tip and tip.GetOwner and tip:GetOwner() end)
+	local slots = rawget(_G, "C_Container")
+	if okO and type(owner) == "table" and type(owner.GetBagID) == "function" and type(owner.GetID) == "function"
+		and type(slots) == "table" and type(slots.GetContainerItemInfo) == "function" then
+		local okS, info = pcall(function() return slots.GetContainerItemInfo(owner:GetBagID(), owner:GetID()) end)
+		local n = okS and type(info) == "table" and plainLine(info.stackCount) or nil
+		-- (the slot's item is this one: a tooltip can outlast the slot's)
+		local same = okS and type(info) == "table" and plainLine(info.itemID)
+		if type(n) == "number" and n >= 1 and (same == nil or same == id) then
+			held = n
+		end
+	end
+	if held then
+		return ("Stack %d/%d"):format(held, most)
+	end
+	return ("Stacks to %d"):format(most)
 end
 
 -- how many of an item are in your bags, by its name; nil where the game
@@ -5275,6 +5434,11 @@ function M.RebuildItem(tip, data)
 	-- the item itself, and whether this is a comparison tooltip, which shows
 	-- the worn piece
 	item.link = shownItem(tip)
+	-- a stackable item's stack, on the foot's left (M.StackText)
+	if not item.durability and not item.footText then
+		local okStack, stack = pcall(M.StackText, tip, id)
+		item.footText = okStack and stack or nil
+	end
 	local comparing = tip.isShopping or tip == rawget(_G, "ShoppingTooltip1") or tip == rawget(_G, "ShoppingTooltip2")
 		or tip == rawget(_G, "ItemRefShoppingTooltip1") or tip == rawget(_G, "ItemRefShoppingTooltip2")
 	item.comparing = comparing and true or false

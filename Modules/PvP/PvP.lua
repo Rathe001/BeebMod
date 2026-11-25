@@ -619,6 +619,18 @@ function M.UnitRank(unit)
 	if type(unit) ~= "string" then
 		return nil
 	end
+	-- YOUR OWN, AS THE DOCK'S LINE HAS IT (Josh 2026-11-25, a Private with
+	-- no tag on their own tooltip: "Shouldnt my own tooltip say my pvp rank
+	-- or icon somewhere?"). The book holds players met on a scoreboard or
+	-- inspected, and you are neither. Your rank is what M.Read says.
+	if plainOf((ask("UnitIsUnit", unit, "player"))) == true then
+		local ok, mine = pcall(M.Read)
+		local n = ok and type(mine) == "table" and tonumber(mine.number) or nil
+		if n and n >= 1 and n <= 14 then
+			return math.floor(n), mine.name or M.RankName(n)
+		end
+		return nil
+	end
 	local rank = M.RankFor((ask("UnitGUID", unit)))
 	if not rank then
 		local titled, name = plainOf((ask("UnitPVPName", unit))), plainOf((ask("UnitName", unit)))
@@ -680,6 +692,336 @@ function M.ReadInspect()
 	return M.NoteRank(guid, plainOf(level) or 0)
 end
 
+-- FOR A CHARACTER IN THE LEDGER (Josh 2026-11-25: "even include it in our
+-- ledger data", then "Let's move forward with the ledger part"). The Ledger
+-- keeps a character's GUID and side, and the ranks are kept by GUID, so the
+-- Ledger reads a character's rank through here. It is not written into the
+-- Ledger's packed rows: those are a fixed width, and a letter more on every
+-- row is a change to every saved book for a thing few characters have.
+-- `p`: a Ledger row with its GUID (DB.Get, or DB.View with `full`).
+-- Returns the rank 1 to 14 and its name on their side, or nil.
+function M.RankOfRecord(p)
+	if type(p) ~= "table" then
+		return nil
+	end
+	local rank = M.RankFor(p.guid)
+	if not rank then
+		return nil
+	end
+	local list = M.RANKS[p.faction or ""] or M.RANKS[M.SideName() or ""] or M.RANKS.Alliance
+	return rank, list[rank]
+end
+
+-- FOR THE CENSUS'S PVP CHART (Josh 2026-11-25: "Can we add a pvp graph?").
+-- The ranks by GUID, and by the seven letters a packed Ledger row keeps a
+-- GUID in (Core/Pack.lua, P.GuidCoder), so the count reads a rank for a row
+-- with one lookup. Made once a count.
+function M.RankCodes(db)
+	local book = rankBook()
+	if not (book and BT.Pack and BT.Pack.GuidCoder) then
+		return nil
+	end
+	local coder = BT.Pack.GuidCoder(db)
+	local codes = {}
+	for guid, rank in pairs(book.by) do
+		local code = coder(guid)
+		if code then
+			codes[code] = rank
+		end
+	end
+	return { code = codes, guid = book.by }
+end
+
+-- a rank's insignia as a picture in a line of text, `size` across, lifted
+-- `lift` pixels; nil where the game has no picture for it
+function M.RankMarkup(n, size, lift)
+	local how, art = M.RankArt(n)
+	size, lift = tonumber(size) or 14, tonumber(lift) or 0
+	if how == "atlas" then
+		return ("|A:%s:%d:%d:0:%d|a"):format(art, size, size, lift)
+	elseif how == "file" and type(art) == "string" then
+		return ("|T%s:%d:%d:0:%d|t"):format(art, size, size, lift)
+	end
+	return nil
+end
+
+-- the two together, for a line about a Ledger character: "<insignia> Sergeant"
+function M.RankWords(p, size, lift)
+	local n, word = M.RankOfRecord(p)
+	if not word then
+		return nil
+	end
+	local mark = M.RankMarkup(n, size, lift)
+	return mark and (mark .. " " .. word) or word
+end
+
+-- ASKED FOR WHEN YOU POINT AT A PLAYER (Josh 2026-11-25: "I'd like to load
+-- the rank in all player tooltips if possible, and even include it in our
+-- ledger data"). The game says another player's rank in two places only, a
+-- scoreboard and the inspect window. No call gives it for a unit:
+-- UnitHonorLevel said 1 of a rank 3 player and UnitPVPName the bare name
+-- (Josh's dumps, 2026-11-23). So BeebMod asks as the inspect window does
+-- (Blizzard_InspectUI/Camelot: NotifyInspect, then INSPECT_HONOR_UPDATE and
+-- GetInspectHonorData's seventh value), without opening the window.
+--
+-- This is the asking the note above ruled out. It is kept small:
+--   one player at a time, and no sooner than ASK_EVERY seconds after the last
+--   a player once in ASK_AGAIN seconds, whatever the answer
+--   never in a fight, and never while the inspect window is open, since the
+--   answer would be taken for the one that window is waiting on
+--   only a player the game says can be inspected (your own side, near you)
+-- An answer not heard in ASK_WAIT seconds is counted as lost. The game is
+-- told it may forget the inspected player afterwards (ClearInspectPlayer),
+-- as addons that inspect do. Counted for What loaded. Not yet seen in game.
+M.ASK_EVERY, M.ASK_WAIT, M.ASK_AGAIN = 1.5, 4, 1800
+M.asked = {}
+M.askSaid = { sent = 0, answered = 0, lost = 0, refused = 0, ranked = 0 }
+
+local function clock()
+	return type(_G.GetTime) == "function" and _G.GetTime() or 0
+end
+
+local function inspecting()
+	local w = _G.InspectFrame
+	local ok, shown = pcall(function() return type(w) == "table" and w.IsShown and w:IsShown() end)
+	return ok and shown and true or false
+end
+
+function M.AskRank(unit)
+	if type(unit) ~= "string" or type(_G.NotifyInspect) ~= "function" or not BT.Enabled("pvp") then
+		return false
+	end
+	if plainOf((ask("UnitIsPlayer", unit))) ~= true or plainOf((ask("UnitIsUnit", unit, "player"))) == true then
+		return false
+	end
+	local guid = plainOf((ask("UnitGUID", unit)))
+	if type(guid) ~= "string" then
+		return false
+	end
+	local now = clock()
+	local said = M.askSaid
+	if M.asking then
+		if now - M.asking.at < M.ASK_WAIT then
+			return false
+		end
+		-- (lost: the honor never came. The talents alone not coming is not.)
+		if not M.asking.honor then
+			said.lost = said.lost + 1
+		end
+		M.asking = nil
+		if not inspecting() then
+			ask("ClearInspectPlayer")
+		end
+	end
+	if now - (M.askAt or -math.huge) < M.ASK_EVERY then
+		return false
+	end
+	if M.asked[guid] and now - M.asked[guid] < M.ASK_AGAIN then
+		return false
+	end
+	if inspecting() or ask("InCombatLockdown") then
+		return false
+	end
+	if plainOf((ask("CanInspect", unit))) ~= true then
+		said.refused = said.refused + 1
+		return false
+	end
+	if not pcall(_G.NotifyInspect, unit) then
+		return false
+	end
+	M.asking = { guid = guid, at = now }
+	M.asked[guid], M.askAt = now, now
+	said.sent = said.sent + 1
+	return true
+end
+
+-- THEIR TALENTS COME WITH THE SAME ANSWER (Josh 2026-11-25: "it would be
+-- nice to show spec on the tooltips", and "I don't think the ledger should
+-- store that since it would be outdated pretty fast"). His dump with a
+-- player inspected: C_Traits.HasValidInspectData() true, and
+-- C_SpecializationInfo.GetSpecializationInfo(1, true) with no name and no
+-- points. So the trees are read as the game's talent window reads them
+-- (Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentsFrame.lua,
+-- RefreshTreeHeaders): the three trees of a class are groups of one tree
+-- (C_Traits.GetGroupDisplayInfoByTreeID: a name, an icon, an order), and
+-- the points spent in each is C_Traits.GetGroupCurrencyInfo's first
+-- currency's `spent`. The inspected player's talents are config -1
+-- (Constants.TraitConsts.INSPECT_TRAIT_CONFIG_ID), yours the active one.
+--
+-- `config`: which talents. Returns { name, icon, spent = { 5, 8, 25 } }: the
+-- tree with the most points, and each tree's points in the window's order.
+-- Nil with no points anywhere, or two trees level at the top.
+function M.SpecOf(config)
+	local traits = _G.C_Traits
+	if not (type(traits) == "table" and type(config) == "number" and traits.GetConfigInfo
+		and traits.GetGroupDisplayInfoByTreeID and traits.GetGroupCurrencyInfo) then
+		return nil
+	end
+	local okC, info = pcall(traits.GetConfigInfo, config)
+	local tree = okC and type(info) == "table" and type(info.treeIDs) == "table" and info.treeIDs[1] or nil
+	if type(tree) ~= "number" then
+		return nil
+	end
+	local okD, shown = pcall(traits.GetGroupDisplayInfoByTreeID, tree)
+	if not (okD and type(shown) == "table" and #shown > 0) then
+		return nil
+	end
+	local ids, trees = {}, {}
+	for _, d in ipairs(shown) do
+		if type(d) == "table" and type(d.groupID) == "number" then
+			ids[#ids + 1] = d.groupID
+			trees[#trees + 1] = { id = d.groupID, name = plainOf(d.displayName), icon = plainOf(d.icon),
+				order = tonumber(plainOf(d.orderIndex)) or #trees, spent = 0 }
+		end
+	end
+	local okG, groups = pcall(traits.GetGroupCurrencyInfo, config, ids)
+	if not (okG and type(groups) == "table") then
+		return nil
+	end
+	for _, g in ipairs(groups) do
+		local first = type(g) == "table" and type(g.currencyInfos) == "table" and g.currencyInfos[1]
+		local spent = type(first) == "table" and tonumber(plainOf(first.spent)) or 0
+		for _, t in ipairs(trees) do
+			if t.id == g.traitNodeGroupID then
+				t.spent = spent
+			end
+		end
+	end
+	table.sort(trees, function(a, b) return a.order < b.order end)
+	local best, level, spent = nil, false, {}
+	for _, t in ipairs(trees) do
+		spent[#spent + 1] = t.spent
+		if not best or t.spent > best.spent then
+			best, level = t, false
+		elseif t.spent == best.spent then
+			level = true
+		end
+	end
+	if not best or best.spent <= 0 or level or type(best.name) ~= "string" then
+		return nil
+	end
+	return { name = best.name, icon = best.icon, spent = spent }
+end
+
+-- [guid] = what M.SpecOf said of them, for this session only
+M.specs = {}
+
+-- a unit's talents as last heard: another player's from the answer to
+-- M.AskRank, your own read now
+function M.SpecFor(unit)
+	if type(unit) ~= "string" then
+		return nil
+	end
+	if plainOf((ask("UnitIsUnit", unit, "player"))) == true then
+		local talents = _G.C_ClassTalents
+		local ok, config = pcall(function() return talents and talents.GetActiveConfigID and talents.GetActiveConfigID() end)
+		return ok and M.SpecOf(config) or nil
+	end
+	local guid = plainOf((ask("UnitGUID", unit)))
+	return type(guid) == "string" and M.specs[guid] or nil
+end
+
+-- their tooltip, still up, written again with what was heard
+--
+-- THE TOOLTIP'S OWN WAY OF DRAWING AGAIN, A FRAME LATER (Josh 2026-11-25, a
+-- player's tooltip with no talents line until pointed at twice: "Any way to
+-- update the tooltips in real time after the spec results come back?"). The
+-- first try asked GameTooltip for "mouseover" again from inside the game's
+-- answer, and only where "mouseover" had the asked player's GUID. Nothing
+-- was drawn again. It is now what a tag written while a tooltip is up uses
+-- (Core/Tooltip.lua, T.Restack: the unit the tooltip shows, whatever it
+-- hangs off), run on the next frame, once the answer has been put away.
+-- The player shown is checked by the GUID the tooltip was drawn with, or
+-- "mouseover"'s where that one is not known. Counted for What loaded.
+M.retips = { asked = 0, other = 0, drawn = 0 }
+function M.Retip(guid)
+	local said = M.retips
+	said.asked = said.asked + 1
+	local function again()
+		local T = BT.UnitTip
+		if not (T and T.Restack) or ask("InCombatLockdown") then
+			return false
+		end
+		local shown = plainOf(T.guid)
+		if shown == nil then
+			shown = plainOf((ask("UnitGUID", "mouseover")))
+		end
+		if shown ~= guid then
+			said.other = said.other + 1
+			return false
+		end
+		local ok, did = pcall(T.Restack)
+		if ok and did then
+			said.drawn = said.drawn + 1
+			return true
+		end
+		return false
+	end
+	local timer = _G.C_Timer
+	if type(timer) == "table" and type(timer.After) == "function" then
+		timer.After(0, again)
+		return true
+	end
+	return again()
+end
+local retip = function(guid) return M.Retip(guid) end
+
+-- both answers in, or given up on: the game told it may forget them
+local function done(a)
+	if a.honor and a.ready then
+		M.asking = nil
+		if not inspecting() then
+			ask("ClearInspectPlayer")
+		end
+	end
+end
+
+-- the game's answer about a player's honor: ours, if one is waited for
+function M.Answered()
+	local a = M.asking
+	if not a or a.honor or clock() - a.at >= M.ASK_WAIT or inspecting() then
+		return false
+	end
+	a.honor = true
+	local said = M.askSaid
+	said.answered = said.answered + 1
+	local _, _, _, _, _, _, level = ask("GetInspectHonorData")
+	level = plainOf(level)
+	local news = M.NoteRank(a.guid, type(level) == "number" and level or 0)
+	if type(level) == "number" and level >= 1 then
+		said.ranked = said.ranked + 1
+	end
+	if news then
+		retip(a.guid)
+	end
+	done(a)
+	return true, news
+end
+
+-- the game's word that an inspected player's gear and talents are in
+-- (INSPECT_READY, with their GUID): ours, if they are the one asked about
+function M.Ready(guid)
+	local a = M.asking
+	guid = plainOf(guid)
+	if not a or a.ready or guid ~= a.guid or clock() - a.at >= M.ASK_WAIT or inspecting() then
+		return false
+	end
+	a.ready = true
+	local consts = _G.Constants and _G.Constants.TraitConsts
+	local config = type(consts) == "table" and tonumber(consts.INSPECT_TRAIT_CONFIG_ID) or -1
+	local ok, spec = pcall(M.SpecOf, config)
+	spec = ok and spec or nil
+	local had = M.specs[a.guid]
+	M.specs[a.guid] = spec
+	local said = M.askSaid
+	said.specs = (said.specs or 0) + (spec and 1 or 0)
+	if spec and not (had and had.name == spec.name) then
+		retip(a.guid)
+	end
+	done(a)
+	return true, spec
+end
+
 -- the game's picture for a rank: its atlas where the client has one (the
 -- scoreboard's), or the insignia file; "atlas" or "file", and which
 function M.RankArt(n)
@@ -706,10 +1048,13 @@ function M.Status()
 	local rows, total = M.MatchRows()
 	local book = rankBook()
 	local s = M.scoreSaid
-	return ("battlegrounds counted: %d kinds, %d matches · last: %s · other players' ranks kept: %d, heard this session: %d · last scoreboard: %s")
+	local a = M.askSaid
+	return ("battlegrounds counted: %d kinds, %d matches · last: %s · other players' ranks kept: %d, heard this session: %d · last scoreboard: %s · ranks asked for: %d sent, %d answered, %d with a rank, %d with talents, %d lost, %d the game would not let be inspected · tooltips drawn again: %d of %d asked, %d showing somebody else")
 		:format(#rows, total.won + total.lost + total.draw, tostring(M.lastMatch or "none this session"),
 			book and book.n or 0, M.ranksNoted,
-			s and ("%d rows, %d kept secret, %d with a rank"):format(s.rows, s.secret, s.ranked) or "none read")
+			s and ("%d rows, %d kept secret, %d with a rank"):format(s.rows, s.secret, s.ranked) or "none read",
+			a.sent, a.answered, a.ranked, a.specs or 0, a.lost, a.refused,
+			M.retips.drawn, M.retips.asked, M.retips.other)
 end
 
 -- the game's insignia for a rank, if the client has the file
@@ -914,6 +1259,7 @@ pcall(M.events.RegisterEvent, M.events, "PVP_MATCH_COMPLETE")
 -- other players' ranks, as the game shows them (M.NoteRank)
 pcall(M.events.RegisterEvent, M.events, "UPDATE_BATTLEFIELD_SCORE")
 pcall(M.events.RegisterEvent, M.events, "INSPECT_HONOR_UPDATE")
+pcall(M.events.RegisterEvent, M.events, "INSPECT_READY")
 M.SCORE_EVERY = 5
 M.events:SetScript("OnEvent", function(_, event, unit)
 	if not BT.Enabled("pvp") then
@@ -940,8 +1286,15 @@ M.events:SetScript("OnEvent", function(_, event, unit)
 		end
 		return
 	end
+	if event == "INSPECT_READY" then
+		pcall(M.Ready, unit)
+		return
+	end
 	if event == "INSPECT_HONOR_UPDATE" then
-		pcall(M.ReadInspect)
+		local ok, ours = pcall(M.Answered)
+		if not (ok and ours) then
+			pcall(M.ReadInspect)
+		end
 		return
 	end
 	if event == "UNIT_FACTION" and unit ~= "player" then

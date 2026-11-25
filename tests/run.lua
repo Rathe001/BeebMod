@@ -2152,6 +2152,38 @@ do
 		and #after.guild == #before.guild and after.zone[1].key == "Stormwind City",
 		"the census reads a packed book the same")
 
+	-- THE PVP CHART (2026-11-25): a rank kept by GUID is matched to a packed
+	-- row by the seven letters the row keeps its GUID in
+	do
+		local packed = db.players["Drae Moreweth"]
+		check(type(packed) == "string" and P.GuidCoder(db)("Player-4620-007246A3") == P.GuidPart(packed),
+			"a GUID comes out as the letters its packed row holds")
+		check(P.GuidCoder(db)("Player-9999-007246A3") == nil and P.GuidCoder(db)("Creature-0-1") == nil
+			and P.GuidCoder(db)(nil) == nil, "and a GUID no row could have as nothing")
+		-- (the ranks handed in as the PvP module hands them: M.RankCodes)
+		local hadGet = BT.GetModule
+		local by = { ["Player-4620-007246A3"] = 3 }
+		BT.GetModule = function(key)
+			if key == "pvp" then
+				return { RankCodes = function(d)
+					local coder, codes = P.GuidCoder(d), {}
+					for guid, rank in pairs(by) do
+						codes[coder(guid) or false] = rank
+					end
+					return { code = codes, guid = by }
+				end }
+			end
+			return hadGet and hadGet(key)
+		end
+		local c = BT.Stats.Census(db, T + 60)
+		check(#c.pvp == 1 and c.pvp[1].key == 3 and c.pvp[1].n == 1 and c.unknown.pvp == c.total - 1,
+			"the census counts a packed character at their rank, and the rest as unknown")
+		by["Player-4620-007246A3"] = nil
+		c = BT.Stats.Census(db, T + 60)
+		check(#c.pvp == 0 and c.unknown.pvp == c.total, "no ranks learned: an empty chart")
+		BT.GetModule = hadGet
+	end
+
 	-- and back into a table when somebody asks
 	local p = DB.Get(db, "Drae Moreweth")
 	check(type(db.players["Drae Moreweth"]) == "table" and p == db.players["Drae Moreweth"],

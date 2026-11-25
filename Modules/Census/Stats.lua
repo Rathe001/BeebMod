@@ -159,7 +159,7 @@ local function picks(pick, p, tags)
 	return of ~= nil and of(p) == pick.key
 end
 
-local function begin(now, filter)
+local function begin(now, filter, db)
 	filter = filter or {}
 	local bands = filter.bands
 	local filtering = false
@@ -196,6 +196,10 @@ local function begin(now, filter)
 		today = 0, shown = 0, sides = {}, sexes = {},
 		unknownClass = 0, unknownLevel = 0, unknownRace = 0,
 		unknownGuild = 0, unknownZone = 0,
+		-- PVP RANKS (Josh 2026-11-25: "Can we add a pvp graph?"): how many at
+		-- each rank, 1 to 14, of the characters whose rank BeebMod has learned
+		-- (Modules/PvP/PvP.lua, M.RankCodes). The rest are `unknownRank`.
+		rank = {}, unknownRank = 0,
 		-- characters carrying at least one tag: the tag chart's rows count
 		-- marks, and a character with three tags is one character
 		tagged = 0,
@@ -204,6 +208,11 @@ local function begin(now, filter)
 	}
 	for _, b in ipairs(S.AGE_BUCKETS) do
 		t.ageBuckets[b.key] = 0
+	end
+	local pvp = db and BT.GetModule and BT.GetModule("pvp")
+	if pvp and pvp.RankCodes then
+		local ok, ranks = pcall(pvp.RankCodes, db)
+		t.ranks = ok and ranks or nil
 	end
 	return t
 end
@@ -255,7 +264,7 @@ local function stepAge(step)
 	return (step - 24) * DAY
 end
 
-local function count(t, p, key)
+local function count(t, p, key, row)
 	t.book = t.book + 1
 	local age = t.now - (p.last or t.now)
 	if p.last and age < DAY then
@@ -309,6 +318,21 @@ local function count(t, p, key)
 	end
 	if isMine then
 		t.mine = t.mine + 1
+	end
+	if matched then
+		local ranks, r = t.ranks, nil
+		if ranks then
+			if type(row) == "string" then
+				r = ranks.code[string.sub(row, 25, 31)]
+			elseif type(row) == "table" and row.guid then
+				r = ranks.guid[row.guid]
+			end
+		end
+		if r then
+			t.rank[r] = (t.rank[r] or 0) + 1
+		else
+			t.unknownRank = t.unknownRank + 1
+		end
 	end
 	if matched or pickMode == "class" then
 		local c = p.class
@@ -480,6 +504,13 @@ local function finish(t)
 	for _, b in ipairs(S.AGE_BUCKETS) do
 		buckets[#buckets + 1] = { key = b.key, n = t.ageBuckets[b.key] }
 	end
+	-- the ranks from the highest down, only those somebody holds
+	local rankRows = {}
+	for n = 14, 1, -1 do
+		if t.rank[n] then
+			rankRows[#rankRows + 1] = { key = n, n = t.rank[n] }
+		end
+	end
 	local classRows = sorted(t.class)
 	-- last row, whatever its size: it is not a class, it is the gap in the book
 	if t.unknownClass > 0 then
@@ -506,6 +537,7 @@ local function finish(t)
 		tag = topRows(t.tag, S.TOP + 1),
 		guild = topRows(t.guild, S.TOP, { [S.UNGUILDED] = true }),
 		zone = topRows(t.zone, S.TOP + 1),
+		pvp = rankRows,
 		-- EVERY GUILD, ZONE AND TAG, NOT ONLY THE LARGEST (Josh 2026-11-12, the
 		-- charts' search: "all the guilds with olympus in their names"): the
 		-- counts as they were tallied, sorted only when somebody searches
@@ -514,7 +546,7 @@ local function finish(t)
 		tagged = t.tagged,
 		unknown = {
 			class = t.unknownClass, level = t.unknownLevel, race = t.unknownRace, tag = 0,
-			guild = t.unknownGuild, zone = t.unknownZone,
+			guild = t.unknownGuild, zone = t.unknownZone, pvp = t.unknownRank,
 		},
 		age = {
 			mean = t.ageN > 0 and (t.ageSum / t.ageN) or nil,
@@ -574,10 +606,10 @@ local function reader(db)
 end
 
 function S.Census(db, now, filter)
-	local t = begin(now or U.Now(), filter)
+	local t = begin(now or U.Now(), filter, db)
 	local view = reader(db)
 	for key, row in pairs(DB.Players(db)) do
-		count(t, view(key, row), key)
+		count(t, view(key, row), key, row)
 	end
 	return finish(t)
 end
@@ -600,7 +632,7 @@ function S.CensusJob(db, now, filter, per)
 		list[#list + 1] = p
 		keys[#list] = key
 	end
-	local t = begin(now or U.Now(), filter)
+	local t = begin(now or U.Now(), filter, db)
 	local view = reader(db)
 	local at = 0
 	per = per or S.JOB_SLICE
@@ -618,7 +650,7 @@ function S.CensusJob(db, now, filter, per)
 		local i = at
 		while i < stop do
 			i = i + 1
-			count(t, view(keys[i], list[i]), keys[i])
+			count(t, view(keys[i], list[i]), keys[i], list[i])
 			-- the clock is asked every hundred: asking it is not free either
 			if clock and i % 100 == 0 and clock() - started >= budget then
 				break

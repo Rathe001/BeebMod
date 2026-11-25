@@ -3,6 +3,32 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Reagent items stay lit while you drag the bags.** Dragging the bag
+  window drew the reagent bag's items dim until you let go.
+- **Stack sizes on item tooltips.** A stackable item in your bags says how
+  many are in the stack and how many a stack holds, such as "Stack 7/20".
+  Elsewhere it says "Stacks to 20".
+- **A player with no guild has a header of the usual height.** With nothing
+  under the name and tags, the coloured band was taller than on other
+  tooltips.
+- **A player's PvP rank and talents, without inspecting them.** When you
+  point at a player of your own side near you, BeebMod asks the game about
+  them the way the inspect window does. Their tooltip then has their rank,
+  and the talent tree they have the most points in with the points in each
+  tree, such as "Retribution 5/8/25". Your own tooltip has yours. The
+  talents are kept until you log out.
+- **PvP ranks in the Ledger.** A character's card in the Ledger's search
+  has their rank after their level, where BeebMod has learned it. The
+  charts have a PvP chart: how many characters hold each rank.
+- **A player's PvP rank on a line of its own.** A player's tooltip has the
+  game's insignia and the rank's name under their guild. It was a grey tag.
+  Your own tooltip has yours too.
+- **Arrow keys in the chat box.** While you type, the arrow keys move the
+  cursor and go through what you typed before. The game wants Alt held for
+  that. A switch for it is on the General page, on to begin with.
+
 ## 1.19.0
 
 - **The reagent bag's items stay under other windows.** They were drawn on

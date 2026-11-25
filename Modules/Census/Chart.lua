@@ -40,6 +40,9 @@ local MODES = {
 	{ key = "level", label = "Level" },
 	{ key = "guild", label = "Guild" },
 	{ key = "zone",  label = "Zone"  },
+	-- PvP ranks, the highest first (Josh 2026-11-25: "Can we add a pvp
+	-- graph?"): the characters whose rank BeebMod has learned
+	{ key = "pvp",   label = "PvP" },
 	{ key = "tag",   label = "Tags",  ledger = true },
 	-- the people you grouped with, a row each (C.Grouped): the Ledger's too
 	{ key = "grouped", label = "Grouped", ledger = true },
@@ -76,6 +79,11 @@ local function rowLabel(mode, key)
 	elseif mode == "tag" then
 		local f = U.TagByKey(key)
 		return f and f.label or key
+	elseif mode == "pvp" then
+		-- a rank by its name on your side
+		local pvp = BT.GetModule and BT.GetModule("pvp")
+		local ok, name = pcall(function() return pvp and pvp.RankName and pvp.RankName(key) end)
+		return ok and type(name) == "string" and name or ("Rank " .. tostring(key))
 	end
 	return key
 end
@@ -899,7 +907,7 @@ end
 local NOUN = {
 	class = { "class", "classes" }, race = { "race", "races" }, level = { "level range", "level ranges" },
 	guild = { "guild", "guilds", true }, zone = { "zone", "zones", true }, tag = { "tag", "tags", true },
-	grouped = { "person", "people", true },
+	grouped = { "person", "people", true }, pvp = { "rank", "ranks" },
 }
 
 -- how many guilds, zones or tags a chart has by name: not the pile of the
@@ -981,7 +989,7 @@ end
 
 -- what the line under the bars calls a chart's gap in the book: "Race
 -- unknown for 70", so the guild chart's gap is not read as its No guild row
-C.NOTE = { class = "Class", race = "Race", level = "Level", guild = "Guild", zone = "Zone" }
+C.NOTE = { class = "Class", race = "Race", level = "Level", guild = "Guild", zone = "Zone", pvp = "Rank" }
 
 -- the tiles, from the census: its count, both splits, and the level columns
 function C.PaintTiles(view, census)

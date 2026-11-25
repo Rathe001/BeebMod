@@ -953,6 +953,13 @@ local function fillCard(card, row, text)
 	if guild and type(text) == "string" and text ~= "" and guild:lower():find(text:lower(), 1, true) then
 		small[#small + 1] = ("<%s>"):format(guild)
 	end
+	-- their PvP rank, where BeebMod has heard it (Modules/PvP/PvP.lua,
+	-- M.RankOfRecord; Josh 2026-11-25: "include it in our ledger data")
+	local pvp = BT.GetModule and BT.GetModule("pvp")
+	if pvp and pvp.RankWords then
+		local ok, words = pcall(pvp.RankWords, p, 12, 0)
+		small[#small + 1] = ok and words or nil
+	end
 	small[#small + 1] = BT.LedgerGroups and BT.LedgerGroups.Line(p) or nil
 	-- and your duels with them (Modules/Ledger/Duels.lua)
 	small[#small + 1] = BT.LedgerDuels and BT.LedgerDuels.Line(p) or nil
