@@ -3,6 +3,17 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **The personal resource display is a bit see-through**, so the ground
+  under your character shows through it.
+- **A paladin's seal on the personal resource display.** A bar under your
+  health and mana has the seal's picture and runs down as the seal does. It
+  flashes red in the last three seconds.
+- **The enchant glow fits the character window.** The gold frame that
+  flashes when an enchant or an item's buff goes on your gear was drawn
+  bigger than the window and off to its left.
+
 ## 1.20.0
 
 - **Reagent items stay lit while you drag the bags.** Dragging the bag

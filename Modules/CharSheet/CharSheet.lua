@@ -2081,7 +2081,49 @@ local function layoutTabs(frame)
 	end
 end
 
+-- THE GLOW WHEN AN ENCHANT OR AN ITEM'S BUFF GOES ON A PIECE OF GEAR (Josh
+-- 2026-11-25, a screenshot of a gold frame bigger than the window and off to
+-- its left: "The frame glow when enchanting or using item buffs doesnt match
+-- our frame size"). The game's glow (CharacterModelScene.GearEnchantAnimation)
+-- is drawn at fixed sizes around the centre of the model, made for a doll
+-- pane of 398 by 424. Ours is smaller and its model sits between the slots.
+-- So the glow is centred on our doll pane and each of its pictures is sized
+-- by how much smaller our pane is, across and down. The turning lights take
+-- the larger of the two so they still fill the mask.
+M.GLOW_PANE = { w = 398, h = 424 }
+M.GLOW_ART = {
+	frame = { 387, 420, 2, 3 }, mask = { 855, 670, 4, 0 },
+	light = { 650, 650 }, sparkles = { 585, 585 },
+}
+function M.FitGlow(left)
+	local scene = _G.CharacterModelScene
+	local glow = scene and scene.GearEnchantAnimation
+	if not (glow and left) then
+		return false
+	end
+	local sx, sy = (M.W - M.PANE) / M.GLOW_PANE.w, (M.H - M.TITLE) / M.GLOW_PANE.h
+	local big = math.max(sx, sy)
+	local art = M.GLOW_ART
+	place(glow, { { "CENTER", left, "CENTER", 0, 0 } })
+	local fx, top = glow.FrameFX, glow.TopFrame
+	if top then
+		place(top, { { "CENTER", glow, "CENTER", 0, 0 } })
+		local a = art.frame
+		place(top.Frame, { { "CENTER", top, "CENTER", a[3] * sx, a[4] * sy } }, a[1] * sx, a[2] * sy)
+	end
+	if fx then
+		place(fx, { { "CENTER", glow, "CENTER", 0, 0 } })
+		local a = art.mask
+		place(fx.Mask, { { "CENTER", fx, "CENTER", a[3] * sx, a[4] * sy } }, a[1] * sx, a[2] * sy)
+		place(fx.PurpleGlow, { { "CENTER", fx, "CENTER", 0, 0 } }, art.light[1] * big, art.light[2] * big)
+		place(fx.BlueGlow, { { "CENTER", fx, "CENTER", 0, 0 } }, art.light[1] * big, art.light[2] * big)
+		place(fx.Sparkles, { { "CENTER", fx, "CENTER", 0, 0 } }, art.sparkles[1] * big, art.sparkles[2] * big)
+	end
+	return true
+end
+
 local function layoutDoll(frame, left)
+	pcall(M.FitGlow, left)
 	local slot, gap = M.SLOT, M.GAP
 	local LEFT = { "Head", "Neck", "Shoulder", "Back", "Chest", "Shirt", "Tabard", "Wrist" }
 	local RIGHT = { "Hands", "Waist", "Legs", "Feet", "Finger0", "Finger1", "Trinket0", "Trinket1" }

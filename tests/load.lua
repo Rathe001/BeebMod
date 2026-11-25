@@ -12211,6 +12211,11 @@ if ok then
 			assert(pips and pips:IsShown(), "and a row of pips hangs under it")
 			assert(#pips.squares == 5, "one per possible point: " .. tostring(#pips.squares))
 			assert(pips._parent == plate or pips:GetParent() == plate, "on the plate, so it moves with it")
+			-- a bit see-through, the points with it as the plate's children (2026-11-25)
+			assert(plate:GetAlpha() == mod.ALPHA and mod.ALPHA < 1, "the whole display a bit see-through: " .. tostring(plate:GetAlpha()))
+			mod.Release()
+			assert(plate:GetAlpha() == 1, "and the game's again when BeebMod lets go")
+			mod.Apply()
 			-- each segment is a bar from i - 1 to i, full when the count reaches i
 			local function lit()
 				local n = 0
@@ -12320,6 +12325,48 @@ if ok then
 			-- which showed the rogue-only lines: built again as the warrior
 			BT.Dock.Rebuild()
 			BT.Window.Rebuild()
+		end },
+		{ "a paladin's seal is a lane under the personal resource bars (2026-11-25)", function()
+			local mod = BT.GetModule("resourcedisplay")
+			local T = BT.UnitFrames.Timers
+			local realCF, wasClass, wasIds, wasFight = _G.CreateFrame, _G.UnitClass, T.Ids, _G.InCombatLockdown
+			local made = {}
+			_G.CreateFrame = function(kind, name, parent, template)
+				if kind == "AuraContainer" then
+					local c = realCF("Frame", name, parent)
+					c.groups = {}
+					c.AddAuraGroup = function(self, key, filter, opts) self.groups[key] = { filter = filter, opts = opts } end
+					c.SetUnit = function(self, u) self.unit = u end
+					c.SetEnabled = function(self, on) self.enabled = on end
+					made[#made + 1] = c
+					return c
+				end
+				return realCF(kind, name, parent, template)
+			end
+			local book = { ["Seal of Righteousness"] = { [20287] = true }, ["Seal of Command"] = { [20375] = true } }
+			T.Ids = function(name) return book[name] end
+			_G.UnitClass = function() return "Rogue", "ROGUE" end
+			assert(mod.SealBuild() == nil and mod.SealSaid() == nil, "no lane for a class with no seals")
+			_G.UnitClass = function() return "Paladin", "PALADIN" end
+			local ids, sig = mod.SealIds()
+			assert(ids[20287] and ids[20375] and sig == "20287,20375", "every seal in your book: " .. sig)
+			_G.InCombatLockdown = function() return true end
+			assert(mod.SealBuild() == nil and mod.sealOwed, "not made in a fight, and owed after it")
+			_G.InCombatLockdown = function() return false end
+			local lane = mod.SealBuild(180)
+			assert(lane and #made == 1 and lane.unit == "player" and lane.enabled == true, "one container, on you")
+			local g = lane.groups.seal
+			assert(g and g.filter == "HELPFUL|PLAYER" and g.opts.maxFrameCount == 1
+				and g.opts.candidateFilters.includeSpellIDs[20375], "your own seals alone, one at a time")
+			assert(g.opts.layout.elementWidth == 180, "as wide as the bars")
+			assert(mod.SealBuild(180) == lane and #made == 1, "made once while nothing changes")
+			book["Seal of Light"] = { [20165] = true }
+			assert(mod.SealBuild(180) ~= lane and #made == 2 and lane.enabled == false, "a seal learned: made again, the old one off")
+			assert(mod.SealSaid():find("20165", 1, true), "and said for What loaded: " .. mod.SealSaid())
+			_G.CreateFrame, _G.UnitClass, T.Ids, _G.InCombatLockdown = realCF, wasClass, wasIds, wasFight
+			if mod.SealFrame() then
+				mod.SealFrame():Hide()
+			end
 		end },
 		{ "the display's own combo points are put away, and the row hangs under its bars", function()
 			-- BUILD 70291 (Josh 2026-10-08: "now combo points and bags look
@@ -19041,6 +19088,36 @@ if ok then
 				_G["Character" .. name .. "Slot"] = nil
 			end
 			_G.CharacterShirtSlot, _G.GetInventoryItemLink, _G.GetItemInfo = nil, nil, nil
+		end },
+		{ "the enchant glow fitted to our doll pane (2026-11-25)", function()
+			local mod = BT.GetModule("charsheet")
+			local function piece()
+				local p = { points = {} }
+				p.ClearAllPoints = function(self) self.points = {} end
+				p.SetPoint = function(self, ...) self.points[#self.points + 1] = { ... } end
+				p.GetNumPoints = function() return 0 end
+				p.GetWidth = function(self) return self.w or 0 end
+				p.GetHeight = function(self) return self.h or 0 end
+				p.SetWidth = function(self, w) self.w = w end
+				p.SetHeight = function(self, h) self.h = h end
+				return p
+			end
+			local glow, left = piece(), piece()
+			glow.TopFrame, glow.FrameFX = piece(), piece()
+			glow.TopFrame.Frame = piece()
+			glow.FrameFX.Mask, glow.FrameFX.PurpleGlow, glow.FrameFX.BlueGlow, glow.FrameFX.Sparkles = piece(), piece(), piece(), piece()
+			local hadScene = rawget(_G, "CharacterModelScene")
+			rawset(_G, "CharacterModelScene", nil)
+			assert(mod.FitGlow(left) == false, "no model, nothing to fit")
+			rawset(_G, "CharacterModelScene", { GearEnchantAnimation = glow })
+			assert(mod.FitGlow(left) == true, "fitted")
+			assert(glow.points[1][1] == "CENTER" and glow.points[1][2] == left, "centred on our doll pane, not the model")
+			local paneW, paneH = mod.W - mod.PANE, mod.H - mod.TITLE
+			local f = glow.TopFrame.Frame
+			assert(f.w < paneW and f.w > paneW * 0.9, "the gold frame a little inside the pane's width: " .. tostring(f.w))
+			assert(f.h < paneH + 1 and f.h > paneH * 0.9, "and its height: " .. tostring(f.h))
+			assert(glow.FrameFX.Mask.w < 855 and glow.FrameFX.PurpleGlow.w < 650, "the lights and their mask shrunk with it")
+			rawset(_G, "CharacterModelScene", hadScene)
 		end },
 		{ "the character sheet in the toolkit's clothes, by what each piece draws", function()
 			local mod = BT.GetModule("charsheet")

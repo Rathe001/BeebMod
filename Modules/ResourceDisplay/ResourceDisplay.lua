@@ -627,6 +627,194 @@ function M.ReachFrame()
 end
 
 -- ---------------------------------------------------------------------------
+-- A paladin's seal
+-- ---------------------------------------------------------------------------
+
+-- YOUR SEAL, AS A BAR (Josh 2026-11-25, a paladin's display with no sign of
+-- the seal: "For paladin personal resource bar, can we add a bar (similar to
+-- the DoT timers) for seals?"). One lane under the bars, where another
+-- class has its points: the seal's picture, and a bar that runs down as the
+-- seal does and flashes red in its last seconds.
+--
+-- It is a DoT timer's lane (Modules/UnitFrames/Timers.lua, T.LaneButton):
+-- one of the client's aura containers told to show only your seals on you,
+-- with a duration bar the client runs down. Nothing here reads an aura,
+-- which the client would refuse in a fight.
+--
+-- The container is the client's, so it is made out of a fight only, and sits
+-- on a holder of ours that is never the plate's child: the plate is
+-- borrowed, and a container cannot change hands in a fight. The holder is
+-- pinned under the lowest bar and given the plate's scale, so the lane is as
+-- wide as the bars. A seal learned later makes the lane again, out of a
+-- fight.
+M.SEALS = { "Seal of Righteousness", "Seal of the Crusader", "Seal of Command", "Seal of Justice",
+	"Seal of Light", "Seal of Wisdom", "Seal of Fury" }
+M.SEAL_COLOUR = { 1.00, 0.84, 0.36 }
+M.SEAL_BAR_H, M.SEAL_H = 9, 13
+M.SEAL_W = 199
+M.sealSaid = { made = 0, refused = nil }
+
+local seal -- the holder; seal.lane is the container on it
+
+local function timers()
+	return BT.UnitFrames and BT.UnitFrames.Timers, BT.UnitFrames and BT.UnitFrames.Auras
+end
+
+-- every rank of every seal in your book, and the same as a word to tell a
+-- new one by
+function M.SealIds()
+	local T = timers()
+	local out, list = {}, {}
+	if not (T and T.Ids) then
+		return out, ""
+	end
+	for _, name in ipairs(M.SEALS) do
+		for id in pairs(T.Ids(name) or {}) do
+			if not out[id] then
+				out[id] = true
+				list[#list + 1] = id
+			end
+		end
+	end
+	table.sort(list)
+	return out, table.concat(list, ",")
+end
+
+function M.HasSeals()
+	local ok, _, class = pcall(UnitClass, "player")
+	return ok and class == "PALADIN"
+end
+
+-- the lane made, or made again for a new seal or a new width; out of a fight
+function M.SealBuild(width)
+	if not M.HasSeals() then
+		return nil
+	end
+	if InCombatLockdown and InCombatLockdown() then
+		M.sealOwed = true
+		return seal and seal.lane or nil
+	end
+	M.sealOwed = nil
+	local T, A = timers()
+	if not (T and T.LaneButton and A and A.Container) then
+		return nil
+	end
+	local ids, sig = M.SealIds()
+	if sig == "" then
+		return nil
+	end
+	width = math.floor((width or (seal and seal.w) or M.SEAL_W) + 0.5)
+	if seal and seal.lane and seal.sig == sig and seal.w == width then
+		return seal.lane
+	end
+	if not seal then
+		seal = CreateFrame("Frame", nil, UIParent)
+		seal.beebs = true
+		seal:Hide()
+	end
+	if seal.lane then
+		pcall(seal.lane.SetEnabled, seal.lane, false)
+		seal.lane:Hide()
+		seal.lane = nil
+	end
+	local ok, c = pcall(A.Container, seal, {
+		key = "seal", max = 1, size = width, cellH = M.SEAL_H, inside = true, flowAt = "TOPLEFT",
+		filter = "HELPFUL|PLAYER",
+		candidate = { includeSpellIDs = ids },
+		init = T.LaneButton(width, M.SEAL_H, M.SEAL_COLOUR, true, M.SEAL_BAR_H),
+	}, "player")
+	if not (ok and c) then
+		M.sealSaid.refused = ok and "the game made no container" or tostring(c)
+		return nil
+	end
+	c:ClearAllPoints()
+	c:SetPoint("TOPLEFT", seal, "TOPLEFT", 0, 0)
+	pcall(c.SetEnabled, c, true)
+	c:Show()
+	seal.lane, seal.sig, seal.w = c, sig, width
+	seal:SetSize(width, M.SEAL_H)
+	M.sealSaid.made = M.sealSaid.made + 1
+	return c
+end
+
+-- the holder under the lowest bar, at the plate's scale; or away
+function M.Seal()
+	if not (plate and M.HasSeals()) then
+		if seal then
+			seal:Hide()
+		end
+		return false
+	end
+	local anchor = M.PipAnchor()
+	if not anchor then
+		if seal then
+			seal:Hide()
+		end
+		return false
+	end
+	local width = BT.Pill.Number(BT.Furniture.Call(anchor, "GetWidth"), M.SEAL_W)
+	if not (width and width > 0) then
+		width = M.SEAL_W
+	end
+	M.SealBuild(width)
+	if not (seal and seal.lane) then
+		return false
+	end
+	local theirs = BT.Pill.Number(BT.Furniture.Call(anchor, "GetEffectiveScale"), nil)
+	local ours = BT.Pill.Number(BT.Furniture.Call(UIParent, "GetEffectiveScale"), nil)
+	if theirs and ours and ours > 0 and theirs > 0 then
+		pcall(seal.SetScale, seal, theirs / ours)
+	end
+	seal:ClearAllPoints()
+	seal:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -PIP_DROP)
+	seal:Show()
+	return true
+end
+
+function M.SealFrame()
+	return seal
+end
+
+function M.SealSaid()
+	if not M.HasSeals() then
+		return nil
+	end
+	local _, sig = M.SealIds()
+	local s = M.sealSaid
+	return ("seal bar %s, made %d times, seals in your book %s%s%s"):format(
+		(seal and seal.lane) and ((seal:IsShown() and "up" or "hidden") .. (" at %d wide"):format(seal.w or 0)) or "not made",
+		s.made, sig ~= "" and sig or "none", M.sealOwed and ", owed after the fight" or "",
+		s.refused and (", refused: " .. s.refused:sub(1, 80)) or "")
+end
+
+-- ---------------------------------------------------------------------------
+-- A bit see-through
+-- ---------------------------------------------------------------------------
+
+-- THE WHOLE DISPLAY, A BIT SEE-THROUGH (Josh 2026-11-25: "Can we make the
+-- entire personal resource thing a bit transparent?"). It sits over the
+-- world under your character, where a solid bar hides the ground. The
+-- display's own frame is given M.ALPHA, and the points and the target icon
+-- are its children, so they go with it. The seal's lane is on a holder of
+-- ours that is not its child and is given the same. The display is the
+-- game's: it gets its own alpha back when BeebMod lets go of it.
+M.ALPHA = 0.7
+function M.Fade(p, alpha)
+	if type(p) == "table" and p.SetAlpha then
+		pcall(p.SetAlpha, p, alpha)
+	end
+	if seal then
+		pcall(seal.SetAlpha, seal, alpha)
+	end
+end
+
+-- how see-through the display is right now, for What loaded
+function M.FadeSaid()
+	local a = plate and BT.Pill.Number(BT.Furniture.Call(plate, "GetAlpha"), nil)
+	return a and ("alpha %.2f of %.2f asked"):format(a, M.ALPHA) or "alpha not readable"
+end
+
+-- ---------------------------------------------------------------------------
 -- Putting it all on, and taking it off
 -- ---------------------------------------------------------------------------
 
@@ -642,6 +830,7 @@ function M.Apply()
 	if p ~= plate then
 		-- the plate we had may be somebody else's now: everything back
 		dresser:Undress()
+		M.Fade(plate, 1)
 		plate = p
 	end
 	M.foundBy = p and how or nil
@@ -657,12 +846,18 @@ function M.Apply()
 	M.lastCount = n
 	M.Pips(M.Combo())
 	M.Reach()
+	local okSeal, errSeal = pcall(M.Seal)
+	if not okSeal then
+		BT.Err("resourcedisplay seal: " .. tostring(errSeal))
+	end
+	M.Fade(plate, M.ALPHA)
 	return n
 end
 
 -- the client's plate back as it came, and the pips and the icon away
 function M.Release()
 	dresser:Undress()
+	M.Fade(plate, 1)
 	if pips then
 		pips:Hide()
 		pips:SetParent(UIParent)
@@ -670,6 +865,9 @@ function M.Release()
 	if reach then
 		reach:Hide()
 		reach:SetParent(UIParent)
+	end
+	if seal then
+		seal:Hide()
 	end
 	plate = nil
 	M.lastCount = 0
@@ -699,6 +897,9 @@ hookPlate = function(p)
 		if pips then
 			pips:Hide()
 		end
+		if seal then
+			seal:Hide()
+		end
 	end)
 end
 
@@ -708,7 +909,7 @@ function M.Watch()
 	end
 	M.events = CreateFrame("Frame")
 	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
-		"PLAYER_TARGET_CHANGED", "UPDATE_SHAPESHIFT_FORM", "CVAR_UPDATE" }) do
+		"PLAYER_TARGET_CHANGED", "UPDATE_SHAPESHIFT_FORM", "CVAR_UPDATE", "SPELLS_CHANGED", "PLAYER_REGEN_ENABLED" }) do
 		pcall(M.events.RegisterEvent, M.events, event)
 	end
 	-- your own power, not every unit's on the screen
@@ -730,6 +931,15 @@ function M.Watch()
 		-- cpu: 225 a second, from the minimap's zoom): only the nameplate ones
 		-- are this display's business
 		if event == "CVAR_UPDATE" and not tostring(unit or ""):lower():find("nameplate", 1, true) then
+			return
+		end
+		-- a seal learned, or a fight over with the seal's lane owed: the lane
+		-- alone, and only for a paladin
+		if event == "SPELLS_CHANGED" or event == "PLAYER_REGEN_ENABLED" then
+			if M.HasSeals() and (event == "SPELLS_CHANGED" or M.sealOwed) then
+				pcall(M.SealBuild)
+				pcall(M.Seal)
+			end
 			return
 		end
 		if event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
@@ -779,6 +989,9 @@ end
 
 function M:OnEnable()
 	M.Watch()
+	-- the seal's lane, made before a fight can start (the display may only
+	-- come up in one)
+	pcall(M.SealBuild)
 	M.Apply()
 end
 
@@ -799,7 +1012,9 @@ function M.Status()
 	if not (plate and plate.IsVisible and plate:IsVisible()) then
 		return "not on screen: turn on Personal Resource Display"
 	end
-	return ("%d bars themed · %s · %s"):format(M.lastCount or 0, M.Said(), M.ReachSaid())
+	local sealSaid = M.SealSaid()
+	return ("%d bars themed · %s · %s · %s%s"):format(M.lastCount or 0, M.Said(), M.ReachSaid(), M.FadeSaid(),
+		sealSaid and (" · " .. sealSaid) or "")
 end
 
 -- the target icon in words: what it was told, and by which spell
