@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.20.0
 
 - **Reagent items stay lit while you drag the bags.** Dragging the bag
   window drew the reagent bag's items dim until you let go.
