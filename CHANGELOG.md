@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.22.0
 
 - **Battleground teams on the dock.** In a battleground the dock shows both
   teams' average level. Your team's average item level is under them. At
