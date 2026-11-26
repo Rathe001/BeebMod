@@ -24,6 +24,7 @@ If something breaks, please report it on GitHub (link at the bottom).
 - Gold, bag space, durability, item level, speed, FPS and latency
 - Quest list grouped by zone
 - In a dungeon, its own quests and notes for each boss by role
+- In a battleground, its own quests, both teams' levels, the score, bases and capture timers
 - The game's menu buttons
 - Drag the rows into any order you like
 

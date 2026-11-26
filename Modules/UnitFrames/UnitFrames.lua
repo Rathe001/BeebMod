@@ -1197,6 +1197,9 @@ function M.Status()
 	end
 	local said = ("group cells %d, with aura rows %d · dispel marks the game kept back: %d"):format(cells, rows,
 		F.Auras and F.Auras.forbidden or 0)
+	if F.HiddenSaid then
+		said = said .. " · " .. F.HiddenSaid()
+	end
 	-- after where Edit Mode has the blocks (M.EditModeSaid)
 	local ok, edit = pcall(M.EditModeSaid)
 	return (ok and type(edit) == "string") and (edit .. " · " .. said) or said

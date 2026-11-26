@@ -132,6 +132,12 @@ function S.Build(parent)
 		"While you type, the arrow keys move the cursor and go through what you typed before. Without this the game wants Alt held.",
 		function() return BT.Switched("chatarrows") end,
 		function(on) BT.SetEnabled("chatarrows", on) end)
+	-- CHAT TEXT THAT STAYS (Josh 2026-11-25: "Still seeing blank chat";
+	-- Modules/Chat/Fading.lua)
+	S.chatFadeRow = W.SwitchRow(typing, "Chat text stays",
+		"Chat lines stay on screen. Without this the game fades each line out two minutes after it arrives.",
+		function() return BT.Switched("chatfade") end,
+		function(on) BT.SetEnabled("chatfade", on) end)
 
 	-- UPGRADES (Josh 2026-11-16: "make sure we have a switch for this in the
 	-- options"; a module of BeebMod since 2026-11-17, Modules/Upgrades). A

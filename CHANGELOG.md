@@ -3,6 +3,45 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Battleground teams on the dock.** In a battleground the dock shows both
+  teams' average level. Your team's average item level is under them. At
+  level 60 it shows the item level alone. The numbers are
+  gray, green, blue or purple. For item level the colour says how your team
+  compares with players BeebMod has read at the same levels. For level it
+  says where the average sits in the bracket. Your team's gear is read from
+  teammates within about 30 yards. An enemy's level is read once you see
+  them. The game doesn't let addons inspect enemies, so there is no enemy
+  item level. A switch on the Dock page, "Battleground teams", turns it off.
+- **Arathi Basin on the dock.** The score, the match clock and each base
+  with the side that holds it. A base being taken counts down the 60
+  seconds until it falls. One line says which side wins and when, if every
+  base stays as it is. The countdown starts when BeebMod sees the base
+  change, so a base already being taken when you join has none.
+- **Darkspear Islands, Warsong Gulch and Alterac Valley on the dock.**
+  Darkspear Islands has the score, its four bases with capture countdowns,
+  a win time and the wait for a captured flag to come back. Warsong Gulch
+  has a row for each flag: at base, dropped, or who carries it. Alterac
+  Valley lists the towers and graveyards being taken, each with its five
+  minutes counting down. These three follow what is published about the
+  game and have not been checked in a match yet.
+- **The quest tracker in a battleground.** It lists the quests your log
+  files under that battleground. The others are under one line that opens
+  them, as in a dungeon.
+- **Battleground wins and losses by bracket.** The PvP tooltip lists your
+  matches under 10-19, 20-29, 30-39 and so on, where the "All" row was.
+  Matches played before this version are counted in the bracket your
+  character is in now.
+- **A shorter dock in a battleground.** The Ledger and Expedition lines are
+  hidden while you are in a battleground. They come back when you leave.
+- **Chat text stays.** Chat lines no longer fade out two minutes after they
+  arrive, which left gaps in the chat window. A switch on General, "Chat
+  text stays", gives the game's fading back.
+- **An enemy player's class colour.** The game keeps an enemy player's class
+  from addons at times, which left their health bar red. The bar now takes
+  its class colour from the game.
+
 ## 1.21.0
 
 - **The personal resource display is a bit see-through**, so the ground

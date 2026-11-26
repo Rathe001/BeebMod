@@ -1909,14 +1909,25 @@ function M.DumpPlates(lines)
 			-- how large the game draws the plate, and ours on it (M.Steady)
 			local scale = BT.Pill.Number(plate.GetEffectiveScale and plate:GetEffectiveScale(), -1)
 			local oursScale = BT.Pill.Number(up and up.GetEffectiveScale and up:GetEffectiveScale(), -1)
-			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f oursAlpha=%.2f scale=%.2f oursScale=%.2f reaction=%s attack=%s pvp=%s"):format(
+			lines[#lines + 1] = ("%s %s player=%s friend=%s ours=%s alpha=%.2f oursAlpha=%.2f scale=%.2f oursScale=%.2f reaction=%s attack=%s pvp=%s class=%s"):format(
 				token, describe(F.Plain(UnitName, token)), describe(player), describe(M.IsFriend(token)),
 				ours, alpha, oursAlpha, scale, oursScale, describe(F.Plain(_G.UnitReaction, token, "player")),
-				describe(F.Plain(_G.UnitCanAttack, "player", token)), describe(F.Plain(_G.UnitIsPVP, token)))
+				describe(F.Plain(_G.UnitCanAttack, "player", token)), describe(F.Plain(_G.UnitIsPVP, token)),
+				M.ClassSaid(token))
 		end
 	end
 	lines[#lines + 1] = ("plates: %d of %d in use, %d of them players"):format(plates, M.MAX_PLATES, players)
 	return plates
+end
+
+-- a plate's class for the record: its token, or that the game keeps it
+-- secret (Unit.lua, F.HiddenClassColour)
+function M.ClassSaid(token)
+	local src = F.Source(token)
+	if src:HiddenClass() then
+		return "secret"
+	end
+	return tostring(src:Class())
 end
 
 function M.Dump()

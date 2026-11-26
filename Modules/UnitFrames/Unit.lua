@@ -223,6 +223,44 @@ function F.HealthColour(src)
 	return REACTION[src:Reaction()] or REACTION.neutral
 end
 
+-- A PLAYER WHOSE CLASS IS A SECRET: whether the client gave a colour for it,
+-- and the colour.
+-- C_ClassColor.GetClassColor takes a secret from an addon (its documentation:
+-- SecretArguments "AllowedWhenTainted"), and a bar takes the colour's parts
+-- as they come. No sum may be made on them, so the bar is not deepened as
+-- F.Deepen does it. It is drawn part see-through on the dark fill instead,
+-- which mixes the two the same way (HIDDEN_ALPHA).
+-- F.hidden counts the asking and the painting, for What loaded.
+F.hidden = { asked = 0, answered = 0, painted = 0 }
+function F.HiddenClassColour(src)
+	if src:Gone() or src:Charmed() or not src:IsPlayer() or not src.HiddenClass then
+		return false
+	end
+	local is, token = src:HiddenClass()
+	if not is then
+		return false
+	end
+	F.hidden.asked = F.hidden.asked + 1
+	local get = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
+	if type(get) ~= "function" then
+		F.hidden.why = "no C_ClassColor.GetClassColor"
+		return false
+	end
+	local ok, colour = pcall(get, token)
+	if not ok then
+		F.hidden.why = tostring(colour)
+		return false
+	end
+	F.hidden.answered = F.hidden.answered + 1
+	return true, colour
+end
+
+function F.HiddenSaid()
+	local h = F.hidden
+	return ("classes kept secret: asked %d, answered %d, painted %d%s"):format(h.asked, h.answered, h.painted,
+		h.why and (" · last refusal: " .. h.why) or "")
+end
+
 -- ---------------------------------------------------------------------------
 -- Where the numbers come from: the client, or a table
 -- ---------------------------------------------------------------------------
@@ -263,6 +301,20 @@ end
 function Live:Class()
 	local _, token = raw(UnitClass, self.unit)
 	return (not secret(token)) and token or nil
+end
+-- A CLASS THE GAME KEEPS FROM ADDONS (Josh 2026-11-25: "It's currently not
+-- possible to see what class an enemy faction is that is attacking me, it is
+-- just a red bar"). The token is a secret then, and a secret is no table's
+-- key, so the bar fell back to the hostile red. This is that token as it
+-- came, for the client's own colour function and nothing else
+-- (F.HiddenClassColour). Whether there is one comes first: a secret may not
+-- be tested or compared, so nothing after this asks it anything.
+function Live:HiddenClass()
+	local _, token = raw(UnitClass, self.unit)
+	if secret(token) then
+		return true, token
+	end
+	return false
 end
 function Live:IsPlayer() return plain(UnitIsPlayer, self.unit) and true or false end
 function Live:Level() return plain(UnitLevel, self.unit) end
@@ -657,6 +709,7 @@ function Fake:Exists() return true end
 function Fake:Name() return (self.d.name or ""):match("^(%S+)") end
 function Fake:FullName() return self.d.name end
 function Fake:Class() return self.d.class end
+function Fake:HiddenClass() return false end
 function Fake:IsPlayer() return self.d.class ~= nil end
 function Fake:Level() return self.d.level end
 function Fake:Classification() return self.d.classification end
@@ -1571,9 +1624,26 @@ local function easeOf(b, src)
 end
 
 -- health, the heal past its end, and the shield after it or over it
+local HIDDEN_ALPHA = 1 - DEEPEN
 local function paintHealth(b, src, gone, ease)
 	local r, g, bl = deepen(F.HealthColour(src))
 	b.health:SetStatusBarColor(r, g, bl, 1)
+	-- a player whose class is a secret: over the reaction's colour, the
+	-- client's colour for the class, where it gives one
+	local has, hidden = F.HiddenClassColour(src)
+	if has then
+		local ok, why = pcall(function()
+			-- (no colour came back: an error here, and the red stays)
+			local cr, cg, cb = hidden:GetRGB()
+			b.health:SetStatusBarColor(cr, cg, cb, HIDDEN_ALPHA)
+		end)
+		if ok then
+			F.hidden.painted = F.hidden.painted + 1
+		else
+			F.hidden.why = tostring(why)
+			b.health:SetStatusBarColor(r, g, bl, 1)
+		end
+	end
 	local max = src:HealthMax()
 	if max ~= nil then
 		b.health:SetMinMaxValues(0, max)

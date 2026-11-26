@@ -121,6 +121,9 @@ Modules\XP\XP.lua
 Modules\Rep\Rep.lua
 Modules\Pet\Pet.lua
 Modules\PvP\PvP.lua
+Modules\PvP\Teams.lua
+Modules\PvP\Objectives.lua
+Modules\PvP\Record.lua
 # every kind of mob you have killed: the book, what counts as a kill, the
 # toast and the journal window before the module that drives them
 Modules\Expedition\LoreData.lua
@@ -140,6 +143,7 @@ Modules\Chat\Chat.lua
 Modules\Chat\Links.lua
 Modules\Chat\Reader.lua
 Modules\Chat\Arrows.lua
+Modules\Chat\Fading.lua
 Modules\DamageMeter\DamageMeter.lua
 Modules\ResourceDisplay\ResourceDisplay.lua
 Modules\GameMenu\GameMenu.lua

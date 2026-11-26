@@ -297,6 +297,11 @@ function B.SetPreview(key, value)
 	if BT.CensusWindow and BT.CensusWindow.Refresh then
 		pcall(BT.CensusWindow.Refresh)
 	end
+	-- and the battleground, where one is previewed or just stopped being
+	-- (Modules/PvP/Teams.lua, T.Preview)
+	if BT.Teams and BT.Teams.Check then
+		pcall(BT.Teams.Check)
+	end
 end
 function B.ClearPreviews()
 	for k in pairs(B.preview) do
@@ -467,6 +472,37 @@ function B.Section(key, order)
 		table.sort(ordered, function(a, b) return a.order < b.order end)
 	end
 	return s.frame
+end
+
+-- LESS IN A BATTLEGROUND (Josh 2026-11-26: "I think we can also hide the
+-- ledger and expidition in pvp to save some room"). The journals' two lines
+-- are put away while you are in a battleground and come back when you leave,
+-- if their module and their own switch still want them. The dock does it,
+-- not the two modules: each shows its line from several places, and a line
+-- shown again in a match is put away at the next layout.
+B.QUIET = { ledgerline = true, expedition = true }
+
+function B.Quiet()
+	local T = BT.Teams
+	return T ~= nil and T.Place ~= nil and T.Place() ~= nil
+end
+
+function B.Hold()
+	local quiet = B.Quiet()
+	for _, s in ipairs(ordered) do
+		if B.QUIET[s.key] then
+			if quiet and s.frame:IsShown() then
+				s.frame:Hide()
+				s.held = true
+			elseif not quiet and s.held then
+				s.held = nil
+				local m = BT.GetModule and BT.GetModule(s.key)
+				if m and BT.Enabled(s.key) and (not m.LineOn or m.LineOn()) then
+					s.frame:Show()
+				end
+			end
+		end
+	end
 end
 
 -- Stack whatever sections are showing under the header, and make the dock the
@@ -915,6 +951,7 @@ function B.Relayout()
 	-- EVERYTHING UNDER THE HEADER IN YOUR ORDER (Josh 2026-09-22). The minimap
 	-- used to sit at the top whatever the tabs said, so dragging its tab moved
 	-- nothing. Every section takes its module's place.
+	B.Hold()
 	local stack = {}
 	for i, s in ipairs(ordered) do
 		if s.frame:IsShown() then

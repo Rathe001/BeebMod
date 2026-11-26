@@ -471,7 +471,120 @@ function M.Tally(name, winner, team)
 		mine[name] = row
 	end
 	row[result] = (tonumber(row[result]) or 0) + 1
+	M.TallyBracket(result)
 	return result
+end
+
+-- BY BRACKET (Josh 2026-11-26: "Lets give stats per bracket. 10-19, 20-29,
+-- 30-39, etc. This would replace 'all'"). A match is also counted under the
+-- ten levels you were in when it ended, for this character:
+-- { [who] = { [30] = { won, lost, draw } } }. A battleground's own row still
+-- counts every match in it, whatever your level was.
+function M.Brackets()
+	if not BT.settings then
+		return nil
+	end
+	BT.settings.pvpBrackets = BT.settings.pvpBrackets or {}
+	local all = BT.settings.pvpBrackets
+	local mine, who = BT.Session.Mine(all)
+	if not mine then
+		mine = {}
+		all[who] = mine
+	end
+	return mine
+end
+
+-- the bracket a level is in, by its lowest level: 30 for 30 to 39
+function M.BracketOf(level)
+	level = tonumber(level)
+	if not level or level < 1 then
+		return nil
+	end
+	return math.floor(level / 10) * 10
+end
+
+-- "30-39"; "60" for the bracket of one level
+function M.BracketName(lo)
+	return lo >= 60 and tostring(lo) or ("%d-%d"):format(lo, lo + 9)
+end
+
+function M.TallyBracket(result)
+	local mine = M.Brackets()
+	local lo = M.BracketOf(plainOf((ask("UnitLevel", "player"))))
+	if not (mine and lo and result) then
+		return false
+	end
+	local row = mine[lo]
+	if type(row) ~= "table" then
+		row = { won = 0, lost = 0, draw = 0 }
+		mine[lo] = row
+	end
+	row[result] = (tonumber(row[result]) or 0) + 1
+	return true
+end
+
+-- every bracket with a match in it, lowest first. Then one row, "Earlier",
+-- for the matches counted before brackets were: `total` is every match
+-- (M.MatchRows), and what the brackets don't account for is those.
+--
+-- THE MATCHES FROM BEFORE GO IN THE BRACKET YOU ARE IN (Josh 2026-11-26, of a
+-- tooltip whose only new row was "Earlier · 6 won · 12 lost": "Not seeing
+-- the brackets"). BeebMod never wrote your level down with a match, so this
+-- is a guess: matches have only been counted since 2026-11-23, and most
+-- characters are still in the bracket they played them in. Done once for
+-- each character, the first time its level is known. "Earlier" is left for
+-- a character whose level the game won't say.
+function M.MoveEarlier(total)
+	local mine = M.Brackets()
+	local lo = M.BracketOf(plainOf((ask("UnitLevel", "player"))))
+	if not (mine and lo and total) or mine.moved then
+		return false
+	end
+	local sum = { won = 0, lost = 0, draw = 0 }
+	for key, row in pairs(mine) do
+		if tonumber(key) and type(row) == "table" then
+			for k in pairs(sum) do
+				sum[k] = sum[k] + (tonumber(row[k]) or 0)
+			end
+		end
+	end
+	local row = type(mine[lo]) == "table" and mine[lo] or { won = 0, lost = 0, draw = 0 }
+	local any = false
+	for k in pairs(sum) do
+		local rest = math.max(0, (tonumber(total[k]) or 0) - sum[k])
+		row[k] = (tonumber(row[k]) or 0) + rest
+		any = any or rest > 0
+	end
+	if any then
+		mine[lo] = row
+	end
+	mine.moved = true
+	return any
+end
+
+function M.BracketRows(total)
+	M.MoveEarlier(total)
+	local rows, sum = {}, { won = 0, lost = 0, draw = 0 }
+	for lo, row in pairs(M.Brackets() or {}) do
+		lo = tonumber(lo)
+		if lo and type(row) == "table" then
+			local one = { lo = lo, name = M.BracketName(lo), won = tonumber(row.won) or 0, lost = tonumber(row.lost) or 0,
+				draw = tonumber(row.draw) or 0 }
+			if one.won + one.lost + one.draw > 0 then
+				rows[#rows + 1] = one
+				sum.won, sum.lost, sum.draw = sum.won + one.won, sum.lost + one.lost, sum.draw + one.draw
+			end
+		end
+	end
+	table.sort(rows, function(a, b) return a.lo < b.lo end)
+	if total then
+		local rest = { name = "Earlier", won = math.max(0, total.won - sum.won), lost = math.max(0, total.lost - sum.lost),
+			draw = math.max(0, total.draw - sum.draw) }
+		if rest.won + rest.lost + rest.draw > 0 then
+			rows[#rows + 1] = rest
+		end
+	end
+	return rows
 end
 
 -- the match you are in has ended: counted once, in a battleground only
@@ -787,8 +900,28 @@ local function inspecting()
 	return ok and shown and true or false
 end
 
-function M.AskRank(unit)
-	if type(unit) ~= "string" or type(_G.NotifyInspect) ~= "function" or not BT.Enabled("pvp") then
+--
+-- FOR THE BATTLEGROUND TEAMS TOO (2026-11-26, Modules/PvP/Teams.lua): a
+-- teammate's item level comes with the same answer, so Teams asks through
+-- here and the game is never asked by two parts of BeebMod at once. Its
+-- `opts`: `teams` (asked for Teams, whose own switch counts), `fight` (in a
+-- fight too: a match is mostly fights, and the measuring addon's asks in
+-- fights were answered) and `again` (within ASK_AGAIN: a teammate out of
+-- range the first time).
+-- an answer still awaited, or the last ask too recent: nothing can be asked
+-- now, so a caller need not look for someone to ask about
+function M.Busy()
+	local now = clock()
+	if M.asking and now - M.asking.at < M.ASK_WAIT then
+		return true
+	end
+	return now - (M.askAt or -math.huge) < M.ASK_EVERY
+end
+
+function M.AskRank(unit, opts)
+	opts = type(opts) == "table" and opts or {}
+	if type(unit) ~= "string" or type(_G.NotifyInspect) ~= "function"
+		or not (BT.Enabled("pvp") or (opts.teams and BT.Enabled("teams"))) then
 		return false
 	end
 	if plainOf((ask("UnitIsPlayer", unit))) ~= true or plainOf((ask("UnitIsUnit", unit, "player"))) == true then
@@ -816,10 +949,10 @@ function M.AskRank(unit)
 	if now - (M.askAt or -math.huge) < M.ASK_EVERY then
 		return false
 	end
-	if M.asked[guid] and now - M.asked[guid] < M.ASK_AGAIN then
+	if not opts.again and M.asked[guid] and now - M.asked[guid] < M.ASK_AGAIN then
 		return false
 	end
-	if inspecting() or ask("InCombatLockdown") then
+	if inspecting() or (not opts.fight and ask("InCombatLockdown")) then
 		return false
 	end
 	if plainOf((ask("CanInspect", unit))) ~= true then
@@ -1018,6 +1151,11 @@ function M.Ready(guid)
 	if spec and not (had and had.name == spec.name) then
 		retip(a.guid)
 	end
+	-- a teammate's item level, read before the game is told it may forget
+	-- them (Modules/PvP/Teams.lua)
+	if BT.Teams and BT.Teams.Ready then
+		pcall(BT.Teams.Ready, a.guid)
+	end
 	done(a)
 	return true, spec
 end
@@ -1207,7 +1345,10 @@ function M.Tip()
 			for _, row in ipairs(rows) do
 				t:ListRow(row.name, M.MatchWords(row))
 			end
-			t:ListRow("All", M.MatchWords(total))
+			-- by bracket, where "All" was (Josh 2026-11-26)
+			for _, row in ipairs(M.BracketRows(total)) do
+				t:ListRow(row.name, M.MatchWords(row))
+			end
 		end
 		if p.fromTab then
 			t:Note("From your PvP tab.")
@@ -1263,6 +1404,14 @@ pcall(M.events.RegisterEvent, M.events, "INSPECT_READY")
 M.SCORE_EVERY = 5
 M.events:SetScript("OnEvent", function(_, event, unit)
 	if not BT.Enabled("pvp") then
+		-- an answer Teams asked for is still put away, so the next can be asked
+		if BT.Enabled("teams") and M.asking then
+			if event == "INSPECT_READY" then
+				pcall(M.Ready, unit)
+			elseif event == "INSPECT_HONOR_UPDATE" then
+				pcall(M.Answered)
+			end
+		end
 		return
 	end
 	-- a match ended (its winner is the event's first word); a new place, and

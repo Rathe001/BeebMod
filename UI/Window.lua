@@ -215,6 +215,7 @@ W.LABELS = {
 	xp = { "Experience", "XP bar with time to level" },
 	pet = { "Pet", "A hunter's pet: its level, experience and mood" },
 	pvp = { "PvP", "Your PvP rank and progress to the next" },
+	teams = { "Battleground teams", "Both teams' level and your team's item level. The battleground's score, bases, flags and capture timers." },
 	rep = { "Reputation", "Your standing with the faction you watch" },
 	metrics = { "Metrics", "Small stats in rows of three" },
 	currency = { "Gold" },
@@ -224,7 +225,7 @@ W.LABELS = {
 	pickpocket = { "Pick Pocket" },
 	speed = { "Movement speed" },
 	performance = { "Performance" },
-	tracker = { "Quest tracker", "Tracked quests grouped by zone. In a dungeon, its own quests." },
+	tracker = { "Quest tracker", "Tracked quests grouped by zone. In a dungeon or battleground, its own quests." },
 	micro = { "Micro menu", "The game's menu buttons" },
 	unitframes = { "Unit frames", "Player, target, focus and target of target frames" },
 	buffs = { "Buffs", "Buff and debuff tray next to the dock" },
@@ -864,6 +865,11 @@ local function testingPage(body)
 			values = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, say = function(v) return "Rank " .. v end },
 		{ key = "ledger", title = "Ledger", blurb = "Each Ledger rank's badge",
 			values = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, say = function(v) return "Rank " .. v end },
+		-- (Josh 2026-11-26: "Can you add a testing option to enable a pvp mode
+		-- so I can look at it?"; Modules/PvP/Teams.lua, T.Preview)
+		{ key = "battleground", title = "Battleground", blurb = "The dock as it is in each battleground, with made-up numbers",
+			values = { "Arathi Basin", "Darkspear Islands", "Warsong Gulch", "Alterac Valley", "Arathi Basin at 60" },
+			say = function(v) return v end },
 	}
 	body.previews = {}
 	for _, p in ipairs(previews) do

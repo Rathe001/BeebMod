@@ -58,6 +58,7 @@ bottom. Drag a row on that page to move it in the dock.
 | **Addon buttons** | Other addons' minimap buttons in one row. |
 | **Experience** | Your level on a shield. The XP bar with rested XP. Time to level at your XP per hour. Its tooltip lists zones and dungeons for your level. |
 | **PvP**, **Reputation** | Your PvP rank with its insignia and progress to the next. Your standing with the faction you watch. |
+| **Battleground teams** | In a battleground: both teams' average level, your team's average item level, and the score, bases, flags and capture timers. Arathi Basin, Darkspear Islands, Warsong Gulch and Alterac Valley. |
 | **Expedition**, **Ledger** | Each journal's rank badge, rank and points. Click a line to open its journal. |
 | **Metrics** | Small stats in rows of three, each with its own switch: gold, bag space with your class's reagents, durability, item level, Pick Pocket takings (rogues), movement speed, FPS and latency. Point at the gold to see every character's gold and the total. Each character is counted once you log in on it. Click the gold to show the total in the dock, with a pile of coins in front. Click again for this character's gold. |
 | **Quest tracker** | Your quests grouped by zone, lowest level first. In a dungeon or raid it lists the quests filed under that place, followed or not. Your other quests fold under one line. The game's tracker is hidden. |

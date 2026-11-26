@@ -2156,7 +2156,8 @@ if ok then
 			probe.armed = nil
 			assert(line:find("Records: wrote %d+ into the saved file") and line:find("Type /reload to save them.", 1, true),
 				"Record says what it wrote: " .. line)
-			assert(line:find("the next menu you open and your next fight", 1, true), "and what it waits for: " .. line)
+			assert(line:find("the next menu you open, every battleground you play and your next fight", 1, true),
+				"and what it waits for: " .. line)
 			assert(BeebModDB.unitframesDump and BeebModDB.unitProbe, "the records are in the saved file")
 			assert(BT.GetModule("dropdowns").dumpNext, "and the next menu is waited for")
 			BT.GetModule("dropdowns").dumpNext = false
@@ -2806,7 +2807,8 @@ if ok then
 			-- AND THE VENDOR'S TWO (Josh 2026-11-08), utilities with no page either
 			-- AND UPGRADES (Josh 2026-11-17, when it became a module of BeebMod)
 			-- AND THE CHAT BOX'S ARROW KEYS (Josh 2026-11-24)
-			assert(#switches == 6 and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow]
+			-- AND CHAT TEXT THAT STAYS (Josh 2026-11-25)
+			assert(#switches == 7 and found[BT.Settings.chatFadeRow] and found[BT.Settings.fishingRow] and found[BT.Settings.encounterRow]
 				and found[BT.Settings.junkRow] and found[BT.Settings.repairRow] and found[BT.Settings.upgradesRow]
 				and found[BT.Settings.chatArrowsRow],
 				"on General, only the look, fishing, encounter notes, the vendor's two, the chat box's arrows and Upgrades: " .. #switches)
@@ -2828,6 +2830,31 @@ if ok then
 				A.Opened(box)
 				assert(box.mode == true, "and left alone while the switch is off")
 				BT.SetEnabled("chatarrows", true)
+			end
+			do
+				local Fd = BT.ChatFade
+				local win = { fades = true, calls = 0 }
+				win.GetFading = function(s) return s.fades end
+				win.SetFading = function(s, v) s.fades = v s.calls = s.calls + 1 end
+				assert(BT.Enabled("chatfade"), "on until switched off")
+				assert(Fd.Set(win, true) and win.fades == false and Fd.home[win] == true, "the window's text stays, what it had kept")
+				assert(Fd.Set(win, false) and win.fades == true, "switched off, the window fades as the game had it")
+				assert(not Fd.Set(win, false) and not Fd.Set({}, true), "nothing to undo twice, and nothing done to a frame with no fading")
+				-- A WINDOW THAT DID NOT FADE IS LEFT NOT FADING (the code review,
+				-- 2026-11-26: what it had was kept as true, and switching this off
+				-- made it fade)
+				local still = { fades = false, calls = 0 }
+				still.GetFading, still.SetFading = win.GetFading, win.SetFading
+				assert(Fd.Set(still, true) and Fd.home[still] == false, "a window with fading off is kept as that")
+				assert(Fd.Set(still, false) and still.fades == false, "and switched off, it still does not fade")
+				-- lines the game has drawn: on screen, or with text and hidden
+				local function line(up, alpha, has)
+					return { messageInfo = has and {} or nil, IsShown = function() return up end, GetAlpha = function() return alpha end }
+				end
+				win.visibleLines = { line(true, 1, true), line(false, 0, true), line(true, 0, true), line(false, 0, false) }
+				local shown, hidden = Fd.Lines(win)
+				assert(shown == 1 and hidden == 2, "one on screen, two with text hidden, an empty one not counted: " .. shown .. "/" .. hidden)
+				assert(Fd.Lines({}) == nil, "a frame with no lines to read")
 			end
 			assert(BT.GetModule("upgrades") and BT.Enabled("upgrades") and BT.Upgrades.On(), "Upgrades is a module, on until switched off")
 			-- the target row's switch went with the row (Josh 2026-10-05)
@@ -15817,7 +15844,7 @@ if ok then
 			BT.SortModules()
 			BT.Window.Reorder(dockPage)
 			BT.Dock.Relayout()
-			assert(pageKeys() == "minimap,buttons,xp,pet,pvp,rep,expedition,ledgerline,metrics,tracker,micro",
+			assert(pageKeys() == "minimap,buttons,xp,pet,pvp,teams,rep,expedition,ledgerline,metrics,tracker,micro",
 				"no order is the default order: " .. pageKeys())
 			-- ANOTHER FEATURE'S ROW (Josh 2026-09-27): the Expedition's tab in the
 			-- Dock's block moves its line, and is gone while the Expedition is
@@ -18194,6 +18221,46 @@ if ok then
 					and mod.Result(1, nil) == nil, "the winner against your side")
 				local hadInfo, hadTeam, hadMatches = _G.GetInstanceInfo, _G.GetBattlefieldArenaFaction, BT.settings.pvpMatches
 				BT.settings.pvpMatches = nil
+				-- BY BRACKET (Josh 2026-11-26: "Lets give stats per bracket ...
+				-- This would replace 'all'"): one match counted before brackets
+				-- were, then one at 39, one at 40 and one at 60
+				local hadBrackets, hadLevel = BT.settings.pvpBrackets, _G.UnitLevel
+				BT.settings.pvpBrackets = nil
+				do
+					local level
+					_G.UnitLevel = function() return level end
+					_G.GetInstanceInfo = function() return "Warsong Gulch", "pvp" end
+					_G.GetBattlefieldArenaFaction = function() return 1 end
+					-- a level the game won't say: the battleground counts it, no bracket does
+					assert(mod.Tally("Warsong Gulch", 1, 1) == "won" and #mod.BracketRows() == 0, "no level, no bracket")
+					level = 39
+					mod.Tally("Warsong Gulch", 0, 1)
+					level = 40
+					mod.Tally("Warsong Gulch", 1, 1)
+					level = 60
+					mod.Tally("Alterac Valley", 1, 1)
+					local _, all = mod.MatchRows()
+					-- a character whose level the game won't say keeps "Earlier"
+					level = nil
+					local rows = mod.BracketRows(all)
+					assert(#rows == 4 and rows[1].name == "30-39" and rows[1].lost == 1 and rows[2].name == "40-49"
+						and rows[2].won == 1 and rows[3].name == "60" and rows[4].name == "Earlier" and rows[4].won == 1,
+						"each bracket lowest first, 60 by itself, and the match from before brackets as Earlier")
+					-- THE MATCHES FROM BEFORE GO IN THE BRACKET YOU ARE IN (Josh
+					-- 2026-11-26: "Not seeing the brackets"), once
+					level = 39
+					rows = mod.BracketRows(all)
+					assert(#rows == 3 and rows[1].name == "30-39" and rows[1].won == 1 and rows[1].lost == 1,
+						"the earlier match is counted in the bracket you are in, and Earlier is gone")
+					level = 40
+					mod.Tally("Warsong Gulch", 1, 1)
+					_, all = mod.MatchRows()
+					rows = mod.BracketRows(all)
+					assert(#rows == 3 and rows[1].won == 1 and rows[2].won == 2, "moved once: a later match goes where it was played")
+					assert(mod.BracketOf(19) == 10 and mod.BracketOf(20) == 20 and mod.BracketOf(nil) == nil, "ten levels a bracket")
+					BT.settings.pvpMatches, BT.settings.pvpBrackets = nil, nil
+					mod.counted = nil
+				end
 				local place, kind = "Warsong Gulch", "pvp"
 				_G.GetInstanceInfo = function() return place, kind end
 				_G.GetBattlefieldArenaFaction = function() return 1 end
@@ -18217,6 +18284,7 @@ if ok then
 					"and all of them together: " .. mod.MatchWords(total))
 				assert(mod.MatchWords({ won = 1, lost = 0, draw = 1 }) == "1 won · 0 lost · 1 drawn · 50%", "a draw is said")
 				_G.GetInstanceInfo, _G.GetBattlefieldArenaFaction, BT.settings.pvpMatches = hadInfo, hadTeam, hadMatches
+				BT.settings.pvpBrackets, _G.UnitLevel = hadBrackets, hadLevel
 				mod.counted, mod.lastMatch = nil, nil
 			end
 			assert(mod.NumberOf("First Sergeant") == 5 and mod.NumberOf("Master Sergeant") == 4
@@ -21693,6 +21761,547 @@ if ok then
 			tracker.Update()
 			assert(not f:IsShown(), "and gone again outside")
 		end },
+		{ "in a battleground, its own quests, and both teams on the dock", function()
+			-- BATTLEGROUND TEAMS (Josh 2026-11-26: "roll it into beebmod and
+			-- place it on the dock", with "a pvp mode for the dock ... Only show
+			-- quests relevent to the battleground"; Modules/PvP/Teams.lua)
+			local names = { "C_QuestLog", "GetNumQuestLogEntries", "GetQuestLogTitle", "IsQuestWatched",
+				"GetNumQuestLeaderBoards", "GetQuestLogLeaderBoard", "IsInInstance", "GetInstanceInfo", "GetRealZoneText",
+				"UnitExists", "UnitIsPlayer", "UnitIsUnit", "UnitGUID", "UnitName", "UnitLevel", "UnitIsEnemy",
+				"CanInspect", "CheckInteractDistance", "NotifyInspect", "ClearInspectPlayer", "C_PaperDollInfo",
+				"GetAverageItemLevel", "GetNumBattlefieldScores", "GetBattlefieldArenaFaction", "C_PvP",
+				"RequestBattlefieldScoreData", "InCombatLockdown", "GetTime", "InspectFrame", "GetInspectHonorData" }
+			local keep = {}
+			for _, k in ipairs(names) do keep[k] = rawget(_G, k) end
+			local T, Q = BT.Teams, BT.Quests
+			local pvp, mod, tracker = BT.GetModule("pvp"), BT.GetModule("teams"), BT.GetModule("tracker")
+			local hadGear, hadSaid = BT.settings.pvpGear, {}
+			for k, v in pairs(pvp.askSaid) do hadSaid[k] = v end
+			BT.settings.pvpGear = nil
+			pvp.asking, pvp.askAt, pvp.asked = nil, nil, {}
+
+			local inside, now = false, 5000
+			local log = {
+				{ "Westfall", true }, { "The Defias Brotherhood", false, 22, true },
+				{ "Warsong Gulch", true }, { "Battle of Warsong Gulch", false, 35, false },
+				{ "Arathi Basin", true }, { "Control Four Bases", false, 35, true },
+			}
+			_G.C_QuestLog = nil
+			_G.GetNumQuestLogEntries = function() return #log end
+			_G.GetQuestLogTitle = function(i)
+				local e = log[i]
+				return e[1], e[3] or 0, nil, e[2], nil, nil, nil, (not e[2]) and (2000 + i) or nil
+			end
+			_G.IsQuestWatched = function(i) return log[i] ~= nil and log[i][4] == true end
+			_G.GetNumQuestLeaderBoards = function() return 0 end
+			_G.GetQuestLogLeaderBoard = function() return nil end
+			_G.IsInInstance = function() return inside, inside and "pvp" or "none" end
+			_G.GetInstanceInfo = function() return inside and "Warsong Gulch" or "Westfall", inside and "pvp" or "none" end
+			_G.GetRealZoneText = function() return inside and "Warsong Gulch" or "Westfall" end
+			_G.GetTime = function() return now end
+
+			-- you at 39 wearing 31; Ann 35 wearing 40, near; Bob 37 wearing 30, far
+			local units = {
+				player = { guid = "Player-1-00", name = "Aeki", level = 39 },
+				raid2 = { guid = "Player-1-02", name = "Ann", level = 35, near = true, ilvl = 40 },
+				raid3 = { guid = "Player-1-03", name = "Bob", level = 37, near = false, ilvl = 30 },
+				nameplate1 = { name = "Foe", level = 39, enemy = true },
+				nameplate2 = { name = "Orc", level = 37, enemy = true },
+				nameplate3 = { name = "Gone", level = 31, enemy = true },
+			}
+			units.raid1, units.target = units.player, units.nameplate1
+			local inspected, asked = nil, {}
+			_G.UnitExists = function(u) return units[u] ~= nil end
+			_G.UnitIsPlayer = function(u) return units[u] ~= nil end
+			_G.UnitIsUnit = function(a, b) return units[a] ~= nil and units[a] == units[b] end
+			-- an enemy's GUID is kept from addons
+			_G.UnitGUID = function(u) return units[u] and units[u].guid end
+			_G.UnitName = function(u) return units[u] and units[u].name end
+			_G.UnitLevel = function(u) return units[u] and units[u].level end
+			_G.UnitIsEnemy = function(_, u) return units[u] ~= nil and units[u].enemy == true end
+			_G.CanInspect = function(u) return units[u] ~= nil and not units[u].enemy end
+			_G.CheckInteractDistance = function(u) return units[u] and units[u].near end
+			_G.NotifyInspect = function(u)
+				inspected = units[u]
+				asked[#asked + 1] = units[u].name
+			end
+			_G.ClearInspectPlayer = function() inspected = nil end
+			_G.C_PaperDollInfo = { GetInspectItemLevel = function(u) return units[u] == inspected and units[u].ilvl or 0 end }
+			_G.GetAverageItemLevel = function() return 32, 31, 32 end
+			_G.GetInspectHonorData = function() return nil end
+			-- in a fight the whole time: a match mostly is
+			_G.InCombatLockdown = function() return true end
+			_G.InspectFrame = nil
+			local board = { { 1, "Aeki Xx" }, { 1, "Ann Y" }, { 1, "Bob Z" }, { 0, "Foe A" }, { 0, "Orc B" }, { 0, "Unseen C" } }
+			_G.GetNumBattlefieldScores = function() return #board end
+			_G.GetBattlefieldArenaFaction = function() return 1 end
+			_G.C_PvP = { GetScoreInfo = function(i) return { faction = board[i][1], name = board[i][2] } end }
+			_G.RequestBattlefieldScoreData = function() end
+
+			-- the colours' cuts
+			assert(T.GearTier(3) == 4 and T.GearTier(1.8) == 3 and T.GearTier(0.9) == 2 and T.GearTier(-0.9) == 2
+				and T.GearTier(-1) == 1, "item level against usual: purple, blue, green, gray")
+			assert(T.LevelTier(38.1, 30) == 4 and T.LevelTier(36, 30) == 3 and T.LevelTier(33, 30) == 2
+				and T.LevelTier(32.9, 30) == 1 and T.LevelTier(60, 60) == nil, "a level in its bracket, and none at 60")
+			assert(T.Bracket(39) == 30 and T.Bracket(40) == 40 and T.Bracket(9) == 0, "a bracket every ten levels")
+
+			-- usual, from the players kept: none until twenty, then a line
+			local fit, n = T.Fit(30)
+			assert(fit == nil and n == 0, "nobody read, nothing to compare with")
+			for i = 1, 30 do
+				T.Remember("Player-9-" .. i, 30 + i % 10, 25 + i % 10)
+			end
+			fit, n = T.Fit(30)
+			assert(fit and n == 30 and math.abs(fit.a + fit.b * 35 - 30) < 0.01,
+				"thirty players five under their level: usual at 35 is 30")
+			assert(T.Fit(40) == nil, "and another bracket has none")
+			-- A MATCH BEGUN WITHOUT A USUAL GETS ONE ON THE WAY (Josh 2026-11-26:
+			-- "Not seeing the notch on the gear meter"), once twenty are read and
+			-- ten of them are from other matches
+			do
+				local had = BT.settings.pvpGear
+				BT.settings.pvpGear = nil
+				for i = 1, 14 do
+					T.Remember("Player-8-" .. i, 30 + i % 10, 25 + i % 10)
+				end
+				T.match = { scan = 0, own = {}, foe = {}, lo = 30 }
+				T.match.usual, T.match.read = T.Fit(30)
+				assert(T.match.usual == nil and T.match.read == 14 and not T.Refit(), "fourteen kept: no usual yet")
+				inside = true
+				local said = T.View().verdict
+				inside = false
+				assert(said == "6 more to compare", "and the section says how many are still to read: " .. tostring(said))
+				for i = 1, 6 do
+					T.match.own["Player-7-" .. i] = { asked = 1 }
+					T.Remember("Player-7-" .. i, 35, 30)
+				end
+				assert(T.Refit() and T.match.usual.n == 20, "six teammates read, twenty in all: a usual")
+				-- but not from one team alone
+				BT.settings.pvpGear = nil
+				T.match = { scan = 0, own = {}, foe = {}, lo = 30 }
+				for i = 1, 25 do
+					T.match.own["Player-6-" .. i] = { asked = 1 }
+					T.Remember("Player-6-" .. i, 30 + i % 10, 25 + i % 10)
+				end
+				assert(not T.Refit() and T.match.usual == nil and T.match.read == 25,
+					"twenty-five read in your own team is not a usual")
+				T.match, BT.settings.pvpGear = nil, had
+			end
+
+			BT.SetEnabled("tracker", true)
+			BT.SetEnabled("pvp", true)
+			BT.SetEnabled("teams", true)
+			mod.Show(true)
+			local section = mod.Build()
+			section:SetWidth(212)
+			local function shown(kind)
+				local out = {}
+				for _, r in ipairs(tracker.Rows()) do
+					if r:IsShown() and r.kind == kind then
+						out[#out + 1] = r
+					end
+				end
+				return out
+			end
+
+			-- outside: every quest you follow, and no section
+			T.Check()
+			tracker.Update()
+			-- LESS IN A BATTLEGROUND (Josh 2026-11-26: "hide the ledger and
+			-- expidition in pvp to save some room")
+			BT.SetEnabled("expedition", true)
+			BT.SetEnabled("ledgerline", true)
+			local lines = { BT.Dock.SectionFrame("expedition"), BT.Dock.SectionFrame("ledgerline") }
+			lines[1]:Show()
+			lines[2]:Show()
+			BT.Dock.Relayout()
+			assert(lines[1]:IsShown() and lines[2]:IsShown() and not BT.Dock.Quiet(), "outside, the journals' lines stay")
+			assert(#shown("title") == 2 and #shown("fold") == 0, "outside, the quests you follow and no fold")
+			assert(not section:IsShown() and T.match == nil and T.Place() == nil, "and no teams outside a battleground")
+
+			-- inside: the battleground's own quest, followed or not, and the rest folded
+			inside = true
+			T.Check()
+			tracker.Update()
+			local titles = shown("title")
+			assert(#titles == 1 and titles[1].text._text:find("Battle of Warsong Gulch", 1, true),
+				"inside, the quest filed under the battleground: " .. tostring(titles[1] and titles[1].text._text))
+			local fold = shown("fold")[1]
+			assert(fold and fold.text._text == "2 other quests", "and one line for the rest")
+			assert(section:IsShown() and section.wantHeight > 0 and T.match and T.match.lo == 30,
+				"the teams are a section of the dock, in the 30-39 bracket")
+			assert(BT.Dock.Quiet() and not lines[1]:IsShown() and not lines[2]:IsShown(),
+				"and the Expedition's line and the Ledger's are put away")
+			lines[1]:Show()
+			BT.Dock.Relayout()
+			assert(not lines[1]:IsShown(), "a line shown again in a match is put away at the next layout")
+
+			-- the first look: levels at once, and Ann asked about though you are in a fight
+			T.Tick(now)
+			assert(asked[1] == "Ann" and #asked == 1, "the teammate in range is asked about, one at a time: " .. tostring(asked[1]))
+			assert(mod.level:GetText() == "37.0", "your team's level: 39, 35 and 37: " .. tostring(mod.level:GetText()))
+			assert(mod.foe:GetText() == "38.0" and mod.foeLabel:GetText() == "Enemy · 2 of 3",
+				"the enemy seen and still on the scoreboard: " .. tostring(mod.foe:GetText()) .. " | " .. tostring(mod.foeLabel:GetText()))
+			local heard = pvp.events:GetScript("OnEvent")
+			heard(pvp.events, "INSPECT_READY", "Player-1-02")
+			heard(pvp.events, "INSPECT_HONOR_UPDATE")
+			mod.Update()
+			assert(mod.gear:GetText() == "35.5" and mod.count:GetText() == "2 of 3 read",
+				"your 31 and Ann's 40: " .. tostring(mod.gear:GetText()) .. " | " .. tostring(mod.count:GetText()))
+			assert(mod.verdict:GetText() == "3.5 above usual" and T.View().gearColor == T.TIERS[4] and mod.bar == nil,
+				"against usual at each one's level, in purple, and no bar under it: " .. tostring(mod.verdict:GetText()))
+			assert(BT.settings.pvpGear["Player-1-02"][1] == 35 and BT.settings.pvpGear["Player-1-02"][2] == 40,
+				"and Ann is kept for next time")
+			assert(pvp.asking == nil and inspected == nil, "the game told it may forget her")
+
+			-- Bob comes near: asked next
+			units.raid3.near = true
+			now = now + 2
+			T.Tick(now)
+			assert(asked[2] == "Bob", "the next teammate once in range")
+			heard(pvp.events, "INSPECT_READY", "Player-1-03")
+			heard(pvp.events, "INSPECT_HONOR_UPDATE")
+			mod.Update()
+			assert(mod.gear:GetText() == "33.7" and mod.count:GetText() == "All read", "all three: " .. tostring(mod.gear:GetText()))
+			now = now + 2
+			T.Tick(now)
+			assert(#asked == 2, "nobody is asked about twice")
+
+			-- Ann leaves the match
+			units.raid2 = nil
+			now = now + 3
+			T.Tick(now)
+			mod.Update()
+			assert(mod.gear:GetText() == "30.5" and mod.level:GetText() == "38.0", "a teammate who left is dropped: "
+				.. tostring(mod.gear:GetText()))
+
+			-- its tooltip says what the colours mean
+			if BT.Tip then
+				mod.Tip()
+			end
+
+			-- TWO CARDS (Josh 2026-11-26: "At <60, average level is most
+			-- important. At 60, we obviously dont even need average level, and
+			-- ilevel bcomes important")
+			assert(mod.mode == "level" and mod.head:GetText() == "TEAM LEVEL" and mod.level:IsShown() and mod.foe:IsShown()
+				and mod.gearHead:IsShown(), "below 60 the levels lead, and gear has its own heading under them")
+			T.match.lo = 60
+			mod.Update()
+			assert(mod.mode == "gear" and mod.head:GetText() == "TEAM GEAR" and not mod.level:IsShown()
+				and not mod.foe:IsShown() and not mod.foeLabel:IsShown() and not mod.gearHead:IsShown(),
+				"at 60 gear leads and no level is shown")
+			assert(section.wantHeight == 46 and mod.gear:GetText() == "30.5", "a shorter card, the same item level")
+			T.match.lo = 30
+			mod.Update()
+			assert(mod.mode == "level" and section.wantHeight == 78 and mod.level:IsShown(), "and back for a lower bracket")
+
+			-- OBJECTIVES AND TIMERS, IN ARATHI BASIN (Josh 2026-11-26: "Let's try
+			-- AB first"; Modules/PvP/Objectives.lua, from the record of one match)
+			do
+				local O = T.Objectives
+				assert(O.Where() == nil and mod.top == 0 and section.wantHeight == 78,
+					"Warsong Gulch is not known yet: the card alone")
+				local hadW, hadMap, hadPoi, hadInfo = rawget(_G, "C_UIWidgetManager"), rawget(_G, "C_Map"),
+					rawget(_G, "C_AreaPoiInfo"), _G.GetInstanceInfo
+				local hadPvP = _G.C_PvP
+				_G.GetInstanceInfo = function() return "Arathi Basin", "pvp", 0, "", 15, 0, false, 529 end
+				local alliance, horde = 1020, 1170
+				_G.C_UIWidgetManager = {
+					GetTopCenterWidgetSetID = function() return 1 end,
+					GetAllWidgetsBySetID = function() return { { widgetID = 1645, widgetType = 14 }, { widgetID = 7467, widgetType = 3 } } end,
+					GetDoubleStatusBarWidgetVisualizationInfo = function(id)
+						return id == 7467 and { leftBarValue = alliance, rightBarValue = horde, leftBarMax = 2000 } or nil
+					end,
+				}
+				_G.C_Map = { GetBestMapForUnit = function() return 1461 end }
+				-- the record's five bases: picture number, and how far down the map
+				local points = {
+					{ "Stables", 38, 0.279 }, { "Gold Mine", 18, 0.282 }, { "Blacksmith", 30, 0.444 },
+					{ "Lumber Mill", 25, 0.594 }, { "Farm", 35, 0.585 },
+				}
+				_G.C_AreaPoiInfo = {
+					GetAreaPOIForMap = function()
+						local ids = {}
+						for i = 1, #points do ids[i] = i end
+						return ids
+					end,
+					GetAreaPOIInfo = function(_, id)
+						local p = points[id]
+						return { name = p[1], textureIndex = p[2], description = p[4],
+							position = { GetXY = function() return 0.5, p[3] end } }
+					end,
+				}
+				_G.C_PvP = { GetScoreInfo = hadPvP.GetScoreInfo, GetActiveMatchDuration = function() return 1535 end }
+
+				-- a base's state from its picture number, five to a base
+				local AB = O.PLACES[O.ARATHI_BASIN]
+				local owner, taking = O.StateOf(38, nil, AB)
+				assert(owner == "Alliance" and taking == nil, "38: the Alliance's Stables")
+				-- the number alone says nothing outside Arathi Basin (the code review)
+				assert(O.StateOf(38, nil, O.PLACES[O.ALTERAC_VALLEY]) == nil and O.StateOf(38) == nil,
+					"38 is not the Alliance's anything in Alterac Valley")
+				owner, taking = O.StateOf(39, nil, AB)
+				assert(owner == nil and taking == "Horde", "39: the Horde taking the Stables")
+				owner, taking = O.StateOf(27, nil, AB)
+				assert(taking == "Alliance" and O.StateOf(16, nil, AB) == nil and O.StateOf(41, nil, AB) == nil,
+					"27: the Alliance taking the Blacksmith; 16 nobody's; 41 not a base")
+				-- the other kinds of point: the picture says who is taking it,
+				-- and the point's own words whose it is
+				owner, taking = O.StateOf(12, "In Conflict")
+				assert(owner == nil and taking == "Horde", "12: the Horde taking a tower")
+				owner, taking = O.StateOf(11, "Alliance Controlled")
+				assert(owner == "Alliance" and taking == nil, "a tower's owner from its words")
+				local _, _, known = O.StateOf(200, "A place")
+				assert(known == false, "a point that says nothing is not guessed at")
+				-- all five bases: 30 points a second
+				local w5, s5 = O.Forecast(0, 1940, 2000, 0, 5)
+				assert(w5 == "Horde" and s5 == 2, "five bases: 60 points in two seconds")
+				-- a win time from how fast the scores rise: 10 a second against 5
+				local wr, sr, orr = O.ForecastByRate(1000, 1500, 2000, 10, 5)
+				assert(wr == "Alliance" and sr == 100 and orr == 2000, "by rate: the Alliance in 100 seconds")
+				assert(O.ForecastByRate(0, 0, 2000, nil, 0) == nil, "no rate, no winner")
+				-- who wins, and when: 83 steps at 6 seconds against 98 at 9
+				local winner, secs, other = O.Forecast(1020, 1170, 2000, 2, 3)
+				assert(winner == "Horde" and secs == 498 and other == 1570, "the Horde in 8:18, 2,000 to 1,570: "
+					.. tostring(winner) .. " " .. tostring(secs) .. " " .. tostring(other))
+				assert(O.Forecast(0, 0, 2000, 0, 0) == nil, "nobody holds a base: nobody wins")
+				assert(O.Time(498) == "8:18" and O.Time(5) == "0:05", "minutes and seconds")
+
+				mod.Update()
+				local block = O.frame
+				assert(block and block:IsShown() and mod.top == 50 + 5 * 13 + 6 and section.wantHeight == mod.top + 78,
+					"the bases above the card, and the section as tall as both: " .. tostring(section.wantHeight))
+				assert(O.head:GetText() == "ARATHI BASIN" and O.clock:GetText() == "25:35", "its name and the match's clock")
+				assert(O.alliance:GetText() == "Alliance 1,020" and O.horde:GetText() == "Horde 1,170", "the score")
+				assert(O.wins:GetText() == "Horde wins in 8:18" and O.final:GetText() == "1,570 - 2,000",
+					"who wins and by what: " .. tostring(O.wins:GetText()) .. " | " .. tostring(O.final:GetText()))
+				assert(O.rows[1].name:GetText() == "Stables" and O.rows[1].state:GetText() == "Alliance"
+					and O.rows[4].name:GetText() == "Farm" and O.rows[5].name:GetText() == "Lumber Mill"
+					and O.rows[5].state:GetText() == "Horde", "the bases north to south, each with its side")
+
+				-- the Horde assaults the Stables: a minute on BeebMod's own clock
+				points[1][2] = 39
+				mod.Update()
+				assert(O.rows[1].state:GetText() == "Horde in 1:00", "taken in a minute: " .. tostring(O.rows[1].state:GetText()))
+				assert(O.wins:GetText() == "Horde wins in 8:18", "and the Alliance, down to one base, still loses to three")
+				now = now + 18
+				mod.Update()
+				assert(O.rows[1].state:GetText() == "Horde in 0:42", "counting down")
+				-- defended: the Alliance's again, and no clock
+				points[1][2] = 38
+				mod.Update()
+				assert(O.rows[1].state:GetText() == "Alliance", "defended")
+				-- a base already being taken at the first look has no clock
+				O.seen = {}
+				points[3][2] = 27
+				mod.Update()
+				assert(O.rows[3].state:GetText() == "Alliance taking", "no clock for a capture nobody saw begin")
+				if BT.Tip then
+					O.Tip()
+				end
+
+				-- a secret score is not shown as a number
+				if Strict and Strict.Secret then
+					alliance = Strict.Secret(5)
+					mod.Update()
+					assert(O.alliance:GetText() == "No score yet", "a score kept from addons is not read")
+					alliance = 1020
+				end
+
+				-- THE OTHER BATTLEGROUNDS (Josh 2026-11-26: "Can we build out the
+				-- other BGs?"), from what is published of each
+				-- Warsong Gulch: no score to read, a row for each flag from the chat lines
+				_G.GetInstanceInfo = function() return "Warsong Gulch", "pvp", 0, "", 10, 0, false, 489 end
+				points = {}
+				mod.Update()
+				assert(O.head:GetText() == "WARSONG GULCH" and not O.alliance:IsShown() and not O.wins:IsShown()
+					and O.rows[1].name:GetText() == "Alliance flag" and O.rows[1].state:GetText() == "At base"
+					and O.rows[2].name:GetText() == "Horde flag" and mod.top == 20 + 2 * 13 + 6,
+					"Warsong Gulch: two flags at base, and no score lines: " .. tostring(mod.top))
+				assert(O.Chat("The Alliance Flag was picked up by Das!", now), "a line about a flag is taken")
+				mod.Update()
+				assert(O.rows[1].state:GetText() == "Das", "the Alliance's flag is carried by Das")
+				O.Chat("The Alliance Flag was dropped by Das!", now)
+				mod.Update()
+				assert(O.rows[1].state:GetText() == "Dropped", "dropped")
+				O.Chat("The Alliance Flag was returned to its base by Ann!", now)
+				mod.Update()
+				assert(O.rows[1].state:GetText() == "At base", "returned")
+				O.Chat("The Horde flag was picked up by Ann!", now)
+				O.Chat("Ann captured the Horde flag!", now)
+				mod.Update()
+				assert(O.rows[2].state:GetText() == "At base" and O.rows[3].name:GetText() == "Flags back in"
+					and O.rows[3].state:GetText() == "0:12", "a capture: both at base, back in 12 seconds")
+				now = now + 13
+				mod.Update()
+				assert(not O.rows[3].name:IsShown(), "and the wait is over")
+				assert(not O.Chat("Good luck everyone", now), "any other line is passed over")
+
+				-- Alterac Valley: only what is being taken, five minutes each
+				_G.GetInstanceInfo = function() return "Alterac Valley", "pvp", 0, "", 40, 0, false, 30 end
+				points = { { "Stonehearth Bunker", 11, 0.3, "Alliance Controlled" }, { "Iceblood Tower", 10, 0.6, "Horde Controlled" } }
+				mod.Update()
+				assert(O.head:GetText() == "ALTERAC VALLEY" and O.rows[1].name:GetText() == "Nothing being taken"
+					and not O.rows[2].name:IsShown(), "Alterac Valley lists only what is being taken")
+				points[1][2], points[1][4] = 12, "In Conflict"
+				mod.Update()
+				assert(O.rows[1].name:GetText() == "Stonehearth Bunker" and O.rows[1].state:GetText() == "Horde in 5:00",
+					"a bunker under attack falls in five minutes: " .. tostring(O.rows[1].state:GetText()))
+
+				-- Darkspear Islands: the win time from how fast the scores rise
+				_G.GetInstanceInfo = function() return "Darkspear Islands", "pvp", 0, "", 10, 0, false, 2997 end
+				points = { { "Camp", 200, 0.2, "Alliance Controlled" }, { "Ruins", 212, 0.4, "Horde Controlled" },
+					{ "Abandoned Tower", 10, 0.6, "Horde Controlled" }, { "Shipwreck Cove", 146, 0.8, "Uncontrolled" } }
+				alliance, horde = 500, 800
+				mod.Update()
+				assert(O.head:GetText() == "DARKSPEAR ISLANDS" and O.alliance:IsShown() and O.wins:GetText() == ""
+					and O.rows[1].state:GetText() == "Alliance" and O.rows[4].state:GetText() == "-",
+					"Darkspear Islands: the score, four bases, and no win time before the scores move")
+				for _ = 1, 2 do
+					now = now + 6
+					alliance, horde = alliance + 5, horde + 10
+					mod.Update()
+				end
+				assert(O.wins:GetText() == "Horde wins in 11:48", "the Horde at 10 points every 6 seconds: " .. tostring(O.wins:GetText()))
+				-- a flag capture is a jump, not a step: the rate is kept
+				now = now + 3
+				horde = horde + 85
+				mod.Update()
+				assert(O.wins:GetText():find("^Horde wins in 10:"), "a capture's 85 points do not change the rate: " .. tostring(O.wins:GetText()))
+				O.Chat("Zug captured the flag!", now)
+				mod.Update()
+				assert(O.rows[5].name:GetText() == "Flag back in" and O.rows[5].state:GetText() == "0:23", "and its flag is back in 23 seconds")
+
+				_G.C_UIWidgetManager, _G.C_Map, _G.C_AreaPoiInfo, _G.GetInstanceInfo, _G.C_PvP = hadW, hadMap, hadPoi, hadInfo, hadPvP
+				mod.Update()
+				assert(mod.top == 0 and section.wantHeight == 78 and not block:IsShown(), "out of Arathi Basin, the card alone again")
+			end
+
+			-- THE CODE REVIEW'S FINDINGS (2026-11-26)
+			do
+				-- a match begun again part-way through does not take its own team
+				-- for the usual: with only this team kept, no usual
+				local hadBook, hadMatch = BT.settings.pvpGear, T.match
+				BT.settings.pvpGear = nil
+				for guid, p in pairs(hadMatch.own) do
+					if p.level then
+						T.Remember(guid, p.level, 30)
+					end
+				end
+				for i = 1, 25 do
+					local guid = "Player-5-" .. i
+					hadMatch.own[guid] = { asked = 0, level = 35, here = -1 }
+					T.Remember(guid, 35, 30)
+				end
+				T.Begin()
+				assert(T.match.usual == nil and (T.match.read or 0) >= 25, "begun again: no usual until the team is known")
+				T.match.own = hadMatch.own
+				T.Scan()
+				assert(T.match.usual == nil, "and none from this team alone")
+				local said = T.View().verdict
+				assert(said == "Needs another match", "enough read, none from another match: " .. tostring(said))
+				for i = 1, 25 do
+					hadMatch.own["Player-5-" .. i] = nil
+				end
+				T.match, BT.settings.pvpGear = hadMatch, hadBook
+
+				-- a teammate asked about three times with no answer is asked again
+				-- after a rest, not never
+				local p = T.match.own["Player-1-03"]
+				local hadGear, hadAsked, hadAt = p.ilvl, p.asked, p.askedAt
+				p.ilvl, p.asked, p.askedAt = nil, T.MAX_ASKS, now
+				local n = #asked
+				now = now + 5
+				T.Tick(now)
+				assert(#asked == n, "three asks, and not a fourth straight away")
+				now = now + T.ASK_REST
+				T.Tick(now)
+				assert(#asked == n + 1 and asked[#asked] == "Bob", "asked again after a minute")
+				-- and while that answer is awaited, nobody is looked at
+				assert(pvp.Busy(), "an answer is awaited")
+				local looked = 0
+				local hadCan = _G.CanInspect
+				_G.CanInspect = function(...) looked = looked + 1 return hadCan(...) end
+				T.Ask()
+				_G.CanInspect = hadCan
+				assert(looked == 0, "no teammate is looked at while nothing can be asked")
+				heard(pvp.events, "INSPECT_READY", "Player-1-03")
+				heard(pvp.events, "INSPECT_HONOR_UPDATE")
+				p.ilvl, p.asked, p.askedAt = hadGear, hadAsked, hadAt
+				now = now + 5
+			end
+
+			-- with the PvP line off, Teams still asks and still hears
+			BT.SetEnabled("pvp", false)
+			units.raid4 = { guid = "Player-1-04", name = "Cy", level = 39, near = true, ilvl = 36 }
+			now = now + 3
+			T.Tick(now)
+			assert(asked[#asked] == "Cy", "Teams asks with the PvP line switched off")
+			heard(pvp.events, "INSPECT_READY", "Player-1-04")
+			assert(T.match.own["Player-1-04"].ilvl == 36, "and reads the answer")
+			BT.SetEnabled("pvp", true)
+
+			-- switched off: no section, and nobody asked about
+			BT.SetEnabled("teams", false)
+			assert(not section:IsShown() and T.match == nil, "switched off, the section goes")
+			BT.SetEnabled("teams", true)
+			assert(section:IsShown() and T.match ~= nil, "and comes back")
+
+			-- out again
+			inside = false
+			T.Check()
+			tracker.Update()
+			assert(not section:IsShown() and T.match == nil, "outside again, no teams")
+			assert(lines[1]:IsShown() and lines[2]:IsShown(), "and the journals' lines are back")
+			assert(#shown("title") == 2 and #shown("fold") == 0, "and every quest you follow")
+
+			-- A BATTLEGROUND PREVIEWED FROM THE TESTING PAGE (Josh 2026-11-26:
+			-- "Can you add a testing option to enable a pvp mode so I can look at
+			-- it?"): the dock as it would be there, with nothing read from the game
+			do
+				local O = T.Objectives
+				local before = #asked
+				BT.Dock.SetPreview("battleground", "Arathi Basin")
+				assert(T.Place() == "arathibasin" and T.match and T.match.preview == "Arathi Basin" and section:IsShown(),
+					"previewed: the teams' section shows outside a battleground")
+				assert(BT.Dock.Quiet() and not lines[1]:IsShown() and not lines[2]:IsShown(), "the journals' lines put away")
+				assert(O.head:GetText() == "ARATHI BASIN" and O.alliance:GetText() == "Alliance 1,020"
+					and O.rows[3].state:GetText():find("^Horde in 0:"), "Arathi Basin with made-up numbers, a base counting down: "
+					.. tostring(O.rows[3].state:GetText()))
+				assert(mod.mode == "level" and mod.level:GetText() == "36.9" and mod.foe:GetText() == "38.0"
+					and mod.gear:GetText() == "31.1", "and made-up teams")
+				T.Tick(now + 5)
+				assert(#asked == before, "a preview asks the game about nobody")
+				-- THE RECORDER PASSES A PREVIEW OVER (the code review, 2026-11-26:
+				-- it wrote one down over the real match of the same name)
+				do
+					local R, hadDump = T.Record, BeebModDB.teamsDump
+					local real = { "a real match's line" }
+					BeebModDB.teamsDump = { armed = true, lines = {}, matches = { ["Arathi Basin"] = real } }
+					R.on = nil
+					R.Tick()
+					assert(not R.on and BeebModDB.teamsDump.matches["Arathi Basin"] == real and #real == 1,
+						"a previewed battleground is not recorded, and the real record is kept")
+					BeebModDB.teamsDump = hadDump
+				end
+				BT.Dock.SetPreview("battleground", "Warsong Gulch")
+				assert(O.head:GetText() == "WARSONG GULCH" and O.rows[1].name:GetText() == "Alliance flag"
+					and T.match.preview == "Warsong Gulch", "stepped on to Warsong Gulch")
+				BT.Dock.SetPreview("battleground", "Arathi Basin at 60")
+				assert(mod.mode == "gear" and mod.gear:GetText() == "62.3" and O.head:GetText() == "ARATHI BASIN",
+					"and Arathi Basin at 60, with the level 60 card")
+				BT.Dock.ClearPreviews()
+				assert(T.match == nil and not section:IsShown() and lines[1]:IsShown() and lines[2]:IsShown(),
+					"cleared: the dock as it was")
+			end
+
+			for _, k in ipairs(names) do _G[k] = keep[k] end
+			BT.settings.pvpGear = hadGear
+			pvp.asking, pvp.askAt, pvp.asked = nil, nil, {}
+			for k in pairs(pvp.askSaid) do pvp.askSaid[k] = hadSaid[k] end
+			T.Check()
+			tracker.Update()
+		end },
 		{ "one panel: the header and the tracker in the same dock", function()
 			local dock = _G.BeebModDock
 			local mod = BT.GetModule("tracker")
@@ -23445,6 +24054,58 @@ if ok then
 		-- points and range are always secret on this client. Each part that
 		-- draws them is given the client's secrets, which raise an error on a
 		-- sum or a comparison, and must hand them to its bars untouched.
+		-- (Josh 2026-11-25: "It's currently not possible to see what class an
+		-- enemy faction is that is attacking me, it is just a red bar")
+		{ "a player whose class is a secret wears the client's colour for it", function()
+			local F = BT.UnitFrames
+			local was = { class = _G.UnitClass, player = _G.UnitIsPlayer, colours = _G.C_ClassColor, dead = _G.UnitIsDeadOrGhost,
+				connected = _G.UnitIsConnected, charmed = _G.UnitIsCharmed }
+			local token = Strict.Secret("MAGE")
+			local sr, sg, sb = Strict.Secret(0.41), Strict.Secret(0.80), Strict.Secret(0.94)
+			local askedWith
+			_G.UnitClass = function() return "Mage", token end
+			_G.UnitIsPlayer = function() return true end
+			_G.UnitIsDeadOrGhost = function() return false end
+			_G.UnitIsConnected = function() return true end
+			_G.UnitIsCharmed = function() return false end
+			_G.C_ClassColor = { GetClassColor = function(t)
+				askedWith = t
+				return { GetRGB = function() return sr, sg, sb end }
+			end }
+			local ok, err = pcall(function()
+				local src = F.Source("target")
+				assert(src:Class() == nil, "the token is nobody's to read")
+				local is, kept = src:HiddenClass()
+				assert(is == true and rawequal(kept, token), "and it is handed on as it came")
+				local cell = F.Build(_G.UIParent, "target", nil, false)
+				local before = F.hidden.painted
+				F.Paint(cell, src)
+				local c = cell.health._barColor
+				assert(rawequal(askedWith, token), "the client's colour function is asked with the secret")
+				assert(rawequal(c[1], sr) and rawequal(c[2], sg) and rawequal(c[3], sb), "the bar takes the colour's parts untouched")
+				assert(type(c[4]) == "number" and c[4] < 1 and c[4] > 0.5, "part see-through on the fill, in place of the deepening")
+				assert(F.hidden.painted == before + 1 and F.HiddenSaid():find("painted", 1, true), "and it is counted for What loaded")
+				-- the client refuses: the reaction's colour stays, and the refusal is kept
+				_G.C_ClassColor = { GetClassColor = function() error("refused here") end }
+				F.Paint(cell, src)
+				c = cell.health._barColor
+				assert(type(c[1]) == "number" and c[4] == 1, "a refusal leaves the reaction's colour")
+				assert(F.HiddenSaid():find("refused here", 1, true), "and What loaded says why")
+				-- a colour with no parts: the same
+				_G.C_ClassColor = { GetClassColor = function() return nil end }
+				F.Paint(cell, src)
+				assert(cell.health._barColor[4] == 1, "no colour back leaves the reaction's colour")
+				-- a plain class is painted as it always was
+				_G.UnitClass = function() return "Warrior", "WARRIOR" end
+				local asked = F.hidden.asked
+				F.Paint(cell, src)
+				assert(F.hidden.asked == asked and cell.health._barColor[4] == 1, "a plain class asks nothing")
+				assert(select(1, src:HiddenClass()) == false, "and has nothing hidden")
+			end)
+			_G.UnitClass, _G.UnitIsPlayer, _G.C_ClassColor, _G.UnitIsDeadOrGhost = was.class, was.player, was.colours, was.dead
+			_G.UnitIsConnected, _G.UnitIsCharmed = was.connected, was.charmed
+			assert(ok, tostring(err))
+		end },
 		{ "the unit frames, a nameplate, the resource display and the tooltip's health bar draw from secrets", function()
 			local was = SECRET_UNIT.Save()
 			local wasPlates, wasClass, wasAttack, wasHook = _G.C_NamePlate, _G.UnitClass, _G.UnitCanAttack, _G.hooksecurefunc

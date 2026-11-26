@@ -903,13 +903,26 @@ end
 -- the dungeon or raid you are in, as a zone key, and every key its quests
 -- may be filed under; nil outside one (Modules/Encounter/Encounter.lua,
 -- which answers whether its notes are on or not)
+--
+-- A BATTLEGROUND IS LISTED THE SAME WAY (Josh 2026-11-26: "I'd like to have a
+-- pvp mode for the dock though, so it shows less clutter (similar to in a
+-- dungeon). Only show quests relevent to the battleground"): the quests the
+-- log files under the battleground's name, and the rest folded under one
+-- line (Modules/PvP/Teams.lua, T.Place).
 local function dungeonHere()
 	local E = BT.Encounter
-	if not (E and E.Here) then
-		return nil
+	if E and E.Here then
+		local key, _, _, keys = E.Here()
+		if key then
+			return key, keys
+		end
 	end
-	local key, _, _, keys = E.Here()
-	return key, keys
+	local T = BT.Teams
+	if T and T.Place then
+		local key, keys = T.Place()
+		return key, keys
+	end
+	return nil
 end
 
 -- the line between a dungeon's quests and the rest, in the list
