@@ -3994,6 +3994,11 @@ function M.WatchParts(holder)
 	if tip and not M.CardShown(tip, bitsOf[tip]) then
 		M.leftovers = M.leftovers + 1
 		M.HideItemBits(tip)
+	elseif tip and M.IsSpared and M.IsSpared(tip) then
+		-- the game's own lines are under the card's parts, the name the same
+		-- (M.Spared): the card is written now, not waited for (Josh
+		-- 2026-11-26: "Seeing some overlapping here")
+		M.SettleSpared()
 	end
 end
 
@@ -5594,16 +5599,39 @@ function M.Spared(tip, data)
 		spare[tip] = nil
 		return false
 	end
+	-- THE SAME WORN PIECE BESIDE ANOTHER ITEM IS ANOTHER HOVER (Josh
+	-- 2026-11-26: "Seeing some overlapping here", the "Equipped" tooltip with
+	-- the card's figures over the game's own lines, and lying over the item's
+	-- tooltip). Two shoulder pieces are both compared with the shoulders you
+	-- wear. Moving from one in a bag to one in a loot window inside
+	-- M.SPARE_FORGET kept the bag's count of fills, the loot window made
+	-- fewer, and the last of them was left as the game's. So the count is
+	-- kept for the worn piece and the item pointed at together.
+	local okOver, over = pcall(shownItem, GameTooltip)
+	if okOver and type(over) == "string" and not (issecretvalue and issecretvalue(over)) then
+		key = tostring(key) .. "|" .. over
+	end
 	local c = spare[tip]
 	if not c or c.key ~= key or t - c.at > M.SPARE_FORGET then
 		spare[tip] = { key = key, at = t, n = 1, written = true }
 		return false
 	end
 	if c.at ~= t then
+		-- A REDRAW THAT STOPPED SHORT IS NOT TRUSTED AGAIN (the same day). Its
+		-- last fill was left as the game's, and the game placed the tooltips
+		-- by that one's width. So for the rest of this hover every fill is
+		-- written, as before the fills were counted.
+		if c.written == false then
+			c.never = true
+		end
 		-- a new redraw: the last one's count is what this one is taken to be
 		c.expect, c.at, c.n, c.written, c.owed = c.n, t, 0, false, nil
 	end
 	c.n = c.n + 1
+	if c.never then
+		c.written, c.owed = true, nil
+		return false
+	end
 	if c.expect and c.n < c.expect then
 		c.owed = data
 		return true
@@ -5620,13 +5648,20 @@ function M.SettleSpared()
 	for tip, c in pairs(spare) do
 		if c.owed and not c.written then
 			local data = c.owed
-			c.owed, c.written = nil, true
+			c.owed, c.written, c.never = nil, true, true
 			if tip.IsShown and tip:IsShown() and BT.Enabled("tooltips") then
 				local ok, err = pcall(M.ComposeItem, tip, data)
 				if not ok then
 					BT.Err("tooltips.spared: " .. tostring(err))
 				end
 				M.settled = M.settled + 1
+				-- the game placed the tooltips by the width it filled this one
+				-- at, so it is asked to place them again by the card's
+				local mgr = rawget(_G, "TooltipComparisonManager")
+				if type(mgr) == "table" and type(mgr.AnchorShoppingTooltips) == "function" then
+					local one, two = rawget(_G, "ShoppingTooltip1"), rawget(_G, "ShoppingTooltip2")
+					pcall(mgr.AnchorShoppingTooltips, mgr, one and one:IsShown() or false, two and two:IsShown() or false)
+				end
 			end
 		end
 	end
@@ -6423,8 +6458,24 @@ M.NO_RATE = { "repeatedly" }
 -- It is read by the words, so every rank is covered. "A hammer that
 -- strikes an enemy" is a hit of your own, and Overpower's "cannot be
 -- blocked" and Revenge's "must follow a block" are not damage on a block.
+-- AND ON A CHANCE (Josh 2026-11-26: "All ranks of seal of command say 94.7
+-- dps"). Seal of Command "gives the Paladin a chance to deal additional Holy
+-- damage equal to 70% of normal weapon damage" at every rank; only its
+-- Judgement grows. The 94.7 was one such hit over the global cooldown, as
+-- if casting the seal did the damage.
 M.ON_A_HIT = { "when hit", "when struck", "attackers?", "any %a+ that strikes", "who strikes", "attacks? blocked",
-	"each melee attack", "each hit" }
+	"each melee attack", "each hit", "chance to deal",
+	-- THE REST OF THEM (the same day: "Can we double check all other spells
+	-- to make sure we don't have issues like seal of command?"). Every class
+	-- spell in the game's own tables was read again, 983 of them, and six
+	-- more land on somebody's hit and were given a DPS: Seal of Fury ("causing
+	-- melee attacks to deal an additional 11"), Seal of Martyrdom ("each of
+	-- your melee attacks"), Earth Shield ("causing attacks to heal"), Sacred
+	-- Shield ("each time the target takes damage"), Blessing of Sacrifice
+	-- ("damage taken per hit") and a pet's Furious Howl ("their next
+	-- Physical attack").
+	"melee attacks to deal", "each of your melee attacks", "attacks to heal", "each time the target takes damage",
+	"per hit", "next physical attack" }
 
 -- whether `text` has one of `words` in it, each a whole word or words
 local function says(text, words)
@@ -6584,6 +6635,12 @@ local function amountOf(label, text, lo, hi, after)
 	end
 	if not lasts then
 		local n, unit = after:match("^%s*%a*%s*over (%d+) (%a+)")
+		-- AFTER SO LONG IS OVER SO LONG (Josh 2026-11-26, the same check).
+		-- Bane of Doom "causing 3200 Shadow damage after 1 min" was worked
+		-- out over the global cooldown, as if it could be cast again at once.
+		if not n then
+			n, unit = after:match("^%s*%a*%s*%a*%s*after (%d+) (%a+)")
+		end
 		if n then
 			lasts = tonumber(n) * (unit:find("^min") and 60 or 1)
 		end

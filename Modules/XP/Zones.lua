@@ -61,6 +61,23 @@ Z.CLASSIC = {
 	[1452] = { "Winterspring", 53, 60 },
 	[1451] = { "Silithus", 55, 60 },
 	[1430] = { "Deadwind Pass", 55, 60 },
+	-- A ZONE NEW TO WOW: FOREVER (Josh 2026-11-26: "Riverglades is not
+	-- showing here", at level 39). The game gave no range for it, and it was
+	-- not written here, so it was left out. Map 2548 is the one his kills
+	-- there are filed under, level 36 to 42. Guides give 36-44 or 35-45.
+	[2548] = { "Riverglades", 36, 44 },
+	-- THE OTHER THREE (the same day: "Lets add the other new zones as well").
+	-- Zephras Isle is where a Skyborne starts, on either side, so it is
+	-- listed for a Skyborne alone (the fifth field). Map 2521 from his kills.
+	[2521] = { "Zephras Isle", 1, 12, nil, "Skyborne" },
+}
+-- Two more whose map number nobody here has seen. They go by name: the
+-- game's own map of that name where the world map lists one, so the zone is
+-- not listed twice. Ranges from guides; Shen'dralas is given as 40-45 or
+-- 41-45, Mount Hyjal as 55-60.
+Z.NAMED = {
+	{ "Shen'dralas", 40, 45 },
+	{ "Mount Hyjal", 55, 60 },
 }
 -- Kalimdor and the Eastern Kingdoms, should the world map list nothing
 Z.CONTINENTS = { 1414, 1415 }
@@ -115,10 +132,23 @@ function Z.All()
 	for id, z in pairs(Z.CLASSIC) do
 		add(id, z[1])
 	end
+	-- a zone written by name: under the game's number for it, or its name
+	local named = {}
+	for _, z in ipairs(Z.NAMED) do
+		local id = z[1]
+		for _, info in ipairs(found) do
+			if info.name == z[1] and info.mapID then
+				id = info.mapID
+				break
+			end
+		end
+		named[id] = z
+		add(id, z[1])
+	end
 	local list = {}
 	Z.fromGame = 0
 	for _, id in ipairs(order) do
-		local z = Z.CLASSIC[id]
+		local z = Z.CLASSIC[id] or named[id]
 		local lo, hi = gameLevels(id)
 		if lo then
 			Z.fromGame = Z.fromGame + 1
@@ -127,7 +157,7 @@ function Z.All()
 		end
 		if lo then
 			list[#list + 1] = { id = id, name = names[id] or (z and z[1]) or ("#" .. id), lo = lo, hi = hi,
-				side = z and z[4] or nil }
+				side = z and z[4] or nil, race = z and z[5] or nil }
 		end
 	end
 	if Z.fromGame > 0 then
@@ -145,6 +175,21 @@ end
 -- any level is eight, at 43.
 
 -- the zones for a level and a side, by the dungeons' sweet spot
+-- A zone for one race is listed for that race alone; with the race not
+-- known, it is left out.
 function Z.For(level, side, limit)
-	return BT.Dungeons.Pick(Z.All(), level, side, limit)
+	local name, token
+	if UnitRace then
+		local ok, a, b = pcall(UnitRace, "player")
+		if ok then
+			name, token = a, b
+		end
+	end
+	local open = {}
+	for _, z in ipairs(Z.All()) do
+		if not z.race or z.race == name or z.race == token then
+			open[#open + 1] = z
+		end
+	end
+	return BT.Dungeons.Pick(open, level, side, limit)
 end

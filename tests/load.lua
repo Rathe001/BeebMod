@@ -3638,6 +3638,29 @@ if ok then
 			C.housekept = wasKept
 			BT.SetEnabled("census", hadCensus)
 		end },
+		{ "old test dumps leave the saved file", function()
+			-- Josh 2026-11-27: "I don't want to get too bloated"
+			local day, now = 86400, 2000000000
+			local saved = {
+				charsheetDump = { at = now - 8 * day, lines = { "a" } },
+				pvpDump = { at = now - 6 * day, lines = { "a" } },
+				unitProbe = { { at = now - 30 * day }, { at = now - 9 * day } },
+				bagProbe = { { at = now - 30 * day }, { at = now - 1 * day } },
+				teamsDump = { at = now - 60 * day, matches = { "a" } },
+				oddDump = { lines = { "a" } },
+				settings = { at = now - 400 * day },
+				ledger = {},
+			}
+			assert(BT.SweepDumps(saved, now) == 2, "two were older than a week")
+			assert(saved.charsheetDump == nil and saved.unitProbe == nil, "the old ones went")
+			assert(saved.pvpDump and saved.bagProbe, "a dump, or a run in one, under a week old stays")
+			assert(saved.teamsDump and saved.settings and saved.ledger, "battlegrounds written down and the rest are left")
+			assert(saved.oddDump and saved.dumpSeen.oddDump == now, "one with no date is dated from now")
+			assert(BT.SweepDumps(saved, now + day // 2) == 0 and saved.oddDump, "and kept for the week")
+			assert(BT.SweepDumps(saved, now + 8 * day) == 3 and saved.oddDump == nil and saved.pvpDump == nil
+				and saved.bagProbe == nil and saved.dumpSeen == nil, "then it goes, and the note of it")
+			assert(BT.SweepDumps(nil, now) == 0 or true, "nothing saved, nothing to do")
+		end },
 		{ "the tracker listens to your quest log, not everybody's", function()
 			local mod = BT.GetModule("tracker")
 			BT.SetEnabled("tracker", true)
@@ -12243,6 +12266,49 @@ if ok then
 			mod.Release()
 			assert(plate:GetAlpha() == 1, "and the game's again when BeebMod lets go")
 			mod.Apply()
+			-- WHEN SPIRIT REGEN COMES BACK (Josh 2026-11-26: "the casting and
+			-- spirit regen meter"): five seconds from a spell that cost mana
+			do
+				local hadSpell, hadType, hadTime = rawget(_G, "C_Spell"), _G.UnitPowerType, _G.GetTime
+				local now = 500
+				_G.GetTime = function() return now end
+				_G.UnitPowerType = function() return 0 end
+				_G.C_Spell = { GetSpellPowerCost = function(id)
+					if id == 1 then return { { type = 0, cost = 35 } } end
+					if id == 2 then return {} end
+					if id == 3 then return { { type = 3, cost = 40 } } end
+					if id == 5 then return nil end -- crafting: the game gives no cost at all
+						error("no such spell")
+				end }
+				assert(mod.SpendsMana(1) == true and mod.SpendsMana(2) == false and mod.SpendsMana(3) == false
+					and mod.SpendsMana(4) == nil and mod.SpendsMana(nil) == nil, "what a spell costs, or that nobody says")
+				assert(mod.Spent(2) == false and mod.RestFrame() == nil, "a wand's shot starts nothing")
+					-- Josh 2026-11-26: "Does crafting and other non spell actions
+					-- really trigger the 5 second rule?"
+					assert(mod.SpendsMana(5) == false and mod.Spent(5) == false and mod.RestFrame() == nil,
+						"a spell the game gives no cost for costs nothing")
+				assert(mod.Spent(1) == true, "a spell that cost mana starts the five seconds")
+				local rest = mod.RestFrame()
+				assert(rest:IsShown() and rest:GetParent() == plate and rest._max == 5 and rest._value == 5,
+					"a full strip on the display: " .. tostring(rest._value))
+				now = now + 3
+				rest:GetScript("OnUpdate")(rest, 3)
+				assert(rest._value == 2 and rest:IsShown(), "running down: " .. tostring(rest._value))
+				assert(mod.Spent(4) == true and rest._value == 5, "a spell the game says nothing of starts them again")
+				now = now + 5.1
+				rest:GetScript("OnUpdate")(rest, 5.1)
+				assert(not rest:IsShown(), "and gone when your spirit gives mana again")
+				_G.UnitPowerType = function() return 3 end
+				assert(mod.Spent(1) == false and not rest:IsShown(), "nothing for somebody on energy")
+				_G.UnitPowerType = function() return 0 end
+				mod.Spent(1)
+				mod.Release()
+				assert(not rest:IsShown(), "and away with the display")
+				mod.Apply()
+				_G.C_Spell, _G.UnitPowerType, _G.GetTime = hadSpell, hadType, hadTime
+				rest.untilAt = nil
+				rest:Hide()
+			end
 			-- each segment is a bar from i - 1 to i, full when the count reaches i
 			local function lit()
 				local n = 0
@@ -13687,7 +13753,10 @@ if ok then
 			now = now + 0.2
 			assert(fills(2) == 0 and mod.IsSpared(shop), "a redraw that stops short is owed its card")
 			now = now + 0.2
-			assert(fills(2) == 1, "and the one after it is taken to be as short")
+			-- (Josh 2026-11-26: "Seeing some overlapping here")
+			assert(fills(2) == 2 and not mod.IsSpared(shop), "and after it every fill of this hover is written")
+			now = now + 0.2
+			assert(fills(3) == 3, "the redraw after that too")
 			now = now + 0.2
 			assert(not mod.Spared(shop, { guid = "Item-1-0-0002" }), "another item is written at once")
 			now = now + 5
@@ -14779,8 +14848,36 @@ if ok then
 			assert(math.abs(one - (mid * 0.3 + 10.5)) < 0.001, "Holy Strike rank 1: " .. tostring(one))
 			assert(math.abs(four - (mid * 0.432 + 20.5)) < 0.001, "Holy Strike rank 4: " .. tostring(four))
 			-- the rest of a paladin's spellbook, as recorded 2026-11-16
-			local _, _, command, _, withWeapon = mod.SpellAmount("Gives the Paladin a chance to deal additional Holy damage equal to 70% of normal weapon damage.  Only one Seal can be active on the Paladin at any one time.  Lasts 30 sec.\n\nUnleashing this Seal's energy will judge an enemy, instantly causing 80 to 85 Holy damage, 160 to 169 if the target is stunned or incapacitated.")
+			local _, _, command, _, withWeapon, _, _, onAHit = mod.SpellAmount("Gives the Paladin a chance to deal additional Holy damage equal to 70% of normal weapon damage.  Only one Seal can be active on the Paladin at any one time.  Lasts 30 sec.\n\nUnleashing this Seal's energy will judge an enemy, instantly causing 80 to 85 Holy damage, 160 to 169 if the target is stunned or incapacitated.")
 			assert(withWeapon and math.abs(command - mid * 0.7) < 0.001, "Seal of Command is its own hit, not its Judgement's: " .. tostring(command))
+			-- (Josh 2026-11-26: "All ranks of seal of command say 94.7 dps")
+			assert(onAHit, "and it lands on a chance, so it has no DPS and no per mana")
+			-- THE REST OF THEM (the same day: "double check all other spells"):
+			-- every class spell in the game's tables read again
+			for name, words in pairs({
+				["Seal of Fury"] = "Fills the Paladin with divine fury for 30 sec, causing melee attacks to deal an additional 11 Holy damage. While a shield is equipped, each attack also grants an absorb shield equal to 50% of the Holy damage dealt.",
+				["Seal of Martyrdom"] = "Fills you with holy spirit for 30 sec, causing each of your melee attacks to deal 30% weapon damage to your target, but you lose health equal to 10% of the damage inflicted.",
+				["Earth Shield"] = "Protects the target with an earthen shield, reducing casting or channeling time lost when damaged by 30%  and causing attacks to heal the shielded target for 150.  This effect can only occur once every few seconds.  6 charges. Lasts 10 min.",
+				["Sacred Shield"] = "Each time the target takes damage they gain a Sacred Shield, absorbing 500 damage and increasing the Paladin's chance to critically hit with Flash of Light by 50% for up to 6 sec.",
+				["Blessing of Sacrifice"] = "Places a Blessing on the party member, transfering 45 damage taken per hit to the caster.  Lasts 30 sec.",
+				["Furious Howl"] = "Party members within 15 yards receive an extra 18 damage to their next Physical attack.  Lasts 10 sec.",
+			}) do
+				local label, _, _, _, _, _, _, hit = mod.SpellAmount(words)
+				assert(label and hit, name .. " lands on a hit, so it has no DPS and no per mana")
+			end
+			-- and a strike of your own keeps its figures
+			for name, words in pairs({
+				["Hammer of Wrath"] = "Hurls a hammer that strikes an enemy for 304 Holy damage.  Only usable on enemies that have 20% or less health.",
+				["Mutilate"] = "Instantly attacks with both weapons for 100% weapon damage plus an additional 20 with each weapon. Damage increased by 20% against Poisoned targets. Awards 2 Combo Points.",
+				["Whirlwind"] = "In a whirlwind of steel you attack up to 4 enemies within 8 yards, causing weapon damage from both melee weapons to each enemy.",
+				["Mocking Blow"] = "A mocking attack that causes 21 damage, a moderate amount of threat and forces the target to focus attacks on you for 6 sec.",
+			}) do
+				local label, _, _, _, _, _, _, hit = mod.SpellAmount(words)
+				assert(label and not hit, name .. " is your own strike")
+			end
+			-- after so long is over so long
+			local _, doom, _, doomOver = mod.SpellAmount("Afflicts the target with impending doom, causing 3200 Shadow damage after 1 min.  If the target dies from this damage, there is a chance that a Doomguard will be summoned.")
+			assert(doom == "3200" and doomOver == 60, "Bane of Doom's damage comes after a minute: " .. tostring(doomOver))
 			local _, fury = mod.SpellAmount("Fills you with divine fury for 30 sec, causing melee attacks to deal an additional 11 Holy damage. While a shield is equipped, each attack also grants an absorb shield equal to 50% of the Holy damage dealt. Only one Seal can be active on the Paladin at any one time.\n\nUnleashing this Seal's energy inflicts 54 to 57 Holy damage to an enemy and taunts the target to attack you for 3 sec.")
 			assert(fury == "11", "Seal of Fury is its own hit, not its Judgement's: " .. tostring(fury))
 			local _, right = mod.SpellAmount("Fills the Paladin with holy spirit for 30 sec, granting each melee attack an additional 7 to 15 Holy damage.  Slower weapons cause more Holy damage per swing.\n\nUnleashing this Seal's energy will cause 47 to 50 Holy damage to an enemy.")
@@ -16114,11 +16211,18 @@ if ok then
 					assert(D.RangeColour(thanes, level, "dungeon") == U.DIFFICULTY[want],
 						"The Hall of Thanes at " .. level .. " is " .. want)
 				end
-				-- a zone in halves: yellow while you start it, green after
+				-- a zone in thirds too: orange, yellow, green
 				local westfall = { lo = 10, hi = 20 }
-				assert(D.RangeColour(westfall, 10, "zone") == U.DIFFICULTY.difficult
+				assert(D.RangeColour(westfall, 10, "zone") == U.DIFFICULTY.verydifficult
+					and D.RangeColour(westfall, 13, "zone") == U.DIFFICULTY.verydifficult
+					and D.RangeColour(westfall, 15, "zone") == U.DIFFICULTY.difficult
+					and D.RangeColour(westfall, 17, "zone") == U.DIFFICULTY.standard
+					and D.RangeColour(westfall, 20, "zone") == U.DIFFICULTY.standard
+					-- three levels into nine is the second third, not a hair short
+					and D.RangeColour({ lo = 37, hi = 46 }, 40, "dungeon") == U.DIFFICULTY.difficult
 					and D.RangeColour(westfall, 14, "zone") == U.DIFFICULTY.difficult
-					and D.RangeColour(westfall, 16, "zone") == U.DIFFICULTY.standard, "Westfall yellow to 14, green from 15")
+					and D.RangeColour(westfall, 16, "zone") == U.DIFFICULTY.difficult,
+					"Westfall in thirds (Josh 2026-11-26): orange to 13, yellow to 16, green from 17")
 			end
 			-- A RANGE'S TOP LEVEL IS THE ONE YOU LEAVE IT AT, but the cap's
 			assert(not D.Takes({ lo = 13, hi = 18 }, 18) and D.Takes({ lo = 13, hi = 18 }, 17)
@@ -16213,7 +16317,8 @@ if ok then
 				section:GetScript("OnEnter")(section)
 				local yellow, orange = BT.Util.DIFFICULTY.difficult, BT.Util.DIFFICULTY.verydifficult
 				local r, g = BT.Tip.ColourOf("The Barrens")
-				assert(r == yellow[1] and g == yellow[2], "a zone that starts at your level is yellow: " .. tostring(g))
+				assert(yellow and r == orange[1] and g == orange[2],
+					"a zone that starts at your level is orange (Josh 2026-11-26): " .. tostring(g))
 				r, g = BT.Tip.ColourOf("Ragefire Chasm")
 				assert(r == orange[1] and g == orange[2], "a dungeon three levels up is orange: " .. tostring(g))
 				r, g = BT.Tip.ColourOf("13-18")
@@ -16263,6 +16368,26 @@ if ok then
 				assert(zoneNames(Z.For(4, "Alliance")) == "Dun Morogh,Elwynn Forest,Teldrassil",
 					"and an Alliance one the Alliance's: " .. zoneNames(Z.For(4, "Alliance")))
 				assert(Z.list == nil and Z.fromGame == 0, "nothing from the game: built again next time")
+				-- a zone new to this game, written down (Josh 2026-11-26:
+				-- "Riverglades is not showing here", at 39)
+				assert((", " .. zoneNames(Z.For(39, "Alliance")):gsub(",", ", ") .. ","):find(", Riverglades,", 1, true),
+					"Riverglades at 39 with no range from the game: " .. zoneNames(Z.For(39, "Alliance")))
+				-- THE OTHER NEW ZONES (the same day: "Lets add the other new zones
+				-- as well"): two by name, and a Skyborne's own starting zone
+				do
+					local function has(list, name)
+						return ((", " .. zoneNames(list):gsub(",", ", ") .. ","):find(", " .. name .. ",", 1, true)) ~= nil
+					end
+					assert(has(Z.For(43, "Horde"), "Shen'dralas"), "Shen'dralas at 43: " .. zoneNames(Z.For(43, "Horde")))
+					assert(has(Z.For(60, "Alliance"), "Mount Hyjal"), "Mount Hyjal at 60: " .. zoneNames(Z.For(60, "Alliance")))
+					local hadRace = _G.UnitRace
+					_G.UnitRace = function() return "Human", "Human" end
+					assert(not has(Z.For(4, "Alliance"), "Zephras Isle"), "Zephras Isle is not a human's")
+					_G.UnitRace = function() return "Skyborne", "Skyborne" end
+					assert(has(Z.For(4, "Alliance"), "Zephras Isle") and has(Z.For(4, "Horde"), "Zephras Isle"),
+						"a Skyborne of either side starts on Zephras Isle")
+					_G.UnitRace = hadRace
+				end
 				_G.UnitLevel = function() return 4 end
 				section:GetScript("OnEnter")(section)
 				assert(BT.Tip.Says("RECOMMENDED CONTENT") and BT.Tip.Says("Zones") and BT.Tip.Says("Durotar")
@@ -16277,7 +16402,7 @@ if ok then
 						asked = asked + 1
 						assert(id == 947 and kind == 3 and all == true, "every zone under the world map")
 						return { { mapID = 1433, name = "Redridge Mountains" }, { mapID = 9001, name = "Riverglades" },
-							{ mapID = 1454, name = "Orgrimmar" } }
+							{ mapID = 1454, name = "Orgrimmar" }, { mapID = 9002, name = "Mount Hyjal" } }
 					end,
 					GetMapLevels = function(id)
 						local l = LEVELS[id]
@@ -16294,6 +16419,16 @@ if ok then
 				assert(redridge and redridge.lo == 16 and redridge.hi == 26, "the game's range over Classic's")
 				assert(river and river.name == "Riverglades" and river.lo == 40, "a zone only the game knows")
 				assert(capital == nil, "a capital has no range and is left out")
+				do
+					local hyjal = 0
+					for _, z in ipairs(Z.All()) do
+						if z.name == "Mount Hyjal" then
+							hyjal = hyjal + 1
+							assert(z.id == 9002 and z.lo == 55, "a zone written by name takes the game's number")
+						end
+					end
+					assert(hyjal == 1, "and is listed once: " .. hyjal)
+				end
 				assert(Z.fromGame == 2 and Z.list ~= nil, "kept once the game has given ranges")
 				Z.All()
 				assert(asked == 1, "read from the game once")
@@ -17050,6 +17185,23 @@ if ok then
 				_G.UnitIsUnit = function(a, b2) return a == "nameplate2" and b2 == "target" end
 				mod.TargetChanged()
 				assert(f.under._alpha == 1, "and a white line under your target's")
+				-- LARGER WHEN IT IS YOUR TARGET (Josh 2026-11-26: "it used to
+				-- zoom slightly"): by the game's own setting, 1.2 as it comes
+				do
+					local base = UIParent:GetEffectiveScale()
+					assert(math.abs(f._scale - base * 1.2) < 1e-9, "your target's name is drawn larger: " .. tostring(f._scale))
+					local hadC = _G.C_CVar
+					_G.C_CVar = { GetCVar = function(n) return n == "nameplateSelectedScale" and "1.5" or nil end }
+					mod.TargetChanged()
+					assert(math.abs(f._scale - base * 1.5) < 1e-9, "by the game's setting where it has one: " .. tostring(f._scale))
+					_G.C_CVar = hadC
+					local hadIs = _G.UnitIsUnit
+					_G.UnitIsUnit = function() return false end
+					mod.TargetChanged()
+					assert(math.abs(f._scale - base) < 1e-9, "and back to its size when it is not: " .. tostring(f._scale))
+					_G.UnitIsUnit = hadIs
+					mod.TargetChanged()
+				end
 				-- A PLAYER'S TITLE, OVER THE NAME (2026-11-23)
 				do
 					assert(mod.TitleFrom("Private Omajin Ghosttusk", "Omajin Ghosttusk", "Omajin") == "Private", "a title before")

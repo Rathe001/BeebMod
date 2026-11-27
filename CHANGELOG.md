@@ -3,6 +3,44 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **A spirit regen strip on the personal resource display.** Spending mana
+  stops the mana your spirit gives for five seconds. A thin strip along the
+  bottom of the display's mana bar runs down over those five seconds. When
+  it is gone, your spirit is giving mana again.
+- **Old test dumps leave the saved file.** A button on the Testing page
+  writes what it found into BeebMod's saved file, and it stayed there for
+  good. A dump more than a week old is now removed when you log in. A
+  battleground written down with the Record button is kept.
+
+- **The new zones in the XP tooltip.** The four zones new to WoW: Forever
+  were missing from the list of zones for your level. Riverglades is listed
+  from level 36 to 44, Shen'dralas from 40 to 45 and Mount Hyjal from 55
+  to 60. Zephras Isle is listed from 1 to 12 for a Skyborne.
+- **Zone colours in the XP tooltip.** A zone is orange in the lowest third
+  of its range, yellow in the middle third and green in the top third, the
+  way a dungeon is. It used to be yellow in the lower half and green in the
+  upper. A dungeon exactly a third of the way through its range is yellow.
+  It was orange.
+- **Seal of Command has no DPS figure.** Every rank showed the same DPS and
+  a per mana figure. The seal's hit lands on a chance and is the same at
+  every rank, so the tooltip shows its damage alone.
+- **Six more spells lose a DPS figure they should not have had.** Seal of
+  Fury, Seal of Martyrdom, Earth Shield, Sacred Shield, Blessing of
+  Sacrifice and a pet's Furious Howl work on somebody's hit, the way Seal
+  of Command does. Each shows its amount alone.
+- **Bane of Doom's DPS is worked out over the minute it takes.** It was
+  worked out over the global cooldown.
+- **Your target's name is larger again.** The name over a friendly player or
+  NPC grows when you select them, the way the game's own nameplates do. It
+  stopped growing in 1.17.0, when friendly names were given one size at
+  every distance.
+- **The "Equipped" tooltip no longer lies over the item's tooltip.** Moving
+  quickly from one item to another of the same slot could leave the
+  "Equipped" tooltip with the game's own lines under BeebMod's figures, and
+  placed on top of the item's tooltip.
+
 ## 1.22.0
 
 - **Battleground teams on the dock.** In a battleground the dock shows both

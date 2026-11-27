@@ -130,15 +130,21 @@ end
 -- range is cut in equal steps, each a colour: a dungeon in thirds - orange,
 -- yellow, green - and a zone, which you start at its lowest level, in halves
 -- - yellow, green. The colours are the quests' (Core/Util.lua).
+-- A ZONE IN THIRDS TOO (Josh 2026-11-26: "If I am at the minimum level for a
+-- zone, it should be red/orange. If I am at max level, it should be green.
+-- Right in the middle should be yellow"). At 40 Badlands, 35-45, was green
+-- and Feralas, 40-50, yellow.
 D.STEPS = {
 	dungeon = { "verydifficult", "difficult", "standard" },
-	zone = { "difficult", "standard" },
+	zone = { "verydifficult", "difficult", "standard" },
 }
 function D.RangeColour(entry, level, kind)
 	local steps = D.STEPS[kind] or D.STEPS.dungeon
 	local span = entry.hi - entry.lo
-	local at = span > 0 and (level - entry.lo) / span or 1
-	local i = math.min(#steps, math.max(1, math.floor(at * #steps) + 1))
+	-- in whole numbers: 3 levels into a 9-level range is the second third,
+	-- and 3 / 9 * 3 falls a hair short of 1
+	local i = span > 0 and math.floor((level - entry.lo) * #steps / span) + 1 or #steps
+	i = math.min(#steps, math.max(1, i))
 	return BT.Util.DIFFICULTY[steps[i]]
 end
 

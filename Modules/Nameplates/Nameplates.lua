@@ -387,7 +387,26 @@ M.FRIEND_SIZE = { player = 13, npc = 10, level = 12, sub = 9 }
 -- at whole sizes, so the name jumped from one size to the next as a player
 -- walked. A friend's name leaves the plate's scale alone and keeps the scale
 -- of the rest of the interface. The plate still places it and fades it.
-function M.Steady(f)
+-- LARGER WHEN IT IS YOUR TARGET (Josh 2026-11-26: "When clicking nameplates
+-- to select them, it used to zoom slightly. Can we add that back in?"). The
+-- game draws its target's plate larger, by its setting nameplateSelectedScale
+-- (1.2 as it comes), and a name that left the plate's scale alone lost that
+-- with the rest. The name of your target is drawn larger by the same setting.
+-- `target`: whether this name is your target's.
+M.SELECTED_CVAR, M.SELECTED = "nameplateSelectedScale", 1.2
+function M.SelectedScale()
+	local get = (_G.C_CVar and _G.C_CVar.GetCVar) or _G.GetCVar
+	local ok, said = pcall(function()
+		return get and get(M.SELECTED_CVAR)
+	end)
+	local n = ok and tonumber(said) or nil
+	if not n or n < 1 or n > 2 then
+		return M.SELECTED
+	end
+	return n
+end
+
+function M.Steady(f, target)
 	if type(f.SetIgnoreParentScale) ~= "function" then
 		return false
 	end
@@ -395,7 +414,8 @@ function M.Steady(f)
 		return false
 	end
 	local scale = BT.Pill.Number(UIParent.GetEffectiveScale and UIParent:GetEffectiveScale(), 1)
-	pcall(f.SetScale, f, scale > 0 and scale or 1)
+	scale = scale > 0 and scale or 1
+	pcall(f.SetScale, f, scale * (target and M.SelectedScale() or 1))
 	return true
 end
 
@@ -406,9 +426,11 @@ for _, event in ipairs({ "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
 	pcall(M.scaleWatch.RegisterEvent, M.scaleWatch, event)
 end
 M.scaleWatch:SetScript("OnEvent", function()
-	for _, f in pairs(M.friends or {}) do
+	for token, f in pairs(M.friends or {}) do
 		if f.IsShown and f:IsShown() then
-			pcall(M.Steady, f)
+			pcall(function()
+				M.Steady(f, F.Source(token):IsTarget())
+			end)
 		end
 	end
 end)
@@ -1540,7 +1562,7 @@ function M.Added(token)
 		if not pcall(f.SetParent, f, plate) then
 			pcall(f.SetParent, f, UIParent)
 		end
-		M.Steady(f)
+		M.Steady(f, src:IsTarget())
 		M.Place(f, plate)
 		f:Show()
 		M.PaintFriend(f, src)
@@ -1678,7 +1700,9 @@ function M.TargetChanged()
 	end
 	for token, f in pairs(M.friends) do
 		if f:IsShown() then
-			F.AlphaFrom(f.under, F.Source(token):IsTarget(), 1, 0)
+			local target = F.Source(token):IsTarget()
+			F.AlphaFrom(f.under, target, 1, 0)
+			M.Steady(f, target)
 		end
 	end
 	targetDots()

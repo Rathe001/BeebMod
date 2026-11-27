@@ -547,6 +547,12 @@ function C.World(initial, reloading)
 		BT.lastRun = BT.lastRun or {}
 		BT.lastRun.capped, BT.lastRun.cappedLow, BT.lastRun.capFrom = DB.Cap(BT.db, BT.settings.bookCap)
 	end
+	-- and the Testing page's old dumps (BT.SweepDumps)
+	if BT.SweepDumps then
+		BT.lastRun = BT.lastRun or {}
+		local ok, gone = pcall(BT.SweepDumps)
+		BT.lastRun.dumps = ok and gone or 0
+	end
 	-- whoever counts the book hears that rows went (the Ledger's ranks)
 	local run = BT.lastRun or {}
 	if BT.db and DB.onRemoved and ((tonumber(run.pruned) or 0) > 0 or (tonumber(run.capped) or 0) > 0) then

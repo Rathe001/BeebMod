@@ -42,7 +42,7 @@ BT.SCHEMA = 14
 -- Bumped by hand whenever something changes that must be reloaded to take
 -- effect. What loaded, on the Testing page, prints it, so "did the reload
 -- take?" is never a guess.
-BT.BUILD = "2026-11-26-review-fixes-164"
+BT.BUILD = "2026-11-26-dump-sweep-173"
 
 -- A COPY TO WORK ON, OR A COPY TO PLAY WITH (Josh 2026-10-05: "is there a way
 -- to disable it in production builds so normal users don't see it?"). The
@@ -1266,6 +1266,53 @@ function BT.EnsureBound()
 	end
 	BT.Bind(BT.RealmNow and BT.RealmNow() or (GetRealmName and GetRealmName()), UnitFactionGroup and UnitFactionGroup("player"))
 	return BT.db ~= nil
+end
+
+-- OLD TEST DUMPS GO (Josh 2026-11-27: "I don't want to get too bloated").
+-- A button on the Testing page writes what it found into the saved file, to
+-- be read once, and it stayed for good: 22 of them were 1.4 MB of a 6.2 MB
+-- file. A dump is any table of BeebModDB whose name ends in Dump or Probe.
+-- Its age is its own "at", or the newest "at" of the runs in it; one that
+-- carries neither is aged from the login that first met it. Past DUMP_DAYS
+-- it is dropped. teamsDump is left: it holds whole battlegrounds written
+-- down, which a button press does not bring back.
+BT.DUMP_DAYS = 7
+BT.DUMP_KEPT = { teamsDump = true }
+function BT.SweepDumps(saved, now)
+	saved = saved or BeebModDB
+	if type(saved) ~= "table" then
+		return 0
+	end
+	now = now or (time and time()) or 0
+	local cutoff = now - BT.DUMP_DAYS * 86400
+	local seen = type(saved.dumpSeen) == "table" and saved.dumpSeen or {}
+	local old, met = {}, {}
+	for key, dump in pairs(saved) do
+		if type(key) == "string" and type(dump) == "table" and not BT.DUMP_KEPT[key]
+			and (key:find("Dump$") or key:find("Probe$")) then
+			local at = type(dump.at) == "number" and dump.at or nil
+			if not at then
+				for _, run in pairs(dump) do
+					if type(run) == "table" and type(run.at) == "number" and run.at > (at or 0) then
+						at = run.at
+					end
+				end
+			end
+			if not at then
+				at = type(seen[key]) == "number" and seen[key] or now
+				met[key] = at
+			end
+			if at < cutoff then
+				old[#old + 1] = key
+				met[key] = nil
+			end
+		end
+	end
+	for _, key in ipairs(old) do
+		saved[key] = nil
+	end
+	saved.dumpSeen = next(met) and met or nil
+	return #old
 end
 
 -- Move another book's characters into this one, from its row on the Testing

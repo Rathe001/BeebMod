@@ -788,6 +788,134 @@ function M.SealSaid()
 end
 
 -- ---------------------------------------------------------------------------
+-- Casting, or resting
+-- ---------------------------------------------------------------------------
+
+-- WHEN SPIRIT REGEN COMES BACK (Josh 2026-11-26: "Are we able to add the
+-- casting and spirit regen meter to personal resource display?"). Spending
+-- mana stops the mana your spirit gives for five seconds, and a spell that
+-- costs mana in that time starts the five again. A strip along the bottom of
+-- the display's mana bar is full when you spend mana and runs down over the
+-- five seconds. While it is up you are casting; when it is gone your spirit
+-- is giving mana again.
+--
+-- A spell is asked what it costs (C_Spell.GetSpellPowerCost). One that costs
+-- no mana, a wand's shot or a hunter's Auto Shot, starts nothing. Where the
+-- game will not say what a spell costs, the strip starts: for somebody with
+-- a mana bar most spells cost mana, and a strip that never came would say
+-- your spirit was giving mana when it was not.
+M.REST_SECONDS, M.REST_H = 5, 2
+M.REST_COLOUR = { 0.86, 0.94, 1.00 }
+local MANA = (Enum and Enum.PowerType and Enum.PowerType.Mana) or 0
+
+local rest -- the strip
+
+-- whether `spellID` costs mana: true, false, or nil where the game won't say
+function M.SpendsMana(spellID)
+	if spellID == nil or secret(spellID) or not (C_Spell and type(C_Spell.GetSpellPowerCost) == "function") then
+		return nil
+	end
+	local ok, costs = pcall(C_Spell.GetSpellPowerCost, spellID)
+	if not ok or secret(costs) then
+		return nil
+	end
+	-- the game hands back nothing for a spell with no cost, as crafting has
+	if type(costs) ~= "table" then
+		return false
+	end
+	local unsure = false
+	for _, c in ipairs(costs) do
+		if type(c) == "table" then
+			local kind, cost = c.type, c.cost
+			if secret(kind) or secret(cost) then
+				unsure = true
+			elseif kind == MANA and type(cost) == "number" and cost > 0 then
+				return true
+			end
+		end
+	end
+	if unsure then
+		return nil
+	end
+	return false
+end
+
+-- whether your bar is mana right now; nil where the game won't say
+local function onMana()
+	if type(UnitPowerType) ~= "function" then
+		return nil
+	end
+	local ok, kind = pcall(UnitPowerType, "player")
+	if not ok or secret(kind) or type(kind) ~= "number" then
+		return nil
+	end
+	return kind == MANA
+end
+
+local function restTick(self)
+	local left = (self.untilAt or 0) - (GetTime and GetTime() or 0)
+	if left <= 0 then
+		self.untilAt = nil
+		self:Hide()
+		return
+	end
+	self:SetValue(left)
+end
+
+-- the strip along the bottom of the mana bar, while the five seconds run
+function M.Rest()
+	local left = rest and rest.untilAt and (rest.untilAt - (GetTime and GetTime() or 0)) or 0
+	if not (plate and left > 0) then
+		if rest then
+			rest:Hide()
+		end
+		return false
+	end
+	local own = type(plate.PowerBar) == "table" and BT.Furniture.Call(plate.PowerBar, "IsShown") and plate.PowerBar or nil
+	local anchor = own or M.PipAnchor()
+	if not anchor then
+		rest:Hide()
+		return false
+	end
+	rest:SetParent(plate)
+	rest:ClearAllPoints()
+	rest:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+	rest:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+	rest:SetHeight(M.REST_H)
+	local strata = BT.Furniture.Call(anchor, "GetFrameStrata")
+	if type(strata) == "string" then
+		pcall(rest.SetFrameStrata, rest, strata)
+	end
+	pcall(rest.SetFrameLevel, rest, BT.Pill.Number(BT.Furniture.Call(anchor, "GetFrameLevel"), 1) + 6)
+	rest:SetValue(left)
+	rest:Show()
+	return true
+end
+
+-- a spell of yours went off: the five seconds start, or start again
+function M.Spent(spellID, now)
+	if onMana() == false or M.SpendsMana(spellID) == false then
+		return false
+	end
+	if not rest then
+		rest = CreateFrame("StatusBar", nil, UIParent)
+		rest.beebs = true
+		rest:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+		rest:SetMinMaxValues(0, M.REST_SECONDS)
+		rest:SetStatusBarColor(M.REST_COLOUR[1], M.REST_COLOUR[2], M.REST_COLOUR[3], 1)
+		rest:SetScript("OnUpdate", restTick)
+		rest:Hide()
+	end
+	rest.untilAt = (now or (GetTime and GetTime()) or 0) + M.REST_SECONDS
+	M.Rest()
+	return true
+end
+
+function M.RestFrame()
+	return rest
+end
+
+-- ---------------------------------------------------------------------------
 -- A bit see-through
 -- ---------------------------------------------------------------------------
 
@@ -850,6 +978,7 @@ function M.Apply()
 	if not okSeal then
 		BT.Err("resourcedisplay seal: " .. tostring(errSeal))
 	end
+	pcall(M.Rest)
 	M.Fade(plate, M.ALPHA)
 	return n
 end
@@ -868,6 +997,10 @@ function M.Release()
 	end
 	if seal then
 		seal:Hide()
+	end
+	if rest then
+		rest:Hide()
+		rest:SetParent(UIParent)
 	end
 	plate = nil
 	M.lastCount = 0
@@ -916,15 +1049,26 @@ function M.Watch()
 	-- UNIT_POWER_FREQUENT IS THE ONE THAT CARRIES POINTS (Josh 2026-09-23):
 	-- it is what the client's own combo frame listens to, and on this client
 	-- earning a point does not always raise UNIT_POWER_UPDATE
-	for _, event in ipairs({ "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }) do
+	for _, event in ipairs({ "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
+		"UNIT_SPELLCAST_SUCCEEDED" }) do
 		local ok = M.events.RegisterUnitEvent
 			and pcall(M.events.RegisterUnitEvent, M.events, event, "player")
 		if not ok then
 			pcall(M.events.RegisterEvent, M.events, event)
 		end
 	end
-	M.events:SetScript("OnEvent", function(_, event, unit, powerType)
+	M.events:SetScript("OnEvent", function(_, event, unit, powerType, spellID)
 		if not BT.Enabled("resourcedisplay") then
+			return
+		end
+		-- a spell of yours went off: the strip alone (M.Spent)
+		if event == "UNIT_SPELLCAST_SUCCEEDED" then
+			if unit == "player" then
+				local ok, err = pcall(M.Spent, spellID)
+				if not ok then
+					BT.Err("resourcedisplay rest: " .. tostring(err))
+				end
+			end
 			return
 		end
 		-- EVERY SETTING IN THE GAME SAYS WHEN IT CHANGES (Josh 2026-09-23, /bt
