@@ -3,7 +3,7 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
-## Unreleased
+## 1.23.1
 
 - **Quests show on enemies Questie does not know.** With Questie running,
   BeebMod leaves an enemy's quest rows to it. Questie has no lists for the
