@@ -931,6 +931,30 @@ local function objective(trimmed, done)
 	return { text = words, have = have, need = need, done = done }
 end
 
+-- WHOSE NAME A LINE IS: "mine", "theirs", or nil where it is nobody's in your
+-- group. The game hands a two-part name back whole in one place and as its
+-- first word in another, so a line is somebody's when it is their name or
+-- begins with it and a space. A name that is nobody's is read as yours: an
+-- objective shown twice is better than yours left out.
+local function sameName(line, name)
+	return type(name) == "string" and name ~= ""
+		and (line == name or line:sub(1, #name + 1) == name .. " " or name:sub(1, #line + 1) == line .. " ")
+end
+function M.NameOwner(line, me, others)
+	if type(line) ~= "string" or line == "" then
+		return nil
+	end
+	if sameName(line, me) then
+		return "mine"
+	end
+	for name in pairs(others or {}) do
+		if sameName(line, name) then
+			return "theirs"
+		end
+	end
+	return nil
+end
+
 -- ONLY YOURS (Josh 2026-11-10: "in dungeons it is used for every group
 -- member's quest objectives, which reads quite spammy"). In a group the
 -- client writes, under a quest's name, your objectives and then each other
@@ -957,7 +981,16 @@ function M.TypedQuests(data)
 	if not any then
 		return nil
 	end
-	local out, used, mine = nil, {}, true
+	-- YOUR OWN NAME IS A NAME TOO (Josh 2026-11-27, Rog'mar Poacher in a group
+	-- of two: "Quest is not showing on the tooltip for these guys"). In a
+	-- group the client writes your name over your objectives as it writes a
+	-- member's over theirs, and every name was taken for somebody else's, so
+	-- your own objectives were dropped. A name line is yours when it is your
+	-- name. The name is read above the quest's name or under it: a quest's
+	-- name that follows a name line keeps that line's owner.
+	local me = UnitName and known(UnitName("player")) or nil
+	local others = M.GroupNames()
+	local out, used, mine, named, titled = nil, {}, true, false, {}
 	for _, line in ipairs(lines) do
 		local kind = type(line) == "table" and known(line.type) or nil
 		local text = type(line) == "table" and known(line.leftText) or nil
@@ -968,18 +1001,26 @@ function M.TypedQuests(data)
 		if kind == nil then
 			-- nothing to go by
 		elseif kind == LT.QuestTitle then
-			mine = true
+			if not named then
+				mine = true
+			end
+			named = false
 			if trimmed then
-				out = out or {}
-				out[#out + 1] = { text = trimmed, title = true }
 				used[trimmed] = true
+				if not titled[trimmed] then
+					titled[trimmed] = true
+					out = out or {}
+					out[#out + 1] = { text = trimmed, title = true }
+				end
 			end
 		elseif LT.QuestPlayer and kind == LT.QuestPlayer then
-			mine = false
+			mine = M.NameOwner(trimmed, me, others) ~= "theirs"
+			named = true
 			if trimmed then
 				used[trimmed] = true
 			end
 		elseif kind == LT.QuestObjective and trimmed then
+			named = false
 			used[trimmed] = true
 			if mine then
 				local done = known(line.completed)
@@ -1024,6 +1065,10 @@ local function questBlock(tip, spoken)
 	if not (tip.NumLines and BT.Quests and BT.Quests.Watched) then
 		return nil, used
 	end
+	-- kept for the Testing page's Record button (M.Seen)
+	if M.Seen and BT.UnitTip and BT.UnitTip.data then
+		pcall(M.Seen, "unit", BT.UnitTip.data)
+	end
 	local typed, typedUsed = M.TypedQuests(BT.UnitTip and BT.UnitTip.data)
 	if typedUsed then
 		return typed, typedUsed
@@ -1045,8 +1090,11 @@ local function questBlock(tip, spoken)
 		return nil, used
 	end
 	local others = M.GroupNames()
+	-- your own name, which the client writes over your objectives in a group
+	local me = next(others) and UnitName and known(UnitName("player")) or nil
 	-- inBlock: false, "mine", or "theirs" under a group member's name
-	local out, inBlock = nil, false
+	-- named: whose name the line before was, where it was one
+	local out, inBlock, named, titled = nil, false, nil, {}
 	for i = 2, BT.Pill.Number(tip:NumLines(), 0) do
 		local fs = lineOf(tip, i)
 		local text = fs and fs.GetText and fs:GetText()
@@ -1073,15 +1121,26 @@ local function questBlock(tip, spoken)
 			local trimmed = text:match("^%s*(.-)%s*$")
 			if spoken and spoken[trimmed] then
 				inBlock = false
+				named = nil
 			elseif titles[trimmed] then
-				out = out or {}
-				out[#out + 1] = { text = trimmed, title = true }
 				used[trimmed] = true
-				inBlock = "mine"
-			elseif inBlock and others[trimmed] then
+				if not titled[trimmed] then
+					titled[trimmed] = true
+					out = out or {}
+					out[#out + 1] = { text = trimmed, title = true }
+				end
+				inBlock = named or "mine"
+				named = nil
+			elseif me and M.NameOwner(trimmed, me, others) == "mine" then
 				used[trimmed] = true
-				inBlock = "theirs"
+				named = "mine"
+				inBlock = inBlock and "mine"
+			elseif next(others) and M.NameOwner(trimmed, nil, others) == "theirs" then
+				used[trimmed] = true
+				named = "theirs"
+				inBlock = inBlock and "theirs"
 			elseif inBlock then
+				named = nil
 				used[trimmed] = true
 				if inBlock == "mine" then
 					out[#out + 1] = objective(trimmed)
@@ -1215,7 +1274,15 @@ end
 -- Questie is loaded and its own tooltips are on, BeebMod leaves the quests to
 -- it. With Questie's tooltips switched off in its options, BeebMod's rows
 -- are back.
-function M.QuestieWrites()
+--
+-- ONLY WHERE QUESTIE HAS SOMETHING TO WRITE (Josh 2026-11-27, a Rog'mar
+-- Poacher in Riverglades with "Hunting the Hunters" in the log: "Quest is not
+-- showing on the tooltip for these guys"). Questie's lists don't have the
+-- zones new to WoW: Forever, so it wrote nothing there, and BeebMod had left
+-- the quests to it. Given a unit, Questie is asked what it has for that
+-- creature, the way its own tooltip asks. Nothing: the rows are BeebMod's.
+-- Where it can't be asked, it is taken to write them, as before.
+function M.QuestieWrites(unit)
 	local q = rawget(_G, "Questie")
 	if type(q) ~= "table" then
 		return false
@@ -1224,7 +1291,37 @@ function M.QuestieWrites()
 	if type(profile) == "table" and profile.enableTooltips == false then
 		return false
 	end
+	local has = unit and M.QuestieHas(unit)
+	if has == false then
+		return false
+	end
 	return true
+end
+
+-- whether Questie has lines for this creature: true, false, or nil where it
+-- can't be asked
+function M.QuestieHas(unit)
+	local loader = rawget(_G, "QuestieLoader")
+	if not (type(loader) == "table" and type(loader.ImportModule) == "function" and UnitGUID) then
+		return nil
+	end
+	local okGuid, guid = pcall(UnitGUID, unit)
+	if not okGuid or guid == nil or (issecretvalue and issecretvalue(guid)) or type(guid) ~= "string" then
+		return nil
+	end
+	local kind, id = guid:match("^(%a+)%-[^-]*%-[^-]*%-[^-]*%-[^-]*%-(%d+)")
+	if not (id and (kind == "Creature" or kind == "Vehicle")) then
+		return nil
+	end
+	local okMod, tips = pcall(loader.ImportModule, loader, "QuestieTooltips")
+	if not (okMod and type(tips) == "table" and type(tips.GetTooltip) == "function") then
+		return nil
+	end
+	local ok, lines = pcall(tips.GetTooltip, "m_" .. id)
+	if not ok then
+		return nil
+	end
+	return type(lines) == "table" and next(lines) ~= nil
 end
 
 function M.QuestRows(tip, quests)
@@ -2510,7 +2607,7 @@ function M.Compose(tip, unit)
 
 	-- the rows: the quests it counts for, then your kills of it
 	local beforeQuests = BT.Pill.Number(tip:NumLines(), 0)
-	M.QuestRows(tip, M.QuestieWrites() and {} or quests)
+	M.QuestRows(tip, M.QuestieWrites(unit) and {} or quests)
 	local beforeKills = BT.Pill.Number(tip:NumLines(), 0)
 	local killsAt = M.KillsRow(tip, unit, beforeKills > beforeQuests)
 	-- where it is, should another addon write under it (M.KillsLast)
@@ -6974,7 +7071,7 @@ end
 -- in hand, so the last few of each kind are kept as they came, and written
 -- into the saved file on Record.
 M.SEEN_MOST = 6
-M.seen = { item = {}, spell = {}, aura = {}, macro = {}, object = {} }
+M.seen = { item = {}, spell = {}, aura = {}, macro = {}, object = {}, unit = {} }
 function M.Seen(kind, data)
 	local list = M.seen[kind]
 	if not (list and type(data) == "table" and type(data.lines) == "table") then

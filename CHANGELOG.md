@@ -3,6 +3,18 @@
 BeebMod is built for WoW: Forever. Versions are `MAJOR.MINOR.PATCH`. The
 0.1.0-beta versions were made during the game's beta.
 
+## Unreleased
+
+- **Quests show on enemies Questie does not know.** With Questie running,
+  BeebMod leaves an enemy's quest rows to it. Questie has no lists for the
+  zones new to WoW: Forever, so an enemy in Riverglades showed no quest at
+  all. BeebMod now asks Questie whether it has anything for the enemy, and
+  writes the rows itself where it has not.
+- **Your quest shows on an enemy's tooltip while you are in a group.** In a
+  group the game writes your name over your objectives, as it does for each
+  member. BeebMod read every name as somebody else's and left your
+  objectives out. It now knows your name from theirs.
+
 ## 1.23.0
 
 - **A spirit regen strip on the personal resource display.** Spending mana

@@ -4156,6 +4156,56 @@ if ok then
 			assert(#typed == 4 and typed[2].have == 2 and typed[4].done == true and not typed[3].have,
 				"two quests, your objectives, the one the client calls done done: " .. #typed)
 			assert(typedUsed["Aeki"] and typedUsed["- 9/10 Red Silk Bandana"], "and the member's lines used up, not small print")
+			-- YOUR OWN NAME IS A NAME TOO (Josh 2026-11-27, Rog'mar Poacher in
+			-- a group: "Quest is not showing on the tooltip for these guys")
+			BT.UnitTip.data = { lines = {
+				{ type = 2, leftText = "Defias Pillager" },
+				{ type = 17, leftText = "Red Silk Bandanas" },
+				{ type = 18, leftText = "Beeb" },
+				{ type = 8, leftText = "- 2/10 Red Silk Bandana", completed = false },
+				{ type = 18, leftText = "Aeki" },
+				{ type = 8, leftText = "- 9/10 Red Silk Bandana", completed = false },
+			} }
+			typed, typedUsed = mod.QuestBlock(tip, {})
+			assert(#typed == 2 and typed[2].have == 2 and typedUsed["Beeb"], "your name over your objective: " .. #typed)
+			-- and with the name written above the quest's name
+			BT.UnitTip.data = { lines = {
+				{ type = 2, leftText = "Defias Pillager" },
+				{ type = 18, leftText = "Beeb" },
+				{ type = 17, leftText = "Red Silk Bandanas" },
+				{ type = 8, leftText = "- 2/10 Red Silk Bandana", completed = false },
+				{ type = 18, leftText = "Aeki" },
+				{ type = 17, leftText = "Red Silk Bandanas" },
+				{ type = 8, leftText = "- 9/10 Red Silk Bandana", completed = false },
+			} }
+			typed = mod.QuestBlock(tip, {})
+			assert(#typed == 2 and typed[1].title and typed[2].have == 2, "the name first: the quest once, your count: " .. #typed)
+			BT.UnitTip.data = nil
+			-- the same two, read from the words
+			got, words = read({ "Defias Pillager", "Level 16", "Red Silk Bandanas", "Beeb", "- 2/10 Red Silk Bandana",
+				"Aeki", "- 9/10 Red Silk Bandana" })
+			assert(#got == 2 and got[2].have == 2, "your name over your objective, in words: " .. words)
+			got, words = read({ "Defias Pillager", "Level 16", "Beeb", "Red Silk Bandanas", "- 2/10 Red Silk Bandana",
+				"Aeki", "Red Silk Bandanas", "- 9/10 Red Silk Bandana" })
+			assert(#got == 2 and got[2].have == 2, "the name first, in words: " .. words)
+			-- a two-part name the game hands back as its first word alone, and
+			-- a name that is nobody's in the group: both read as yours
+			assert(mod.NameOwner("Beeb Bob", "Beeb", { Aeki = true }) == "mine"
+				and mod.NameOwner("Aeki Xx", "Beeb", { Aeki = true }) == "theirs"
+				and mod.NameOwner("Aeki", "Beeb", { ["Aeki Xx"] = true }) == "theirs"
+				and mod.NameOwner("Stranger", "Beeb", { Aeki = true }) == nil, "whose name a line is")
+			BT.UnitTip.data = { lines = {
+				{ type = 2, leftText = "Defias Pillager" },
+				{ type = 17, leftText = "Red Silk Bandanas" },
+				{ type = 18, leftText = "Beeb Bob" },
+				{ type = 8, leftText = "- 2/10 Red Silk Bandana", completed = false },
+				{ type = 18, leftText = "Aeki Xx" },
+				{ type = 8, leftText = "- 9/10 Red Silk Bandana", completed = false },
+			} }
+			typed = mod.QuestBlock(tip, {})
+			assert(#typed == 2 and typed[2].have == 2, "two-part names: yours kept, theirs left out: " .. #typed)
+			assert(mod.seen.unit[1] and mod.seen.unit[1].first == "Defias Pillager", "and the enemy's lines kept for Record")
+			BT.UnitTip.data = nil
 			-- no quest lines in the data: the words are read, as before
 			BT.UnitTip.data = { lines = { { type = 2, leftText = "Protector Dorana" } } }
 			assert(mod.TypedQuests(BT.UnitTip.data) == nil, "no quest lines in the data: none from it")
@@ -5493,6 +5543,28 @@ if ok then
 				assert(not tips.QuestieWrites(), "its tooltips off: BeebMod's again")
 				_G.Questie = {}
 				assert(tips.QuestieWrites(), "a Questie whose options can't be read is taken to write them")
+				-- ONLY WHERE IT HAS SOMETHING TO WRITE (Josh 2026-11-27, a Rog'mar
+				-- Poacher: "Quest is not showing on the tooltip for these guys")
+				local wasLoader, wasGuid = rawget(_G, "QuestieLoader"), _G.UnitGUID
+				local asked
+				_G.UnitGUID = function() return "Creature-0-4170-0-41-98123-00006A1B2C" end
+				_G.QuestieLoader = { ImportModule = function(_, name)
+					return name == "QuestieTooltips" and { GetTooltip = function(key)
+						asked = key
+						if key == "m_98123" then return nil end
+						return { "a quest" }
+					end } or nil
+				end }
+				assert(tips.QuestieHas("mouseover") == false and asked == "m_98123", "asked by the creature's number: " .. tostring(asked))
+				assert(not tips.QuestieWrites("mouseover"), "a creature Questie has nothing for: BeebMod's rows")
+				_G.UnitGUID = function() return "Creature-0-4170-0-41-1234-00006A1B2C" end
+				assert(tips.QuestieWrites("mouseover"), "one it has lines for is left to it")
+				_G.UnitGUID = function() return "Player-4170-00ABCDEF" end
+				assert(tips.QuestieHas("mouseover") == nil and tips.QuestieWrites("mouseover"), "not a creature: as before")
+				_G.QuestieLoader = { ImportModule = function() error("gone") end }
+				_G.UnitGUID = function() return "Creature-0-4170-0-41-98123-00006A1B2C" end
+				assert(tips.QuestieWrites("mouseover"), "a Questie that can't be asked is taken to write them")
+				_G.QuestieLoader, _G.UnitGUID = wasLoader, wasGuid
 				_G.Questie = wasQ
 			end
 			-- only the window's own item slots are laid out: the game's bag
